@@ -16,7 +16,7 @@ export const API_ENDPOINTS = {
   IMAGE_GENERATIONS: '/images/generations',
   
   // Video | 视频
-  VIDEO_GENERATIONS: '/videos/generations',
+  VIDEO_GENERATIONS: '/videos',
   VIDEO_TASK: '/videos',
   
   // Chat | 对话

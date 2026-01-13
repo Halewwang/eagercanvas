@@ -2,6 +2,13 @@
   <!-- API Settings Modal | API 设置弹窗 -->
   <n-modal v-model:show="showModal" preset="card" title="API 设置" style="width: 480px;">
     <n-form ref="formRef" :model="formData" label-placement="left" label-width="80">
+      
+      <n-form-item label="Base URL" path="baseUrl">
+        <n-input 
+        v-model:value="formData.baseUrl" 
+        placeholder="https://api.chatfire.site/v1"
+        />
+      </n-form-item>
       <n-form-item label="API Key" path="apiKey">
         <n-input 
           v-model:value="formData.apiKey" 
@@ -10,13 +17,30 @@
           placeholder="请输入 API Key"
         />
       </n-form-item>
+
+      <!-- 三方渠道端点配置 -->
+      <n-divider title-placement="left" class="!my-3">
+        <span class="text-xs text-[var(--text-secondary)]">端点路径</span>
+      </n-divider>
       
-      <n-form-item label="Base URL" path="baseUrl">
-        <n-input 
-          v-model:value="formData.baseUrl" 
-          placeholder="https://api.chatfire.site/v1"
-        />
-      </n-form-item>
+      <div class="endpoint-list">
+        <div class="endpoint-item">
+          <span class="endpoint-label">问答</span>
+          <n-tag size="small" type="info" class="endpoint-tag">/chat/completions</n-tag>
+        </div>
+        <div class="endpoint-item">
+          <span class="endpoint-label">生图</span>
+          <n-tag size="small" type="success" class="endpoint-tag">/images/generations</n-tag>
+        </div>
+        <div class="endpoint-item">
+          <span class="endpoint-label">视频生成</span>
+          <n-tag size="small" type="warning" class="endpoint-tag">/videos</n-tag>
+        </div>
+        <div class="endpoint-item">
+          <span class="endpoint-label">视频查询</span>
+          <n-tag size="small" type="warning" class="endpoint-tag">/videos/{taskId}</n-tag>
+        </div>
+      </div>
 
       <n-alert v-if="!isConfigured" type="warning" title="未配置" class="mb-4">
         <div class="flex flex-col gap-2">
@@ -62,7 +86,7 @@
  * Modal for configuring API key and base URL
  */
 import { ref, reactive, watch } from 'vue'
-import { NModal, NForm, NFormItem, NInput, NButton, NAlert } from 'naive-ui'
+import { NModal, NForm, NFormItem, NInput, NButton, NAlert, NDivider, NTag } from 'naive-ui'
 import { useApiConfig } from '../hooks'
 
 // Props | 属性
@@ -121,3 +145,32 @@ const handleClear = () => {
   formData.baseUrl = 'https://api.chatfire.site/v1'
 }
 </script>
+
+<style scoped>
+.endpoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 6px;
+}
+
+.endpoint-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.endpoint-label {
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+  min-width: 70px;
+}
+
+.endpoint-tag {
+  font-family: monospace;
+  font-size: 12px;
+}
+</style>

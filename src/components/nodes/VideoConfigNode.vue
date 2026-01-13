@@ -21,8 +21,12 @@
         <!-- Model selector | 模型选择 -->
         <div class="flex items-center justify-between">
           <span class="text-xs text-[var(--text-secondary)]">模型</span>
-          <n-cascader v-model:value="localModel" :options="cascaderOptions" :show-path="false" placeholder="选择模型"
-            size="small" :check-strategy="'child'" @update:value="handleModelSelect" class="w-[200px]" />
+          <n-dropdown :options="modelOptions" @select="handleModelSelect">
+            <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
+              {{ displayModelName }}
+              <n-icon :size="12"><ChevronDownOutline /></n-icon>
+            </button>
+          </n-dropdown>
         </div>
 
         <!-- Aspect ratio selector | 宽高比选择 -->
@@ -132,19 +136,13 @@
  * Video config node component | 视频配置节点组件
  * Configuration panel for video generation with API integration
  */
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NIcon, NDropdown, NSpin, NProgress, NCascader } from 'naive-ui'
-import { ChevronForwardOutline, TrashOutline, VideocamOutline, CopyOutline } from '@vicons/ionicons5'
+import { NIcon, NDropdown, NSpin } from 'naive-ui'
+import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '@vicons/ionicons5'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges } from '../../stores/canvas'
-import {
-  videoModels,
-  videoModelOptions,
-  videoCascaderOptions,
-  getModelSchema,
-  extractFormConfig
-} from '../../stores/models'
+import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, DEFAULT_VIDEO_MODEL } from '../../stores/models'
 
 const props = defineProps({
   id: String,
@@ -164,13 +162,9 @@ const { loading, error, status, video: generatedVideo, progress, generate } = us
 const showActions = ref(false)
 
 // Local state | 本地状态
-const localModel = ref(props.data?.model || '')
+const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
 const localRatio = ref(props.data?.ratio || '16:9')
 const localDuration = ref(props.data?.dur || 5)
-
-// Current model schema config | 当前模型 schema 配置
-const modelSchema = ref(null)
-const formConfig = ref({ ratioOptions: [], durationOptions: [] })
 
 // Get connected images with roles | 获取连接的图片及其角色
 const connectedImages = computed(() => {
@@ -206,72 +200,43 @@ const imagesByRole = computed(() => {
   }
 })
 
-// Default ratio options (fallback) | 默认比例选项（回退）
-const defaultRatioOptions = [
-  { label: '16:9 (横版)', key: '16:9' },
-  { label: '9:16 (竖版)', key: '9:16' },
-  { label: '1:1 (方形)', key: '1:1' },
-  { label: '4:3', key: '4:3' }
-]
+// Get current model config | 获取当前模型配置
+const currentModelConfig = computed(() => getModelConfig(localModel.value))
 
-// Default duration options (fallback) | 默认时长选项（回退）
-const defaultDurationOptions = [
-  { label: '3 秒', key: 3 },
-  { label: '5 秒', key: 5 },
-  { label: '10 秒', key: 10 }
-]
+// Model options from store | 从 store 获取模型选项
+const modelOptions = videoModelOptions
 
-// Cascader options from store | 从 store 获取级联选项
-const cascaderOptions = computed(() => {
-  if (videoCascaderOptions.value.length > 0) {
-    return videoCascaderOptions.value
-  }
-  // Fallback options | 回退选项
-  return [
-    {
-      label: '视频模型',
-      value: 'factory_default',
-      children: [
-        { label: 'Runway Gen-3', value: 'runway-gen3' },
-        { label: 'Kling', value: 'kling' },
-        { label: 'Luma', value: 'luma' }
-      ]
-    }
-  ]
+// Display model name | 显示模型名称
+const displayModelName = computed(() => {
+  const model = modelOptions.value.find(m => m.key === localModel.value)
+  return model?.label || localModel.value || '选择模型'
 })
 
-// Ratio options from schema or default | 从 schema 或默认获取比例选项
+// Ratio options based on model | 基于模型的比例选项
 const ratioOptions = computed(() => {
-  if (formConfig.value.ratioOptions?.length > 0) {
-    return formConfig.value.ratioOptions
-  }
-  return defaultRatioOptions
+  return getModelRatioOptions(localModel.value)
 })
 
-// Duration options from schema or default | 从 schema 或默认获取时长选项
+// Duration options based on model | 基于模型的时长选项
 const durationOptions = computed(() => {
-  if (formConfig.value.durationOptions?.length > 0) {
-    return formConfig.value.durationOptions
-  }
-  return defaultDurationOptions
+  return getModelDurationOptions(localModel.value)
 })
-
-// Load model schema when model changes | 模型变更时加载 schema
-const loadModelSchema = async (modelName) => {
-  if (!modelName) return
-  const schema = await getModelSchema(modelName)
-  if (schema) {
-    modelSchema.value = schema
-    formConfig.value = extractFormConfig(schema.inputFields)
-  }
-}
 
 // Handle model selection | 处理模型选择
-const handleModelSelect = (value) => {
-  if (!value || value.startsWith('factory_')) return
-  localModel.value = value
-  updateNode(props.id, { model: value })
-  loadModelSchema(value)
+const handleModelSelect = (key) => {
+  localModel.value = key
+  // Update ratio and duration to model's default | 更新为模型默认比例和时长
+  const config = getModelConfig(key)
+  const updates = { model: key }
+  if (config?.defaultParams?.ratio) {
+    localRatio.value = config.defaultParams.ratio
+    updates.ratio = config.defaultParams.ratio
+  }
+  if (config?.defaultParams?.duration) {
+    localDuration.value = config.defaultParams.duration
+    updates.dur = config.defaultParams.duration
+  }
+  updateNode(props.id, updates)
 }
 
 // Handle duplicate | 处理复制
@@ -415,17 +380,7 @@ const handleGenerate = async () => {
       params.dur = localDuration.value
     }
 
-    // Get full schema config for request building | 获取完整 schema 配置用于请求构建
-    const schemaConfig = modelSchema.value ? {
-      inputTransform: modelSchema.value.inputTransform,
-      requestType: modelSchema.value.requestType,
-      asyncMode: modelSchema.value.asyncMode,
-      endpoint: modelSchema.value.endpoint,
-      output: modelSchema.value.output,
-      typeName: modelSchema.value.typeName
-    } : { typeName: '视频', asyncMode: 'auto' }
-
-    const result = await generate(params, schemaConfig)
+    const result = await generate(params)
 
     // Update video node with generated URL | 更新视频节点 URL
     if (result && result.url) {
@@ -455,10 +410,11 @@ const handleDelete = () => {
   removeNode(props.id)
 }
 
-// Load model schema on mount | 挂载时加载模型 schema
+// Initialize on mount | 挂载时初始化
 onMounted(() => {
-  if (localModel.value) {
-    loadModelSchema(localModel.value)
+  if (!localModel.value) {
+    localModel.value = DEFAULT_VIDEO_MODEL
+    updateNode(props.id, { model: localModel.value })
   }
 })
 
@@ -466,7 +422,6 @@ onMounted(() => {
 watch(() => props.data?.model, (newModel) => {
   if (newModel && newModel !== localModel.value) {
     localModel.value = newModel
-    loadModelSchema(newModel)
   }
 })
 </script>

@@ -26,29 +26,38 @@
 
       <!-- Config options | 配置选项 -->
       <div class="p-3 space-y-3">
-        <!-- Model selector with cascader | 模型级联选择 -->
+        <!-- Model selector | 模型选择 -->
         <div class="flex items-center justify-between">
           <span class="text-xs text-[var(--text-secondary)]">模型</span>
-          <n-cascader v-model:value="cascaderValue" :options="imageCascaderOptions" :show-path="false"
-            placeholder="选择模型" size="small" style="max-width: 200px" @update:value="handleCascaderChange" />
+          <n-dropdown :options="modelOptions" @select="handleModelSelect">
+            <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
+              {{ displayModelName }}
+              <n-icon :size="12"><ChevronDownOutline /></n-icon>
+            </button>
+          </n-dropdown>
         </div>
 
         <!-- Size selector | 尺寸选择 -->
-        <div class="flex items-center justify-between">
+        <div v-if="hasSizeOptions" class="flex items-center justify-between">
           <span class="text-xs text-[var(--text-secondary)]">尺寸</span>
           <div class="flex items-center gap-2">
             <n-dropdown :options="sizeOptions" @select="handleSizeSelect">
               <button
                 class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
-                {{ localSize }}
+                {{ displaySize }}
                 <n-icon :size="12">
                   <ChevronForwardOutline />
                 </n-icon>
               </button>
             </n-dropdown>
-            <input v-model="localSize" @blur="updateSize" @mousedown.stop placeholder="自定义尺寸"
-              class="w-24 px-2 py-1 text-xs bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded outline-none focus:border-[var(--accent-color)] text-[var(--text-primary)]" />
+            <!-- <input v-model="localSize" @blur="updateSize" @mousedown.stop placeholder="自定义尺寸"
+              class="w-24 px-2 py-1 text-xs bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded outline-none focus:border-[var(--accent-color)] text-[var(--text-primary)]" /> -->
           </div>
+        </div>
+
+        <!-- Model tips | 模型提示 -->
+        <div v-if="currentModelConfig?.tips" class="text-xs text-[var(--text-tertiary)] bg-[var(--bg-tertiary)] rounded px-2 py-1">
+          💡 {{ currentModelConfig.tips }}
         </div>
 
         <!-- Connected inputs indicator | 连接输入指示 -->
@@ -120,19 +129,13 @@
  * Image config node component | 文生图配置节点组件
  * Configuration panel for text-to-image generation with API integration
  */
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NIcon, NDropdown, NSpin, NCascader } from 'naive-ui'
+import { NIcon, NDropdown, NSpin } from 'naive-ui'
 import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline } from '@vicons/ionicons5'
 import { useImageGeneration, useApiConfig } from '../../hooks'
 import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode } from '../../stores/canvas'
-import {
-  imageModels,
-  imageModelOptions,
-  imageCascaderOptions,
-  getModelSchema,
-  extractFormConfig
-} from '../../stores/models'
+import { imageModelOptions, getModelSizeOptions, getModelConfig, DEFAULT_IMAGE_MODEL } from '../../stores/models'
 
 const props = defineProps({
   id: String,
@@ -152,34 +155,14 @@ const { loading, error, images: generatedImages, generate } = useImageGeneration
 const showActions = ref(false)
 
 // Local state | 本地状态
-const localModel = ref(props.data?.model || '')
+const localModel = ref(props.data?.model || DEFAULT_IMAGE_MODEL)
 const localSize = ref(props.data?.size || '1024x1024')
 
-// Current model schema config | 当前模型 schema 配置
-const modelSchema = ref(null)
-const formConfig = ref({ sizeOptions: [], hasRefImage: false, hasRefImages: false })
-
-// Default size options (fallback) | 默认尺寸选项（回退）
-const defaultSizeOptions = [
-  { label: '512x512', key: '512x512' },
-  { label: '1024x1024', key: '1024x1024' },
-  { label: '2048x2048', key: '2048x2048' },
-  { label: '1024x1792 (竖版)', key: '1024x1792' },
-  { label: '1792x1024 (横版)', key: '1792x1024' }
-]
+// Get current model config | 获取当前模型配置
+const currentModelConfig = computed(() => getModelConfig(localModel.value))
 
 // Model options from store | 从 store 获取模型选项
-const modelOptions = computed(() => {
-  if (imageModelOptions.value.length > 0) {
-    return imageModelOptions.value
-  }
-  // Fallback options | 回退选项
-  return [
-    { label: '豆包 Seedream', key: 'doubao-seedream-4-5-251128' },
-    { label: 'DALL-E 3', key: 'dall-e-3' },
-    { label: 'Flux Pro', key: 'flux-pro' }
-  ]
-})
+const modelOptions = imageModelOptions
 
 // Display model name | 显示模型名称
 const displayModelName = computed(() => {
@@ -187,63 +170,29 @@ const displayModelName = computed(() => {
   return model?.label || localModel.value || '选择模型'
 })
 
-// Size options from schema or default | 从 schema 或默认获取尺寸选项
+// Size options based on model | 基于模型的尺寸选项
 const sizeOptions = computed(() => {
-  if (formConfig.value.sizeOptions?.length > 0) {
-    return formConfig.value.sizeOptions
-  }
-  return defaultSizeOptions
+  return getModelSizeOptions(localModel.value)
 })
 
-// Load model schema when model changes | 模型变更时加载 schema
-const loadModelSchema = async (modelName) => {
-  if (!modelName) return
+// Check if model has size options | 检查模型是否有尺寸选项
+const hasSizeOptions = computed(() => {
+  const config = getModelConfig(localModel.value)
+  return config?.sizes && config.sizes.length > 0
+})
 
-  const schema = await getModelSchema(modelName)
-  if (schema) {
-    modelSchema.value = schema
-    formConfig.value = extractFormConfig(schema.inputFields)
-
-    // Update size if current size not in options | 如果当前尺寸不在选项中则更新
-    if (formConfig.value.sizeOptions?.length > 0) {
-      const validSize = formConfig.value.sizeOptions.find(s => s.key === localSize.value)
-      if (!validSize) {
-        localSize.value = formConfig.value.sizeOptions[0].key
-        updateNode(props.id, { size: localSize.value })
-      }
-    }
-  }
-}
-
-// Cascader value | 级联选择器值
-const cascaderValue = ref(null)
-
-// Handle cascader change | 处理级联选择器变化
-const handleCascaderChange = async (value, option, pathValues) => {
-  // value is the model name (last level) | value 是模型名称（最后一级）
-  if (value && !value.startsWith('factory_')) {
-    localModel.value = value
-    updateNode(props.id, { model: value })
-    await loadModelSchema(value)
-  }
-}
+// Display size with label | 显示尺寸（带标签）
+const displaySize = computed(() => {
+  const option = sizeOptions.value.find(o => o.key === localSize.value)
+  return option?.label || localSize.value
+})
 
 // Initialize on mount | 挂载时初始化
-onMounted(async () => {
+onMounted(() => {
   // Set default model if not set | 如果未设置则设置默认模型
-  if (!localModel.value && imageModels.value.length > 0) {
-    localModel.value = imageModels.value[0].name
-    // updateNode(props.id, { model: localModel.value })
-  }
-
-  // Set cascader value | 设置级联选择器值
-  if (localModel.value) {
-    cascaderValue.value = localModel.value
-  }
-
-  // Load schema for current model | 加载当前模型的 schema
-  if (localModel.value) {
-    // await loadModelSchema(localModel.value)
+  if (!localModel.value) {
+    localModel.value = DEFAULT_IMAGE_MODEL
+    updateNode(props.id, { model: localModel.value })
   }
 })
 
@@ -282,11 +231,16 @@ const connectedRefImages = computed(() => {
 })
 
 // Handle model selection | 处理模型选择
-const handleModelSelect = async (key) => {
+const handleModelSelect = (key) => {
   localModel.value = key
-  updateNode(props.id, { model: key })
-  // Reload schema for new model | 重新加载新模型的 schema
-  await loadModelSchema(key)
+  // Update size to model's default | 更新为模型默认尺寸
+  const config = getModelConfig(key)
+  if (config?.defaultParams?.size) {
+    localSize.value = config.defaultParams.size
+    updateNode(props.id, { model: key, size: config.defaultParams.size })
+  } else {
+    updateNode(props.id, { model: key })
+  }
 }
 
 // Handle size selection | 处理尺寸选择
@@ -318,7 +272,6 @@ const handleGenerate = async () => {
   }
 
   // Get current node position | 获取当前节点位置
-  debugger
   const currentNode = nodes.value.find(n => n.id === props.id)
   const nodeX = currentNode?.position?.x || 0
   const nodeY = currentNode?.position?.y || 0
@@ -345,35 +298,20 @@ const handleGenerate = async () => {
   }, 50)
 
   try {
-    // Build request params (raw form data) | 构建请求参数（原始表单数据）
+    // Build request params | 构建请求参数
     const params = {
       model: localModel.value,
+      prompt: prompt,
       size: localSize.value,
-      // n: 1
+      n: 1
     }
 
-    // Add prompt if provided | 如果有提示词则添加
-    if (prompt) {
-      params.prompt = prompt
-    }
-
-    // Add reference images if provided | 如果有参考图则添加
+    // Add reference image if provided | 如果有参考图则添加
     if (refImages.length > 0) {
-      params.image = refImages[0] // Single reference image | 单张参考图
-      params.images = refImages   // Multiple reference images | 多张参考图
+      params.image = refImages[0]
     }
 
-    // Get full schema config for request building | 获取完整 schema 配置用于请求构建
-    const schemaConfig = modelSchema.value ? {
-      inputTransform: modelSchema.value.inputTransform,
-      requestType: modelSchema.value.requestType,
-      asyncMode: modelSchema.value.asyncMode,
-      endpoint: modelSchema.value.endpoint,
-      output: modelSchema.value.output,
-      typeName: modelSchema.value.typeName
-    } : null
-
-    const result = await generate(params, schemaConfig)
+    const result = await generate(params)
 
     // Update image node with generated URL | 更新图片节点 URL
     if (result && result.length > 0) {

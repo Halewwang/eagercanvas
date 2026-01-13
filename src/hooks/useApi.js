@@ -1,17 +1,16 @@
 /**
  * API Hooks | API Hooks
- * Vue hooks for API integration in components
+ * Simplified hooks for open source version | 开源版简化 hooks
  */
 
 import { ref, reactive, onUnmounted } from 'vue'
 import {
   generateImage,
   createVideoTask,
-  pollVideoTask,
   getVideoTaskStatus,
   streamChatCompletions
 } from '@/api'
-import { parseApiResult, applyInputTransform, buildRequestBody } from '@/utils'
+import { getModelByName } from '@/config/models'
 import { useApiConfig } from './useApiConfig'
 
 /**
@@ -75,7 +74,7 @@ export const useChat = (options = {}) => {
         let fullResponse = ''
 
         for await (const chunk of streamChatCompletions(
-          { model: options.model || 'doubao-seed-1-6-flash-250615', messages: msgList },
+          { model: options.model || 'gpt-4o-mini', messages: msgList },
           abortController.signal
         )) {
           fullResponse += chunk
@@ -115,6 +114,7 @@ export const useChat = (options = {}) => {
 
 /**
  * Image generation composable | 图片生成组合式函数
+ * Simplified for open source - fixed input/output format
  */
 export const useImageGeneration = () => {
   const { loading, error, status, reset, setLoading, setError, setSuccess } = useApiState()
@@ -123,45 +123,42 @@ export const useImageGeneration = () => {
   const currentImage = ref(null)
 
   /**
-   * Generate image with flexible response parsing
-   * @param {Object} options - Generation options (raw form data)
-   * @param {Object} schemaConfig - Model schema config { inputTransform, requestType, asyncMode, endpoint, output }
+   * Generate image with fixed params | 固定参数生成图片
+   * @param {Object} params - { model, prompt, size, n, image (optional ref image) }
    */
-  const generate = async (options, schemaConfig = null) => {
+  const generate = async (params) => {
     setLoading(true)
     images.value = []
     currentImage.value = null
 
     try {
-      // Apply input transform if provided | 如果有 inputTransform 则应用
-      let requestData = options
-      if (schemaConfig?.inputTransform) {
-        requestData = { ...applyInputTransform(schemaConfig.inputTransform, options), model: options.model}
+      const modelConfig = getModelByName(params.model)
+      
+      // Build request data | 构建请求数据
+      const requestData = {
+        model: params.model,
+        prompt: params.prompt,
+        size: params.size || modelConfig?.defaultParams?.size || '1024x1024',
+        n: params.n || 1
       }
 
-      // Build request body (FormData or JSON) | 构建请求体
-      const requestType = schemaConfig?.requestType || 'json'
-      const requestBody = buildRequestBody(requestData, requestType)
+      // Add reference image if provided | 添加参考图
+      if (params.image) {
+        requestData.image = params.image
+      }
 
-      // Call API with options | 调用 API
-      const response = await generateImage(requestBody, {
-        requestType,
-        endpoint: schemaConfig?.endpoint || '/images/generations'
+      // Call API | 调用 API
+      const response = await generateImage(requestData, {
+        requestType: 'json',
+        endpoint: modelConfig?.endpoint || '/images/generations'
       })
 
-      // Parse result based on output schema
-      const parsedData = parseApiResult(response, schemaConfig?.output, 'image')
-
-      // Normalize result to array of {url, revisedPrompt}
-      const generatedImages = parsedData.map(item => {
-        if (typeof item === 'string') {
-          return { url: item, revisedPrompt: '' }
-        }
-        return {
-          url: item.url || item,
-          revisedPrompt: item.revised_prompt || ''
-        }
-      })
+      // Parse response (OpenAI format) | 解析响应
+      const data = response.data || response
+      const generatedImages = (Array.isArray(data) ? data : [data]).map(item => ({
+        url: item.url || item.b64_json || item,
+        revisedPrompt: item.revised_prompt || ''
+      }))
 
       images.value = generatedImages
       currentImage.value = generatedImages[0] || null
@@ -178,6 +175,7 @@ export const useImageGeneration = () => {
 
 /**
  * Video generation composable | 视频生成组合式函数
+ * Simplified for open source - fixed input/output format with polling
  */
 export const useVideoGeneration = () => {
   const { loading, error, status, reset, setLoading, setError, setSuccess } = useApiState()
@@ -191,11 +189,10 @@ export const useVideoGeneration = () => {
   })
 
   /**
-   * Generate video with flexible response parsing
-   * @param {Object} options - Generation options (raw form data)
-   * @param {Object} schemaConfig - Model schema config { inputTransform, requestType, asyncMode, endpoint, output, typeName }
+   * Generate video with fixed params | 固定参数生成视频
+   * @param {Object} params - { model, prompt, first_frame_image, last_frame_image, ratio, duration }
    */
-  const generate = async (options, schemaConfig = null) => {
+  const generate = async (params) => {
     setLoading(true)
     video.value = null
     taskId.value = null
@@ -203,41 +200,37 @@ export const useVideoGeneration = () => {
     progress.percentage = 0
 
     try {
-      // Apply input transform if provided | 如果有 inputTransform 则应用
-      let requestData = options
-      if (schemaConfig?.inputTransform) {
-        requestData = { ...applyInputTransform(schemaConfig.inputTransform, options), model: options.model }
+      const modelConfig = getModelByName(params.model)
+      
+      // Build request data | 构建请求数据
+      const requestData = {
+        model: params.model,
+        prompt: params.prompt || ''
       }
-
-      // Build request body (FormData or JSON) | 构建请求体
-      // Video defaults to formdata | 视频默认使用 formdata
-      const requestType = schemaConfig?.requestType || 'formdata'
-      const requestBody = buildRequestBody(requestData, requestType)
+      // Add optional params | 添加可选参数
+      if (params.first_frame_image) requestData.first_frame_image = params.first_frame_image
+      if (params.last_frame_image) requestData.last_frame_image = params.last_frame_image
+      if (params.ratio) requestData.size = params.ratio
+      if (params.dur) requestData.seconds = params.dur
 
       // Call API | 调用 API
-      const task = await createVideoTask(requestBody, {
-        requestType,
-        endpoint: schemaConfig?.endpoint || '/videos'
+      const task = await createVideoTask(requestData, {
+        requestType: 'json',
+        endpoint: modelConfig?.endpoint || '/videos'
       })
 
-      // Check if need polling | 判断是否需要轮询
-      // asyncMode: 'auto' - 视频异步，图片同步
-      // asyncMode: 'sync' - 强制同步
-      // asyncMode: 'async' - 强制异步轮询
-      const isVideo = schemaConfig?.typeName === '视频'
-      const asyncMode = schemaConfig?.asyncMode || 'auto'
-      const needPolling = asyncMode === 'async' || (asyncMode === 'auto' && isVideo)
+      // Check if async (need polling) | 检查是否异步
+      const isAsync = modelConfig?.async !== false
 
-      // If sync mode or already has data, return directly | 同步模式或已有数据，直接返回
-      if (!needPolling || (task.data && !task.id)) {
-        const parsedData = parseApiResult(task, schemaConfig?.output, 'video')
-        const videoUrl = Array.isArray(parsedData) ? parsedData[0] : parsedData
-        video.value = { url: typeof videoUrl === 'string' ? videoUrl : videoUrl?.url, ...task }
+      // If has video URL directly, return | 如果直接有视频 URL，返回
+      if (!isAsync || task.data?.url || task.url) {
+        const videoUrl = task.data?.url || task.url || task.data?.[0]?.url
+        video.value = { url: videoUrl, ...task }
         setSuccess()
         return video.value
       }
 
-      // Handle different response formats | 处理不同的响应格式
+      // Get task ID for polling | 获取任务 ID 用于轮询
       const id = task.id || task.task_id || task.taskId
       if (!id) {
         throw new Error('未获取到任务 ID')
@@ -246,7 +239,7 @@ export const useVideoGeneration = () => {
       taskId.value = id
       status.value = 'polling'
 
-      // Poll with progress updates | 带进度更新的轮询
+      // Poll for result | 轮询获取结果
       const maxAttempts = 120
       const interval = 5000
 
@@ -259,18 +252,8 @@ export const useVideoGeneration = () => {
         // Check for completion | 检查是否完成
         if (result.status === 'completed' || result.status === 'succeeded' || result.data) {
           progress.percentage = 100
-
-          // Parse result based on output schema | 根据输出 schema 解析结果
-          let videoUrl = ''
-          if (schemaConfig?.output) {
-            const parsedData = parseApiResult(result, schemaConfig.output, 'video')
-            videoUrl = Array.isArray(parsedData) ? parsedData[0] : parsedData
-          } else {
-            // Fallback parsing | 回退解析
-            videoUrl = result.data?.url || result.data?.[0]?.url || result.url || result.video_url
-          }
-
-          video.value = { url: typeof videoUrl === 'string' ? videoUrl : videoUrl?.url, ...result }
+          const videoUrl = result.data?.url || result.data?.[0]?.url || result.url || result.video_url
+          video.value = { url: videoUrl, ...result }
           setSuccess()
           return video.value
         }
