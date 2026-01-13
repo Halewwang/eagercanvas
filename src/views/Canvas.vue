@@ -178,10 +178,10 @@
               </button>
             </div>
             <div class="flex items-center gap-3">
-              <!-- <label class="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+              <label class="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
                 <n-switch v-model:value="autoExecute" size="small" />
                 自动执行
-              </label> -->
+              </label>
               <button 
                 @click="sendMessage"
                 :disabled="isProcessing"
@@ -269,7 +269,7 @@ import {
 import { isDark, toggleTheme } from '../stores/theme'
 import { nodes, edges, addNode, addEdge, updateNode, initSampleData, loadProject, saveProject, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
 import { loadAllModels } from '../stores/models'
-import { useApiConfig, useChat } from '../hooks'
+import { useApiConfig, useChat, useWorkflowOrchestrator } from '../hooks'
 import { projects, initProjectsStore, updateProject, renameProject, currentProject } from '../stores/projects'
 
 // API Settings component | API 设置组件
@@ -310,6 +310,19 @@ const {
   systemPrompt: CHAT_TEMPLATES.imagePrompt.systemPrompt,
   model: CHAT_TEMPLATES.imagePrompt.model
 })
+
+// Workflow orchestrator hook | 工作流编排 hook
+const {
+  isAnalyzing: workflowAnalyzing,
+  isExecuting: workflowExecuting,
+  currentStep: workflowStep,
+  totalSteps: workflowTotalSteps,
+  executionLog: workflowLog,
+  analyzeIntent,
+  executeWorkflow,
+  createTextToImageWorkflow,
+  WORKFLOW_TYPES
+} = useWorkflowOrchestrator()
 
 // Custom node components | 自定义节点组件
 import TextNode from '../components/nodes/TextNode.vue'
@@ -556,46 +569,69 @@ const sendMessage = async () => {
   const input = chatInput.value.trim()
   if (!input) return
 
+  // Check API configuration | 检查 API 配置
+  if (!isApiConfigured.value) {
+    window.$message?.warning('请先配置 API Key')
+    showApiSettings.value = true
+    return
+  }
+
   isProcessing.value = true
   const content = chatInput.value
   chatInput.value = ''
 
   try {
     // Calculate position to avoid overlap | 计算位置避免重叠
-    // Find the lowest Y position of existing nodes | 找到现有节点的最低 Y 位置
     let maxY = 0
     if (nodes.value.length > 0) {
       maxY = Math.max(...nodes.value.map(n => n.position.y))
     }
-    
-    // Place new nodes below existing ones with spacing | 将新节点放在现有节点下方，保持间距
     const baseX = 100
-    const baseY = maxY + 200 // 200px spacing from bottom node
-    
-    // Create text node directly with user input | 直接使用用户输入创建文本节点
-    const textNodeId = addNode('text', { x: baseX, y: baseY }, { 
-      content: content, 
-      label: '提示词' 
-    })
-    
-    // Create imageConfig node to the right | 在右侧创建生图配置节点
-    const imageConfigNodeId = addNode('imageConfig', { x: baseX + 400, y: baseY }, {
-      label: '文生图'
-    })
-    
-    // Auto-connect text → imageConfig | 自动连接 文本 → 生图配置
-    addEdge({
-      source: textNodeId,
-      target: imageConfigNodeId,
-      sourceHandle: 'right',
-      targetHandle: 'left'
-    })
-    
-    // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点尺寸
-    // Use setTimeout to ensure DOM is fully rendered before updating internals
-    // setTimeout(() => {
-    //   updateNodeInternals([textNodeId, imageConfigNodeId])
-    // }, 50)
+    const baseY = maxY + 200
+
+    if (autoExecute.value) {
+      // Auto-execute mode: analyze intent and execute workflow | 自动执行模式：分析意图并执行工作流
+      window.$message?.info('正在分析工作流...')
+      
+      try {
+        // Analyze user intent | 分析用户意图
+        const result = await analyzeIntent(content)
+        const workflowType = result?.workflow_type || WORKFLOW_TYPES.TEXT_TO_IMAGE
+        
+        // Get prompts from AI analysis or use original content
+        const imagePrompt = result?.image_prompt || content
+        const videoPrompt = result?.video_prompt || content
+        
+        window.$message?.info(`执行工作流: ${result?.description || '文生图'}`)
+        
+        // Execute the workflow | 执行工作流
+        await executeWorkflow(workflowType, imagePrompt, videoPrompt, { x: baseX, y: baseY })
+        
+        window.$message?.success('工作流已启动')
+      } catch (err) {
+        console.error('Workflow error:', err)
+        // Fallback to simple text-to-image | 回退到文生图
+        window.$message?.warning('使用默认文生图工作流')
+        await createTextToImageWorkflow(content, { x: baseX, y: baseY })
+      }
+    } else {
+      // Manual mode: just create nodes | 手动模式：仅创建节点
+      const textNodeId = addNode('text', { x: baseX, y: baseY }, { 
+        content: content, 
+        label: '提示词' 
+      })
+      
+      const imageConfigNodeId = addNode('imageConfig', { x: baseX + 400, y: baseY }, {
+        label: '文生图'
+      })
+      
+      addEdge({
+        source: textNodeId,
+        target: imageConfigNodeId,
+        sourceHandle: 'right',
+        targetHandle: 'left'
+      })
+    }
   } catch (err) {
     window.$message?.error(err.message || '创建失败')
   } finally {

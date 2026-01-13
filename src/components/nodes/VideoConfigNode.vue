@@ -391,6 +391,9 @@ const handleGenerate = async () => {
         model: localModel.value,
         updatedAt: Date.now()
       })
+      
+      // Mark this config node as executed | 标记配置节点已执行
+      updateNode(props.id, { executed: true, outputNodeId: videoNodeId })
     }
     window.$message?.success('视频生成成功')
   } catch (err) {
@@ -424,6 +427,22 @@ watch(() => props.data?.model, (newModel) => {
     localModel.value = newModel
   }
 })
+
+// Watch for auto-execute flag | 监听自动执行标志
+watch(
+  () => props.data?.autoExecute,
+  (shouldExecute) => {
+    if (shouldExecute && !loading.value) {
+      // Clear the flag first to prevent re-triggering | 先清除标志防止重复触发
+      updateNode(props.id, { autoExecute: false })
+      // Delay to ensure node connections are established | 延迟确保节点连接已建立
+      setTimeout(() => {
+        handleGenerate()
+      }, 100)
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>

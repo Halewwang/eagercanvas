@@ -96,6 +96,14 @@ const getDefaultNodeData = (type) => {
         quality: '4张 | 高清',
         label: '文生图'
       }
+    case 'videoConfig':
+      return {
+        prompt: '',
+        ratio: '16:9',
+        duration: '5秒',
+        model: 'doubao-seedance-1-5-pro_480p',
+        label: '图生视频'
+      }
     case 'video':
       return {
         url: '',
