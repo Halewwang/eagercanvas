@@ -188,6 +188,50 @@ export const useVideoGeneration = () => {
     percentage: 0
   })
 
+  const getTaskId = (task) => {
+    const candidates = [
+      task?.task_id,
+      task?.taskId,
+      task?.id,
+      task?.data?.task_id,
+      task?.data?.taskId,
+      task?.data?.id,
+      task?.data?.data?.task_id,
+      task?.data?.data?.id
+    ]
+    const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+    return found ? String(found) : ''
+  }
+
+  const getTaskStatus = (result) => {
+    return String(
+      result?.status ||
+      result?.task_status ||
+      result?.data?.status ||
+      result?.data?.task_status ||
+      result?.data?.state ||
+      ''
+    ).toLowerCase()
+  }
+
+  const getVideoUrl = (result) => {
+    return (
+      result?.url ||
+      result?.video_url ||
+      result?.data?.url ||
+      result?.data?.video_url ||
+      result?.data?.task_result?.video_url ||
+      result?.data?.task_result?.video?.url ||
+      result?.data?.task_result?.videos?.[0]?.url ||
+      result?.task_result?.video_url ||
+      result?.task_result?.video?.url ||
+      result?.task_result?.videos?.[0]?.url ||
+      result?.data?.[0]?.url ||
+      result?.output?.[0]?.url ||
+      ''
+    )
+  }
+
   /**
    * Generate video with fixed params | 固定参数生成视频
    * @param {Object} params - { model, prompt, first_frame_image, last_frame_image, ratio, duration }
@@ -230,15 +274,18 @@ export const useVideoGeneration = () => {
       const isAsync = modelConfig?.async !== false
 
       // If has video URL directly, return | 如果直接有视频 URL，返回
-      if (!isAsync || task.data?.url || task.url) {
-        const videoUrl = task.data?.url || task.url || task.data?.[0]?.url
+      const createStatus = getTaskStatus(task)
+      const createVideoUrl = getVideoUrl(task)
+
+      if (!isAsync || (createVideoUrl && (!createStatus || ['completed', 'succeeded', 'success', 'done', 'finished'].includes(createStatus)))) {
+        const videoUrl = createVideoUrl
         video.value = { url: videoUrl, ...task }
         setSuccess()
         return video.value
       }
 
       // Get task ID for polling | 获取任务 ID 用于轮询
-      const id = task.id || task.task_id || task.taskId
+      const id = getTaskId(task)
       if (!id) {
         throw new Error('未获取到任务 ID')
       }
@@ -255,18 +302,19 @@ export const useVideoGeneration = () => {
         progress.percentage = Math.min(Math.round((i / maxAttempts) * 100), 99)
 
         const result = await getVideoTaskStatus(id)
+        const resultStatus = getTaskStatus(result)
+        const resultVideoUrl = getVideoUrl(result)
 
         // Check for completion | 检查是否完成
-        if (result.status === 'completed' || result.status === 'succeeded' || result.data) {
+        if (resultVideoUrl && (!resultStatus || ['completed', 'succeeded', 'success', 'done', 'finished'].includes(resultStatus))) {
           progress.percentage = 100
-          const videoUrl = result.data?.url || result.data?.[0]?.url || result.url || result.video_url
-          video.value = { url: videoUrl, ...result }
+          video.value = { url: resultVideoUrl, ...result }
           setSuccess()
           return video.value
         }
 
         // Check for failure | 检查是否失败
-        if (result.status === 'failed' || result.status === 'error') {
+        if (['failed', 'error', 'cancelled', 'canceled'].includes(resultStatus)) {
           throw new Error(result.error?.message || result.message || '视频生成失败')
         }
 

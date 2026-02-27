@@ -71,8 +71,8 @@ instance.interceptors.response.use(
       return res.data
     }
     
-    // Success response | 成功响应
-    if (code === 200 || res.status === 200) {
+    // Success response | 成功响应 (any 2xx)
+    if ((res.status >= 200 && res.status < 300) || code === 200) {
       return res.data
     }
     

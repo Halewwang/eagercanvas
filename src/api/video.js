@@ -10,8 +10,7 @@ export const createVideoTask = (data, options = {}) => {
   return request({
     url: endpoint,
     method: 'post',
-    data,
-    headers: { 'Content-Type': 'multipart/form-data' }
+    data
   })
 }
 
@@ -26,13 +25,27 @@ export const getVideoTaskStatus = (taskId) =>
 export const pollVideoTask = async (taskId, maxAttempts = 120, interval = 5000) => {
   for (let i = 0; i < maxAttempts; i++) {
     const result = await getVideoTaskStatus(taskId)
+    const status = String(
+      result?.status ||
+      result?.task_status ||
+      result?.data?.status ||
+      result?.data?.task_status ||
+      ''
+    ).toLowerCase()
+    const videoUrl =
+      result?.url ||
+      result?.video_url ||
+      result?.data?.url ||
+      result?.data?.video_url ||
+      result?.data?.task_result?.video_url ||
+      result?.data?.task_result?.videos?.[0]?.url
 
-    if (result.status === 'completed' || result.data) {
+    if (videoUrl && (!status || ['completed', 'succeeded', 'success', 'done', 'finished'].includes(status))) {
       return result
     }
 
-    if (result.status === 'failed') {
-      throw new Error(result.error?.message || '视频生成失败')
+    if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) {
+      throw new Error(result?.error?.message || result?.message || '视频生成失败')
     }
 
     await new Promise(resolve => setTimeout(resolve, interval))
