@@ -119,6 +119,7 @@ instance.interceptors.response.use(
             localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
             flushQueue(refreshError, '')
             window.$message?.error('登录已过期，请重新登录')
+            error.__handled = true
             return Promise.reject(refreshError)
           } finally {
             isRefreshing = false
@@ -127,10 +128,13 @@ instance.interceptors.response.use(
 
         localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
         window.$message?.error('登录已过期，请重新登录')
+        error.__handled = true
       } else if (status === 429) {
         window.$message?.error('请求过于频繁，请稍后再试')
+        error.__handled = true
       } else {
         window.$message?.error(message || '请求失败')
+        error.__handled = true
       }
 
       if (import.meta.env.DEV) {
@@ -142,6 +146,7 @@ instance.interceptors.response.use(
       }
     } else {
       window.$message?.error(error.message || '网络错误')
+      error.__handled = true
     }
     
     return Promise.reject(error)

@@ -66,6 +66,18 @@ export const useWorkflowExecutor = () => {
           notifier.success('Workflow started')
         } catch (err) {
           console.error('Workflow error:', err)
+          const status = err?.response?.status
+          const message = err?.response?.data?.message || err?.message || ''
+          const shouldSkipFallback =
+            [401, 403, 429, 500].includes(status) ||
+            /too many requests|capacity|unauthorized|认证|登录已过期/i.test(message)
+
+          // Avoid fallback when upstream is rate-limited/auth-failed.
+          // It only causes a second failing request and duplicate toasts.
+          if (shouldSkipFallback) {
+            throw err
+          }
+
           // Fallback to simple text-to-image | 回退到文生图
           notifier.warning('Falling back to default text-to-image workflow')
           await createTextToImageWorkflow(content, position)
@@ -79,7 +91,9 @@ export const useWorkflowExecutor = () => {
         }
       }
     } catch (err) {
-      notifier.error(err.message || 'Creation failed')
+      if (!err?.__handled) {
+        notifier.error(err?.message || 'Creation failed')
+      }
     } finally {
       isProcessing.value = false
     }
