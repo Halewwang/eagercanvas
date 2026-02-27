@@ -60,7 +60,8 @@ const handleSendCode = async () => {
     await sendCode(email.value.trim())
     window.$message?.success('Verification code sent')
   } catch (error) {
-    window.$message?.error(error?.message || 'Failed to send code')
+    const msg = error?.response?.data?.message || error?.message || 'Failed to send code'
+    window.$message?.error(msg)
   } finally {
     sending.value = false
   }
@@ -74,7 +75,8 @@ const handleVerify = async () => {
     window.$message?.success('Signed in')
     router.push('/')
   } catch (error) {
-    window.$message?.error(error?.message || 'Sign in failed')
+    const msg = error?.response?.data?.message || error?.message || 'Sign in failed'
+    window.$message?.error(msg)
   } finally {
     verifying.value = false
   }
