@@ -35,29 +35,23 @@ export const SEEDREAM_QUALITY_OPTIONS = [
     { label: '4K 高清', key: '4k' }
 ]
 
-export const BANANA_SIZE_OPTIONS = [
-    { label: '21:9', key: '21x9' },
-    { label: '16:9', key: '16x9' },
-    { label: '4:3', key: '4x3' },
-    { label: '3:2', key: '3x2' },
-    { label: '1:1', key: '1x1' },
-    { label: '2:3', key: '2x3' },
-    { label: '3:4', key: '3x4' },
-    { label: '9:16', key: '9x16' },
-    { label: '9:21', key: '9x21' }
-]
-
 // Image generation models | 图片生成模型
 export const IMAGE_MODELS = [
     {
         label: 'Nano Banana Pro',
         key: 'nano-banana-pro',
-        sizes: BANANA_SIZE_OPTIONS.map(s => s.key),
-        // qualities: SEEDREAM_QUALITY_OPTIONS,
-        // getSizesByQuality: (quality) => quality === '4k' ? SEEDREAM_4K_SIZE_OPTIONS : SEEDREAM_SIZE_OPTIONS,
+        tips: 'Nano Banana 系列建议在提示词中描述画幅（如: vertical 9:16）。',
+        sizes: [],
         defaultParams: {
-            size: '1x1',
-            quality: 'standard',
+            style: 'vivid'
+        }
+    },
+    {
+        label: 'Nano Banana',
+        key: 'nano-banana',
+        tips: 'Nano Banana 系列建议在提示词中描述画幅（如: vertical 9:16）。',
+        sizes: [],
+        defaultParams: {
             style: 'vivid'
         }
     },
@@ -72,18 +66,7 @@ export const IMAGE_MODELS = [
             quality: 'standard',
             style: 'vivid'
         }
-    },
-    {
-        label: 'Nano Banana',
-        key: 'nano-banana',
-        tips: '尺寸写在提示词中: 尺寸 9:16',
-        sizes: [],
-        defaultParams: {
-            quality: 'standard',
-            style: 'vivid'
-        }
-    },
-
+    }
 ]
 
 // Video ratio options | 视频比例选项

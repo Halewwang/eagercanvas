@@ -133,18 +133,27 @@ export const useImageGeneration = () => {
 
     try {
       const modelConfig = getModelByName(params.model)
+      const isNanoBanana = String(params.model || '').startsWith('nano-banana')
       
       // Build request data | 构建请求数据
       const requestData = {
         model: params.model,
-        prompt: params.prompt,
-        size: params.size || modelConfig?.defaultParams?.size || '2048x2048',
-        // n: params.n || 1
+        model_name: params.model,
+        prompt: params.prompt
+      }
+
+      // Seedream requires size/quality; nano banana family usually does not.
+      if (!isNanoBanana) {
+        requestData.size = params.size || modelConfig?.defaultParams?.size || '2048x2048'
+        requestData.quality = params.quality || modelConfig?.defaultParams?.quality || 'standard'
       }
 
       // Add reference image if provided | 添加参考图
       if (params.image) {
         requestData.image = params.image
+        if (Array.isArray(params.image)) {
+          requestData.images = params.image
+        }
       }
 
       // Call API | 调用 API
@@ -214,6 +223,8 @@ export const useVideoGeneration = () => {
     ).toLowerCase()
   }
 
+  const doneStatuses = new Set(['completed', 'succeeded', 'success', 'done', 'finished', 'succeed', 'successed'])
+
   const getVideoUrl = (result) => {
     return (
       result?.url ||
@@ -226,6 +237,8 @@ export const useVideoGeneration = () => {
       result?.task_result?.video_url ||
       result?.task_result?.video?.url ||
       result?.task_result?.videos?.[0]?.url ||
+      result?.detail?.draft_info?.downloadable_url ||
+      result?.data?.detail?.draft_info?.downloadable_url ||
       result?.data?.[0]?.url ||
       result?.output?.[0]?.url ||
       ''
@@ -277,7 +290,7 @@ export const useVideoGeneration = () => {
       const createStatus = getTaskStatus(task)
       const createVideoUrl = getVideoUrl(task)
 
-      if (!isAsync || (createVideoUrl && (!createStatus || ['completed', 'succeeded', 'success', 'done', 'finished'].includes(createStatus)))) {
+      if (!isAsync || (createVideoUrl && (!createStatus || doneStatuses.has(createStatus)))) {
         const videoUrl = createVideoUrl
         video.value = { url: videoUrl, ...task }
         setSuccess()
@@ -306,7 +319,7 @@ export const useVideoGeneration = () => {
         const resultVideoUrl = getVideoUrl(result)
 
         // Check for completion | 检查是否完成
-        if (resultVideoUrl && (!resultStatus || ['completed', 'succeeded', 'success', 'done', 'finished'].includes(resultStatus))) {
+        if (resultVideoUrl && (!resultStatus || doneStatuses.has(resultStatus))) {
           progress.percentage = 100
           video.value = { url: resultVideoUrl, ...result }
           setSuccess()

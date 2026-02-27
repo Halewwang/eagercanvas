@@ -293,8 +293,17 @@ const connectedRefImages = computed(() => {
 // Handle model selection | 处理Model选择
 const handleModelSelect = (key) => {
   localModel.value = key
-  // Only update model, keep size and quality unchanged | 仅更新Model，保持Size和Quality不变
-  updateNode(props.id, { model: key })
+  const config = getModelConfig(key)
+  const updates = { model: key }
+  if (config?.defaultParams?.size) {
+    localSize.value = config.defaultParams.size
+    updates.size = config.defaultParams.size
+  }
+  if (config?.defaultParams?.quality) {
+    localQuality.value = config.defaultParams.quality
+    updates.quality = config.defaultParams.quality
+  }
+  updateNode(props.id, updates)
 }
 
 // Handle quality selection | 处理Quality选择
@@ -445,9 +454,14 @@ const handleGenerate = async (mode = 'auto') => {
     const params = {
       model: localModel.value,
       prompt: prompt,
-      size: localSize.value,
-      quality: localQuality.value,
       n: 1
+    }
+
+    if (hasSizeOptions.value && localSize.value) {
+      params.size = localSize.value
+    }
+    if (hasQualityOptions.value && localQuality.value) {
+      params.quality = localQuality.value
     }
 
     // Add reference image if provided | 如果有Reference则添加

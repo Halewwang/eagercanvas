@@ -96,6 +96,7 @@ import { NIcon, NSpin } from 'naive-ui'
 import { TrashOutline, ExpandOutline, CopyOutline, ImageOutline, VideocamOutline } from '../../icons/coolicons'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes } from '../../stores/canvas'
 import { useChat, useApiConfig } from '../../hooks'
+import { useModelConfig } from '../../hooks/useModelConfig'
 
 const props = defineProps({
   id: String,
@@ -107,11 +108,12 @@ const { updateNodeInternals } = useVueFlow()
 
 // API config hook | API 配置 hook
 const { isConfigured: isApiConfigured } = useApiConfig()
+const { selectedChatModel } = useModelConfig()
 
 // Chat hook for polish | 润色用的 Chat hook
 const { send: sendChat } = useChat({
   systemPrompt: 'You are an expert prompt writer for image generation. Rewrite user input into a high-quality visual prompt with style, lighting, composition, and details. Return only the prompt.',
-  model: 'gpt-4o-mini'
+  model: selectedChatModel.value || 'gpt-4o-mini'
 })
 
 // Local content state | 本地内容状态

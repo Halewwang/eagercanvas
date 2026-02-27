@@ -76,6 +76,7 @@ const selectedVideoModel = ref(getStored(STORAGE_KEYS.SELECTED_VIDEO_MODEL, DEFA
  * Model Configuration Hook
  */
 export const useModelConfig = () => {
+  const allowedImageModels = new Set(['doubao-seedream-4-5-251128', 'nano-banana-pro', 'nano-banana'])
   // Combined models (built-in + custom)
   const allChatModels = computed(() => [
     ...CHAT_MODELS.map(m => ({ ...m, isCustom: false })),
@@ -88,7 +89,9 @@ export const useModelConfig = () => {
 
   const allImageModels = computed(() => [
     ...IMAGE_MODELS.map(m => ({ ...m, isCustom: false })),
-    ...customImageModels.value.map(m => ({ 
+    ...customImageModels.value
+      .filter(m => allowedImageModels.has(m.key))
+      .map(m => ({
       label: m.label || m.key, 
       key: m.key,
       isCustom: true,

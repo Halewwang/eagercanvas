@@ -37,11 +37,46 @@ const callProvider = async (path, body, method = 'POST') => {
 
 export const providerChatCompletions = (payload) => callProvider('/chat/completions', payload)
 
+const RATIO_TO_VIDEO_SIZE = {
+  '16:9': '1280x720',
+  '9:16': '720x1280',
+  '4:3': '1152x864',
+  '3:4': '864x1152',
+  '1:1': '1024x1024'
+}
+
+const normalizeVideoSize = (value) => {
+  if (!value) return undefined
+  if (typeof value === 'string' && value.includes(':')) return RATIO_TO_VIDEO_SIZE[value] || undefined
+  if (typeof value === 'string' && value.includes('x')) return value
+  return undefined
+}
+
 const normalizeImagePayload = (payload = {}) => {
-  const model = payload.model === 'nano-banana-pro' ? 'nano-banana' : payload.model
+  const rawModel = String(payload.model_name || payload.model || '').trim()
+  const model = rawModel === 'nano-banana-pro' ? 'nano-banana' : rawModel
+  const prompt = payload.prompt || ''
+  const image = Array.isArray(payload.image) ? payload.image[0] : payload.image
+  const images = Array.isArray(payload.image) ? payload.image : (Array.isArray(payload.images) ? payload.images : undefined)
+
+  if (model.startsWith('nano-banana')) {
+    return {
+      model: 'nano-banana',
+      model_name: 'nano-banana',
+      prompt,
+      image,
+      images
+    }
+  }
+
   return {
-    ...payload,
-    model
+    model,
+    model_name: model || undefined,
+    prompt,
+    size: payload.size,
+    quality: payload.quality,
+    image,
+    images
   }
 }
 
@@ -63,6 +98,9 @@ export const providerCreateVideo = (payload) => {
   const modelName = String(body.model_name || body.model || '').toLowerCase()
   const isKling = modelName.startsWith('kling')
   const hasImageInput = Boolean(body.image || body.image_url || body.first_frame_image || body.last_frame_image || (Array.isArray(body.images) && body.images.length > 0))
+  const aspectRatio = body.aspect_ratio || (typeof body.size === 'string' && body.size.includes(':') ? body.size : undefined)
+  const size = normalizeVideoSize(body.size) || normalizeVideoSize(aspectRatio)
+  const duration = body.duration || body.seconds
 
   if (isKling) {
     if (hasImageInput) {
@@ -71,20 +109,30 @@ export const providerCreateVideo = (payload) => {
         model_name: body.model_name || body.model,
         prompt: body.prompt || '',
         image,
-        aspect_ratio: body.aspect_ratio || body.size,
-        duration: body.duration || body.seconds
+        aspect_ratio: aspectRatio,
+        size,
+        duration
       })
     }
 
     return callProvider('/video/text2video', {
       model_name: body.model_name || body.model,
       prompt: body.prompt || '',
-      aspect_ratio: body.aspect_ratio || body.size,
-      duration: body.duration || body.seconds
+      aspect_ratio: aspectRatio,
+      size,
+      duration
     })
   }
 
-  return callProvider('/video/generations', body)
+  return callProvider('/video/generations', {
+    model: body.model,
+    model_name: body.model_name || body.model,
+    prompt: body.prompt || '',
+    image: body.image || body.first_frame_image,
+    images: body.images,
+    size,
+    duration
+  })
 }
 
 export const providerVideoStatus = (taskId) => callProvider(`/video/task/${taskId}`, null, 'GET')
