@@ -4,7 +4,7 @@
 
 import { ref, computed, watch } from 'vue'
 import { setBaseUrl as setRequestBaseUrl } from '@/utils'
-import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from '@/utils'
+import { DEFAULT_API_BASE_URL, DEFAULT_API_KEY, STORAGE_KEYS } from '@/utils'
 
 /**
  * Get stored value from localStorage | 从 localStorage 获取存储值
@@ -36,7 +36,7 @@ const setStored = (key, value) => {
  * API Configuration Hook | API 配置 Hook
  */
 export const useApiConfig = () => {
-  const apiKey = ref(getStored(STORAGE_KEYS.API_KEY))
+  const apiKey = ref(getStored(STORAGE_KEYS.API_KEY, DEFAULT_API_KEY))
   const baseUrl = ref(getStored(STORAGE_KEYS.BASE_URL, DEFAULT_API_BASE_URL))
   
   const isConfigured = computed(() => !!apiKey.value)
@@ -67,7 +67,7 @@ export const useApiConfig = () => {
   }
 
   const clear = () => {
-    apiKey.value = ''
+    apiKey.value = DEFAULT_API_KEY
     baseUrl.value = DEFAULT_API_BASE_URL
   }
 

@@ -3,6 +3,7 @@
  */
 
 import { request, getBaseUrl } from '@/utils'
+import { DEFAULT_API_KEY } from '@/utils/constants'
 
 // 对话补全
 export const chatCompletions = (data) =>
@@ -14,7 +15,7 @@ export const chatCompletions = (data) =>
 
 // 流式对话补全
 export const streamChatCompletions = async function* (data, signal) {
-  const apiKey = localStorage.getItem('apiKey')
+  const apiKey = localStorage.getItem('apiKey') || DEFAULT_API_KEY
   const baseUrl = getBaseUrl()
   
   const response = await fetch(`${baseUrl}/chat/completions`, {

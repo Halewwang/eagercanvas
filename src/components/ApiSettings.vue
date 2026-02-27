@@ -189,6 +189,7 @@
 import { ref, reactive, watch } from 'vue'
 import { NModal, NForm, NFormItem, NInput, NButton, NAlert, NDivider, NTag, NTabs, NTabPane } from 'naive-ui'
 import { useApiConfig, useModelConfig } from '../hooks'
+import { DEFAULT_API_BASE_URL, DEFAULT_API_KEY } from '../utils/constants'
 
 // Props | 属性
 const props = defineProps({
@@ -287,8 +288,8 @@ const handleSave = () => {
 const handleClear = () => {
   clearConfig()
   clearCustomModels()
-  formData.apiKey = ''
-  formData.baseUrl = 'https://api.chatfire.site/v1'
+  formData.apiKey = DEFAULT_API_KEY
+  formData.baseUrl = DEFAULT_API_BASE_URL
 }
 </script>
 

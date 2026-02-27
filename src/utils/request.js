@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios'
+import { DEFAULT_API_KEY } from './constants'
 
 // Base URL from environment or default
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.chatfire.site/v1'
@@ -18,7 +19,7 @@ const instance = axios.create({
 instance.interceptors.request.use(
   (config) => {
     // Get API key from localStorage | 从 localStorage 获取 API key
-    const apiKey = localStorage.getItem('apiKey')
+    const apiKey = localStorage.getItem('apiKey') || DEFAULT_API_KEY
     
     // Skip auth for certain endpoints | 跳过某些端点的认证
     const noAuthEndpoints = ['/model/page', '/model/fullName', '/model/types']

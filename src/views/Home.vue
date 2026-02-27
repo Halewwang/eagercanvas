@@ -252,7 +252,7 @@ const isApiConfigured = ref(apiConfig.isConfigured.value)
 
 // Refresh API config state | 刷新 API 配置状态
 const refreshApiConfig = () => {
-  isApiConfigured.value = !!localStorage.getItem('apiKey')
+  isApiConfigured.value = apiConfig.isConfigured.value
 }
 
 // Video refs for hover play | 视频引用用于悬停播放
@@ -361,14 +361,6 @@ const confirmRename = () => {
 
 // Check API key before navigation | 跳转前检查 API Key
 const checkApiKeyAndNavigate = (callback) => {
-  if (!isApiConfigured.value) {
-    dialog.warning({
-      title: 'API Key Required',
-      content: 'Please configure your API Key in Settings before using the canvas.',
-      positiveText: 'OK'
-    })
-    return false
-  }
   callback()
   return true
 }
