@@ -9,12 +9,12 @@
             class="tab-item" 
             :class="{ active: activeTab === 'public' }"
             @click="activeTab = 'public'"
-          >公共工作流</span>
+          >Public Workflows</span>
           <span 
             class="tab-item" 
             :class="{ active: activeTab === 'my' }"
             @click="activeTab = 'my'"
-          >我的工作流</span>
+          >My Workflows</span>
         </div>
         <button class="expand-btn" @click="visible = false">
           <n-icon :size="16"><CloseOutline /></n-icon>
@@ -46,7 +46,7 @@
           <n-icon :size="36" class="text-gray-500">
             <FolderOpenOutline />
           </n-icon>
-          <p class="text-gray-500 text-sm mt-2">暂无自定义工作流</p>
+          <p class="text-gray-500 text-sm mt-2">No custom workflows yet</p>
         </div>
       </div>
     </div>
@@ -70,7 +70,7 @@ import {
   PersonOutline,
   CartOutline,
   ChatbubbleOutline
-} from '@vicons/ionicons5'
+} from '../icons/coolicons'
 import { WORKFLOW_TEMPLATES } from '../config/workflows'
 
 const props = defineProps({
@@ -89,7 +89,20 @@ const visible = computed({
 })
 
 // Public workflows | 公共工作流
-const publicWorkflows = computed(() => WORKFLOW_TEMPLATES)
+const WORKFLOW_NAME_MAP = {
+  '多角度分镜': 'Multi-Angle Storyboard',
+  '通用产品全套电商图': 'E-commerce Product Set',
+  '短剧角色设计': 'Character Design Pack',
+  '多时段场景背景': 'Multi-Time Scene Pack',
+  '绘本生成器': 'Storybook Generator'
+}
+
+const publicWorkflows = computed(() =>
+  WORKFLOW_TEMPLATES.map((workflow) => ({
+    ...workflow,
+    name: WORKFLOW_NAME_MAP[workflow.name] || workflow.name
+  }))
+)
 
 // Icon mapping | 图标映射
 const iconMap = {

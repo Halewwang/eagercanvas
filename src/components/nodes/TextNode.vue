@@ -26,16 +26,18 @@
       <div class="p-3">
         <textarea v-model="content" @blur="updateContent" @wheel.stop @mousedown.stop
           class="w-full bg-transparent resize-none outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] min-h-[80px]"
-          placeholder="请输入文本内容..." />
+          placeholder="Enter text..." />
         <!-- Polish button | 润色按钮 -->
         <button 
           @click="handlePolish"
           :disabled="isPolishing || !content.trim()"
-          class="mt-2 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--accent-color)] hover:text-white border border-[var(--border-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+          class="mt-2 px-4 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--accent-color)] hover:text-white border border-[var(--border-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 group"
         >
           <n-spin v-if="isPolishing" :size="12" />
-          <span v-else>✨</span>
-          AI 润色
+          <n-icon v-else :size="14" class="text-[var(--accent-color)] group-hover:text-white transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><path d="M19.07 4.93L17.22 3.07a3.046 3.046 0 0 0-4.31 0l-1.4 1.4l5.69 5.69l1.4-1.4c1.19-1.2 1.19-3.13.47-3.83zm-7.12 3.08L6.26 13.7a3.042 3.042 0 0 0-.88 2.16V19h3.14c.8 0 1.57-.32 2.16-.9l5.69-5.69l-4.42-4.4z" fill="currentColor"></path><path d="M20 24h-4v-2h4v-4h2v4h4v2h-4v4h-2z" fill="currentColor"></path></svg>
+          </n-icon>
+          Polish
         </button>
       </div>
 
@@ -46,7 +48,7 @@
     </div>
 
     <!-- Hover action buttons | 悬浮操作按钮 -->
-    <!-- Top right - Copy button | 右上角 - 复制按钮 -->
+    <!-- Top right - Copy button | 右上角 - Copy按钮 -->
     <div v-show="showActions" class="absolute -top-5 right-12 z-[1000]">
       <button @click="handleDuplicate"
         class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max">
@@ -54,30 +56,30 @@
           <CopyOutline />
         </n-icon>
         <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">复制</span>
+          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
       </button>
     </div>
 
     <!-- Right side - Action buttons | 右侧 - 操作按钮 -->
     <div v-show="showActions"
       class="absolute right-10 top-1/2 -translate-y-1/2 translate-x-full flex flex-col gap-2 z-[1000]">
-      <!-- Image generation button | 图片生成按钮 -->
+      <!-- Image generation button | Image Gen按钮 -->
       <button @click="handleImageGen"
         class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max">
         <n-icon :size="16" class="text-gray-600">
           <ImageOutline />
         </n-icon>
         <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">图片生成</span>
+          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">Image Gen</span>
       </button>
-      <!-- Video generation button | 视频生成按钮 -->
+      <!-- Video generation button | Video Gen按钮 -->
       <button @click="handleVideoGen"
         class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max">
         <n-icon :size="16" class="text-gray-600">
           <VideocamOutline />
         </n-icon>
         <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">视频生成</span>
+          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">Video Gen</span>
       </button>
     </div>
   </div>
@@ -91,7 +93,7 @@
 import { ref, watch, nextTick } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
-import { TrashOutline, ExpandOutline, CopyOutline, ImageOutline, VideocamOutline } from '@vicons/ionicons5'
+import { TrashOutline, ExpandOutline, CopyOutline, ImageOutline, VideocamOutline } from '../../icons/coolicons'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes } from '../../stores/canvas'
 import { useChat, useApiConfig } from '../../hooks'
 
@@ -108,7 +110,7 @@ const { isConfigured: isApiConfigured } = useApiConfig()
 
 // Chat hook for polish | 润色用的 Chat hook
 const { send: sendChat } = useChat({
-  systemPrompt: '你是一个专业的AI绘画提示词专家。将用户输入的内容美化成高质量的生图提示词，包含风格、光线、構图、细节等要素。直接返回提示词，不要其他解释。',
+  systemPrompt: 'You are an expert prompt writer for image generation. Rewrite user input into a high-quality visual prompt with style, lighting, composition, and details. Return only the prompt.',
   model: 'gpt-4o-mini'
 })
 
@@ -133,14 +135,14 @@ const updateContent = () => {
   updateNode(props.id, { content: content.value })
 }
 
-// Handle AI polish | 处理 AI 润色
+// Handle AI polish | 处理 Polish
 const handlePolish = async () => {
   const input = content.value.trim()
   if (!input) return
   
   // Check API configuration | 检查 API 配置
   if (!isApiConfigured.value) {
-    window.$message?.warning('请先配置 API Key')
+    window.$message?.warning('Please configure API Key first')
     return
   }
 
@@ -148,17 +150,17 @@ const handlePolish = async () => {
   const originalContent = content.value
 
   try {
-    // Call chat API to polish the prompt | 调用 AI 润色提示词
+    // Call chat API to polish the prompt | 调用 PolishPrompt
     const result = await sendChat(input, true)
     
     if (result) {
       content.value = result
       updateNode(props.id, { content: result })
-      window.$message?.success('提示词已润色')
+      window.$message?.success('Prompt polished')
     }
   } catch (err) {
     content.value = originalContent
-    window.$message?.error(err.message || '润色失败')
+    window.$message?.error(err.message || 'Polish failed')
   } finally {
     isPolishing.value = false
   }
@@ -169,10 +171,10 @@ const handleDelete = () => {
   removeNode(props.id)
 }
 
-// Handle duplicate | 处理复制
+// Handle duplicate | 处理Copy
 const handleDuplicate = () => {
   const newNodeId = duplicateNode(props.id)
-  window.$message?.success('节点已复制')
+  window.$message?.success('Node duplicated')
   if (newNodeId) {
     setTimeout(() => {
       updateNodeInternals(newNodeId)
@@ -180,7 +182,7 @@ const handleDuplicate = () => {
   }
 }
 
-// Handle image generation | 处理图片生成
+// Handle image generation | 处理Image Gen
 const handleImageGen = () => {
   const currentNode = nodes.value.find(n => n.id === props.id)
   const nodeX = currentNode?.position?.x || 0
@@ -190,7 +192,7 @@ const handleImageGen = () => {
   const configNodeId = addNode('imageConfig', { x: nodeX + 400, y: nodeY }, {
     model: 'doubao-seedream-4-5-251128',
     size: '2048x2048',
-    label: '文生图'
+    label: 'Text to Image'
   })
 
   // Auto connect | 自动连接
@@ -201,13 +203,13 @@ const handleImageGen = () => {
     targetHandle: 'left'
   })
 
-  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点尺寸
+  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点Size
   setTimeout(() => {
     updateNodeInternals(configNodeId)
   }, 50)
 }
 
-// Handle video generation | 处理视频生成
+// Handle video generation | 处理Video Gen
 const handleVideoGen = () => {
   const currentNode = nodes.value.find(n => n.id === props.id)
   const nodeX = currentNode?.position?.x || 0
@@ -215,7 +217,7 @@ const handleVideoGen = () => {
 
   // Create videoConfig node | 创建视频配置节点
   const configNodeId = addNode('videoConfig', { x: nodeX + 400, y: nodeY }, {
-    label: '视频生成'
+    label: 'Video Gen'
   })
 
   // Auto connect | 自动连接
@@ -226,7 +228,7 @@ const handleVideoGen = () => {
     targetHandle: 'left'
   })
 
-  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点尺寸
+  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点Size
   setTimeout(() => {
     updateNodeInternals(configNodeId)
   }, 50)

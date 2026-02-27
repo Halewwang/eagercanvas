@@ -1,16 +1,16 @@
 <template>
   <!-- Download Modal | 下载弹窗 -->
-  <n-modal v-model:show="visible" preset="card" title="素材下载" style="width: 600px; max-width: 90vw;">
+  <n-modal v-model:show="visible" preset="card" title="Asset Downloads" style="width: 600px; max-width: 90vw;">
     <div class="space-y-4">
       <!-- Stats | 统计 -->
       <div class="flex items-center gap-4 text-sm text-[var(--text-secondary)]">
-        <span>图片: {{ imageAssets.length }} 张</span>
-        <span>视频: {{ videoAssets.length }} 个</span>
+        <span>Images: {{ imageAssets.length }}</span>
+        <span>Videos: {{ videoAssets.length }}</span>
       </div>
 
       <!-- Image assets | 图片素材 -->
       <div v-if="imageAssets.length > 0">
-        <h4 class="text-sm font-medium mb-2">图片素材</h4>
+        <h4 class="text-sm font-medium mb-2">Images</h4>
         <div class="grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
           <div 
             v-for="(asset, idx) in imageAssets" 
@@ -28,7 +28,7 @@
 
       <!-- Video assets | 视频素材 -->
       <div v-if="videoAssets.length > 0">
-        <h4 class="text-sm font-medium mb-2">视频素材</h4>
+        <h4 class="text-sm font-medium mb-2">Videos</h4>
         <div class="space-y-2 max-h-[200px] overflow-y-auto">
           <div 
             v-for="(asset, idx) in videoAssets" 
@@ -40,7 +40,7 @@
               <n-icon :size="20"><VideocamOutline /></n-icon>
             </div>
             <div class="flex-1 min-w-0">
-              <div class="text-sm truncate">{{ asset.label || '视频' }}</div>
+              <div class="text-sm truncate">{{ asset.label || 'Video' }}</div>
               <div class="text-xs text-[var(--text-secondary)]">{{ asset.duration ? asset.duration + 's' : '' }}</div>
             </div>
             <n-icon :size="20" class="text-[var(--text-secondary)]"><DownloadOutline /></n-icon>
@@ -50,13 +50,13 @@
 
       <!-- Empty state | 空状态 -->
       <div v-if="imageAssets.length === 0 && videoAssets.length === 0" class="text-center py-8 text-[var(--text-secondary)]">
-        暂无可下载的素材
+        No downloadable assets yet
       </div>
     </div>
 
     <template #footer>
       <div class="flex items-center justify-end">
-        <n-button @click="visible = false">关闭</n-button>
+        <n-button @click="visible = false">Close</n-button>
       </div>
     </template>
   </n-modal>
@@ -69,7 +69,7 @@
  */
 import { computed } from 'vue'
 import { NModal, NButton, NIcon } from 'naive-ui'
-import { DownloadOutline, VideocamOutline } from '@vicons/ionicons5'
+import { DownloadOutline, VideocamOutline } from '../icons/coolicons'
 import { nodes } from '../stores/canvas'
 
 // Props | 属性
@@ -95,7 +95,7 @@ const imageAssets = computed(() => {
     .filter(n => n.type === 'image' && n.data?.url)
     .map(n => ({
       url: n.data.url,
-      label: n.data.label || '图片',
+      label: n.data.label || 'Image',
       nodeId: n.id
     }))
 })
@@ -106,7 +106,7 @@ const videoAssets = computed(() => {
     .filter(n => n.type === 'video' && n.data?.url)
     .map(n => ({
       url: n.data.url,
-      label: n.data.label || '视频',
+      label: n.data.label || 'Video',
       duration: n.data.duration,
       nodeId: n.id
     }))
@@ -115,6 +115,6 @@ const videoAssets = computed(() => {
 // Download single asset | 下载单个素材
 const downloadAsset = (asset) => {
   window.open(asset.url, '_blank')
-  window.$message?.success('已在新标签页打开')
+  window.$message?.success('Opened in a new tab')
 }
 </script>

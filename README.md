@@ -1,4 +1,4 @@
-# AI Canvas
+# Ling's Visuals Canvas
 
 一个基于 Vue Flow 的可视化 AI 创作画布，支持文生图、视频生成等 AI 工作流的节点式编排。
 [体验地址](https://marketing.chatfire.site/huobao-canvas/)

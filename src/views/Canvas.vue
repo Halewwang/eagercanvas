@@ -1,44 +1,29 @@
 <template>
   <!-- Canvas page | 画布页面 -->
-  <div class="h-screen w-screen flex flex-col bg-[var(--bg-primary)]">
-    <!-- Header | 顶部导航 -->
-    <AppHeader class="bg-[var(--bg-secondary)]">
-      <template #left>
-        <button 
-          @click="goBack"
-          class="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-        >
-          <n-icon :size="20"><ChevronBackOutline /></n-icon>
-        </button>
-        <n-dropdown :options="projectOptions" @select="handleProjectAction">
-          <button class="flex items-center gap-1 hover:bg-[var(--bg-tertiary)] px-2 py-1 rounded-lg transition-colors">
-            <span class="font-medium">{{ projectName }}</span>
-            <n-icon :size="16"><ChevronDownOutline /></n-icon>
-          </button>
-        </n-dropdown>
-      </template>
-      <template #right>
-        <button 
-          @click="showDownloadModal = true"
-          class="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-          :class="{ 'text-[var(--accent-color)]': hasDownloadableAssets }"
-          title="批量下载素材"
-        >
-          <n-icon :size="20"><DownloadOutline /></n-icon>
-        </button>
-        <button 
-          @click="showApiSettings = true"
-          class="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
-          :class="{ 'text-[var(--accent-color)]': isApiConfigured }"
-          title="API 设置"
-        >
-          <n-icon :size="20"><SettingsOutline /></n-icon>
-        </button>
-      </template>
-    </AppHeader>
-
+  <div class="h-screen w-screen bg-[var(--bg-primary)]">
     <!-- Main canvas area | 主画布区域 -->
-    <div class="flex-1 relative overflow-hidden">
+    <div class="h-full relative overflow-hidden">
+      <!-- Top capsules | 顶部胶囊菜单 -->
+      <div class="absolute left-4 top-4 z-20 flex items-center gap-2">
+        <div class="flora-panel rounded-full p-1.5">
+          <button
+            @click="goBack"
+            class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--bg-tertiary)] transition-colors"
+            title="Back"
+          >
+            <n-icon :size="18"><ChevronBackOutline /></n-icon>
+          </button>
+        </div>
+        <div class="flora-panel rounded-full p-1.5">
+          <n-dropdown :options="projectOptions" @select="handleProjectAction">
+            <button class="h-9 flex items-center gap-2 px-3 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors">
+              <span class="text-sm font-medium">{{ projectName }}</span>
+              <n-icon :size="16"><ChevronDownOutline /></n-icon>
+            </button>
+          </n-dropdown>
+        </div>
+      </div>
+
       <!-- Vue Flow canvas | Vue Flow 画布 -->
       <VueFlow
         :key="flowKey"
@@ -59,28 +44,31 @@
         @edges-change="onEdgesChange"
         class="canvas-flow"
       >
-        <Background v-if="showGrid" :gap="20" :size="1" />
+        <Background v-if="showGrid" :gap="20" :size="1" style="opacity: 0.5" />
         <MiniMap 
           v-if="!isMobile"
           position="bottom-right"
           :pannable="true"
           :zoomable="true"
+          class="!bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl overflow-hidden"
+          node-color="var(--accent-color)"
+          mask-color="rgba(0,0,0,0.1)"
         />
       </VueFlow>
 
       <!-- Left toolbar | 左侧工具栏 -->
-      <aside class="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-1 p-2 bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-color)] shadow-lg z-10">
+      <aside class="flora-panel absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-1 p-2 rounded-2xl z-10">
         <button 
           @click="showNodeMenu = !showNodeMenu"
-          class="w-10 h-10 flex items-center justify-center rounded-xl bg-[var(--accent-color)] text-white hover:bg-[var(--accent-hover)] transition-colors"
-          title="添加节点"
+          class="flora-button-primary w-10 h-10 flex items-center justify-center rounded-xl"
+          title="Add Node"
         >
           <n-icon :size="20"><AddOutline /></n-icon>
         </button>
         <button 
           @click="showWorkflowPanel = true"
           class="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors"
-          title="工作流模板"
+          title="Workflow Templates"
         >
           <n-icon :size="20"><AppsOutline /></n-icon>
         </button>
@@ -95,12 +83,28 @@
         >
           <n-icon :size="20"><component :is="tool.icon" /></n-icon>
         </button>
+        <div class="w-full h-px bg-[var(--border-color)] my-1"></div>
+        <button
+          @click="showDownloadModal = true"
+          class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
+          :class="{ 'text-[var(--accent-color)]': hasDownloadableAssets }"
+          title="Download Assets"
+        >
+          <n-icon :size="20"><DownloadOutline /></n-icon>
+        </button>
+        <button
+          @click="showApiSettings = true"
+          class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors text-white"
+          title="API Settings"
+        >
+          <n-icon :size="20"><SettingsOutline /></n-icon>
+        </button>
       </aside>
 
       <!-- Node menu popup | 节点菜单弹窗 -->
       <div 
         v-if="showNodeMenu"
-        class="absolute left-20 top-1/2 -translate-y-1/2 bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-color)] shadow-lg p-2 z-20"
+        class="flora-panel absolute left-20 top-1/2 -translate-y-1/2 rounded-2xl p-2 z-20"
       >
         <button 
           v-for="nodeType in nodeTypeOptions" 
@@ -114,7 +118,7 @@
       </div>
 
       <!-- Bottom controls | 底部控制 -->
-      <div class="absolute bottom-4 left-4 flex items-center gap-2 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)] p-1">
+      <div class="flora-panel absolute bottom-4 left-4 flex items-center gap-2 rounded-xl p-1.5">
         <!-- <button 
           @click="showGrid = !showGrid" 
           :class="showGrid ? 'bg-[var(--accent-color)] text-white' : 'hover:bg-[var(--bg-tertiary)]'"
@@ -126,7 +130,7 @@
         <button 
           @click="fitView({ padding: 0.2 })" 
           class="p-2 hover:bg-[var(--bg-tertiary)] rounded transition-colors"
-          title="适应视图"
+          title="Fit View"
         >
           <n-icon :size="16"><LocateOutline /></n-icon>
         </button>
@@ -146,18 +150,18 @@
         <!-- Processing indicator | 处理中指示器 -->
         <div 
           v-if="isProcessing" 
-          class="mb-3 p-3 bg-[var(--bg-primary)] rounded-xl border border-[var(--accent-color)] animate-pulse"
+          class="flora-panel mb-3 p-3 rounded-xl border-[var(--accent-color)] animate-pulse"
         >
           <div class="flex items-center gap-2 text-sm text-[var(--accent-color)] mb-2">
             <n-spin :size="14" />
-            <span>正在生成提示词...</span>
+            <span>Generating prompt...</span>
           </div>
           <div v-if="currentResponse" class="text-sm text-[var(--text-primary)] whitespace-pre-wrap">
             {{ currentResponse }}
           </div>
         </div>
 
-        <div class="bg-[var(--bg-primary)] rounded-xl border border-[var(--border-color)] p-3">
+        <div class="flora-input-shell p-3">
           <textarea
             v-model="chatInput"
             :placeholder="inputPlaceholder"
@@ -172,24 +176,24 @@
               <button 
                 @click="handlePolish"
                 :disabled="isProcessing || !chatInput.trim()"
-                class="px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="AI 润色提示词"
+                class="flora-button-ghost px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Polish Prompt"
               >
-                ✨ AI 润色
+                ✨ Polish
               </button>
             </div>
             <div class="flex items-center gap-3">
               <label class="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
                 <n-switch v-model:value="autoExecute" size="small" />
-                自动执行
+                Auto-run
               </label>
               <button 
                 @click="sendMessage"
                 :disabled="isProcessing"
-                class="w-8 h-8 rounded-xl bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                class="flora-button-primary w-9 h-9 rounded-xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <n-spin v-if="isProcessing" :size="16" />
-                <n-icon v-else :size="20" color="white"><SendOutline /></n-icon>
+                <n-icon v-else :size="20"><SendOutline /></n-icon>
               </button>
             </div>
           </div>
@@ -197,12 +201,12 @@
         
         <!-- Quick suggestions | 快捷建议 -->
         <div class="flex flex-wrap items-center justify-center gap-2 mt-2">
-          <span class="text-xs text-[var(--text-secondary)]">推荐：</span>
+          <span class="text-xs text-[var(--text-secondary)]">Suggested:</span>
           <button 
             v-for="tag in suggestions" 
             :key="tag"
             @click="chatInput = tag"
-            class="px-2 py-0.5 text-xs rounded-full bg-[var(--bg-secondary)]/80 border border-[var(--border-color)] hover:border-[var(--accent-color)] transition-colors"
+            class="flora-pill px-2.5 py-1 text-xs hover:text-[var(--accent-color)] hover:border-[var(--accent-color)] transition-colors"
           >
             {{ tag }}
           </button>
@@ -217,20 +221,20 @@
     <ApiSettings v-model:show="showApiSettings" />
 
     <!-- Rename Modal | 重命名弹窗 -->
-    <n-modal v-model:show="showRenameModal" preset="dialog" title="重命名项目">
-      <n-input v-model:value="renameValue" placeholder="请输入项目名称" />
+    <n-modal v-model:show="showRenameModal" preset="dialog" title="Rename Project">
+      <n-input v-model:value="renameValue" placeholder="Enter project name" />
       <template #action>
-        <n-button @click="showRenameModal = false">取消</n-button>
-        <n-button type="primary" @click="confirmRename">确定</n-button>
+        <n-button @click="showRenameModal = false">Cancel</n-button>
+        <n-button type="primary" @click="confirmRename">Save</n-button>
       </template>
     </n-modal>
 
     <!-- Delete Confirm Modal | 删除确认弹窗 -->
-    <n-modal v-model:show="showDeleteModal" preset="dialog" title="删除项目" type="warning">
-      <p>确定要删除项目「{{ projectName }}」吗？此操作不可恢复。</p>
+    <n-modal v-model:show="showDeleteModal" preset="dialog" title="Delete Project" type="warning">
+      <p>Delete "{{ projectName }}"? This action cannot be undone.</p>
       <template #action>
-        <n-button @click="showDeleteModal = false">取消</n-button>
-        <n-button type="error" @click="confirmDelete">删除</n-button>
+        <n-button @click="showDeleteModal = false">Cancel</n-button>
+        <n-button type="error" @click="confirmDelete">Delete</n-button>
       </template>
     </n-modal>
 
@@ -273,17 +277,18 @@ import {
   DownloadOutline,
   AppsOutline,
   ChatbubbleOutline
-} from '@vicons/ionicons5'
+} from '../icons/coolicons'
 import { nodes, edges, addNode, addEdge, updateNode, initSampleData, loadProject, saveProject, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
 import { loadAllModels } from '../stores/models'
-import { useApiConfig, useChat, useWorkflowOrchestrator } from '../hooks'
-import { projects, initProjectsStore, updateProject, renameProject, currentProject } from '../stores/projects'
+import { useApiConfig, useChat, useWorkflowExecutor, useNodesFactory } from '../hooks'
+import { edgeStrategy } from '../services/edgeStrategy'
+import { notifier } from '../utils/notifier'
+import { projects, initProjectsStore, updateProject, renameProject, currentProject, duplicateProject, deleteProject } from '../stores/projects'
 
 // API Settings component | API 设置组件
 import ApiSettings from '../components/ApiSettings.vue'
 import DownloadModal from '../components/DownloadModal.vue'
 import WorkflowPanel from '../components/WorkflowPanel.vue'
-import AppHeader from '../components/AppHeader.vue'
 
 // API Config hook | API 配置 hook
 const { isConfigured: isApiConfigured } = useApiConfig()
@@ -296,13 +301,13 @@ onMounted(() => {
 // Chat templates | 问答模板
 const CHAT_TEMPLATES = {
   imagePrompt: {
-    name: '生图提示词',
-    systemPrompt: '你是一个专业的AI绘画提示词专家。将用户输入的内容美化成高质量的生图提示词，包含风格、光线、構图、细节等要素。直接返回提示词，不要其他解释。',
+    name: 'Image Prompt',
+    systemPrompt: 'You are an expert prompt writer for image generation. Rewrite user input into a high-quality visual prompt with style, lighting, composition, and details. Return only the prompt.',
     model: 'gpt-4o-mini'
   },
   videoPrompt: {
-    name: '视频提示词',
-    systemPrompt: '你是一个专业的AI视频提示词专家。将用户输入的内容美化成高质量的视频生成提示词，包含运动、场景、镜头等要素。直接返回提示词，不要其他解释。',
+    name: 'Video Prompt',
+    systemPrompt: 'You are an expert prompt writer for video generation. Rewrite user input into a high-quality video prompt with motion, scene setup, and camera direction. Return only the prompt.',
     model: 'gpt-4o-mini'
   }
 }
@@ -321,19 +326,23 @@ const {
   model: CHAT_TEMPLATES.imagePrompt.model
 })
 
-// Workflow orchestrator hook | 工作流编排 hook
+// Vue Flow instance | Vue Flow 实例
+const { viewport, zoomIn, zoomOut, fitView, updateNodeInternals } = useVueFlow()
+
+// Nodes factory | 节点工厂
+const nodesFactory = useNodesFactory({ updateNodeInternals, viewport })
+
+// Workflow executor | 工作流执行器
 const {
   isAnalyzing: workflowAnalyzing,
   isExecuting: workflowExecuting,
+  isProcessing: workflowProcessing,
   currentStep: workflowStep,
   totalSteps: workflowTotalSteps,
   executionLog: workflowLog,
-  analyzeIntent,
-  executeWorkflow,
-  createTextToImageWorkflow,
-  createMultiAngleStoryboard,
+  executeFromInput,
   WORKFLOW_TYPES
-} = useWorkflowOrchestrator()
+} = useWorkflowExecutor()
 
 // Custom node components | 自定义节点组件
 import TextNode from '../components/nodes/TextNode.vue'
@@ -348,9 +357,6 @@ import ImageOrderEdge from '../components/edges/ImageOrderEdge.vue'
 
 const router = useRouter()
 const route = useRoute()
-
-// Vue Flow instance | Vue Flow 实例
-const { viewport, zoomIn, zoomOut, fitView, updateNodeInternals } = useVueFlow()
 
 // Register custom node types | 注册自定义节点类型
 const nodeTypes = {
@@ -376,7 +382,8 @@ const autoExecute = ref(true)
 const isMobile = ref(false)
 const showGrid = ref(true)
 const showApiSettings = ref(false)
-const isProcessing = ref(false)
+const polishProcessing = ref(false)
+const isProcessing = computed(() => polishProcessing.value || workflowProcessing.value)
 
 // Flow key for forcing re-render on project switch | 项目切换时强制重新渲染的 key
 const flowKey = ref(Date.now())
@@ -399,155 +406,62 @@ const hasDownloadableAssets = computed(() => {
 // Project info | 项目信息
 const projectName = computed(() => {
   const project = projects.value.find(p => p.id === route.params.id)
-  return project?.name || '未命名项目'
+  return project?.name || 'Untitled'
 })
 
 // Project dropdown options | 项目下拉选项
 const projectOptions = [
-  { label: '重命名', key: 'rename' },
-  { label: '复制', key: 'duplicate' },
-  { label: '删除', key: 'delete' }
+  { label: 'Rename', key: 'rename' },
+  { label: 'Duplicate', key: 'duplicate' },
+  { label: 'Delete', key: 'delete' }
 ]
 
 // Toolbar tools | 工具栏工具
 const tools = [
-  { id: 'text', name: '文本', icon: TextOutline, action: () => addNewNode('text') },
-  { id: 'image', name: '图片', icon: ImageOutline, action: () => addNewNode('image') },
-  { id: 'imageConfig', name: '文生图', icon: ColorPaletteOutline, action: () => addNewNode('imageConfig') },
-  { id: 'videoConfig', name: '视频生成', icon: VideocamOutline, action: () => addNewNode('videoConfig') },
-  { id: 'undo', name: '撤销', icon: ArrowUndoOutline, action: () => undo(), disabled: () => !canUndo() },
-  { id: 'redo', name: '重做', icon: ArrowRedoOutline, action: () => redo(), disabled: () => !canRedo() }
+  { id: 'text', name: 'Text', icon: TextOutline, action: () => addNewNode('text') },
+  { id: 'image', name: 'Image', icon: ImageOutline, action: () => addNewNode('image') },
+  { id: 'imageConfig', name: 'Image Gen', icon: ColorPaletteOutline, action: () => addNewNode('imageConfig') },
+  { id: 'videoConfig', name: 'Video Gen', icon: VideocamOutline, action: () => addNewNode('videoConfig') },
+  { id: 'undo', name: 'Undo', icon: ArrowUndoOutline, action: () => undo(), disabled: () => !canUndo() },
+  { id: 'redo', name: 'Redo', icon: ArrowRedoOutline, action: () => redo(), disabled: () => !canRedo() }
 ]
 
 // Node type options for menu | 节点类型菜单选项
 const nodeTypeOptions = [
-  { type: 'text', name: '文本节点', icon: TextOutline, color: '#3b82f6' },
+  { type: 'text', name: 'Text Node', icon: TextOutline, color: '#3b82f6' },
   // { type: 'llmConfig', name: 'LLM文本生成', icon: ChatbubbleOutline, color: '#a855f7' },
-  { type: 'imageConfig', name: '文生图配置', icon: ColorPaletteOutline, color: '#22c55e' },
-  { type: 'videoConfig', name: '视频生成配置', icon: VideocamOutline, color: '#f59e0b' },
-  { type: 'image', name: '图片节点', icon: ImageOutline, color: '#8b5cf6' },
-  { type: 'video', name: '视频节点', icon: VideocamOutline, color: '#ef4444' }
+  { type: 'imageConfig', name: 'Image Config', icon: ColorPaletteOutline, color: '#22c55e' },
+  { type: 'videoConfig', name: 'Video Config', icon: VideocamOutline, color: '#f59e0b' },
+  { type: 'image', name: 'Image Node', icon: ImageOutline, color: '#8b5cf6' },
+  { type: 'video', name: 'Video Node', icon: VideocamOutline, color: '#ef4444' }
 ]
 
 // Input placeholder | 输入占位符
-const inputPlaceholder = '你可以试着说"帮我生成一个二次元的卡通角色"'
+const inputPlaceholder = 'Try: "Create an anime-style cartoon character"'
 
 // Quick suggestions | 快捷建议
 const suggestions = [
-  '像个魔法森林',
-  '三只不同的小猫',
-  '生成多角度分镜',
-  '夏日田野环绕漫步'
+  'A magical forest scene',
+  'Three different kittens',
+  'Build a multi-angle storyboard',
+  'Summer field cinematic walk'
 ]
 
 // Add new node | 添加新节点
 const addNewNode = async (type) => {
-  // Calculate viewport center position | 计算视口中心位置
-  const viewportCenterX = -viewport.value.x / viewport.value.zoom + (window.innerWidth / 2) / viewport.value.zoom
-  const viewportCenterY = -viewport.value.y / viewport.value.zoom + (window.innerHeight / 2) / viewport.value.zoom
-  
-  // Add node at viewport center | 在视口中心添加节点
-  const nodeId = addNode(type, { x: viewportCenterX - 100, y: viewportCenterY - 100 })
-  
-  // Set highest z-index | 设置最高层级
-  const maxZIndex = Math.max(0, ...nodes.value.map(n => n.zIndex || 0))
-  updateNode(nodeId, { zIndex: maxZIndex + 1 })
-  
-  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点尺寸
-  setTimeout(() => {
-    updateNodeInternals(nodeId)
-  }, 50)
-  
+  await nodesFactory.addNewNode(type)
   showNodeMenu.value = false
 }
 
 // Handle add workflow from panel | 处理从面板添加工作流
-const handleAddWorkflow = ({ workflow, options }) => {
-  // Calculate viewport center position | 计算视口中心位置
-  const viewportCenterX = -viewport.value.x / viewport.value.zoom + (window.innerWidth / 2) / viewport.value.zoom
-  const viewportCenterY = -viewport.value.y / viewport.value.zoom + (window.innerHeight / 2) / viewport.value.zoom
-  
-  // Create nodes from workflow template | 从工作流模板创建节点
-  const startPosition = { x: viewportCenterX - 300, y: viewportCenterY - 200 }
-  const { nodes: newNodes, edges: newEdges } = workflow.createNodes(startPosition, options)
-  
-  // Add nodes to canvas | 将节点添加到画布
-  newNodes.forEach(node => {
-    const nodeId = addNode(node.type, node.position, node.data)
-    // Update the node ID in edges | 更新边中的节点ID
-    newEdges.forEach(edge => {
-      if (edge.source === node.id) edge.source = nodeId
-      if (edge.target === node.id) edge.target = nodeId
-    })
-    node.newId = nodeId
-  })
-  
-  // Add edges to canvas | 将边添加到画布
-  setTimeout(() => {
-    newEdges.forEach(edge => {
-      addEdge({
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: edge.sourceHandle || 'right',
-        targetHandle: edge.targetHandle || 'left',
-        type: edge.type,  // Preserve edge type (e.g., promptOrder) | 保留边类型
-        data: edge.data   // Preserve edge data (e.g., promptOrder number) | 保留边数据
-      })
-    })
-    
-    // Update node internals | 更新节点内部
-    newNodes.forEach(node => {
-      if (node.newId) {
-        updateNodeInternals(node.newId)
-      }
-    })
-  }, 100)
-  
-  window.$message?.success(`已添加工作流: ${workflow.name}`)
+const handleAddWorkflow = async ({ workflow, options }) => {
+  await nodesFactory.createFromWorkflow(workflow, options)
 }
 
 // Handle connection | 处理连接
 const onConnect = (params) => {
-  // Check connection types | 检查连接类型
-  const sourceNode = nodes.value.find(n => n.id === params.source)
-  const targetNode = nodes.value.find(n => n.id === params.target)
-  
-  if (sourceNode?.type === 'image' && targetNode?.type === 'videoConfig') {
-    // Use imageRole edge type | 使用图片角色边类型
-    addEdge({
-      ...params,
-      type: 'imageRole',
-      data: { imageRole: 'first_frame_image' } // Default to first frame | 默认首帧
-    })
-  } else if (sourceNode?.type === 'text' && targetNode?.type === 'imageConfig') {
-    // Use promptOrder edge type | 使用提示词顺序边类型
-    // Calculate next order number | 计算下一个顺序号
-    const existingTextEdges = edges.value.filter(e => 
-      e.target === params.target && e.type === 'promptOrder'
-    )
-    const nextOrder = existingTextEdges.length + 1
-    
-    addEdge({
-      ...params,
-      type: 'promptOrder',
-      data: { promptOrder: nextOrder }
-    })
-  } else if (sourceNode?.type === 'image' && targetNode?.type === 'imageConfig') {
-    // Use imageOrder edge type | 使用图片顺序边类型
-    // Calculate next order number | 计算下一个顺序号
-    const existingImageEdges = edges.value.filter(e => 
-      e.target === params.target && e.type === 'imageOrder'
-    )
-    const nextOrder = existingImageEdges.length + 1
-    
-    addEdge({
-      ...params,
-      type: 'imageOrder',
-      data: { imageOrder: nextOrder }
-    })
-  } else {
-    addEdge(params)
-  }
+  const edge = edgeStrategy.resolve(params)
+  addEdge(edge)
 }
 
 // Handle node click | 处理节点点击
@@ -593,14 +507,21 @@ const onPaneClick = () => {
 
 // Handle project action | 处理项目操作
 const handleProjectAction = (key) => {
+  const projectId = route.params.id
   switch (key) {
     case 'rename':
       renameValue.value = projectName.value
       showRenameModal.value = true
       break
     case 'duplicate':
-      // TODO: Implement duplicate
-      window.$message?.info('复制功能开发中')
+      if (!projectId) return
+      const newId = duplicateProject(projectId)
+      if (newId) {
+        notifier.success('Project duplicated')
+        router.push(`/canvas/${newId}`)
+      } else {
+        notifier.error('Duplicate failed')
+      }
       break
     case 'delete':
       showDeleteModal.value = true
@@ -613,7 +534,7 @@ const confirmRename = () => {
   const projectId = route.params.id
   if (renameValue.value.trim()) {
     renameProject(projectId, renameValue.value.trim())
-    window.$message?.success('已重命名')
+    notifier.success('Project renamed')
   }
   showRenameModal.value = false
 }
@@ -621,9 +542,10 @@ const confirmRename = () => {
 // Confirm delete | 确认删除
 const confirmDelete = () => {
   const projectId = route.params.id
-  // deleteProject(projectId) // TODO: import deleteProject
+  if (!projectId) return
+  deleteProject(projectId)
   showDeleteModal.value = false
-  window.$message?.success('项目已删除')
+  notifier.success('Project deleted')
   router.push('/')
 }
 
@@ -640,12 +562,12 @@ const handlePolish = async () => {
   
   // Check API configuration | 检查 API 配置
   if (!isApiConfigured.value) {
-    window.$message?.warning('请先配置 API Key')
+    notifier.warning('Please configure API Key first')
     showApiSettings.value = true
     return
   }
 
-  isProcessing.value = true
+  polishProcessing.value = true
   const originalInput = chatInput.value
 
   try {
@@ -654,13 +576,13 @@ const handlePolish = async () => {
     
     if (result) {
       chatInput.value = result
-      window.$message?.success('提示词已润色')
+      notifier.success('Prompt polished')
     }
   } catch (err) {
     chatInput.value = originalInput
-    window.$message?.error(err.message || '润色失败')
+    notifier.error(err.message || 'Polish failed')
   } finally {
-    isProcessing.value = false
+    polishProcessing.value = false
   }
 }
 
@@ -671,76 +593,17 @@ const sendMessage = async () => {
 
   // Check API configuration | 检查 API 配置
   if (!isApiConfigured.value) {
-    window.$message?.warning('请先配置 API Key')
+    notifier.warning('Please configure API Key first')
     showApiSettings.value = true
     return
   }
 
-  isProcessing.value = true
-  const content = chatInput.value
   chatInput.value = ''
 
-  try {
-    // Calculate position to avoid overlap | 计算位置避免重叠
-    let maxY = 0
-    if (nodes.value.length > 0) {
-      maxY = Math.max(...nodes.value.map(n => n.position.y))
-    }
-    const baseX = 100
-    const baseY = maxY + 200
-
-    if (autoExecute.value) {
-      // Auto-execute mode: analyze intent and execute workflow | 自动执行模式：分析意图并执行工作流
-      window.$message?.info('正在分析工作流...')
-      
-      try {
-        // Analyze user intent | 分析用户意图
-        const result = await analyzeIntent(content)
-        
-        // Ensure we have valid workflow params | 确保有效的工作流参数
-        const workflowParams = {
-          workflow_type: result?.workflow_type || WORKFLOW_TYPES.TEXT_TO_IMAGE,
-          image_prompt: result?.image_prompt || content,
-          video_prompt: result?.video_prompt || content,
-          character: result?.character,
-          shots: result?.shots
-        }
-        
-        window.$message?.info(`执行工作流: ${result?.description || '文生图'}`)
-        
-        // Execute the workflow | 执行工作流
-        await executeWorkflow(workflowParams, { x: baseX, y: baseY })
-        
-        window.$message?.success('工作流已启动')
-      } catch (err) {
-        console.error('Workflow error:', err)
-        // Fallback to simple text-to-image | 回退到文生图
-        window.$message?.warning('使用默认文生图工作流')
-        await createTextToImageWorkflow(content, { x: baseX, y: baseY })
-      }
-    } else {
-      // Manual mode: just create nodes | 手动模式：仅创建节点
-      const textNodeId = addNode('text', { x: baseX, y: baseY }, { 
-        content: content, 
-        label: '提示词' 
-      })
-      
-      const imageConfigNodeId = addNode('imageConfig', { x: baseX + 400, y: baseY }, {
-        label: '文生图'
-      })
-      
-      addEdge({
-        source: textNodeId,
-        target: imageConfigNodeId,
-        sourceHandle: 'right',
-        targetHandle: 'left'
-      })
-    }
-  } catch (err) {
-    window.$message?.error(err.message || '创建失败')
-  } finally {
-    isProcessing.value = false
-  }
+  await executeFromInput(input, {
+    autoExecute: autoExecute.value,
+    nodesFactory
+  })
 }
 
 // Go back to home | 返回首页

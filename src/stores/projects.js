@@ -110,7 +110,7 @@ export const saveProjects = () => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(minimalProjects))
         console.log('Saved with aggressive cleanup')
-        window.$message?.warning('存储空间不足，已自动清理部分数据')
+          window.$message?.warning('Storage limit reached. Some data was automatically cleaned.')
       } catch (retryErr) {
         console.error('Still failed after aggressive cleanup:', retryErr)
         // Last resort: only keep first 5 projects | 最后手段：只保留前5个项目
@@ -118,10 +118,10 @@ export const saveProjects = () => {
           const essentialProjects = minimalProjects.slice(0, 5)
           localStorage.setItem(STORAGE_KEY, JSON.stringify(essentialProjects))
           projects.value = projects.value.slice(0, 5)
-          window.$message?.warning('存储空间严重不足，已保留最近 5 个项目')
+          window.$message?.warning('Storage is critically low. Only the latest 5 projects were kept.')
         } catch (finalErr) {
           console.error('Cannot save even minimal data:', finalErr)
-          window.$message?.error('存储失败，请清理浏览器存储空间')
+          window.$message?.error('Storage save failed. Please clear browser storage and try again.')
         }
       }
     } else {
@@ -135,7 +135,7 @@ export const saveProjects = () => {
  * @param {string} name - Project name | 项目名称
  * @returns {string} - New project ID | 新项目ID
  */
-export const createProject = (name = '未命名项目') => {
+export const createProject = (name = 'Untitled') => {
   const id = generateId()
   const now = new Date()
   
@@ -256,7 +256,7 @@ export const duplicateProject = (id) => {
   const newProject = {
     ...JSON.parse(JSON.stringify(source)), // Deep clone | 深拷贝
     id: newId,
-    name: `${source.name} (副本)`,
+    name: `${source.name} (Copy)`,
     createdAt: now,
     updatedAt: now
   }
@@ -325,7 +325,7 @@ export const initProjectsStore = () => {
   
   // Create sample project if empty | 如果为空则创建示例项目
   if (projects.value.length === 0) {
-    const id = createProject('示例项目')
+    const id = createProject('Sample Project')
     const project = projects.value.find(p => p.id === id)
     if (project) {
       project.canvasData = {
@@ -335,8 +335,8 @@ export const initProjectsStore = () => {
             type: 'text',
             position: { x: 150, y: 150 },
             data: {
-              content: '一只金毛寻回犬在草地上奔跑，摇着尾巴，脸上带着快乐的表情。它的毛发在阳光下闪耀，眼神充满了对自由的渴望，全身散发着阳光、友善的气息。',
-              label: '文本输入'
+              content: 'A golden retriever running across a sunlit meadow, tail wagging, bright fur, and an energetic expression with cinematic lighting and shallow depth of field.',
+              label: 'Text Input'
             }
           },
           {
@@ -347,7 +347,7 @@ export const initProjectsStore = () => {
               prompt: '',
               model: 'doubao-seedream-4-5-251128',
               size: '512x512',
-              label: '文生图'
+              label: 'Image Generation'
             }
           }
         ],

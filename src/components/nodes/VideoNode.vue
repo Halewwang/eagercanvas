@@ -3,7 +3,7 @@
   <div class="video-node-wrapper relative" @mouseenter="showActions = true" @mouseleave="showActions = false">
     <!-- Video node | 视频节点 -->
     <div 
-      class="video-node bg-[var(--bg-secondary)] rounded-xl border w-[400px] relative transition-all duration-200"
+      class="video-node bg-[var(--bg-secondary)] rounded-xl border w-[420px] relative transition-all duration-200"
       :class="data.selected ? 'border-1 border-blue-500 shadow-lg shadow-blue-500/20' : 'border border-[var(--border-color)]'"
       
     >
@@ -23,13 +23,13 @@
           </button> -->
         </div>
       </div>
-      <!-- Model name | 模型名称 -->
+      <!-- Model name | Model名称 -->
       <div v-if="data.model" class="mt-1 text-xs text-[var(--text-secondary)] truncate">
         {{ data.model }}
       </div>
     </div>
     
-    <!-- Video preview area | 视频预览区域 -->
+    <!-- Video preview area | 视频Preview区域 -->
     <div class="p-3">
       <!-- Loading state | 加载状态 -->
       <div 
@@ -48,7 +48,7 @@
           />
         </div>
         
-        <span class="text-sm text-white font-medium relative z-10">创作中，预计等待 1 分钟</span>
+        <span class="text-sm text-white font-medium relative z-10">In progress, ~1 minute</span>
       </div>
       <!-- Error state | 错误状态 -->
       <div 
@@ -58,7 +58,7 @@
         <n-icon :size="32" class="text-red-500"><CloseCircleOutline /></n-icon>
         <span class="text-sm text-red-500">{{ data.error }}</span>
       </div>
-      <!-- Video preview | 视频预览 -->
+      <!-- Video preview | 视频Preview -->
       <div 
         v-else-if="data.url"
         class="aspect-video rounded-lg overflow-hidden bg-black"
@@ -75,18 +75,35 @@
         class="aspect-video rounded-lg bg-[var(--bg-tertiary)] flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[var(--border-color)] relative"
       >
         <n-icon :size="32" class="text-[var(--text-secondary)]"><VideocamOutline /></n-icon>
-        <span class="text-sm text-[var(--text-secondary)]">拖放视频或点击上传</span>
+        <span class="text-sm text-[var(--text-secondary)]">Drop a video or click to upload</span>
         <input 
           type="file" 
           accept="video/*" 
-          class="absolute inset-0 opacity-0 cursor-pointer"
+          class="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
           @change="handleFileUpload"
         />
+        <div class="w-full px-4 flex gap-2 relative z-10 pointer-events-auto">
+          <input 
+            type="text" 
+            v-model="inputUrl"
+            placeholder="Enter video URL..." 
+            class="flex-1 px-2 py-1 text-sm bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--accent-color)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] min-w-0"
+            @keydown.enter.stop="handleUrlInput"
+            @click.stop
+          />
+          <button 
+            @click.stop="handleUrlInput"
+            :disabled="!inputUrl"
+            class="flora-button-primary px-3 py-1 text-xs rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            Load
+          </button>
+        </div>
       </div>
       
-      <!-- Duration info | 时长信息 -->
+      <!-- Duration info | Duration信息 -->
       <div v-if="data.duration" class="mt-2 text-xs text-[var(--text-secondary)]">
-        时长: {{ formatDuration(data.duration) }}
+        Duration: {{ formatDuration(data.duration) }}
       </div>
     </div>
 
@@ -96,7 +113,7 @@
     </div>
 
     <!-- Hover action buttons | 悬浮操作按钮 -->
-    <!-- Top right - Copy button | 右上角 - 复制按钮 -->
+    <!-- Top right - Copy button | 右上角 - Copy按钮 -->
     <div 
       v-show="showActions"
       class="absolute -top-5 right-12 z-[1000]"
@@ -106,7 +123,7 @@
         class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max"
       >
         <n-icon :size="16" class="text-gray-600"><CopyOutline /></n-icon>
-        <span class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">复制</span>
+        <span class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
       </button>
     </div>
 
@@ -115,21 +132,21 @@
       v-show="showActions && data.url"
       class="absolute right-10 top-20 -translate-y-1/2 translate-x-full flex flex-col gap-2 z-[1000]"
     >
-      <!-- Preview button | 预览按钮 -->
+      <!-- Preview button | Preview按钮 -->
       <button 
         @click="handlePreview"
         class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max"
       >
         <n-icon :size="16" class="text-gray-600"><EyeOutline /></n-icon>
-        <span class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">预览</span>
+        <span class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">Preview</span>
       </button>
-      <!-- Download button | 下载按钮 -->
+      <!-- Download button | Download按钮 -->
       <button 
         @click="handleDownload"
         class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max"
       >
         <n-icon :size="16" class="text-gray-600"><DownloadOutline /></n-icon>
-        <span class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">下载</span>
+        <span class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">Download</span>
       </button>
     </div>
   </div>
@@ -143,7 +160,7 @@
 import { ref } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
-import { TrashOutline, ExpandOutline, VideocamOutline, CopyOutline, CloseCircleOutline, DownloadOutline, EyeOutline } from '@vicons/ionicons5'
+import { TrashOutline, ExpandOutline, VideocamOutline, CopyOutline, CloseCircleOutline, DownloadOutline, EyeOutline } from '../../icons/coolicons'
 import { updateNode, removeNode, duplicateNode } from '../../stores/canvas'
 
 const props = defineProps({
@@ -151,8 +168,22 @@ const props = defineProps({
   data: Object
 })
 
+// Input URL state | 输入URL状态
+const inputUrl = ref('')
+
 // Hover state | 悬浮状态
 const showActions = ref(false)
+
+// Handle URL input | 处理URL输入
+const handleUrlInput = () => {
+  if (inputUrl.value) {
+    updateNode(props.id, { 
+      url: inputUrl.value,
+      updatedAt: Date.now()
+    })
+    inputUrl.value = ''
+  }
+}
 
 // Handle file upload | 处理文件上传
 const handleFileUpload = (event) => {
@@ -166,7 +197,7 @@ const handleFileUpload = (event) => {
   }
 }
 
-// Format duration | 格式化时长
+// Format duration | 格式化Duration
 const formatDuration = (seconds) => {
   const mins = Math.floor(seconds / 60)
   const secs = Math.floor(seconds % 60)
@@ -178,14 +209,14 @@ const handleDelete = () => {
   removeNode(props.id)
 }
 
-// Handle preview | 处理预览
+// Handle preview | 处理Preview
 const handlePreview = () => {
   if (props.data.url) {
     window.open(props.data.url, '_blank')
   }
 }
 
-// Handle download | 处理下载
+// Handle download | 处理Download
 const handleDownload = () => {
   if (props.data.url) {
     const link = document.createElement('a')
@@ -194,18 +225,18 @@ const handleDownload = () => {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    window.$message?.success('视频下载中...')
+    window.$message?.success('Video download started...')
   }
 }
 
-// Handle duplicate | 处理复制
+// Handle duplicate | 处理Copy
 const handleDuplicate = () => {
   const newId = duplicateNode(props.id)
   if (newId) {
-    // Clear selection and select the new node | 清除选中并选中新节点
+    // Clear selection and select the new node | Clear选中并选中新节点
     updateNode(props.id, { selected: false })
     updateNode(newId, { selected: true })
-    window.$message?.success('节点已复制')
+    window.$message?.success('Node duplicated')
   }
 }
 </script>

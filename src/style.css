@@ -2,9 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Base styles | 基础样式 */
+/* Base styles */
 :root {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'fieldwork', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -25,48 +25,105 @@ html, body, #app {
   overflow: hidden;
 }
 
-/* Light mode variables | 浅色模式变量 */
 :root {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f1f5f9;
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --border-color: #e2e8f0;
-  --accent-color: #22c55e;
-  --accent-hover: #16a34a;
-}
-
-/* Dark mode variables | 深色模式变量 */
-.dark {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --border-color: #334155;
-  --accent-color: #4ade80;
-  --accent-hover: #22c55e;
+  --bg-primary: #050607;
+  --bg-secondary: #141618;
+  --bg-tertiary: #1a1d20;
+  --text-primary: #eceff2;
+  --text-secondary: #8d949e;
+  --text-tertiary: #747d89;
+  --border-color: #252a30;
+  --accent-color: #A58163;
+  --accent-hover: #A58163;
+  --button-highlight: #ffffff;
+  --button-highlight-hover: #e8ecef;
+  --panel-shadow: 0 16px 40px -22px rgba(0, 0, 0, 0.85);
+  --surface-blur: blur(12px);
 }
 
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
+  background-image: radial-gradient(circle at 0% 0%, rgba(165, 129, 99, 0.06), transparent 34%);
   transition: background-color 0.3s, color 0.3s;
 }
 
-/* Vue Flow styles override | Vue Flow 样式覆盖 */
+.flora-panel {
+  background: color-mix(in srgb, var(--bg-secondary) 84%, transparent);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: var(--surface-blur);
+}
+
+.flora-header {
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: var(--surface-blur);
+}
+
+.flora-input-shell {
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: var(--surface-blur);
+}
+
+.flora-button-primary {
+  background: linear-gradient(135deg, var(--button-highlight), var(--button-highlight-hover));
+  color: #090b0d;
+  border: 1px solid color-mix(in srgb, var(--button-highlight) 88%, #000000 12%);
+  transition: transform 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
+}
+
+.flora-button-primary:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
+
+.n-button--primary-type {
+  --n-color: var(--button-highlight) !important;
+  --n-color-hover: var(--button-highlight-hover) !important;
+  --n-color-pressed: color-mix(in srgb, var(--button-highlight-hover) 88%, #dce2e8 12%) !important;
+  --n-text-color: #090b0d !important;
+  --n-text-color-hover: #090b0d !important;
+  --n-text-color-pressed: #090b0d !important;
+  --n-border: 1px solid color-mix(in srgb, var(--button-highlight) 88%, #000000 12%) !important;
+  --n-border-hover: 1px solid color-mix(in srgb, var(--button-highlight-hover) 88%, #000000 12%) !important;
+  --n-border-pressed: 1px solid color-mix(in srgb, var(--button-highlight-hover) 85%, #000000 15%) !important;
+}
+
+.flora-button-ghost {
+  background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.flora-button-ghost:hover {
+  border-color: color-mix(in srgb, var(--button-highlight) 55%, var(--border-color));
+  transform: translateY(-1px);
+}
+
+.flora-pill {
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  color: var(--text-secondary);
+}
+
+/* Vue Flow styles override */
 .vue-flow {
   background-color: var(--bg-primary);
 }
 
 .vue-flow__node {
-  border-radius: 8px;
-  /* box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); */
+  border-radius: 14px;
+  box-shadow: var(--panel-shadow);
 }
 
 .vue-flow__edge-path {
-  stroke: var(--border-color);
+  stroke: color-mix(in srgb, var(--accent-color) 35%, var(--border-color));
   stroke-width: 2;
 }
 
@@ -75,4 +132,70 @@ body {
   height: 10px;
   background-color: var(--accent-color);
   border: 2px solid var(--bg-secondary);
+}
+
+.action-btn {
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: var(--surface-blur);
+}
+
+.home-logo-ring {
+  position: relative;
+  padding: 12px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(165, 129, 99, 0.3), transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(165, 129, 99, 0.12), transparent 60%);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 36%, var(--border-color));
+  box-shadow: 0 22px 48px -26px rgba(0, 0, 0, 0.86);
+}
+
+.home-hero-glow {
+  position: absolute;
+  top: -12px;
+  width: 220px;
+  height: 220px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(165, 129, 99, 0.18), transparent 65%);
+  filter: blur(16px);
+}
+
+.home-hero-glow-left {
+  left: 8%;
+}
+
+/* Custom Modal Styles */
+.custom-modal .n-card-header__main {
+  color: var(--text-primary);
+}
+
+.custom-modal .n-alert-body__title,
+.custom-modal .n-alert-body__content,
+.custom-modal .n-alert .n-icon,
+.custom-modal .n-tabs-tab__label {
+  color: var(--text-primary) !important;
+}
+
+.custom-modal .n-alert-body__content a {
+  color: var(--accent-color) !important;
+}
+
+.custom-modal .n-tabs-bar {
+  background-color: var(--accent-color) !important;
+}
+
+.custom-modal .n-switch--active .n-switch__rail {
+  background-color: var(--accent-color) !important;
+}
+
+.custom-modal .n-alert--success-type .n-icon {
+  color: var(--accent-color) !important;
+}
+
+.custom-modal .n-alert--warning-type .n-icon {
+  color: var(--accent-color) !important;
 }

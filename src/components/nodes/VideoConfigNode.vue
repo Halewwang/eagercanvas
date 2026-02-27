@@ -6,7 +6,7 @@
       :class="data.selected ? 'border-1 border-blue-500 shadow-lg shadow-blue-500/20' : 'border border-[var(--border-color)]'">
       <!-- Header | 头部 -->
       <div class="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
-        <span class="text-sm font-medium text-[var(--text-secondary)]">{{ data.label || '视频生成' }}</span>
+        <span class="text-sm font-medium text-[var(--text-secondary)]">{{ data.label || 'Video Gen' }}</span>
         <div class="flex items-center gap-1">
           <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
             <n-icon :size="14">
@@ -18,9 +18,9 @@
 
       <!-- Config options | 配置选项 -->
       <div class="p-3 space-y-3">
-        <!-- Model selector | 模型选择 -->
+        <!-- Model selector | Model选择 -->
         <div class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">模型</span>
+          <span class="text-xs text-[var(--text-secondary)]">Model</span>
           <n-dropdown :options="modelOptions" @select="handleModelSelect">
             <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
               {{ displayModelName }}
@@ -31,7 +31,7 @@
 
         <!-- Aspect ratio selector | 宽高比选择 -->
         <div class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">比例</span>
+          <span class="text-xs text-[var(--text-secondary)]">Ratio</span>
           <n-dropdown :options="ratioOptions" @select="handleRatioSelect">
             <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
               {{ localRatio }}
@@ -42,9 +42,9 @@
           </n-dropdown>
         </div>
 
-        <!-- Duration selector | 时长选择 -->
+        <!-- Duration selector | Duration选择 -->
         <div class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">时长</span>
+          <span class="text-xs text-[var(--text-secondary)]">Duration</span>
           <n-dropdown :options="durationOptions" @select="handleDurationSelect">
             <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
               {{ localDuration }}s
@@ -57,29 +57,29 @@
 
         <!-- Connected inputs indicator | 连接输入指示 -->
         <div
-          class="flex items-center gap-2 text-xs text-[var(--text-secondary)] py-1 border-t border-[var(--border-color)]">
-          <span class="px-2 py-0.5 rounded-full"
+          class="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)] py-1 border-t border-[var(--border-color)]">
+          <span class="px-3 py-1 rounded-full"
             :class="connectedPrompt ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
-            提示词 {{ connectedPrompt ? '✓' : '○' }}
+            Prompt {{ connectedPrompt ? '✓' : '○' }}
           </span>
-          <span class="px-2 py-0.5 rounded-full"
+          <span class="px-3 py-1 rounded-full"
             :class="imagesByRole.firstFrame ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
-            首帧 {{ imagesByRole.firstFrame ? '✓' : '○' }}
+            First Frame {{ imagesByRole.firstFrame ? '✓' : '○' }}
           </span>
-          <span class="px-2 py-0.5 rounded-full"
+          <span class="px-3 py-1 rounded-full"
             :class="imagesByRole.lastFrame ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
-            尾帧 {{ imagesByRole.lastFrame ? '✓' : '○' }}
+            Last Frame {{ imagesByRole.lastFrame ? '✓' : '○' }}
           </span>
-          <span class="px-2 py-0.5 rounded-full"
+          <span class="px-3 py-1 rounded-full"
             :class="imagesByRole.referenceImages.length > 0 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
-            参考图 {{ imagesByRole.referenceImages.length > 0 ? `✓ ${imagesByRole.referenceImages.length}` : '○' }}
+            Reference {{ imagesByRole.referenceImages.length > 0 ? `✓ ${imagesByRole.referenceImages.length}` : '○' }}
           </span>
         </div>
 
         <!-- Progress bar | 进度条 -->
         <!-- <div v-if="status === 'polling'" class="space-y-1">
         <div class="flex justify-between text-xs text-[var(--text-secondary)]">
-          <span>生成中...</span>
+          <span>Generating...</span>
           <span>{{ progress.percentage }}%</span>
         </div>
         <n-progress type="line" :percentage="progress.percentage" :show-indicator="false" :height="4" />
@@ -87,24 +87,24 @@
 
         <!-- Generate button | 生成按钮 -->
         <button @click="handleGenerate" :disabled="loading || !isConfigured"
-          class="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          class="flora-button-primary w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
           <n-spin v-if="loading" :size="14" />
           <template v-else>
             <n-icon :size="16">
               <VideocamOutline />
             </n-icon>
-            生成视频
+            Generate Video
           </template>
         </button>
 
         <!-- Error message | 错误信息 -->
         <div v-if="error" class="text-xs text-red-500 mt-2">
-          {{ error.message || '生成失败' }}
+          {{ error.message || 'Generation failed' }}
         </div>
 
-        <!-- Generated video preview | 生成视频预览 -->
+        <!-- Generated video preview | Generate VideoPreview -->
         <!-- <div v-if="generatedVideo?.url" class="mt-3 space-y-2">
-        <div class="text-xs text-[var(--text-secondary)]">生成结果:</div>
+        <div class="text-xs text-[var(--text-secondary)]">Result:</div>
         <div class="aspect-video rounded-lg overflow-hidden bg-black">
           <video :src="generatedVideo.url" controls class="w-full h-full object-contain" />
         </div>
@@ -117,7 +117,7 @@
     </div>
 
     <!-- Hover action buttons | 悬浮操作按钮 -->
-    <!-- Top right - Copy button | 右上角 - 复制按钮 -->
+    <!-- Top right - Copy button | 右上角 - Copy按钮 -->
     <div v-show="showActions" class="absolute -top-5 right-0 z-[1000]">
       <button @click="handleDuplicate"
         class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max">
@@ -125,7 +125,7 @@
           <CopyOutline />
         </n-icon>
         <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">复制</span>
+          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
       </button>
     </div>
   </div>
@@ -139,7 +139,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NDropdown, NSpin } from 'naive-ui'
-import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '@vicons/ionicons5'
+import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges } from '../../stores/canvas'
 import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, DEFAULT_VIDEO_MODEL } from '../../stores/models'
@@ -155,7 +155,7 @@ const { updateNodeInternals } = useVueFlow()
 // API config hook | API 配置 hook
 const { isConfigured } = useApiConfig()
 
-// Video generation hook | 视频生成 hook
+// Video generation hook | Video Gen hook
 const { loading, error, status, video: generatedVideo, progress, generate } = useVideoGeneration()
 
 // Hover state | 悬浮状态
@@ -179,7 +179,7 @@ const connectedImages = computed(() => {
         edgeId: edge.id,
         url: sourceNode.data.url,
         base64: sourceNode.data.base64,
-        role: edge.data?.imageRole || 'first_frame_image' // Default to first frame | 默认首帧
+        role: edge.data?.imageRole || 'first_frame_image' // Default to first frame | 默认First Frame
       })
     }
   }
@@ -200,32 +200,32 @@ const imagesByRole = computed(() => {
   }
 })
 
-// Get current model config | 获取当前模型配置
+// Get current model config | 获取当前Model配置
 const currentModelConfig = computed(() => getModelConfig(localModel.value))
 
-// Model options from store | 从 store 获取模型选项
+// Model options from store | 从 store 获取Model选项
 const modelOptions = videoModelOptions
 
-// Display model name | 显示模型名称
+// Display model name | 显示Model名称
 const displayModelName = computed(() => {
   const model = modelOptions.value.find(m => m.key === localModel.value)
-  return model?.label || localModel.value || '选择模型'
+  return model?.label || localModel.value || 'Select model'
 })
 
-// Ratio options based on model | 基于模型的比例选项
+// Ratio options based on model | 基于Model的Ratio选项
 const ratioOptions = computed(() => {
   return getModelRatioOptions(localModel.value)
 })
 
-// Duration options based on model | 基于模型的时长选项
+// Duration options based on model | 基于Model的Duration选项
 const durationOptions = computed(() => {
   return getModelDurationOptions(localModel.value)
 })
 
-// Handle model selection | 处理模型选择
+// Handle model selection | 处理Model选择
 const handleModelSelect = (key) => {
   localModel.value = key
-  // Update ratio and duration to model's default | 更新为模型默认比例和时长
+  // Update ratio and duration to model's default | 更新为Model默认Ratio和Duration
   const config = getModelConfig(key)
   const updates = { model: key }
   if (config?.defaultParams?.ratio) {
@@ -239,10 +239,10 @@ const handleModelSelect = (key) => {
   updateNode(props.id, updates)
 }
 
-// Handle duplicate | 处理复制
+// Handle duplicate | 处理Copy
 const handleDuplicate = () => {
   const newNodeId = duplicateNode(props.id)
-  window.$message?.success('节点已复制')
+  window.$message?.success('Node duplicated')
   if (newNodeId) {
     setTimeout(() => {
       updateNodeInternals(newNodeId)
@@ -250,13 +250,13 @@ const handleDuplicate = () => {
   }
 }
 
-// Handle ratio selection | 处理比例选择
+// Handle ratio selection | 处理Ratio选择
 const handleRatioSelect = (key) => {
   localRatio.value = key
   updateNode(props.id, { ratio: key })
 }
 
-// Handle duration selection | 处理时长选择
+// Handle duration selection | 处理Duration选择
 const handleDurationSelect = (key) => {
   localDuration.value = key
   updateNode(props.id, { dur: key })
@@ -269,7 +269,7 @@ const getConnectedInputs = () => {
   let prompt = ''
   let first_frame_image = ''
   let last_frame_image = ''
-  const images = [] // input_reference images | 参考图
+  const images = [] // input_reference images | Reference
 
   for (const edge of connectedEdges) {
     const sourceNode = nodes.value.find(n => n.id === edge.source)
@@ -294,7 +294,7 @@ const getConnectedInputs = () => {
   return { prompt, first_frame_image, last_frame_image, images }
 }
 
-// Computed connected prompt | 计算连接的提示词
+// Computed connected prompt | 计算连接的Prompt
 const connectedPrompt = computed(() => {
   return getConnectedInputs().prompt
 })
@@ -308,12 +308,12 @@ const handleGenerate = async () => {
 
   const hasInput = prompt || first_frame_image || last_frame_image || images.length > 0
   if (!hasInput) {
-    window.$message?.warning('请先连接文本节点或图片节点')
+    window.$message?.warning('Connect a text or image node first')
     return
   }
 
   if (!isConfigured.value) {
-    window.$message?.warning('请先配置 API Key')
+    window.$message?.warning('Please configure API Key first')
     return
   }
 
@@ -326,7 +326,7 @@ const handleGenerate = async () => {
   const videoNodeId = addNode('video', { x: nodeX + 350, y: nodeY }, {
     url: '',
     loading: true,
-    label: '视频生成中...'
+    label: 'Generating video...'
   })
   createdVideoNodeId.value = videoNodeId
 
@@ -338,7 +338,7 @@ const handleGenerate = async () => {
     targetHandle: 'left'
   })
 
-  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点尺寸
+  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点Size
   setTimeout(() => {
     updateNodeInternals(videoNodeId)
   }, 50)
@@ -350,32 +350,32 @@ const handleGenerate = async () => {
       model: localModel.value
     }
 
-    // Add prompt if provided | 如果有提示词则添加
+    // Add prompt if provided | 如果有Prompt则添加
     if (prompt) {
       params.prompt = prompt
     }
 
-    // Add first frame image | 添加首帧图片
+    // Add first frame image | 添加First Frame图片
     if (first_frame_image) {
       params.first_frame_image = first_frame_image
     }
 
-    // Add last frame image | 添加尾帧图片
+    // Add last frame image | 添加Last Frame图片
     if (last_frame_image) {
       params.last_frame_image = last_frame_image
     }
 
-    // Add reference images (input_reference) | 添加参考图
+    // Add reference images (input_reference) | 添加Reference
     if (images.length > 0) {
       params.images = images
     }
 
-    // Add ratio/size | 添加比例参数
+    // Add ratio/size | 添加Ratio参数
     if (localRatio.value) {
       params.ratio = localRatio.value
     }
 
-    // Add duration | 添加时长
+    // Add duration | 添加Duration
     if (localDuration.value) {
       params.dur = localDuration.value
     }
@@ -387,7 +387,7 @@ const handleGenerate = async () => {
       updateNode(videoNodeId, {
         url: result.url,
         loading: false,
-        label: '视频生成',
+        label: 'Video Gen',
         model: localModel.value,
         updatedAt: Date.now()
       })
@@ -395,16 +395,16 @@ const handleGenerate = async () => {
       // Mark this config node as executed | 标记配置节点已执行
       updateNode(props.id, { executed: true, outputNodeId: videoNodeId })
     }
-    window.$message?.success('视频生成成功')
+    window.$message?.success('Video generated')
   } catch (err) {
     // Update node to show error | 更新节点显示错误
     updateNode(videoNodeId, {
       loading: false,
-      error: err.message || '生成失败',
-      label: '生成失败',
+      error: err.message || 'Generation failed',
+      label: 'Generation failed',
       updatedAt: Date.now()
     })
-    window.$message?.error(err.message || '视频生成失败')
+    window.$message?.error(err.message || 'Video generation failed')
   }
 }
 
@@ -421,7 +421,7 @@ onMounted(() => {
   }
 })
 
-// Watch for model changes from props | 监听 props 中模型变化
+// Watch for model changes from props | 监听 props 中Model变化
 watch(() => props.data?.model, (newModel) => {
   if (newModel && newModel !== localModel.value) {
     localModel.value = newModel
@@ -433,7 +433,7 @@ watch(
   () => props.data?.autoExecute,
   (shouldExecute) => {
     if (shouldExecute && !loading.value) {
-      // Clear the flag first to prevent re-triggering | 先清除标志防止重复触发
+      // Clear the flag first to prevent re-triggering | 先Clear标志防止重复触发
       updateNode(props.id, { autoExecute: false })
       // Delay to ensure node connections are established | 延迟确保节点连接已建立
       setTimeout(() => {

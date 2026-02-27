@@ -1,9 +1,9 @@
 <template>
   <!-- API Settings Modal | API 设置弹窗 -->
-  <n-modal v-model:show="showModal" preset="card" title="API 设置" style="width: 560px;">
+  <n-modal v-model:show="showModal" preset="card" title="API Settings" style="width: 560px;" class="custom-modal">
     <n-tabs type="line" animated>
       <!-- API 配置标签 -->
-      <n-tab-pane name="api" tab="API 配置">
+      <n-tab-pane name="api" tab="API">
         <n-form ref="formRef" :model="formData" label-placement="left" label-width="80">
           <n-form-item label="Base URL" path="baseUrl">
             <n-input 
@@ -16,71 +16,71 @@
               v-model:value="formData.apiKey" 
               type="password"
               show-password-on="click"
-              placeholder="请输入 API Key"
+              placeholder="Enter API Key"
             />
           </n-form-item>
 
           <n-divider title-placement="left" class="!my-3">
-            <span class="text-xs text-[var(--text-secondary)]">端点路径</span>
+            <span class="text-xs text-[var(--text-secondary)]">Endpoints</span>
           </n-divider>
           
           <div class="endpoint-list">
             <div class="endpoint-item">
-              <span class="endpoint-label">问答</span>
-              <n-tag size="small" type="info" class="endpoint-tag">/chat/completions</n-tag>
+              <span class="endpoint-label">Chat</span>
+              <n-tag size="small" class="endpoint-tag" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">/chat/completions</n-tag>
             </div>
             <div class="endpoint-item">
-              <span class="endpoint-label">生图</span>
-              <n-tag size="small" type="success" class="endpoint-tag">/images/generations</n-tag>
+              <span class="endpoint-label">Image</span>
+              <n-tag size="small" class="endpoint-tag" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">/images/generations</n-tag>
             </div>
             <div class="endpoint-item">
-              <span class="endpoint-label">视频生成</span>
-              <n-tag size="small" type="warning" class="endpoint-tag">/videos</n-tag>
+              <span class="endpoint-label">Video Create</span>
+              <n-tag size="small" class="endpoint-tag" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">/videos</n-tag>
             </div>
             <div class="endpoint-item">
-              <span class="endpoint-label">视频查询</span>
-              <n-tag size="small" type="warning" class="endpoint-tag">/videos/{taskId}</n-tag>
+              <span class="endpoint-label">Video Status</span>
+              <n-tag size="small" class="endpoint-tag" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">/videos/{taskId}</n-tag>
             </div>
           </div>
 
-          <n-alert v-if="!isConfigured" type="warning" title="未配置" class="mb-4">
+          <n-alert v-if="!isConfigured" type="warning" title="Not Configured" class="mb-4">
             <div class="flex flex-col gap-2">
-              <p>请配置 API Key 以使用 AI 功能</p>
+              <p>Please configure an API key to use AI features.</p>
               <a 
                 href="https://api.chatfire.site/login?inviteCode=EEE80324" 
                 target="_blank"
                 class="text-[var(--accent-color)] hover:underline text-sm flex items-center gap-1"
               >
-                🔗 点击获取 API Key
-                <span class="text-xs">（新用户注册）</span>
+                🔗 Get API Key
+                <span class="text-xs">(new account)</span>
               </a>
             </div>
           </n-alert>
 
-          <n-alert v-else type="success" title="已配置" class="mb-4">
-            API 已就绪，可以使用 AI 功能
+          <n-alert v-else type="success" title="Configured" class="mb-4">
+            API is ready.
           </n-alert>
         </n-form>
       </n-tab-pane>
 
       <!-- 模型配置标签 -->
-      <n-tab-pane name="models" tab="模型配置">
+      <n-tab-pane name="models" tab="Models">
         <div class="model-config-section">
           <!-- 问答模型 -->
           <div class="model-group">
             <div class="model-group-header">
-              <span class="model-group-title">问答模型</span>
-              <n-tag size="tiny" type="info">{{ allChatModels.length }} 个</n-tag>
+              <span class="model-group-title">Chat Models</span>
+              <n-tag size="tiny" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">{{ allChatModels.length }}</n-tag>
             </div>
             <div class="model-input-row">
               <n-input 
                 v-model:value="newChatModel" 
-                placeholder="输入模型名称，如 gpt-4o"
+                placeholder="Model name, e.g. gpt-4o"
                 size="small"
                 @keyup.enter="handleAddChatModel"
               />
-              <n-button size="small" type="primary" @click="handleAddChatModel" :disabled="!newChatModel">
-                添加
+              <n-button size="small" color="#A58163" @click="handleAddChatModel" :disabled="!newChatModel">
+                Add
               </n-button>
             </div>
             <div class="model-tags">
@@ -89,7 +89,7 @@
                 :key="model.key"
                 size="small"
                 :closable="model.isCustom"
-                :type="model.isCustom ? 'info' : 'default'"
+                :color="model.isCustom ? { color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' } : undefined"
                 @close="removeCustomChatModel(model.key)"
               >
                 {{ model.label }}
@@ -100,18 +100,18 @@
           <!-- 图片模型 -->
           <div class="model-group">
             <div class="model-group-header">
-              <span class="model-group-title">图片模型</span>
-              <n-tag size="tiny" type="success">{{ allImageModels.length }} 个</n-tag>
+              <span class="model-group-title">Image Models</span>
+              <n-tag size="tiny" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">{{ allImageModels.length }}</n-tag>
             </div>
             <div class="model-input-row">
               <n-input 
                 v-model:value="newImageModel" 
-                placeholder="输入模型名称，如 dall-e-3"
+                placeholder="Model name, e.g. dall-e-3"
                 size="small"
                 @keyup.enter="handleAddImageModel"
               />
-              <n-button size="small" type="primary" @click="handleAddImageModel" :disabled="!newImageModel">
-                添加
+              <n-button size="small" color="#A58163" @click="handleAddImageModel" :disabled="!newImageModel">
+                Add
               </n-button>
             </div>
             <div class="model-tags">
@@ -120,7 +120,7 @@
                 :key="model.key"
                 size="small"
                 :closable="model.isCustom"
-                :type="model.isCustom ? 'success' : 'default'"
+                :color="model.isCustom ? { color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' } : undefined"
                 @close="removeCustomImageModel(model.key)"
               >
                 {{ model.label }}
@@ -131,18 +131,18 @@
           <!-- 视频模型 -->
           <div class="model-group">
             <div class="model-group-header">
-              <span class="model-group-title">视频模型</span>
-              <n-tag size="tiny" type="warning">{{ allVideoModels.length }} 个</n-tag>
+              <span class="model-group-title">Video Models</span>
+              <n-tag size="tiny" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">{{ allVideoModels.length }}</n-tag>
             </div>
             <div class="model-input-row">
               <n-input 
                 v-model:value="newVideoModel" 
-                placeholder="输入模型名称，如 sora-2"
+                placeholder="Model name, e.g. sora-2"
                 size="small"
                 @keyup.enter="handleAddVideoModel"
               />
-              <n-button size="small" type="primary" @click="handleAddVideoModel" :disabled="!newVideoModel">
-                添加
+              <n-button size="small" color="#A58163" @click="handleAddVideoModel" :disabled="!newVideoModel">
+                Add
               </n-button>
             </div>
             <div class="model-tags">
@@ -151,7 +151,7 @@
                 :key="model.key"
                 size="small"
                 :closable="model.isCustom"
-                :type="model.isCustom ? 'warning' : 'default'"
+                :color="model.isCustom ? { color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' } : undefined"
                 @close="removeCustomVideoModel(model.key)"
               >
                 {{ model.label }}
@@ -169,12 +169,12 @@
           target="_blank"
           class="text-xs text-[var(--text-secondary)] hover:text-[var(--accent-color)] transition-colors"
         >
-          没有 API Key？点击注册
+          No API key? Register here
         </a>
         <div class="flex gap-2">
-          <n-button @click="handleClear" tertiary>清除配置</n-button>
-          <n-button @click="showModal = false">取消</n-button>
-          <n-button type="primary" @click="handleSave">保存</n-button>
+          <n-button @click="handleClear" tertiary>Clear</n-button>
+          <n-button @click="showModal = false">Cancel</n-button>
+          <n-button type="primary" color="#A58163" @click="handleSave">Save</n-button>
         </div>
       </div>
     </template>

@@ -11,7 +11,7 @@
           <n-icon :size="16" class="text-purple-500">
             <ChatbubbleOutline />
           </n-icon>
-          <span class="text-sm font-medium text-[var(--text-secondary)]">{{ data.label || 'LLM 文本生成' }}</span>
+          <span class="text-sm font-medium text-[var(--text-secondary)]">{{ data.label || 'LLM Text Generation' }}</span>
         </div>
         <div class="flex items-center gap-1">
           <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
@@ -24,22 +24,22 @@
 
       <!-- Config content | 配置内容 -->
       <div class="p-3 space-y-3">
-        <!-- System prompt | 系统提示词 -->
+        <!-- System prompt | System Prompt -->
         <div>
-          <label class="text-xs text-[var(--text-secondary)] mb-1 block">系统提示词</label>
+          <label class="text-xs text-[var(--text-secondary)] mb-1 block">System Prompt</label>
           <textarea 
             v-model="systemPrompt" 
             @blur="updateConfig"
             @wheel.stop 
             @mousedown.stop
             class="w-full bg-[var(--bg-tertiary)] rounded-lg p-2 resize-none outline-none text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] min-h-[60px] max-h-[120px] overflow-y-auto border border-[var(--border-color)] focus:border-purple-500 transition-colors"
-            placeholder="设定 AI 的角色和行为规则..." 
+            placeholder="Set the AI role and behavior..." 
           />
         </div>
 
-        <!-- Model selection | 模型选择 -->
+        <!-- Model selection | Model选择 -->
         <div>
-          <label class="text-xs text-[var(--text-secondary)] mb-1 block">模型</label>
+          <label class="text-xs text-[var(--text-secondary)] mb-1 block">Model</label>
           <n-select
             v-model:value="model"
             :options="modelOptions"
@@ -48,9 +48,9 @@
           />
         </div>
 
-        <!-- Output format | 输出格式 -->
+        <!-- Output format | Output Format -->
         <div>
-          <label class="text-xs text-[var(--text-secondary)] mb-1 block">输出格式</label>
+          <label class="text-xs text-[var(--text-secondary)] mb-1 block">Output Format</label>
           <n-select
             v-model:value="outputFormat"
             :options="formatOptions"
@@ -67,19 +67,19 @@
         >
           <n-spin v-if="isGenerating" :size="14" />
           <n-icon v-else :size="14"><SparklesOutline /></n-icon>
-          {{ isGenerating ? '生成中...' : '执行生成' }}
+          {{ isGenerating ? 'Generating...' : 'Run' }}
         </button>
 
-        <!-- Output preview | 输出预览 -->
+        <!-- Output preview | 输出Preview -->
         <div v-if="outputContent" class="mt-2">
           <div class="flex items-center justify-between mb-1">
-            <label class="text-xs text-[var(--text-secondary)]">生成结果</label>
+            <label class="text-xs text-[var(--text-secondary)]">Result</label>
             <button 
               @click="handleCopyOutput"
               class="text-xs text-[var(--text-secondary)] hover:text-purple-500 flex items-center gap-1 transition-colors"
             >
               <n-icon :size="12"><CopyOutline /></n-icon>
-              复制
+              Copy
             </button>
           </div>
           <div 
@@ -104,7 +104,7 @@
         <n-icon :size="16" class="text-gray-600">
           <CopyOutline />
         </n-icon>
-        <span class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">复制</span>
+        <span class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
       </button>
     </div>
   </div>
@@ -118,7 +118,7 @@
 import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin, NSelect } from 'naive-ui'
-import { TrashOutline, CopyOutline, ChatbubbleOutline, SparklesOutline } from '@vicons/ionicons5'
+import { TrashOutline, CopyOutline, ChatbubbleOutline, SparklesOutline } from '../../icons/coolicons'
 import { updateNode, removeNode, duplicateNode, nodes, edges } from '../../stores/canvas'
 import { useChat, useApiConfig } from '../../hooks'
 
@@ -141,7 +141,7 @@ const outputContent = ref(props.data?.outputContent || '')
 const isGenerating = ref(false)
 const showActions = ref(false)
 
-// Model options | 模型选项
+// Model options | Model选项
 const modelOptions = [
   { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
   { label: 'GPT-4o', value: 'gpt-4o' },
@@ -151,8 +151,8 @@ const modelOptions = [
 
 // Format options | 格式选项
 const formatOptions = [
-  { label: '纯文本', value: 'text' },
-  { label: 'JSON 结构', value: 'json' },
+  { label: 'Plain Text', value: 'text' },
+  { label: 'JSON', value: 'json' },
   { label: 'Markdown', value: 'markdown' }
 ]
 
@@ -204,13 +204,13 @@ const getInputFromConnections = () => {
 // Handle generate | 处理生成
 const handleGenerate = async () => {
   if (!isApiConfigured.value) {
-    window.$message?.warning('请先配置 API Key')
+    window.$message?.warning('Please configure API Key first')
     return
   }
 
   const input = getInputFromConnections()
   if (!input && !systemPrompt.value) {
-    window.$message?.warning('请连接输入节点或设置系统提示词')
+    window.$message?.warning('Connect input nodes or set a system prompt')
     return
   }
 
@@ -222,15 +222,15 @@ const handleGenerate = async () => {
       model: model.value
     })
 
-    const result = await send(input || '请根据系统提示词生成内容', true)
+    const result = await send(input || 'Generate content from the system prompt', true)
     
     if (result) {
       outputContent.value = result
       updateNode(props.id, { outputContent: result })
-      window.$message?.success('生成完成')
+      window.$message?.success('Generation completed')
     }
   } catch (err) {
-    window.$message?.error(err.message || '生成失败')
+    window.$message?.error(err.message || 'Generation failed')
   } finally {
     isGenerating.value = false
   }
@@ -241,10 +241,10 @@ const handleDelete = () => {
   removeNode(props.id)
 }
 
-// Handle duplicate | 处理复制
+// Handle duplicate | 处理Copy
 const handleDuplicate = () => {
   const newNodeId = duplicateNode(props.id)
-  window.$message?.success('节点已复制')
+  window.$message?.success('Node duplicated')
   if (newNodeId) {
     setTimeout(() => {
       updateNodeInternals(newNodeId)
@@ -252,14 +252,14 @@ const handleDuplicate = () => {
   }
 }
 
-// Handle copy output | 处理复制输出
+// Handle copy output | 处理Copy输出
 const handleCopyOutput = async () => {
   if (!outputContent.value) return
   try {
     await navigator.clipboard.writeText(outputContent.value)
-    window.$message?.success('已复制到剪贴板')
+    window.$message?.success('Copied to clipboard')
   } catch (err) {
-    window.$message?.error('复制失败')
+    window.$message?.error('Copy failed')
   }
 }
 </script>

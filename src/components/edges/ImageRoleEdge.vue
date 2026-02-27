@@ -32,7 +32,7 @@
 import { computed } from 'vue'
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon } from 'naive-ui'
-import { ChevronDownOutline } from '@vicons/ionicons5'
+import { ChevronDownOutline } from '../../icons/coolicons'
 import { edges } from '../../stores/canvas'
 
 // Get VueFlow instance | 获取 VueFlow 实例

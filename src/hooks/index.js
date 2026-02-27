@@ -20,3 +20,7 @@ export {
 
 // Workflow Orchestrator Hook | 工作流编排 Hook
 export { useWorkflowOrchestrator } from './useWorkflowOrchestrator'
+
+// New Hooks
+export { useWorkflowExecutor } from './useWorkflowExecutor'
+export { useNodesFactory } from './useNodesFactory'
