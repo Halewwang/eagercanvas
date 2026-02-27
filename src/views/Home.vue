@@ -9,8 +9,40 @@
       <div class="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.2)_1px,transparent_1px)] [background-size:20px_20px] opacity-50" />
     </div>
 
+    <div class="relative z-20 max-w-[1400px] mx-auto px-6 pt-6 flex justify-end items-center gap-3">
+      <template v-if="isAuthenticated">
+      <button
+        @click="router.push('/usage')"
+        class="flora-button-ghost px-4 py-2 rounded-xl text-sm"
+      >
+        Usage
+      </button>
+      <span class="text-xs text-[var(--text-secondary)] max-w-[220px] truncate">{{ user?.email }}</span>
+      <button
+        @click="handleLogout"
+        class="flora-button-ghost px-4 py-2 rounded-xl text-sm"
+      >
+        Logout
+      </button>
+      </template>
+      <template v-else>
+        <button
+          @click="openLogin"
+          class="flora-button-ghost px-4 py-2 rounded-xl text-sm"
+        >
+          Login
+        </button>
+        <button
+          @click="openRegister"
+          class="flora-button-primary px-4 py-2 rounded-xl text-sm"
+        >
+          Register
+        </button>
+      </template>
+    </div>
+
     <!-- Main content -->
-    <main class="relative z-10 max-w-[1400px] mx-auto px-6 py-8 md:py-12">
+    <main class="relative z-10 max-w-[1400px] mx-auto px-6 pt-16 pb-8 md:pt-24 md:pb-12">
 
       <!-- Hero Section -->
       <section class="flex flex-col items-center text-center mb-32 md:mb-48 relative">
@@ -240,11 +272,13 @@ import {
   renameProject 
 } from '../stores/projects'
 import { useApiConfig } from '../hooks/useApiConfig'
+import { useAuthStore } from '@/stores/auth'
 import ApiSettings from '../components/ApiSettings.vue'
 
 const router = useRouter()
 const dialog = useDialog()
 const apiConfig = useApiConfig()
+const { user, logout, isAuthenticated } = useAuthStore()
 
 // API Settings state | API 设置状态
 const showApiSettings = ref(false)
@@ -253,6 +287,19 @@ const isApiConfigured = ref(apiConfig.isConfigured.value)
 // Refresh API config state | 刷新 API 配置状态
 const refreshApiConfig = () => {
   isApiConfigured.value = apiConfig.isConfigured.value
+}
+
+const handleLogout = async () => {
+  await logout()
+  router.push('/login')
+}
+
+const openLogin = () => {
+  router.push('/login')
+}
+
+const openRegister = () => {
+  router.push('/login?mode=register')
 }
 
 // Video refs for hover play | 视频引用用于悬停播放
@@ -320,7 +367,7 @@ const formatDate = (date) => {
 }
 
 // Handle project action | 处理项目操作
-const handleProjectAction = (key, project) => {
+const handleProjectAction = async (key, project) => {
   switch (key) {
     case 'rename':
       renameTargetId.value = project.id
@@ -328,7 +375,7 @@ const handleProjectAction = (key, project) => {
       showRenameModal.value = true
       break
     case 'duplicate':
-      const newId = duplicateProject(project.id)
+      const newId = await duplicateProject(project.id)
       if (newId) {
         window.$message?.success('Project duplicated')
       }
@@ -339,8 +386,8 @@ const handleProjectAction = (key, project) => {
         content: `Delete "${project.name}"? This action cannot be undone.`,
         positiveText: 'Delete',
         negativeText: 'Cancel',
-        onPositiveClick: () => {
-          deleteProject(project.id)
+        onPositiveClick: async () => {
+          await deleteProject(project.id)
           window.$message?.success('Project deleted')
         }
       })
@@ -349,9 +396,9 @@ const handleProjectAction = (key, project) => {
 }
 
 // Confirm rename | 确认重命名
-const confirmRename = () => {
+const confirmRename = async () => {
   if (renameTargetId.value && renameValue.value.trim()) {
-    renameProject(renameTargetId.value, renameValue.value.trim())
+    await renameProject(renameTargetId.value, renameValue.value.trim())
     window.$message?.success('Project renamed')
   }
   showRenameModal.value = false
@@ -361,23 +408,25 @@ const confirmRename = () => {
 
 // Check API key before navigation | 跳转前检查 API Key
 const checkApiKeyAndNavigate = (callback) => {
-  callback()
+  Promise.resolve(callback()).catch((err) => {
+    window.$message?.error(err?.message || 'Operation failed')
+  })
   return true
 }
 
 // Create new project | 创建新项目
 const createNewProject = () => {
-  checkApiKeyAndNavigate(() => {
-    const id = createProject('Untitled')
+  checkApiKeyAndNavigate(async () => {
+    const id = await createProject('Untitled')
     router.push(`/canvas/${id}`)
   })
 }
 
 // Create project with input text | 使用输入文本创建项目
 const handleCreateWithInput = () => {
-  checkApiKeyAndNavigate(() => {
+  checkApiKeyAndNavigate(async () => {
     const name = inputText.value.trim() || 'Untitled'
-    const id = createProject(name)
+    const id = await createProject(name)
     // Store the input text to be used as initial prompt
     sessionStorage.setItem('ai-canvas-initial-prompt', inputText.value.trim())
     inputText.value = ''
@@ -400,8 +449,8 @@ const isVideoUrl = (url) => {
 }
 
 // Initialize projects store on mount | 挂载时初始化项目存储
-onMounted(() => {
-  initProjectsStore()
+onMounted(async () => {
+  await initProjectsStore()
 })
 </script>
 

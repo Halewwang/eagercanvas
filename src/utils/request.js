@@ -4,28 +4,47 @@
  */
 
 import axios from 'axios'
-import { DEFAULT_API_KEY } from './constants'
+import { DEFAULT_API_KEY, STORAGE_KEYS } from './constants'
 
 // Base URL from environment or default
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.chatfire.site/v1'
+const BASE_URL = import.meta.env.VITE_APP_API_BASE_URL || '/api/v1'
 
 // Create axios instance | 创建 axios 实例
 const instance = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000000
+  timeout: 30000000,
+  withCredentials: true
 })
+
+let isRefreshing = false
+let refreshQueue = []
+
+const queueRequest = (resolve, reject) => {
+  refreshQueue.push({ resolve, reject })
+}
+
+const flushQueue = (error, token = '') => {
+  refreshQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error)
+    else resolve(token)
+  })
+  refreshQueue = []
+}
 
 // Request interceptor | 请求拦截器
 instance.interceptors.request.use(
   (config) => {
-    // Get API key from localStorage | 从 localStorage 获取 API key
-    const apiKey = localStorage.getItem('apiKey') || DEFAULT_API_KEY
+    const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
+    const apiKey = localStorage.getItem(STORAGE_KEYS.API_KEY) || DEFAULT_API_KEY
     
     // Skip auth for certain endpoints | 跳过某些端点的认证
     const noAuthEndpoints = ['/model/page', '/model/fullName', '/model/types']
     const isNoAuth = noAuthEndpoints.some(ep => config.url?.includes(ep))
     
-    if (apiKey && !isNoAuth) {
+    if (accessToken) {
+      config.headers['Authorization'] = `Bearer ${accessToken}`
+    } else if (apiKey && !isNoAuth) {
+      // Backward compatibility for legacy direct-provider mode
       config.headers['Authorization'] = `Bearer ${apiKey}`
     }
     
@@ -61,7 +80,7 @@ instance.interceptors.response.use(
     window.$message?.error(message || 'Request failed')
     return Promise.reject(res.data)
   },
-  (error) => {
+  async (error) => {
     const { response } = error
     
     if (response) {
@@ -69,7 +88,45 @@ instance.interceptors.response.use(
       const message = data?.message || data?.error?.message || error.message
       
       if (status === 401) {
-        window.$message?.error('API Key 无效或已过期')
+        const originalRequest = error.config || {}
+        const isRefreshPath = originalRequest.url?.includes('/auth/refresh')
+        const hasAccessToken = !!localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN)
+
+        if (!isRefreshPath && hasAccessToken && !originalRequest._retry) {
+          originalRequest._retry = true
+
+          if (isRefreshing) {
+            return new Promise((resolve, reject) => {
+              queueRequest(resolve, reject)
+            }).then((token) => {
+              originalRequest.headers['Authorization'] = `Bearer ${token}`
+              return instance(originalRequest)
+            })
+          }
+
+          isRefreshing = true
+
+          try {
+            const refreshRes = await instance.post('/auth/refresh')
+            const nextToken = refreshRes?.accessToken || ''
+            if (nextToken) {
+              localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, nextToken)
+              flushQueue(null, nextToken)
+              originalRequest.headers['Authorization'] = `Bearer ${nextToken}`
+              return instance(originalRequest)
+            }
+          } catch (refreshError) {
+            localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
+            flushQueue(refreshError, '')
+            window.$message?.error('登录已过期，请重新登录')
+            return Promise.reject(refreshError)
+          } finally {
+            isRefreshing = false
+          }
+        }
+
+        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
+        window.$message?.error('登录已过期，请重新登录')
       } else if (status === 429) {
         window.$message?.error('请求过于频繁，请稍后再试')
       } else {

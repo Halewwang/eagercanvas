@@ -6,3 +6,6 @@
 export * from './image'
 export * from './video'
 export * from './chat'
+export * from './auth'
+export * from './projects'
+export * from './usage'

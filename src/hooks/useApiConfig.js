@@ -37,9 +37,12 @@ const setStored = (key, value) => {
  */
 export const useApiConfig = () => {
   const apiKey = ref(getStored(STORAGE_KEYS.API_KEY, DEFAULT_API_KEY))
-  const baseUrl = ref(getStored(STORAGE_KEYS.BASE_URL, DEFAULT_API_BASE_URL))
+  const baseUrl = ref(DEFAULT_API_BASE_URL)
   
-  const isConfigured = computed(() => !!apiKey.value)
+  const isConfigured = computed(() => {
+    const hasToken = !!getStored(STORAGE_KEYS.ACCESS_TOKEN, '')
+    return hasToken || !!apiKey.value
+  })
 
   // Watch and sync changes | 监听并同步变化
   watch(apiKey, (newKey) => {

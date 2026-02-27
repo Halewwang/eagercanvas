@@ -3,7 +3,7 @@
  */
 
 import { request, getBaseUrl } from '@/utils'
-import { DEFAULT_API_KEY } from '@/utils/constants'
+import { DEFAULT_API_KEY, STORAGE_KEYS } from '@/utils/constants'
 
 // 对话补全
 export const chatCompletions = (data) =>
@@ -15,6 +15,7 @@ export const chatCompletions = (data) =>
 
 // 流式对话补全
 export const streamChatCompletions = async function* (data, signal) {
+  const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
   const apiKey = localStorage.getItem('apiKey') || DEFAULT_API_KEY
   const baseUrl = getBaseUrl()
   
@@ -22,8 +23,9 @@ export const streamChatCompletions = async function* (data, signal) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
+      'Authorization': `Bearer ${accessToken || apiKey}`
     },
+    credentials: 'include',
     body: JSON.stringify({ ...data, stream: true }),
     signal
   })

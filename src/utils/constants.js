@@ -3,8 +3,8 @@
  */
 
 // API Base URL | API 基础 URL
-export const DEFAULT_API_BASE_URL = 'https://api.chatfire.site/v1'
-export const DEFAULT_API_KEY = 'xxxxx'
+export const DEFAULT_API_BASE_URL = import.meta.env.VITE_APP_API_BASE_URL || '/api/v1'
+export const DEFAULT_API_KEY = ''
 
 // API Endpoints | API 端点
 export const API_ENDPOINTS = {
@@ -51,6 +51,7 @@ export const DEFAULT_CHAT_CONFIG = {
 export const STORAGE_KEYS = {
   API_KEY: 'apiKey',
   BASE_URL: 'apiBaseUrl',
+  ACCESS_TOKEN: 'ec_access_token',
   CUSTOM_CHAT_MODELS: 'customChatModels',
   CUSTOM_IMAGE_MODELS: 'customImageModels',
   CUSTOM_VIDEO_MODELS: 'customVideoModels',

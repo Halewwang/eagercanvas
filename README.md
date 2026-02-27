@@ -60,6 +60,26 @@ pnpm dev
 npm run dev
 ```
 
+### 启动后端 API（新）
+
+```bash
+cd backend
+npm install
+cp .env.example .env
+# 配置 Supabase / JWT / Provider Key 后启动
+npm run dev
+```
+
+前端默认请求 `http://localhost:8787/api/v1`（通过 Vite 代理 `/api/v1`）。
+
+### 初始化 Supabase 表结构（新）
+
+在 Supabase SQL Editor 执行：
+
+```sql
+-- see supabase/001_init.sql
+```
+
 ### 构建
 
 ```bash
@@ -70,13 +90,11 @@ npm run build
 
 ## ⚙️ 配置
 
-首次使用需要配置 API：
+首次使用需要登录（邮箱验证码），并在后端配置 Provider API Key：
 
-1. 点击右上角设置图标 ⚙️
-2. 填入 API Base URL 和 API Key
-3. 选择需要使用的模型
-
-支持 OpenAI 兼容的 API 接口。
+1. 前端访问 `/login` 获取验证码登录
+2. 后端 `.env` 配置 `PROVIDER_API_BASE_URL` 与 `PROVIDER_API_KEY`
+3. 业务接口统一通过后端代理调用模型厂商
 
 ## 🛠️ 技术栈
 

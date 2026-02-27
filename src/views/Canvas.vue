@@ -506,7 +506,7 @@ const onPaneClick = () => {
 }
 
 // Handle project action | 处理项目操作
-const handleProjectAction = (key) => {
+const handleProjectAction = async (key) => {
   const projectId = route.params.id
   switch (key) {
     case 'rename':
@@ -515,7 +515,7 @@ const handleProjectAction = (key) => {
       break
     case 'duplicate':
       if (!projectId) return
-      const newId = duplicateProject(projectId)
+      const newId = await duplicateProject(projectId)
       if (newId) {
         notifier.success('Project duplicated')
         router.push(`/canvas/${newId}`)
@@ -530,20 +530,20 @@ const handleProjectAction = (key) => {
 }
 
 // Confirm rename | 确认重命名
-const confirmRename = () => {
+const confirmRename = async () => {
   const projectId = route.params.id
   if (renameValue.value.trim()) {
-    renameProject(projectId, renameValue.value.trim())
+    await renameProject(projectId, renameValue.value.trim())
     notifier.success('Project renamed')
   }
   showRenameModal.value = false
 }
 
 // Confirm delete | 确认删除
-const confirmDelete = () => {
+const confirmDelete = async () => {
   const projectId = route.params.id
   if (!projectId) return
-  deleteProject(projectId)
+  await deleteProject(projectId)
   showDeleteModal.value = false
   notifier.success('Project deleted')
   router.push('/')
@@ -645,12 +645,12 @@ watch(
 )
 
 // Initialize | 初始化
-onMounted(() => {
+onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
   
   // Initialize projects store | 初始化项目存储
-  initProjectsStore()
+  await initProjectsStore()
   
   // Load project data | 加载项目数据
   loadProjectById(route.params.id)

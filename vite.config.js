@@ -13,8 +13,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/v1': {
-        target: 'https://api.chatfire.site',
+      '/api/v1': {
+        target: 'http://localhost:8787',
         changeOrigin: true
       }
     }
