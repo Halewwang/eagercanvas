@@ -132,6 +132,14 @@ instance.interceptors.response.use(
       } else {
         window.$message?.error(message || '请求失败')
       }
+
+      if (import.meta.env.DEV) {
+        console.error('[request:error]', {
+          url: error.config?.url,
+          status,
+          data
+        })
+      }
     } else {
       window.$message?.error(error.message || '网络错误')
     }

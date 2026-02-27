@@ -409,7 +409,9 @@ const confirmRename = async () => {
 // Check API key before navigation | 跳转前检查 API Key
 const checkApiKeyAndNavigate = (callback) => {
   Promise.resolve(callback()).catch((err) => {
-    window.$message?.error(err?.message || 'Operation failed')
+    // Detailed error is already handled by request interceptor.
+    // Avoid showing duplicate generic toasts.
+    console.error('[home] operation failed', err)
   })
   return true
 }
