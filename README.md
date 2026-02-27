@@ -9,9 +9,6 @@
 
 ## 📸 截图
 
-### 首页
-![首页](./doc/home.png)
-
 ### 画布
 ![画布](./doc/canvas.png)
 
@@ -159,11 +156,6 @@ src/
 4. 推送到分支 (`git push origin feature/amazing-feature`)
 5. 提交 Pull Request
 
-## 联系我
-
-扫码添加微信交流：
-
-<img src="./doc/wx-group.jpg" width="200" alt="微信二维码" />
 
 ## 📄 License
 
