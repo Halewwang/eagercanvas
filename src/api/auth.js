@@ -15,6 +15,21 @@ export const verifyLoginCode = (email, code) =>
     withCredentials: true
   })
 
+export const sendRegisterCode = (email) =>
+  request({
+    url: '/auth/register/send-code',
+    method: 'post',
+    data: { email }
+  })
+
+export const verifyRegisterCode = (email, code, displayName) =>
+  request({
+    url: '/auth/register/verify-code',
+    method: 'post',
+    data: { email, code, displayName },
+    withCredentials: true
+  })
+
 export const refreshSession = () =>
   request({
     url: '/auth/refresh',
@@ -33,4 +48,11 @@ export const getMe = () =>
   request({
     url: '/auth/me',
     method: 'get'
+  })
+
+export const patchProfile = (payload) =>
+  request({
+    url: '/auth/profile',
+    method: 'patch',
+    data: payload
   })

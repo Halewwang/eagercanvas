@@ -1,5 +1,14 @@
 import { computed, ref } from 'vue'
-import { getMe, logoutSession, refreshSession, sendLoginCode, verifyLoginCode } from '@/api/auth'
+import {
+  getMe,
+  logoutSession,
+  patchProfile,
+  refreshSession,
+  sendLoginCode,
+  sendRegisterCode,
+  verifyLoginCode,
+  verifyRegisterCode
+} from '@/api/auth'
 
 const ACCESS_TOKEN_KEY = 'ec_access_token'
 
@@ -29,9 +38,19 @@ export const useAuthStore = () => {
   const isAuthenticated = computed(() => !!accessToken.value)
 
   const sendCode = (email) => sendLoginCode(email)
+  const sendRegister = (email) => sendRegisterCode(email)
 
   const verifyCode = async (email, code) => {
     const result = await verifyLoginCode(email, code)
+    if (result?.accessToken) {
+      persistToken(result.accessToken)
+      user.value = result.user || null
+    }
+    return result
+  }
+
+  const verifyRegister = async (email, code, displayName) => {
+    const result = await verifyRegisterCode(email, code, displayName)
     if (result?.accessToken) {
       persistToken(result.accessToken)
       user.value = result.user || null
@@ -72,15 +91,24 @@ export const useAuthStore = () => {
     }
   }
 
+  const updateProfile = async (payload) => {
+    const result = await patchProfile(payload)
+    user.value = result.user
+    return result.user
+  }
+
   return {
     user,
     accessToken,
     isAuthenticated,
     bootstrapped,
     sendCode,
+    sendRegister,
     verifyCode,
+    verifyRegister,
     bootstrapAuth,
     logout,
+    updateProfile,
     persistToken
   }
 }

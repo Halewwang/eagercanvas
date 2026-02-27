@@ -5,6 +5,8 @@ Express API for auth, projects, runs, and usage metrics.
 ## Endpoints
 - `POST /api/v1/auth/send-code`
 - `POST /api/v1/auth/verify-code`
+- `POST /api/v1/auth/register/send-code`
+- `POST /api/v1/auth/register/verify-code`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/me`
@@ -22,7 +24,9 @@ Compatibility endpoints used by current frontend workflow:
 
 ## Setup
 1. Copy `.env.example` to `.env` and fill values.
-2. Run SQL in `../supabase/001_init.sql` on your Supabase Postgres.
+2. Run SQL files in order on your Supabase Postgres:
+   - `../supabase/001_init.sql`
+   - `../supabase/002_auth_registration.sql`
 3. Start server:
 
 ```bash

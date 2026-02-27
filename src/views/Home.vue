@@ -12,12 +12,20 @@
     <div class="relative z-20 max-w-[1400px] mx-auto px-6 pt-6 flex justify-end items-center gap-3">
       <template v-if="isAuthenticated">
       <button
+        @click="triggerAvatarUpload"
+        class="w-9 h-9 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-tertiary)] flex items-center justify-center"
+        title="Upload avatar"
+      >
+        <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" class="w-full h-full object-cover" />
+        <span v-else class="text-xs">{{ avatarInitial }}</span>
+      </button>
+      <span class="text-xs text-[var(--text-secondary)] max-w-[220px] truncate">{{ user?.email }}</span>
+      <button
         @click="router.push('/usage')"
         class="flora-button-ghost px-4 py-2 rounded-xl text-sm"
       >
         Usage
       </button>
-      <span class="text-xs text-[var(--text-secondary)] max-w-[220px] truncate">{{ user?.email }}</span>
       <button
         @click="handleLogout"
         class="flora-button-ghost px-4 py-2 rounded-xl text-sm"
@@ -40,6 +48,7 @@
         </button>
       </template>
     </div>
+    <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
 
     <!-- Main content -->
     <main class="relative z-10 max-w-[1400px] mx-auto px-6 pt-16 pb-8 md:pt-24 md:pb-12">
@@ -243,6 +252,14 @@
         </div>
       </template>
     </n-modal>
+
+    <n-modal v-model:show="showDeleteModal" preset="dialog" title="Delete Project" type="warning">
+      <p>Delete "{{ deleteTargetName }}"? This action cannot be undone.</p>
+      <template #action>
+        <button @click="showDeleteModal = false" class="px-4 py-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>
+        <button @click="confirmDeleteProject" class="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors">Delete</button>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -251,9 +268,9 @@
  * Home view component | 首页视图组件
  * Entry point with project list and creation input
  */
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { NIcon, NModal, useDialog } from 'naive-ui'
+import { NIcon, NModal } from 'naive-ui'
 import { 
   AddOutline, 
   SendOutline,
@@ -276,9 +293,8 @@ import { useAuthStore } from '@/stores/auth'
 import ApiSettings from '../components/ApiSettings.vue'
 
 const router = useRouter()
-const dialog = useDialog()
 const apiConfig = useApiConfig()
-const { user, logout, isAuthenticated } = useAuthStore()
+const { user, logout, isAuthenticated, updateProfile } = useAuthStore()
 
 // API Settings state | API 设置状态
 const showApiSettings = ref(false)
@@ -292,6 +308,35 @@ const refreshApiConfig = () => {
 const handleLogout = async () => {
   await logout()
   router.push('/login')
+}
+
+const avatarInputRef = ref(null)
+const avatarInitial = computed(() => (user.value?.displayName || user.value?.email || 'U').charAt(0).toUpperCase())
+
+const triggerAvatarUpload = () => {
+  avatarInputRef.value?.click()
+}
+
+const handleAvatarChange = async (event) => {
+  const file = event.target?.files?.[0]
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) {
+    window.$message?.error('Avatar must be <= 2MB')
+    return
+  }
+
+  const reader = new FileReader()
+  reader.onload = async () => {
+    try {
+      const dataUrl = String(reader.result || '')
+      await updateProfile({ avatarUrl: dataUrl })
+      window.$message?.success('Avatar updated')
+    } catch (err) {
+      window.$message?.error(err?.response?.data?.message || err?.message || 'Failed to update avatar')
+    }
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
 }
 
 const openLogin = () => {
@@ -338,6 +383,9 @@ const inputText = ref('')
 const showRenameModal = ref(false)
 const renameValue = ref('')
 const renameTargetId = ref(null)
+const showDeleteModal = ref(false)
+const deleteTargetId = ref(null)
+const deleteTargetName = ref('')
 
 // Suggestions tags | 建议标签
 const suggestions = [
@@ -381,17 +429,23 @@ const handleProjectAction = async (key, project) => {
       }
       break
     case 'delete':
-      dialog.warning({
-        title: 'Delete Project',
-        content: `Delete "${project.name}"? This action cannot be undone.`,
-        positiveText: 'Delete',
-        negativeText: 'Cancel',
-        onPositiveClick: async () => {
-          await deleteProject(project.id)
-          window.$message?.success('Project deleted')
-        }
-      })
+      deleteTargetId.value = project.id
+      deleteTargetName.value = project.name
+      showDeleteModal.value = true
       break
+  }
+}
+
+const confirmDeleteProject = async () => {
+  if (!deleteTargetId.value) return
+  const id = deleteTargetId.value
+  showDeleteModal.value = false
+  deleteTargetId.value = null
+  try {
+    await deleteProject(id)
+    window.$message?.success('Project deleted')
+  } catch (err) {
+    window.$message?.error(err?.response?.data?.message || err?.message || 'Delete failed')
   }
 }
 
@@ -406,41 +460,32 @@ const confirmRename = async () => {
   renameValue.value = ''
 }
 
-// Check API key before navigation | 跳转前检查 API Key
-const checkApiKeyAndNavigate = (callback) => {
-  Promise.resolve(callback()).catch((err) => {
-    // Detailed error is already handled by request interceptor.
-    // Avoid showing duplicate generic toasts.
-    console.error('[home] operation failed', err)
-  })
-  return true
-}
-
 // Create new project | 创建新项目
-const createNewProject = () => {
-  checkApiKeyAndNavigate(async () => {
+const createNewProject = async () => {
+  try {
     const id = await createProject('Untitled')
-    router.push(`/canvas/${id}`)
-  })
+    await router.push(`/canvas/${id}`)
+  } catch (err) {
+    window.$message?.error(err?.response?.data?.message || err?.message || 'Failed to create project')
+  }
 }
 
 // Create project with input text | 使用输入文本创建项目
-const handleCreateWithInput = () => {
-  checkApiKeyAndNavigate(async () => {
+const handleCreateWithInput = async () => {
+  try {
     const name = inputText.value.trim() || 'Untitled'
     const id = await createProject(name)
-    // Store the input text to be used as initial prompt
     sessionStorage.setItem('ai-canvas-initial-prompt', inputText.value.trim())
     inputText.value = ''
-    router.push(`/canvas/${id}`)
-  })
+    await router.push(`/canvas/${id}`)
+  } catch (err) {
+    window.$message?.error(err?.response?.data?.message || err?.message || 'Failed to create project')
+  }
 }
 
 // Open existing project | 打开已有项目
-const openProject = (project) => {
-  checkApiKeyAndNavigate(() => {
-    router.push(`/canvas/${project.id}`)
-  })
+const openProject = async (project) => {
+  await router.push(`/canvas/${project.id}`)
 }
 
 // Check if URL is a video | 检查 URL 是否为视频

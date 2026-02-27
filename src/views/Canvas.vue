@@ -24,6 +24,18 @@
         </div>
       </div>
 
+      <div class="absolute right-4 top-4 z-20">
+        <button
+          @click="triggerAvatarUpload"
+          class="w-10 h-10 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center justify-center"
+          title="Upload avatar"
+        >
+          <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" class="w-full h-full object-cover" />
+          <span v-else class="text-xs">{{ avatarInitial }}</span>
+        </button>
+        <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
+      </div>
+
       <!-- Vue Flow canvas | Vue Flow 画布 -->
       <VueFlow
         :key="flowKey"
@@ -284,6 +296,7 @@ import { useApiConfig, useChat, useWorkflowExecutor, useNodesFactory } from '../
 import { edgeStrategy } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { projects, initProjectsStore, updateProject, renameProject, currentProject, duplicateProject, deleteProject } from '../stores/projects'
+import { useAuthStore } from '@/stores/auth'
 
 // API Settings component | API 设置组件
 import ApiSettings from '../components/ApiSettings.vue'
@@ -357,6 +370,33 @@ import ImageOrderEdge from '../components/edges/ImageOrderEdge.vue'
 
 const router = useRouter()
 const route = useRoute()
+const { user, updateProfile } = useAuthStore()
+const avatarInputRef = ref(null)
+const avatarInitial = computed(() => (user.value?.displayName || user.value?.email || 'U').charAt(0).toUpperCase())
+
+const triggerAvatarUpload = () => {
+  avatarInputRef.value?.click()
+}
+
+const handleAvatarChange = async (event) => {
+  const file = event.target?.files?.[0]
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) {
+    notifier.error('Avatar must be <= 2MB')
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = async () => {
+    try {
+      await updateProfile({ avatarUrl: String(reader.result || '') })
+      notifier.success('Avatar updated')
+    } catch (err) {
+      notifier.error(err?.response?.data?.message || err?.message || 'Failed to update avatar')
+    }
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
+}
 
 // Register custom node types | 注册自定义节点类型
 const nodeTypes = {
@@ -543,8 +583,8 @@ const confirmRename = async () => {
 const confirmDelete = async () => {
   const projectId = route.params.id
   if (!projectId) return
-  await deleteProject(projectId)
   showDeleteModal.value = false
+  await deleteProject(projectId)
   notifier.success('Project deleted')
   router.push('/')
 }

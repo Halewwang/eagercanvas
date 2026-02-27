@@ -77,7 +77,9 @@ npm run dev
 在 Supabase SQL Editor 执行：
 
 ```sql
--- see supabase/001_init.sql
+-- run in order:
+-- supabase/001_init.sql
+-- supabase/002_auth_registration.sql
 ```
 
 ### 构建
