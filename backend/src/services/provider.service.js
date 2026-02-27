@@ -37,5 +37,5 @@ const callProvider = async (path, body, method = 'POST') => {
 
 export const providerChatCompletions = (payload) => callProvider('/chat/completions', payload)
 export const providerGenerateImage = (payload) => callProvider('/images/generations', payload)
-export const providerCreateVideo = (payload) => callProvider('/videos', payload)
-export const providerVideoStatus = (taskId) => callProvider(`/videos/${taskId}`, null, 'GET')
+export const providerCreateVideo = (payload) => callProvider('/video/generations', payload)
+export const providerVideoStatus = (taskId) => callProvider(`/video/task/${taskId}`, null, 'GET')

@@ -199,7 +199,11 @@ export const sendCode = async ({ email, ip, purpose = CODE_PURPOSES.LOGIN }) => 
   }
 
   if (payload.purpose === CODE_PURPOSES.REGISTER && existingUser) {
-    throw new HttpError(409, 'Email already registered. Please login.', 'USER_EXISTS')
+    const existingProfile = await getProfileByUserId(existingUser.id)
+    // Legacy account without profile can continue register flow.
+    if (existingProfile) {
+      throw new HttpError(409, 'Email already registered. Please login.', 'USER_EXISTS')
+    }
   }
 
   const { data: lastCode } = await supabase
@@ -269,7 +273,19 @@ export const verifyCode = async ({ email, code, ip, purpose = CODE_PURPOSES.LOGI
   if (payload.purpose === CODE_PURPOSES.REGISTER) {
     const existingUser = await getUserByEmail(payload.email)
     if (existingUser) {
-      throw new HttpError(409, 'Email already registered. Please login.', 'USER_EXISTS')
+      const existingProfile = await getProfileByUserId(existingUser.id)
+      if (existingProfile) {
+        throw new HttpError(409, 'Email already registered. Please login.', 'USER_EXISTS')
+      }
+
+      await ensureProfile({
+        userId: existingUser.id,
+        email: existingUser.email,
+        displayName: payload.displayName,
+        ip
+      })
+
+      return buildAuthResult({ user: existingUser, ip, action: 'auth.register_legacy' })
     }
 
     const { data: createdUser, error: createUserError } = await supabase

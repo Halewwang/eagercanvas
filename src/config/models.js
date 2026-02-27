@@ -88,48 +88,29 @@ export const IMAGE_MODELS = [
 
 // Video ratio options | 视频比例选项
 export const VIDEO_RATIO_LIST = [
-    { label: '16:9 (横版)', key: '16x9' },
-    { label: '4:3', key: '4x3' },
-    { label: '1:1 (方形)', key: '1x1' },
-    { label: '3:4', key: '3x4' },
-    { label: '9:16 (竖版)', key: '9x16' }
+    { label: '16:9 (横版)', key: '16:9' },
+    { label: '4:3', key: '4:3' },
+    { label: '1:1 (方形)', key: '1:1' },
+    { label: '3:4', key: '3:4' },
+    { label: '9:16 (竖版)', key: '9:16' }
 ]
 
 // Video generation models | 视频生成模型
 export const VIDEO_MODELS = [
     {
-        label: 'veo3.1',
-        key: 'veo3.1',
+        label: 'Veo 3.1 Pro',
+        key: 'veo3.1-pro',
         ratios: VIDEO_RATIO_LIST.map(s => s.key),
         durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
         defaultParams: { ratio: '16:9', duration: 5 }
     },
-    // {
-    //     label: 'runway/gen4-turbo',
-    //     key: 'runway/gen4-turbo',
-    //     ratios: VIDEO_RATIO_LIST.map(s => s.key),
-    //     durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-    //     defaultParams: { ratio: '16:9', duration: 5 }
-    // },
-    // {
-    //     label: '可灵视频 O1',
-    //     key: 'kling-video-o1',
-    //     ratios: VIDEO_RATIO_LIST.map(s => s.key),
-    //     durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-    //     defaultParams: { ratio: '16:9', duration: 5 }
-    // },
-    // {
-    //     label: 'viduq2-pro_720p', key: 'viduq2-pro_720p',
-    //     ratios: VIDEO_RATIO_LIST.map(s => s.key),
-    //     durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-    //     defaultParams: { ratio: '16:9', duration: 5 }
-    // },
-    // {
-    //     label: 'Sora 2', key: 'sora-2',
-    //     ratios: VIDEO_RATIO_LIST.map(s => s.key),
-    //     durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-    //     defaultParams: { ratio: '16:9', duration: 5 }
-    // }
+    {
+        label: 'Kling V1',
+        key: 'kling-v1',
+        ratios: VIDEO_RATIO_LIST.map(s => s.key),
+        durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
+        defaultParams: { ratio: '16:9', duration: 5 }
+    }
 ]
 
 // Chat/LLM models | 对话模型
@@ -172,7 +153,7 @@ export const VIDEO_DURATION_OPTIONS = [
 
 // Default values | 默认值
 export const DEFAULT_IMAGE_MODEL = 'nano-banana-pro'
-export const DEFAULT_VIDEO_MODEL = 'veo3.1'
+export const DEFAULT_VIDEO_MODEL = 'veo3.1-pro'
 export const DEFAULT_CHAT_MODEL = 'gpt-4o-mini'
 export const DEFAULT_IMAGE_SIZE = '2048x2048'
 export const DEFAULT_VIDEO_RATIO = '16:9'

@@ -205,13 +205,20 @@ export const useVideoGeneration = () => {
       // Build request data | 构建请求数据
       const requestData = {
         model: params.model,
+        model_name: params.model,
         prompt: params.prompt || ''
       }
       // Add optional params | 添加可选参数
       if (params.first_frame_image) requestData.first_frame_image = params.first_frame_image
       if (params.last_frame_image) requestData.last_frame_image = params.last_frame_image
-      if (params.ratio) requestData.size = params.ratio
-      if (params.dur) requestData.seconds = params.dur
+      if (params.ratio) {
+        requestData.aspect_ratio = params.ratio
+        requestData.size = params.ratio
+      }
+      if (params.dur) {
+        requestData.duration = params.dur
+        requestData.seconds = params.dur
+      }
 
       // Call API | 调用 API
       const task = await createVideoTask(requestData, {

@@ -122,7 +122,7 @@ export const createImageGeneration = async (userId, payload) => {
 }
 
 export const createVideoGeneration = async (userId, payload) => {
-  return createRun(userId, { type: 'video', payload, model: payload.model })
+  return createRun(userId, { type: 'video', payload, model: payload.model || payload.model_name })
 }
 
 export const getVideoTask = async (_userId, taskId) => {

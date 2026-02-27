@@ -103,7 +103,7 @@ export const useModelConfig = () => {
       label: m.label || m.key, 
       key: m.key,
       isCustom: true,
-      ratios: ['16x9', '9x16', '1x1'],
+      ratios: ['16:9', '9:16', '1:1'],
       durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
       defaultParams: { ratio: '16:9', duration: 5 }
     }))
