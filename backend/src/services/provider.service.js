@@ -57,15 +57,13 @@ const normalizeImagePayload = (payload = {}) => {
   const model = rawModel === 'nano-banana-pro' ? 'nano-banana' : rawModel
   const prompt = payload.prompt || ''
   const image = Array.isArray(payload.image) ? payload.image[0] : payload.image
-  const images = Array.isArray(payload.image) ? payload.image : (Array.isArray(payload.images) ? payload.images : undefined)
 
   if (model.startsWith('nano-banana')) {
     return {
       model: 'nano-banana',
       model_name: 'nano-banana',
       prompt,
-      image,
-      images
+      image
     }
   }
 
@@ -75,8 +73,7 @@ const normalizeImagePayload = (payload = {}) => {
     prompt,
     size: payload.size,
     quality: payload.quality,
-    image,
-    images
+    image
   }
 }
 
@@ -97,24 +94,25 @@ export const providerCreateVideo = (payload) => {
   const body = normalizeVideoPayload(payload)
   const modelName = String(body.model_name || body.model || '').toLowerCase()
   const isKling = modelName.startsWith('kling')
+  const isSora = modelName.startsWith('sora')
   const hasImageInput = Boolean(body.image || body.image_url || body.first_frame_image || body.last_frame_image || (Array.isArray(body.images) && body.images.length > 0))
   const aspectRatio = body.aspect_ratio || (typeof body.size === 'string' && body.size.includes(':') ? body.size : undefined)
   const size = normalizeVideoSize(body.size) || normalizeVideoSize(aspectRatio)
   const duration = body.duration || body.seconds
 
-  if (isKling) {
-    if (hasImageInput) {
-      const image = body.image || body.image_url || body.first_frame_image || body.last_frame_image || body.images?.[0]
-      return callProvider('/video/image2video', {
-        model_name: body.model_name || body.model,
-        prompt: body.prompt || '',
-        image,
-        aspect_ratio: aspectRatio,
-        size,
-        duration
-      })
-    }
+  if (hasImageInput) {
+    const image = body.image || body.image_url || body.first_frame_image || body.last_frame_image || body.images?.[0]
+    return callProvider('/video/image2video', {
+      model_name: body.model_name || body.model,
+      prompt: body.prompt || '',
+      image,
+      aspect_ratio: aspectRatio,
+      size,
+      duration
+    })
+  }
 
+  if (isKling || isSora) {
     return callProvider('/video/text2video', {
       model_name: body.model_name || body.model,
       prompt: body.prompt || '',

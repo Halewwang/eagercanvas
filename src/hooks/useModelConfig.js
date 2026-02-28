@@ -14,6 +14,27 @@ import {
   DEFAULT_VIDEO_MODEL
 } from '@/config/models'
 
+const MODEL_KEY_RE = /^[a-z0-9][a-z0-9.-]*$/
+const BUILTIN_IMAGE_KEYS = new Set(IMAGE_MODELS.map(m => m.key))
+const BUILTIN_VIDEO_KEYS = new Set(VIDEO_MODELS.map(m => m.key))
+
+const sanitizeCustomModels = (models, allowedKeys = null) => {
+  const list = Array.isArray(models) ? models : []
+  const seen = new Set()
+  const result = []
+
+  for (const item of list) {
+    const key = String(item?.key || '').trim()
+    if (!key || seen.has(key)) continue
+    if (!MODEL_KEY_RE.test(key)) continue
+    if (allowedKeys && !allowedKeys.has(key)) continue
+    seen.add(key)
+    result.push({ key, label: String(item?.label || key).trim() || key })
+  }
+
+  return result
+}
+
 /**
  * Get stored JSON value from localStorage
  */
@@ -65,8 +86,8 @@ const setStored = (key, value) => {
 
 // Shared reactive state (singleton pattern)
 const customChatModels = ref(getStoredJson(STORAGE_KEYS.CUSTOM_CHAT_MODELS, []))
-const customImageModels = ref(getStoredJson(STORAGE_KEYS.CUSTOM_IMAGE_MODELS, []))
-const customVideoModels = ref(getStoredJson(STORAGE_KEYS.CUSTOM_VIDEO_MODELS, []))
+const customImageModels = ref(sanitizeCustomModels(getStoredJson(STORAGE_KEYS.CUSTOM_IMAGE_MODELS, []), BUILTIN_IMAGE_KEYS))
+const customVideoModels = ref(sanitizeCustomModels(getStoredJson(STORAGE_KEYS.CUSTOM_VIDEO_MODELS, []), BUILTIN_VIDEO_KEYS))
 
 const selectedChatModel = ref(getStored(STORAGE_KEYS.SELECTED_CHAT_MODEL, DEFAULT_CHAT_MODEL))
 const selectedImageModel = ref(getStored(STORAGE_KEYS.SELECTED_IMAGE_MODEL, DEFAULT_IMAGE_MODEL))
@@ -76,7 +97,16 @@ const selectedVideoModel = ref(getStored(STORAGE_KEYS.SELECTED_VIDEO_MODEL, DEFA
  * Model Configuration Hook
  */
 export const useModelConfig = () => {
-  const allowedImageModels = new Set(['doubao-seedream-4-5-251128', 'nano-banana-pro', 'nano-banana'])
+  const mergeBuiltinsAndCustom = (builtins, custom) => {
+    const builtinsWithFlag = builtins.map(m => ({ ...m, isCustom: false }))
+    const builtinKeys = new Set(builtinsWithFlag.map(m => m.key))
+    const customOnly = custom.filter(m => !builtinKeys.has(m.key))
+    return [
+      ...builtinsWithFlag,
+      ...customOnly
+    ]
+  }
+
   // Combined models (built-in + custom)
   const allChatModels = computed(() => [
     ...CHAT_MODELS.map(m => ({ ...m, isCustom: false })),
@@ -87,22 +117,20 @@ export const useModelConfig = () => {
     }))
   ])
 
-  const allImageModels = computed(() => [
-    ...IMAGE_MODELS.map(m => ({ ...m, isCustom: false })),
-    ...customImageModels.value
-      .filter(m => allowedImageModels.has(m.key))
-      .map(m => ({
-      label: m.label || m.key, 
+  const allImageModels = computed(() => mergeBuiltinsAndCustom(
+    IMAGE_MODELS,
+    sanitizeCustomModels(customImageModels.value, BUILTIN_IMAGE_KEYS).map(m => ({
+      label: m.label || m.key,
       key: m.key,
       isCustom: true,
       sizes: [],
       defaultParams: { quality: 'standard', style: 'vivid' }
     }))
-  ])
+  ))
 
-  const allVideoModels = computed(() => [
-    ...VIDEO_MODELS.map(m => ({ ...m, isCustom: false })),
-    ...customVideoModels.value.map(m => ({ 
+  const allVideoModels = computed(() => mergeBuiltinsAndCustom(
+    VIDEO_MODELS,
+    sanitizeCustomModels(customVideoModels.value, BUILTIN_VIDEO_KEYS).map(m => ({
       label: m.label || m.key, 
       key: m.key,
       isCustom: true,
@@ -110,16 +138,42 @@ export const useModelConfig = () => {
       durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
       defaultParams: { ratio: '16:9', duration: 5 }
     }))
-  ])
+  ))
 
   // Watch and persist changes
   watch(customChatModels, (val) => setStoredJson(STORAGE_KEYS.CUSTOM_CHAT_MODELS, val), { deep: true })
-  watch(customImageModels, (val) => setStoredJson(STORAGE_KEYS.CUSTOM_IMAGE_MODELS, val), { deep: true })
-  watch(customVideoModels, (val) => setStoredJson(STORAGE_KEYS.CUSTOM_VIDEO_MODELS, val), { deep: true })
+  watch(customImageModels, (val) => {
+    const next = sanitizeCustomModels(val, BUILTIN_IMAGE_KEYS)
+    if (JSON.stringify(next) !== JSON.stringify(val)) {
+      customImageModels.value = next
+      return
+    }
+    setStoredJson(STORAGE_KEYS.CUSTOM_IMAGE_MODELS, next)
+  }, { deep: true, immediate: true })
+  watch(customVideoModels, (val) => {
+    const next = sanitizeCustomModels(val, BUILTIN_VIDEO_KEYS)
+    if (JSON.stringify(next) !== JSON.stringify(val)) {
+      customVideoModels.value = next
+      return
+    }
+    setStoredJson(STORAGE_KEYS.CUSTOM_VIDEO_MODELS, next)
+  }, { deep: true, immediate: true })
 
   watch(selectedChatModel, (val) => setStored(STORAGE_KEYS.SELECTED_CHAT_MODEL, val))
-  watch(selectedImageModel, (val) => setStored(STORAGE_KEYS.SELECTED_IMAGE_MODEL, val))
-  watch(selectedVideoModel, (val) => setStored(STORAGE_KEYS.SELECTED_VIDEO_MODEL, val))
+  watch(selectedImageModel, (val) => {
+    if (!allImageModels.value.some(m => m.key === val)) {
+      selectedImageModel.value = DEFAULT_IMAGE_MODEL
+      return
+    }
+    setStored(STORAGE_KEYS.SELECTED_IMAGE_MODEL, val)
+  }, { immediate: true })
+  watch(selectedVideoModel, (val) => {
+    if (!allVideoModels.value.some(m => m.key === val)) {
+      selectedVideoModel.value = DEFAULT_VIDEO_MODEL
+      return
+    }
+    setStored(STORAGE_KEYS.SELECTED_VIDEO_MODEL, val)
+  }, { immediate: true })
 
   // Add custom model
   const addCustomChatModel = (modelKey, label = '') => {
@@ -129,13 +183,13 @@ export const useModelConfig = () => {
   }
 
   const addCustomImageModel = (modelKey, label = '') => {
-    if (!modelKey || customImageModels.value.some(m => m.key === modelKey)) return false
+    if (!modelKey || !BUILTIN_IMAGE_KEYS.has(modelKey) || customImageModels.value.some(m => m.key === modelKey)) return false
     customImageModels.value.push({ key: modelKey, label: label || modelKey })
     return true
   }
 
   const addCustomVideoModel = (modelKey, label = '') => {
-    if (!modelKey || customVideoModels.value.some(m => m.key === modelKey)) return false
+    if (!modelKey || !BUILTIN_VIDEO_KEYS.has(modelKey) || customVideoModels.value.some(m => m.key === modelKey)) return false
     customVideoModels.value.push({ key: modelKey, label: label || modelKey })
     return true
   }

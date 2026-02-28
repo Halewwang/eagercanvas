@@ -150,10 +150,7 @@ export const useImageGeneration = () => {
 
       // Add reference image if provided | 添加参考图
       if (params.image) {
-        requestData.image = params.image
-        if (Array.isArray(params.image)) {
-          requestData.images = params.image
-        }
+        requestData.image = Array.isArray(params.image) ? params.image[0] : params.image
       }
 
       // Call API | 调用 API
