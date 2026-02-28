@@ -126,17 +126,17 @@ export const updateProjectCanvas = async (id, canvasData) => {
   }
 
   if (canvasData.nodes) {
-    const mediaNodes = canvasData.nodes
-      .filter((node) => (node.type === 'image' || node.type === 'video') && node.data?.url)
+    // Cover image rule: always use the first generated image in the project.
+    const imageNodes = canvasData.nodes
+      .filter((node) => node.type === 'image' && node.data?.url)
       .sort((a, b) => {
-        const aTime = a.data?.updatedAt || a.data?.createdAt || 0
-        const bTime = b.data?.updatedAt || b.data?.createdAt || 0
-        return bTime - aTime
+        const aTime = Number(a.data?.createdAt || a.data?.updatedAt || 0)
+        const bTime = Number(b.data?.createdAt || b.data?.updatedAt || 0)
+        return aTime - bTime
       })
 
-    if (mediaNodes.length > 0) {
-      const latest = mediaNodes[0]
-      next.thumbnail = latest.type === 'video' ? latest.data.thumbnail || latest.data.url : latest.data.url
+    if (imageNodes.length > 0) {
+      next.thumbnail = imageNodes[0].data.url
     }
   }
 
