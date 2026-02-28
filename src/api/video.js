@@ -18,7 +18,8 @@ export const createVideoTask = (data, options = {}) => {
 export const getVideoTaskStatus = (taskId) =>
   request({
     url: `/videos/${taskId}`,
-    method: 'get'
+    method: 'get',
+    silentNetworkErrorToast: true
   })
 
 // 轮询视频任务直到完成

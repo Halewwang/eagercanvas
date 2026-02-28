@@ -60,6 +60,7 @@ instance.interceptors.request.use(
 instance.interceptors.response.use(
   (res) => {
     const { data, code, message } = res.data || {}
+    const silent = !!res.config?.silentErrorToast
     
     // Handle stream response | 处理流响应
     if (res.config.responseType === 'stream') {
@@ -77,12 +78,14 @@ instance.interceptors.response.use(
     }
     
     // Error response | 错误响应
-    window.$message?.error(message || 'Request failed')
+    if (!silent) window.$message?.error(message || 'Request failed')
     return Promise.reject(res.data)
   },
   async (error) => {
     const { response } = error
-    
+    const silent = !!error?.config?.silentErrorToast
+    const silentNetwork = !!error?.config?.silentNetworkErrorToast
+
     if (response) {
       const { status, data } = response
       const message = data?.message || data?.error?.message || error.message
@@ -118,7 +121,7 @@ instance.interceptors.response.use(
           } catch (refreshError) {
             localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
             flushQueue(refreshError, '')
-            window.$message?.error('登录已过期，请重新登录')
+            if (!silent) window.$message?.error('登录已过期，请重新登录')
             error.__handled = true
             return Promise.reject(refreshError)
           } finally {
@@ -127,13 +130,13 @@ instance.interceptors.response.use(
         }
 
         localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
-        window.$message?.error('登录已过期，请重新登录')
+        if (!silent) window.$message?.error('登录已过期，请重新登录')
         error.__handled = true
       } else if (status === 429) {
-        window.$message?.error('请求过于频繁，请稍后再试')
+        if (!silent) window.$message?.error('请求过于频繁，请稍后再试')
         error.__handled = true
       } else {
-        window.$message?.error(message || '请求失败')
+        if (!silent) window.$message?.error(message || '请求失败')
         error.__handled = true
       }
 
@@ -145,7 +148,7 @@ instance.interceptors.response.use(
         })
       }
     } else {
-      window.$message?.error(error.message || '网络错误')
+      if (!silent && !silentNetwork) window.$message?.error(error.message || '网络错误')
       error.__handled = true
     }
     

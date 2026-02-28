@@ -225,6 +225,7 @@ export const useVideoGeneration = () => {
   }
 
   const doneStatuses = new Set(['completed', 'succeeded', 'success', 'done', 'finished', 'succeed', 'successed'])
+  const transientErrorStatuses = new Set([408, 425, 429, 500, 502, 503, 504])
 
   const getVideoUrl = (result) => {
     return (
@@ -317,8 +318,16 @@ export const useVideoGeneration = () => {
       for (let i = 0; i < maxAttempts; i++) {
         progress.attempt = i + 1
         progress.percentage = Math.min(Math.round((i / maxAttempts) * 100), 99)
-
-        const result = await getVideoTaskStatus(id)
+        let result
+        try {
+          result = await getVideoTaskStatus(id)
+        } catch (pollErr) {
+          const statusCode = Number(pollErr?.response?.status || pollErr?.status || 0)
+          const isTransient = transientErrorStatuses.has(statusCode) || !statusCode
+          if (!isTransient) throw pollErr
+          await new Promise(resolve => setTimeout(resolve, interval))
+          continue
+        }
         const resultStatus = getTaskStatus(result)
         const resultVideoUrl = getVideoUrl(result)
 

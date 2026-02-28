@@ -86,7 +86,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon, NSpin } from 'naive-ui'
 import { AddOutline, CloseCircleOutline, CopyOutline, RefreshOutline, SparklesOutline, TextOutline, TrashOutline } from '../../icons/coolicons'
 import { addEdge, addNode, duplicateNode, nodes, removeNode, updateNode } from '../../stores/canvas'
-import { useChat, useApiConfig } from '../../hooks'
+import { useChat } from '../../hooks'
 import { chatModelOptions, DEFAULT_CHAT_MODEL } from '../../stores/models'
 
 const props = defineProps({
@@ -96,7 +96,6 @@ const props = defineProps({
 })
 
 const { updateNodeInternals, viewport } = useVueFlow()
-const { isConfigured: isApiConfigured } = useApiConfig()
 
 const showCapsule = ref(false)
 const isGenerating = ref(false)
@@ -206,23 +205,23 @@ const setChatModel = (key) => {
 }
 
 const runTextGeneration = async (isRegenerate = false) => {
-  if (!isApiConfigured.value) {
-    window.$message?.warning('Please configure API Key first')
+  const source = content.value.trim()
+  if (!source) {
+    window.$message?.warning('Please enter text before optimization')
     return
   }
+
   isGenerating.value = true
   updateNode(props.id, { loading: true, error: '' })
-  const source = content.value.trim()
-  const prompt = source
-    ? isRegenerate
-      ? `Rewrite the following text with a different wording while preserving the same meaning:\n${source}`
-      : `Improve the following text while preserving the original intent:\n${source}`
-    : 'Generate a concise, high-quality writing sample.'
+  const prompt = isRegenerate
+    ? `Regenerate the following text with a different writing style while preserving the original meaning:\n\n${source}`
+    : `Optimize the following text for clarity, flow, and readability while preserving the original meaning:\n\n${source}`
   try {
     const result = await sendChat(prompt, true)
-    if (result) {
-      content.value = result
-      updateNode(props.id, { content: result, model: localChatModel.value, loading: false, error: '' })
+    const optimized = String(result || '').trim()
+    if (optimized) {
+      content.value = optimized
+      updateNode(props.id, { content: optimized, model: localChatModel.value, loading: false, error: '' })
       window.$message?.success(isRegenerate ? 'Text regenerated' : 'Text generated')
     }
   } catch (err) {

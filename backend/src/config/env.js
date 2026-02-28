@@ -26,8 +26,10 @@ export const env = {
   resendApiKey: process.env.RESEND_API_KEY || '',
   resendFromEmail: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
 
-  providerApiBaseUrl: process.env.PROVIDER_API_BASE_URL || 'https://api.302.ai',
+  providerApiBaseUrl: process.env.PROVIDER_API_BASE_URL || 'https://api.chatfire.site/v1',
+  providerApiBaseUrls: process.env.PROVIDER_API_BASE_URLS || '',
   providerApiKey: process.env.PROVIDER_API_KEY || '',
+  providerTimeoutMs: Number(process.env.PROVIDER_TIMEOUT_MS || 90000),
 
   rateLimitPerMinute: Number(process.env.RATE_LIMIT_PER_MINUTE || 120),
   codeCooldownSec: Number(process.env.AUTH_CODE_COOLDOWN_SEC || 60)

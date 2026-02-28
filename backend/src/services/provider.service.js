@@ -1,10 +1,22 @@
 import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 
-const buildProviderUrl = (path) => {
+const parseProviderBases = () => {
+  const rawList = String(env.providerApiBaseUrls || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const list = rawList.length > 0 ? rawList : [String(env.providerApiBaseUrl || '').trim()]
+  return [...new Set(list.filter(Boolean))]
+}
+
+const providerBases = parseProviderBases()
+
+const buildProviderUrl = (baseUrl, path) => {
   if (/^https?:\/\//i.test(path)) return path
 
-  const base = String(env.providerApiBaseUrl || '').replace(/\/+$/, '')
+  const base = String(baseUrl || '').replace(/\/+$/, '')
   let normalizedPath = path.startsWith('/') ? path : `/${path}`
 
   if (base.endsWith('/v1') && normalizedPath.startsWith('/v1/')) {
@@ -46,21 +58,51 @@ const parseProviderResponse = async (response) => {
   }
 }
 
+const callProviderWithBase = async (base, path, body, method = 'POST') => {
+  const controller = new AbortController()
+  const timeoutMs = Number(env.providerTimeoutMs || 90000)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(buildProviderUrl(base, path), {
+      method,
+      headers: buildHeaders(),
+      body: method === 'GET' ? undefined : JSON.stringify(body),
+      signal: controller.signal
+    })
+    const data = await parseProviderResponse(response)
+
+    if (!response.ok) {
+      const message = data?.error?.message || data?.message || `Provider request failed: ${response.status}`
+      throw new HttpError(response.status, message, 'PROVIDER_ERROR')
+    }
+
+    return data || {}
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const callProvider = async (path, body, method = 'POST') => {
-  const response = await fetch(buildProviderUrl(path), {
-    method,
-    headers: buildHeaders(),
-    body: method === 'GET' ? undefined : JSON.stringify(body)
-  })
-
-  const data = await parseProviderResponse(response)
-
-  if (!response.ok) {
-    const message = data?.error?.message || data?.message || `Provider request failed: ${response.status}`
-    throw new HttpError(response.status, message, 'PROVIDER_ERROR')
+  if (!providerBases.length) {
+    throw new HttpError(500, 'PROVIDER_API_BASE_URL is not configured', 'PROVIDER_NOT_CONFIGURED')
   }
 
-  return data || {}
+  let lastError
+  for (const base of providerBases) {
+    try {
+      return await callProviderWithBase(base, path, body, method)
+    } catch (error) {
+      lastError = error
+      const status = Number(error?.status || 0)
+      const retryableHttp = status === 429 || status >= 500
+      const retryableNetwork = error?.name === 'AbortError' || !status
+      if (!retryableHttp && !retryableNetwork) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError || new HttpError(502, 'Provider request failed', 'PROVIDER_ERROR')
 }
 
 const callProviderWithFallback = async (paths, method = 'GET', body = null) => {
