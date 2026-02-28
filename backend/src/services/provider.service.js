@@ -293,7 +293,8 @@ export const providerGenerateImage = async (payload = {}) => {
 export const providerCreateVideo = async (payload = {}) => {
   const model = String(payload.model_name || payload.model || '').trim()
   const lowerModel = model.toLowerCase()
-  const prompt = String(payload.prompt || '')
+  const prompt = String(payload.prompt || '').trim()
+  const effectivePrompt = prompt || 'Generate a smooth, cinematic video based on the provided inputs.'
   const aspectRatio = payload.aspect_ratio || (typeof payload.size === 'string' && payload.size.includes(':') ? payload.size : undefined)
   const size = normalizeVideoSize(payload.size) || normalizeVideoSize(aspectRatio)
   const duration = Number(payload.duration || payload.seconds || 5)
@@ -318,9 +319,8 @@ export const providerCreateVideo = async (payload = {}) => {
     }
 
     const requestBody = {
-      model_name: 'kling-o1',
       images,
-      prompt,
+      prompt: effectivePrompt,
       duration,
       aspect_ratio: aspectRatio || 'auto'
     }
@@ -346,9 +346,9 @@ export const providerCreateVideo = async (payload = {}) => {
   if (lowerModel === 'sora-2') {
     const requestBody = {
       model: 'sora-2',
-      prompt,
+      prompt: effectivePrompt,
       size: size || '1280x720',
-      n_seconds: duration
+      seconds: duration
     }
     if (firstFrameImage) requestBody.image = firstFrameImage
     if (lastFrameImage) requestBody.end_image = lastFrameImage

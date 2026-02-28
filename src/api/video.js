@@ -19,6 +19,7 @@ export const getVideoTaskStatus = (taskId) =>
   request({
     url: `/videos/${taskId}`,
     method: 'get',
+    silentErrorToast: true,
     silentNetworkErrorToast: true
   })
 
