@@ -89,6 +89,7 @@ instance.interceptors.response.use(
     if (response) {
       const { status, data } = response
       const message = data?.message || data?.error?.message || error.message
+      if (message) error.message = message
       
       if (status === 401) {
         const originalRequest = error.config || {}

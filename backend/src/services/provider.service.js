@@ -160,8 +160,22 @@ const pickFirstImageInput = (payload = {}) => {
 }
 
 const normalizeImageResponse = (response = {}) => {
-  const candidates = Array.isArray(response?.candidates) ? response.candidates : []
   const urls = []
+  const pushUrl = (value, mime = 'image/png') => {
+    if (!value) return
+    const str = String(value).trim()
+    if (!str) return
+    if (/^https?:\/\//i.test(str) || /^data:image\//i.test(str)) {
+      urls.push(str)
+      return
+    }
+    // Base64 payload without prefix.
+    if (/^[A-Za-z0-9+/=\s]+$/.test(str) && str.length > 120) {
+      urls.push(`data:${mime};base64,${str.replace(/\s+/g, '')}`)
+    }
+  }
+
+  const candidates = Array.isArray(response?.candidates) ? response.candidates : []
 
   for (const candidate of candidates) {
     const parts = candidate?.content?.parts || []
@@ -169,13 +183,38 @@ const normalizeImageResponse = (response = {}) => {
       const inlineData = part?.inline_data || part?.inlineData
       if (inlineData?.data) {
         const mime = inlineData.mime_type || inlineData.mimeType || 'image/png'
-        urls.push(`data:${mime};base64,${inlineData.data}`)
+        pushUrl(inlineData.data, mime)
+      }
+      const fileData = part?.file_data || part?.fileData
+      if (fileData?.file_uri || fileData?.fileUri || fileData?.url) {
+        pushUrl(fileData.file_uri || fileData.fileUri || fileData.url)
       }
     }
   }
 
+  // OpenAI-compatible and other common result shapes.
+  const listCandidates = [
+    ...(Array.isArray(response?.data) ? response.data : []),
+    ...(Array.isArray(response?.images) ? response.images : []),
+    ...(Array.isArray(response?.output) ? response.output : []),
+    ...(Array.isArray(response?.result?.images) ? response.result.images : []),
+    ...(Array.isArray(response?.task_result?.images) ? response.task_result.images : [])
+  ]
+
+  for (const item of listCandidates) {
+    if (typeof item === 'string') {
+      pushUrl(item)
+      continue
+    }
+    pushUrl(item?.url || item?.image_url || item?.imageUrl || item?.file_uri || item?.fileUri)
+    pushUrl(item?.b64_json || item?.base64 || item?.image_base64, item?.mime_type || item?.mimeType || 'image/png')
+  }
+
+  pushUrl(response?.url || response?.image_url || response?.imageUrl)
+  pushUrl(response?.b64_json || response?.base64 || response?.image_base64)
+
   return {
-    data: urls.map((url) => ({ url })),
+    data: [...new Set(urls)].map((url) => ({ url })),
     raw: response
   }
 }
@@ -287,7 +326,11 @@ export const providerGenerateImage = async (payload = {}) => {
   }
 
   const raw = await callProvider(`/v1beta/models/${model}:generateContent`, body)
-  return normalizeImageResponse(raw)
+  const normalized = normalizeImageResponse(raw)
+  if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
+    throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
+  }
+  return normalized
 }
 
 export const providerCreateVideo = async (payload = {}) => {
@@ -319,6 +362,7 @@ export const providerCreateVideo = async (payload = {}) => {
     }
 
     const requestBody = {
+      model_name: 'kling-o1',
       images,
       prompt: effectivePrompt,
       duration,
@@ -329,7 +373,9 @@ export const providerCreateVideo = async (payload = {}) => {
 
     const raw = await callProviderWithFallback(
       [
+        '/v1/klingai/m2v_omni_video',
         '/klingai/m2v_omni_video',
+        '/v1/klingai/v1/videos/m2v_omni_video',
         '/klingai/v1/videos/m2v_omni_video'
       ],
       'POST',
@@ -376,6 +422,12 @@ export const providerVideoStatus = async (taskId) => {
   const safeTaskId = String(taskId || '')
   const mayBeKling = safeTaskId.startsWith('kling_') || safeTaskId.startsWith('task_')
   const klingStatusPaths = [
+    `/v1/klingai/m2v_omni_video/${taskId}`,
+    `/v1/klingai/m2v_omni_video?task_id=${taskId}`,
+    `/v1/klingai/m2v_omni_video/status/${taskId}`,
+    `/v1/klingai/v1/videos/m2v_omni_video/${taskId}`,
+    `/v1/klingai/v1/videos/m2v_omni_video?task_id=${taskId}`,
+    `/v1/klingai/v1/videos/m2v_omni_video/status/${taskId}`,
     `/klingai/m2v_omni_video/${taskId}`,
     `/klingai/m2v_omni_video?task_id=${taskId}`,
     `/klingai/m2v_omni_video/status/${taskId}`,
