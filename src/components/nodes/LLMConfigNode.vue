@@ -3,18 +3,18 @@
   <div class="llm-node-wrapper" @mouseenter="showActions = true" @mouseleave="showActions = false">
     <!-- LLM Config node | LLM配置节点 -->
     <div
-      class="llm-node bg-[var(--bg-secondary)] rounded-xl border min-w-[320px] max-w-[400px] relative transition-all duration-200"
-      :class="data.selected ? 'border-1 border-purple-500 shadow-lg shadow-purple-500/20' : 'border border-[var(--border-color)]'">
+      class="llm-node bg-[#0f0f0f] rounded-2xl border min-w-[320px] max-w-[400px] relative transition-all duration-200"
+      :class="data.selected ? 'border-[#8f8f8f]' : 'border-transparent'">
       <!-- Header | 头部 -->
-      <div class="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)] bg-gradient-to-r from-purple-500/10 to-transparent">
+      <div class="flex items-center justify-between px-3 py-2 border-b border-[rgba(143,143,143,0.28)]">
         <div class="flex items-center gap-2">
-          <n-icon :size="16" class="text-purple-500">
+          <n-icon :size="16" class="text-[#c9ccd2]">
             <ChatbubbleOutline />
           </n-icon>
-          <span class="text-sm font-medium text-[var(--text-secondary)]">{{ data.label || 'LLM Text Generation' }}</span>
+          <span class="text-sm font-medium text-[#d7dbe3]">{{ data.label || 'LLM Text Generation' }}</span>
         </div>
         <div class="flex items-center gap-1">
-          <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
+          <button @click="handleDelete" class="p-1 hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors">
             <n-icon :size="14">
               <TrashOutline />
             </n-icon>
@@ -26,20 +26,20 @@
       <div class="p-3 space-y-3">
         <!-- System prompt | System Prompt -->
         <div>
-          <label class="text-xs text-[var(--text-secondary)] mb-1 block">System Prompt</label>
+          <label class="text-xs text-[#8f939e] mb-1 block">System Prompt</label>
           <textarea 
             v-model="systemPrompt" 
             @blur="updateConfig"
             @wheel.stop 
             @mousedown.stop
-            class="w-full bg-[var(--bg-tertiary)] rounded-lg p-2 resize-none outline-none text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] min-h-[60px] max-h-[120px] overflow-y-auto border border-[var(--border-color)] focus:border-purple-500 transition-colors"
+            class="w-full bg-[#14161a] rounded-lg p-2 resize-none outline-none text-xs text-[#eceff2] placeholder:text-[#8f939e] min-h-[60px] max-h-[120px] overflow-y-auto border border-[rgba(143,143,143,0.32)] focus:border-[rgba(226,229,235,0.72)] transition-colors"
             placeholder="Set the AI role and behavior..." 
           />
         </div>
 
         <!-- Model selection | Model选择 -->
         <div>
-          <label class="text-xs text-[var(--text-secondary)] mb-1 block">Model</label>
+          <label class="text-xs text-[#8f939e] mb-1 block">Model</label>
           <n-select
             v-model:value="model"
             :options="modelOptions"
@@ -50,7 +50,7 @@
 
         <!-- Output format | Output Format -->
         <div>
-          <label class="text-xs text-[var(--text-secondary)] mb-1 block">Output Format</label>
+          <label class="text-xs text-[#8f939e] mb-1 block">Output Format</label>
           <n-select
             v-model:value="outputFormat"
             :options="formatOptions"
@@ -63,7 +63,7 @@
         <button 
           @click="handleGenerate"
           :disabled="isGenerating"
-          class="w-full px-4 py-2 text-sm rounded-lg bg-purple-500 hover:bg-purple-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          class="flora-button-primary w-full px-4 py-2 text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           <n-spin v-if="isGenerating" :size="14" />
           <n-icon v-else :size="14"><SparklesOutline /></n-icon>
@@ -73,10 +73,10 @@
         <!-- Output preview | 输出Preview -->
         <div v-if="outputContent" class="mt-2">
           <div class="flex items-center justify-between mb-1">
-            <label class="text-xs text-[var(--text-secondary)]">Result</label>
+            <label class="text-xs text-[#8f939e]">Result</label>
             <button 
               @click="handleCopyOutput"
-              class="text-xs text-[var(--text-secondary)] hover:text-purple-500 flex items-center gap-1 transition-colors"
+              class="text-xs text-[#8f939e] hover:text-[#f2f3f5] flex items-center gap-1 transition-colors"
             >
               <n-icon :size="12"><CopyOutline /></n-icon>
               Copy
@@ -85,7 +85,7 @@
           <div 
             @wheel.stop 
             @mousedown.stop
-            class="bg-[var(--bg-tertiary)] rounded-lg p-2 text-xs text-[var(--text-primary)] max-h-[150px] overflow-y-auto border border-[var(--border-color)]"
+            class="bg-[#14161a] rounded-lg p-2 text-xs text-[#eceff2] max-h-[150px] overflow-y-auto border border-[rgba(143,143,143,0.32)]"
           >
             <pre class="whitespace-pre-wrap">{{ outputContent }}</pre>
           </div>
@@ -93,18 +93,18 @@
       </div>
 
       <!-- Handles | 连接点 -->
-      <Handle type="target" :position="Position.Left" id="left" class="!bg-purple-500" />
-      <Handle type="source" :position="Position.Right" id="right" class="!bg-purple-500" />
+      <Handle type="target" :position="Position.Left" id="left" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
+      <Handle type="source" :position="Position.Right" id="right" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
     </div>
 
     <!-- Hover action buttons | 悬浮操作按钮 -->
     <div v-show="showActions" class="absolute -top-5 right-12 z-[1000]">
       <button @click="handleDuplicate"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max">
-        <n-icon :size="16" class="text-gray-600">
+        class="action-btn group p-2 rounded-lg transition-all border border-[rgba(143,143,143,0.32)] flex items-center gap-0 hover:gap-1.5 w-max">
+        <n-icon :size="16" class="text-[#c9ccd2]">
           <CopyOutline />
         </n-icon>
-        <span class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
+        <span class="text-xs text-[#c9ccd2] max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
       </button>
     </div>
   </div>

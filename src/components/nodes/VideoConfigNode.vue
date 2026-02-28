@@ -2,13 +2,13 @@
   <!-- Video config node wrapper | 视频配置节点包裹层 -->
   <div class="video-config-node-wrapper relative" @mouseenter="showActions = true" @mouseleave="showActions = false">
     <!-- Video config node | 视频配置节点 -->
-    <div class="video-config-node bg-[var(--bg-secondary)] rounded-xl border min-w-[300px] transition-all duration-200"
-      :class="data.selected ? 'border-1 border-blue-500 shadow-lg shadow-blue-500/20' : 'border border-[var(--border-color)]'">
+    <div class="video-config-node bg-[#0f0f0f] rounded-2xl border min-w-[300px] transition-all duration-200"
+      :class="data.selected ? 'border-[#8f8f8f]' : 'border-transparent'">
       <!-- Header | 头部 -->
-      <div class="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
-        <span class="text-sm font-medium text-[var(--text-secondary)]">{{ data.label || 'Video Gen' }}</span>
+      <div class="flex items-center justify-between px-3 py-2 border-b border-[rgba(143,143,143,0.28)]">
+        <span class="text-sm font-medium text-[#d7dbe3]">{{ data.label || 'Video Gen' }}</span>
         <div class="flex items-center gap-1">
-          <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
+          <button @click="handleDelete" class="p-1 hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors">
             <n-icon :size="14">
               <TrashOutline />
             </n-icon>
@@ -20,9 +20,9 @@
       <div class="p-3 space-y-3">
         <!-- Model selector | Model选择 -->
         <div class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">Model</span>
+          <span class="text-xs text-[#8f939e]">Model</span>
           <n-dropdown :options="modelOptions" @select="handleModelSelect">
-            <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ displayModelName }}
               <n-icon :size="12"><ChevronDownOutline /></n-icon>
             </button>
@@ -31,9 +31,9 @@
 
         <!-- Aspect ratio selector | 宽高比选择 -->
         <div class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">Ratio</span>
+          <span class="text-xs text-[#8f939e]">Ratio</span>
           <n-dropdown :options="ratioOptions" @select="handleRatioSelect">
-            <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ localRatio }}
               <n-icon :size="12">
                 <ChevronForwardOutline />
@@ -44,9 +44,9 @@
 
         <!-- Duration selector | Duration选择 -->
         <div class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">Duration</span>
+          <span class="text-xs text-[#8f939e]">Duration</span>
           <n-dropdown :options="durationOptions" @select="handleDurationSelect">
-            <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ localDuration }}s
               <n-icon :size="12">
                 <ChevronForwardOutline />
@@ -57,21 +57,21 @@
 
         <!-- Connected inputs indicator | 连接输入指示 -->
         <div
-          class="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)] py-1 border-t border-[var(--border-color)]">
+          class="flex flex-wrap items-center gap-2 text-xs text-[#8f939e] py-1 border-t border-[rgba(143,143,143,0.28)]">
           <span class="px-3 py-1 rounded-full"
-            :class="connectedPrompt ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
+            :class="connectedPrompt ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
             Prompt {{ connectedPrompt ? '✓' : '○' }}
           </span>
           <span class="px-3 py-1 rounded-full"
-            :class="imagesByRole.firstFrame ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
+            :class="imagesByRole.firstFrame ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
             First Frame {{ imagesByRole.firstFrame ? '✓' : '○' }}
           </span>
           <span class="px-3 py-1 rounded-full"
-            :class="imagesByRole.lastFrame ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
+            :class="imagesByRole.lastFrame ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
             Last Frame {{ imagesByRole.lastFrame ? '✓' : '○' }}
           </span>
           <span class="px-3 py-1 rounded-full"
-            :class="imagesByRole.referenceImages.length > 0 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
+            :class="imagesByRole.referenceImages.length > 0 ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
             Reference {{ imagesByRole.referenceImages.length > 0 ? `✓ ${imagesByRole.referenceImages.length}` : '○' }}
           </span>
         </div>
@@ -112,20 +112,20 @@
       </div>
 
       <!-- Handles | 连接点 -->
-      <Handle type="target" :position="Position.Left" id="left" class="!bg-[var(--accent-color)]" />
-      <Handle type="source" :position="Position.Right" id="right" class="!bg-[var(--accent-color)]" />
+      <Handle type="target" :position="Position.Left" id="left" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
+      <Handle type="source" :position="Position.Right" id="right" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
     </div>
 
     <!-- Hover action buttons | 悬浮操作按钮 -->
     <!-- Top right - Copy button | 右上角 - Copy按钮 -->
     <div v-show="showActions" class="absolute -top-5 right-0 z-[1000]">
       <button @click="handleDuplicate"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max">
-        <n-icon :size="16" class="text-gray-600">
+        class="action-btn group p-2 rounded-lg transition-all border border-[rgba(143,143,143,0.32)] flex items-center gap-0 hover:gap-1.5 w-max">
+        <n-icon :size="16" class="text-[#c9ccd2]">
           <CopyOutline />
         </n-icon>
         <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
+          class="text-xs text-[#c9ccd2] max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
       </button>
     </div>
   </div>

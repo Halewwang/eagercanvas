@@ -3,19 +3,19 @@
   <div class="image-config-node-wrapper" @mouseenter="showActions = true" @mouseleave="showActions = false">
     <!-- Image config node | Text to Image配置节点 -->
     <div
-      class="image-config-node bg-[var(--bg-secondary)] rounded-xl border min-w-[300px] transition-all duration-200"
-      :class="data.selected ? 'border-1 border-blue-500 shadow-lg shadow-blue-500/20' : 'border border-[var(--border-color)]'">
+      class="image-config-node bg-[#0f0f0f] rounded-2xl border min-w-[300px] transition-all duration-200"
+      :class="data.selected ? 'border-[#8f8f8f]' : 'border-transparent'">
       <!-- Header | 头部 -->
-      <div class="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
-        <span class="text-sm font-medium text-[var(--text-secondary)]">{{ data.label }}</span>
+      <div class="flex items-center justify-between px-3 py-2 border-b border-[rgba(143,143,143,0.28)]">
+        <span class="text-sm font-medium text-[#d7dbe3]">{{ data.label }}</span>
         <div class="flex items-center gap-1">
-          <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
+          <button @click="handleDelete" class="p-1 hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors">
             <n-icon :size="14">
               <TrashOutline />
             </n-icon>
           </button>
           <n-dropdown :options="modelOptions" @select="handleModelSelect">
-            <button class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
+            <button class="p-1 hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors">
               <n-icon :size="14">
                 <ChevronDownOutline />
               </n-icon>
@@ -28,9 +28,9 @@
       <div class="p-3 space-y-3">
         <!-- Model selector | Model选择 -->
         <div class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">Model</span>
+          <span class="text-xs text-[#8f939e]">Model</span>
           <n-dropdown :options="modelOptions" @select="handleModelSelect">
-            <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ displayModelName }}
               <n-icon :size="12"><ChevronDownOutline /></n-icon>
             </button>
@@ -39,9 +39,9 @@
 
         <!-- Quality selector | Quality选择 -->
         <div v-if="hasQualityOptions" class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">Quality</span>
+          <span class="text-xs text-[#8f939e]">Quality</span>
           <n-dropdown :options="qualityOptions" @select="handleQualitySelect">
-            <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ displayQuality }}
               <n-icon :size="12"><ChevronForwardOutline /></n-icon>
             </button>
@@ -50,11 +50,11 @@
 
         <!-- Size selector | Size选择 -->
         <div v-if="hasSizeOptions" class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">Size</span>
+          <span class="text-xs text-[#8f939e]">Size</span>
           <div class="flex items-center gap-2">
             <n-dropdown :options="sizeOptions" @select="handleSizeSelect">
               <button
-                class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
+                class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
                 {{ displaySize }}
                 <n-icon :size="12">
                   <ChevronForwardOutline />
@@ -65,19 +65,19 @@
         </div>
 
         <!-- Model tips | Model提示 -->
-        <div v-if="currentModelConfig?.tips" class="text-xs text-[var(--text-tertiary)] bg-[var(--bg-tertiary)] rounded px-2 py-1">
+        <div v-if="currentModelConfig?.tips" class="text-xs text-[#8f939e] bg-[#14161a] rounded px-2 py-1">
           💡 {{ currentModelConfig.tips }}
         </div>
 
         <!-- Connected inputs indicator | 连接输入指示 -->
         <div
-          class="flex items-center gap-2 text-xs text-[var(--text-secondary)] py-1 border-t border-[var(--border-color)]">
+          class="flex items-center gap-2 text-xs text-[#8f939e] py-1 border-t border-[rgba(143,143,143,0.28)]">
           <span class="px-3 py-1 rounded-full"
-            :class="connectedPrompts.length > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
+            :class="connectedPrompts.length > 0 ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
             Prompt {{ connectedPrompts.length > 0 ? `${connectedPrompts.length} items` : '○' }}
           </span>
           <span class="px-3 py-1 rounded-full"
-            :class="connectedRefImages.length > 0 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
+            :class="connectedRefImages.length > 0 ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
             Reference {{ connectedRefImages.length > 0 ? `${connectedRefImages.length} images` : '○' }}
           </span>
         </div>
@@ -95,7 +95,7 @@
           </button>
           <!-- Replace existing (secondary) | Replace现有（次按钮） -->
           <button @click="handleGenerate('replace')" :disabled="loading || !isConfigured"
-            class="flex-shrink-0 flex items-center justify-center gap-1 py-2 px-2.5 rounded-lg border border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            class="flex-shrink-0 flex items-center justify-center gap-1 py-2 px-2.5 rounded-lg border border-[rgba(143,143,143,0.32)] text-[#8f939e] hover:border-[rgba(226,229,235,0.72)] hover:text-[#f2f3f5] text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <n-spin v-if="loading" :size="14" />
             <template v-else>
               <n-icon :size="14"><RefreshOutline /></n-icon>
@@ -133,20 +133,20 @@
       </div>
 
       <!-- Handles | 连接点 -->
-      <Handle type="target" :position="Position.Left" id="left" class="!bg-[var(--accent-color)]" />
-      <Handle type="source" :position="Position.Right" id="right" class="!bg-[var(--accent-color)]" />
+      <Handle type="target" :position="Position.Left" id="left" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
+      <Handle type="source" :position="Position.Right" id="right" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
     </div>
 
     <!-- Hover action buttons | 悬浮操作按钮 -->
     <!-- Top right - Copy button | 右上角 - Copy按钮 -->
     <div v-show="showActions" class="absolute -top-5 right-0 z-[1000]">
       <button @click="handleDuplicate"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5">
-        <n-icon :size="16" class="text-gray-600">
+        class="action-btn group p-2 rounded-lg transition-all border border-[rgba(143,143,143,0.32)] flex items-center gap-0 hover:gap-1.5">
+        <n-icon :size="16" class="text-[#c9ccd2]">
           <CopyOutline />
         </n-icon>
         <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
+          class="text-xs text-[#c9ccd2] max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
       </button>
     </div>
   </div>

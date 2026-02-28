@@ -15,8 +15,8 @@ export const edgeStrategy = {
     const sourceNode = nodes.value.find(n => n.id === params.source)
     const targetNode = nodes.value.find(n => n.id === params.target)
     
-    // Case 1: Image -> VideoConfig (imageRole)
-    if (sourceNode?.type === 'image' && targetNode?.type === 'videoConfig') {
+    // Case 1: Image -> Video / VideoConfig (imageRole)
+    if (sourceNode?.type === 'image' && (targetNode?.type === 'videoConfig' || targetNode?.type === 'video')) {
       return {
         ...params,
         type: 'imageRole',
@@ -24,8 +24,8 @@ export const edgeStrategy = {
       }
     } 
     
-    // Case 2: Text -> ImageConfig (promptOrder)
-    else if (sourceNode?.type === 'text' && targetNode?.type === 'imageConfig') {
+    // Case 2: Text -> Image / ImageConfig (promptOrder)
+    else if (sourceNode?.type === 'text' && (targetNode?.type === 'imageConfig' || targetNode?.type === 'image')) {
       // Calculate next order number | 计算下一个顺序号
       const existingTextEdges = edges.value.filter(e => 
         e.target === params.target && e.type === 'promptOrder'
@@ -39,8 +39,8 @@ export const edgeStrategy = {
       }
     } 
     
-    // Case 3: Image -> ImageConfig (imageOrder)
-    else if (sourceNode?.type === 'image' && targetNode?.type === 'imageConfig') {
+    // Case 3: Image -> Image / ImageConfig (imageOrder)
+    else if (sourceNode?.type === 'image' && (targetNode?.type === 'imageConfig' || targetNode?.type === 'image')) {
       // Calculate next order number | 计算下一个顺序号
       const existingImageEdges = edges.value.filter(e => 
         e.target === params.target && e.type === 'imageOrder'

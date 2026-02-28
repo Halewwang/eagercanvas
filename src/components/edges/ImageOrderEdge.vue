@@ -18,12 +18,16 @@
         size="small"
       >
         <button 
-          class="flex items-center justify-center w-6 h-6 text-xs font-bold rounded-full bg-blue-500 text-white border-2 border-white shadow-md hover:scale-110 transition-transform"
+          class="flex items-center justify-center w-6 h-6 text-xs font-bold rounded-full bg-white text-black border border-[rgba(17,17,17,0.22)] shadow-sm hover:scale-110 transition-transform"
         >
           {{ currentOrder }}
         </button>
       </n-dropdown>
     </div>
+  </EdgeLabelRenderer>
+  <EdgeLabelRenderer>
+    <div :style="sourceDotStyle" class="edge-anchor-dot nodrag nopan" />
+    <div :style="targetDotStyle" class="edge-anchor-dot nodrag nopan" />
   </EdgeLabelRenderer>
 </template>
 
@@ -47,6 +51,7 @@ const props = defineProps({
   sourcePosition: String,
   targetPosition: String,
   data: Object,
+  selected: Boolean,
   markerEnd: String,
   style: Object
 })
@@ -73,13 +78,23 @@ const orderOptions = computed(() => {
 
 // Current order from edge data | 从边数据获取当前顺序
 const currentOrder = computed(() => props.data?.imageOrder || 1)
+const HANDLE_OFFSET = 25
+const normalizePosition = (position) => String(position || '').toLowerCase()
+const alignEdgeX = (x, position) => {
+  const p = normalizePosition(position)
+  if (p === 'right') return x - HANDLE_OFFSET
+  if (p === 'left') return x + HANDLE_OFFSET
+  return x
+}
+const alignedSourceX = computed(() => alignEdgeX(props.sourceX, props.sourcePosition))
+const alignedTargetX = computed(() => alignEdgeX(props.targetX, props.targetPosition))
 
 // Calculate bezier path | 计算贝塞尔路径
 const path = computed(() => {
   const [edgePath] = getBezierPath({
-    sourceX: props.sourceX,
+    sourceX: alignedSourceX.value,
     sourceY: props.sourceY,
-    targetX: props.targetX,
+    targetX: alignedTargetX.value,
     targetY: props.targetY,
     sourcePosition: props.sourcePosition,
     targetPosition: props.targetPosition
@@ -88,13 +103,24 @@ const path = computed(() => {
 })
 
 // Label position (center of edge) | 标签位置（边的中心）
-const labelX = computed(() => (props.sourceX + props.targetX) / 2)
+const labelX = computed(() => (alignedSourceX.value + alignedTargetX.value) / 2)
 const labelY = computed(() => (props.sourceY + props.targetY) / 2)
+const sourceDotStyle = computed(() => ({
+  position: 'absolute',
+  transform: `translate(-50%, -50%) translate(${alignedSourceX.value}px, ${props.sourceY}px)`,
+  pointerEvents: 'none'
+}))
+const targetDotStyle = computed(() => ({
+  position: 'absolute',
+  transform: `translate(-50%, -50%) translate(${alignedTargetX.value}px, ${props.targetY}px)`,
+  pointerEvents: 'none'
+}))
 
 // Edge style | 边样式
 const edgeStyle = computed(() => ({
-  stroke: '#3b82f6',
-  strokeWidth: 2,
+  stroke: '#ffffff',
+  strokeWidth: props.selected ? 2 : 1,
+  strokeDasharray: '0',
   ...props.style
 }))
 
@@ -121,3 +147,12 @@ const handleOrderSelect = (newOrder) => {
   updateEdgeData(props.id, { imageOrder: newOrder })
 }
 </script>
+
+<style scoped>
+.edge-anchor-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #ffffff;
+}
+</style>

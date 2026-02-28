@@ -35,6 +35,21 @@ export const streamChatCompletions = async function* (data, signal) {
     throw new Error(error?.error?.message || error?.message || 'Stream request failed')
   }
 
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase()
+  if (contentType.includes('application/json')) {
+    const payload = await response.json()
+    const text =
+      payload?.choices?.[0]?.message?.content ||
+      payload?.choices?.[0]?.delta?.content ||
+      payload?.choices?.[0]?.text ||
+      payload?.data?.choices?.[0]?.message?.content ||
+      payload?.data?.choices?.[0]?.text ||
+      ''
+
+    if (text) yield text
+    return
+  }
+
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''

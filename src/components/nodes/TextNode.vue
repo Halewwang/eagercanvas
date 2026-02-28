@@ -1,256 +1,401 @@
 <template>
-  <!-- Text node wrapper for hover area | 文本节点包裹层，扩展悬浮区域 -->
-  <div class="text-node-wrapper" @mouseenter="showActions = true" @mouseleave="showActions = false">
-    <!-- Text node | 文本节点 -->
-    <div
-      class="text-node bg-[var(--bg-secondary)] rounded-xl border min-w-[280px] max-w-[350px] relative transition-all duration-200"
-      :class="data.selected ? 'border-1 border-blue-500 shadow-lg shadow-blue-500/20' : 'border border-[var(--border-color)]'">
-      <!-- Header | 头部 -->
-      <div class="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
-        <span class="text-sm font-medium text-[var(--text-secondary)]">{{ data.label }}</span>
-        <div class="flex items-center gap-1">
-          <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
-            <n-icon :size="14">
-              <TrashOutline />
-            </n-icon>
+  <div class="text-node-wrapper" @mouseenter="showCapsule = true" @mouseleave="showCapsule = false">
+    <div class="node-meta-row" @mousedown="handleMetaMouseDown">
+      <n-icon :size="16" class="meta-icon"><TextOutline /></n-icon>
+      <span class="meta-title">Text</span>
+    </div>
+
+    <div v-show="showCapsule || isSelected" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
+      <div class="capsule-inner">
+        <div class="capsule-group">
+          <n-dropdown :options="chatModelDropdownOptions" @select="setChatModel">
+            <button class="capsule-select">{{ displayChatModel }}</button>
+          </n-dropdown>
+        </div>
+
+        <div class="capsule-divider" />
+
+        <div class="capsule-group">
+          <n-dropdown :options="createLinkOptions" @select="createLinkedNode">
+            <button class="capsule-icon" title="Create linked module">
+              <n-icon :size="14"><AddOutline /></n-icon>
+            </button>
+          </n-dropdown>
+          <button class="capsule-icon" @click="handleDuplicate" title="Duplicate">
+            <n-icon :size="14"><CopyOutline /></n-icon>
           </button>
-          <button class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
-            <n-icon :size="14">
-              <ExpandOutline />
-            </n-icon>
+          <button class="capsule-icon" @click="handleDelete" title="Delete">
+            <n-icon :size="14"><TrashOutline /></n-icon>
           </button>
         </div>
       </div>
-
-      <!-- Content | 内容 -->
-      <div class="p-3">
-        <textarea v-model="content" @blur="updateContent" @wheel.stop @mousedown.stop
-          class="w-full bg-transparent resize-none outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] min-h-[80px]"
-          placeholder="Enter text..." />
-        <!-- Polish button | 润色按钮 -->
-        <button 
-          @click="handlePolish"
-          :disabled="isPolishing || !content.trim()"
-          class="mt-2 px-4 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--accent-color)] hover:text-white border border-[var(--border-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 group"
-        >
-          <n-spin v-if="isPolishing" :size="12" />
-          <n-icon v-else :size="14" class="text-[var(--accent-color)] group-hover:text-white transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24"><path d="M19.07 4.93L17.22 3.07a3.046 3.046 0 0 0-4.31 0l-1.4 1.4l5.69 5.69l1.4-1.4c1.19-1.2 1.19-3.13.47-3.83zm-7.12 3.08L6.26 13.7a3.042 3.042 0 0 0-.88 2.16V19h3.14c.8 0 1.57-.32 2.16-.9l5.69-5.69l-4.42-4.4z" fill="currentColor"></path><path d="M20 24h-4v-2h4v-4h2v4h4v2h-4v4h-2z" fill="currentColor"></path></svg>
-          </n-icon>
-          Polish
+      <div class="capsule-inner capsule-generate">
+        <button class="capsule-icon capsule-icon-solid capsule-create" :disabled="isGenerating" @click="handleGenerateText" title="Create">
+          <n-spin v-if="isGenerating" :size="12" />
+          <template v-else>
+            <n-icon :size="14"><SparklesOutline /></n-icon>
+            <span class="capsule-create-label">Create</span>
+          </template>
+        </button>
+        <button class="capsule-icon" :disabled="isGenerating" @click="handleRegenerateText" title="Regenerate">
+          <n-spin v-if="isGenerating" :size="12" />
+          <n-icon v-else :size="14"><RefreshOutline /></n-icon>
         </button>
       </div>
-
-      <!-- Handles | 连接点 -->
-      <Handle type="source" :position="Position.Right" id="right" class="!bg-[var(--accent-color)]" />
-      <Handle type="target" :position="Position.Left" id="left" class="!bg-[var(--accent-color)]" />
-
     </div>
 
-    <!-- Hover action buttons | 悬浮操作按钮 -->
-    <!-- Top right - Copy button | 右上角 - Copy按钮 -->
-    <div v-show="showActions" class="absolute -top-5 right-12 z-[1000]">
-      <button @click="handleDuplicate"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max">
-        <n-icon :size="16" class="text-gray-600">
-          <CopyOutline />
-        </n-icon>
-        <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
-      </button>
-    </div>
+    <div
+      class="text-node rounded-2xl relative transition-all duration-200 overflow-visible"
+      :class="isSelected ? 'node-selected' : 'node-default'"
+      :style="moduleStyle"
+    >
+      <div class="module-stage" :style="stageStyle">
+        <div v-if="showProgress" class="module-progress-shell rounded-[14px]">
+          <div class="module-progress-track"></div>
+          <div class="module-progress-bar" :style="progressBarStyle"></div>
+          <div class="module-progress-label">Generating text... {{ progressPercent }}%</div>
+        </div>
+        <div
+          v-else-if="data.error"
+          class="w-full h-full bg-[#231a1d] flex flex-col items-center justify-center gap-2 rounded-[14px]"
+        >
+          <n-icon :size="28" class="text-red-500"><CloseCircleOutline /></n-icon>
+          <span class="text-sm text-red-400 text-center px-3">{{ data.error }}</span>
+        </div>
+        <div v-else class="text-area-wrap">
+          <textarea
+            v-model="content"
+            @blur="updateContent"
+            @wheel.stop
+            @mousedown.stop
+            class="w-full bg-transparent resize-none outline-none text-sm text-[#d9dce3] placeholder:text-[#7b818c] min-h-[180px]"
+            placeholder="Enter text..."
+          />
+        </div>
+      </div>
 
-    <!-- Right side - Action buttons | 右侧 - 操作按钮 -->
-    <div v-show="showActions"
-      class="absolute right-10 top-1/2 -translate-y-1/2 translate-x-full flex flex-col gap-2 z-[1000]">
-      <!-- Image generation button | Image Gen按钮 -->
-      <button @click="handleImageGen"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max">
-        <n-icon :size="16" class="text-gray-600">
-          <ImageOutline />
-        </n-icon>
-        <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">Image Gen</span>
-      </button>
-      <!-- Video generation button | Video Gen按钮 -->
-      <button @click="handleVideoGen"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max">
-        <n-icon :size="16" class="text-gray-600">
-          <VideocamOutline />
-        </n-icon>
-        <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">Video Gen</span>
-      </button>
+      <Handle type="source" :position="Position.Right" id="right" :class="['node-handle-plus', 'node-handle-plus-right', { 'node-handle-plus-visible': showHandles }]" />
+      <Handle type="target" :position="Position.Left" id="left" :class="['node-handle-plus', 'node-handle-plus-left', { 'node-handle-plus-visible': showHandles }]" />
     </div>
   </div>
 </template>
 
 <script setup>
-/**
- * Text node component | 文本节点组件
- * Allows user to input and edit text content
- */
-import { ref, watch, nextTick } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NIcon, NSpin } from 'naive-ui'
-import { TrashOutline, ExpandOutline, CopyOutline, ImageOutline, VideocamOutline } from '../../icons/coolicons'
-import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes } from '../../stores/canvas'
+import { NDropdown, NIcon, NSpin } from 'naive-ui'
+import { AddOutline, CloseCircleOutline, CopyOutline, RefreshOutline, SparklesOutline, TextOutline, TrashOutline } from '../../icons/coolicons'
+import { addEdge, addNode, duplicateNode, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useChat, useApiConfig } from '../../hooks'
-import { useModelConfig } from '../../hooks/useModelConfig'
-import { DEFAULT_CHAT_MODEL, DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_SIZE } from '../../stores/models'
+import { chatModelOptions, DEFAULT_CHAT_MODEL } from '../../stores/models'
 
 const props = defineProps({
   id: String,
-  data: Object
+  data: Object,
+  selected: Boolean
 })
 
-// Vue Flow instance | Vue Flow 实例
-const { updateNodeInternals } = useVueFlow()
-
-// API config hook | API 配置 hook
+const { updateNodeInternals, viewport } = useVueFlow()
 const { isConfigured: isApiConfigured } = useApiConfig()
-const { selectedChatModel } = useModelConfig()
 
-// Chat hook for polish | 润色用的 Chat hook
-const { send: sendChat } = useChat({
-  systemPrompt: 'You are an expert prompt writer for image generation. Rewrite user input into a high-quality visual prompt with style, lighting, composition, and details. Return only the prompt.',
-  model: selectedChatModel.value || DEFAULT_CHAT_MODEL
-})
-
-// Local content state | 本地内容状态
+const showCapsule = ref(false)
+const isGenerating = ref(false)
 const content = ref(props.data?.content || '')
+const localChatModel = ref(props.data?.model || 'gemini-2.5-flash')
+const progressValue = ref(0)
+const showProgress = ref(false)
+const progressTimer = ref(null)
+const progressFinishTimer = ref(null)
+const isSelected = computed(() => !!props.selected || !!props.data?.selected)
+const showHandles = computed(() => showCapsule.value || isSelected.value)
+const createLinkOptions = [
+  { label: 'Link Text Module', key: 'text' },
+  { label: 'Link Image Module', key: 'image' },
+  { label: 'Link Video Module', key: 'video' }
+]
 
-// Hover state | 悬浮状态
-const showActions = ref(false)
+const { send: sendChat } = useChat({
+  systemPrompt: 'You are an expert writing assistant. Improve clarity, structure, and expression while keeping meaning accurate. Return only the rewritten text.',
+  model: () => localChatModel.value || DEFAULT_CHAT_MODEL
+})
+const chatModelDropdownOptions = computed(() => chatModelOptions.value.map((m) => ({ key: m.key, label: m.label })))
+const displayChatModel = computed(() => chatModelOptions.value.find((m) => m.key === localChatModel.value)?.label || localChatModel.value)
 
-// Polish loading state | 润色加载状态
-const isPolishing = ref(false)
-
-// Watch for external data changes | 监听外部数据变化
 watch(() => props.data?.content, (newVal) => {
-  if (newVal !== content.value) {
-    content.value = newVal
-  }
+  if (newVal !== content.value) content.value = newVal || ''
+})
+watch(() => props.data?.model, (newVal) => {
+  if (newVal && newVal !== localChatModel.value) localChatModel.value = newVal
 })
 
-// Update content in store | 更新存储中的内容
+const stageStyle = computed(() => ({ width: '360px', height: '240px' }))
+const moduleStyle = computed(() => ({ width: '362px' }))
+const progressPercent = computed(() => Math.round(progressValue.value))
+const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
+const capsuleStyle = computed(() => {
+  const zoom = viewport.value?.zoom || 1
+  const inverse = 1 / zoom
+  const safeScale = Math.min(1.06, Math.max(0.82, inverse))
+  return { transform: `translateX(-50%) scale(${safeScale})`, transformOrigin: 'top center' }
+})
+
+const clearProgressTimers = () => {
+  if (progressTimer.value) {
+    clearInterval(progressTimer.value)
+    progressTimer.value = null
+  }
+  if (progressFinishTimer.value) {
+    clearTimeout(progressFinishTimer.value)
+    progressFinishTimer.value = null
+  }
+}
+
+const startProgress = () => {
+  clearProgressTimers()
+  progressValue.value = 0
+  showProgress.value = true
+  progressTimer.value = setInterval(() => {
+    if (progressValue.value < 70) progressValue.value += 3
+    else if (progressValue.value < 90) progressValue.value += 1.2
+    else if (progressValue.value < 98) progressValue.value += 0.35
+    progressValue.value = Math.min(progressValue.value, 98)
+  }, 120)
+}
+
+const finishProgress = () => {
+  clearProgressTimers()
+  progressTimer.value = setInterval(() => {
+    progressValue.value = Math.min(100, progressValue.value + 4.5)
+    if (progressValue.value >= 100) {
+      clearProgressTimers()
+      progressFinishTimer.value = setTimeout(() => {
+        showProgress.value = false
+        progressValue.value = 0
+      }, 120)
+    }
+  }, 16)
+}
+
+watch(
+  () => props.data?.loading,
+  (loadingNow) => {
+    if (loadingNow) {
+      startProgress()
+      return
+    }
+    if (props.data?.error) {
+      clearProgressTimers()
+      showProgress.value = false
+      progressValue.value = 0
+      return
+    }
+    if (showProgress.value) finishProgress()
+  },
+  { immediate: true }
+)
+
+onUnmounted(() => clearProgressTimers())
+
 const updateContent = () => {
   updateNode(props.id, { content: content.value })
 }
 
-// Handle AI polish | 处理 Polish
-const handlePolish = async () => {
-  const input = content.value.trim()
-  if (!input) return
-  
-  // Check API configuration | 检查 API 配置
+const setChatModel = (key) => {
+  localChatModel.value = key
+  updateNode(props.id, { model: key })
+}
+
+const runTextGeneration = async (isRegenerate = false) => {
   if (!isApiConfigured.value) {
     window.$message?.warning('Please configure API Key first')
     return
   }
-
-  isPolishing.value = true
-  const originalContent = content.value
-
+  isGenerating.value = true
+  updateNode(props.id, { loading: true, error: '' })
+  const source = content.value.trim()
+  const prompt = source
+    ? isRegenerate
+      ? `Rewrite the following text with a different wording while preserving the same meaning:\n${source}`
+      : `Improve the following text while preserving the original intent:\n${source}`
+    : 'Generate a concise, high-quality writing sample.'
   try {
-    // Call chat API to polish the prompt | 调用 PolishPrompt
-    const result = await sendChat(input, true)
-    
+    const result = await sendChat(prompt, true)
     if (result) {
       content.value = result
-      updateNode(props.id, { content: result })
-      window.$message?.success('Prompt polished')
+      updateNode(props.id, { content: result, model: localChatModel.value, loading: false, error: '' })
+      window.$message?.success(isRegenerate ? 'Text regenerated' : 'Text generated')
     }
   } catch (err) {
-    content.value = originalContent
-    window.$message?.error(err.message || 'Polish failed')
+    updateNode(props.id, { loading: false, error: err?.message || 'Text generation failed' })
+    window.$message?.error(err?.message || 'Text generation failed')
   } finally {
-    isPolishing.value = false
+    updateNode(props.id, { loading: false })
+    isGenerating.value = false
   }
 }
+const handleGenerateText = () => runTextGeneration(false)
+const handleRegenerateText = () => runTextGeneration(true)
 
-// Handle delete | 处理删除
 const handleDelete = () => {
   removeNode(props.id)
 }
 
-// Handle duplicate | 处理Copy
 const handleDuplicate = () => {
   const newNodeId = duplicateNode(props.id)
-  window.$message?.success('Node duplicated')
-  if (newNodeId) {
-    setTimeout(() => {
-      updateNodeInternals(newNodeId)
-    }, 50)
+  if (!newNodeId) return
+  setTimeout(() => updateNodeInternals(newNodeId), 50)
+}
+
+const selectNode = () => {
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    selected: node.id === props.id,
+    data: { ...(node.data || {}), selected: node.id === props.id }
+  }))
+}
+
+const handleMetaMouseDown = () => {
+  selectNode()
+}
+
+const createLinkedNode = (type) => {
+  const side = 'right'
+  const currentNode = nodes.value.find((n) => n.id === props.id)
+  if (!currentNode) return
+
+  const moduleWidth = 362
+  const gapX = 172
+  const nextPosition = {
+    x: side === 'right' ? currentNode.position.x + moduleWidth + gapX : currentNode.position.x - gapX - moduleWidth,
+    y: currentNode.position.y
   }
-}
 
-// Handle image generation | 处理Image Gen
-const handleImageGen = () => {
-  const currentNode = nodes.value.find(n => n.id === props.id)
-  const nodeX = currentNode?.position?.x || 0
-  const nodeY = currentNode?.position?.y || 0
+  const newNodeId = addNode(type, nextPosition)
+  if (!newNodeId) return
 
-  // Create imageConfig node | 创建text生图配置节点
-  const configNodeId = addNode('imageConfig', { x: nodeX + 400, y: nodeY }, {
-    model: DEFAULT_IMAGE_MODEL,
-    size: DEFAULT_IMAGE_SIZE,
-    label: 'Text to Image'
-  })
+  if (side === 'right') addEdge({ source: props.id, target: newNodeId, sourceHandle: 'right', targetHandle: 'left' })
+  else addEdge({ source: newNodeId, target: props.id, sourceHandle: 'right', targetHandle: 'left' })
 
-  // Auto connect | 自动连接
-  addEdge({
-    source: props.id,
-    target: configNodeId,
-    sourceHandle: 'right',
-    targetHandle: 'left'
-  })
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    selected: node.id === newNodeId,
+    data: { ...(node.data || {}), selected: node.id === newNodeId }
+  }))
 
-  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点Size
   setTimeout(() => {
-    updateNodeInternals(configNodeId)
-  }, 50)
-}
-
-// Handle video generation | 处理Video Gen
-const handleVideoGen = () => {
-  const currentNode = nodes.value.find(n => n.id === props.id)
-  const nodeX = currentNode?.position?.x || 0
-  const nodeY = currentNode?.position?.y || 0
-
-  // Create videoConfig node | 创建视频配置节点
-  const configNodeId = addNode('videoConfig', { x: nodeX + 400, y: nodeY }, {
-    label: 'Video Gen'
-  })
-
-  // Auto connect | 自动连接
-  addEdge({
-    source: props.id,
-    target: configNodeId,
-    sourceHandle: 'right',
-    targetHandle: 'left'
-  })
-
-  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点Size
-  setTimeout(() => {
-    updateNodeInternals(configNodeId)
-  }, 50)
+    updateNodeInternals(props.id)
+    updateNodeInternals(newNodeId)
+  }, 60)
 }
 </script>
 
 <style scoped>
 .text-node-wrapper {
-  padding-right: 50px;
-  padding-top: 20px;
   position: relative;
+  padding-top: 88px;
 }
 
 .text-node {
   cursor: default;
   position: relative;
+  background: #0f0f0f;
 }
 
-.text-node textarea {
-  cursor: text;
+.node-meta-row {
+  position: absolute;
+  top: 58px;
+  left: 0;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #9ca3af;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  border-radius: 10px;
+  cursor: grab;
+}
+
+.meta-icon { color: #c9ccd2; }
+.meta-title { color: #d7dbe3; font-size: 14px; letter-spacing: 0.01em; }
+
+.module-stage { margin: 0 auto; overflow: hidden; border-radius: inherit; }
+.text-area-wrap { width: 100%; height: 100%; padding: 14px; border-radius: 14px; background: #0f0f0f; border: 0; }
+.module-progress-shell {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: #101010;
+}
+.module-progress-track {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+}
+.module-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: #2d2d2d;
+  transition: width 0.12s linear;
+}
+.module-progress-label {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  color: rgba(247, 249, 252, 0.9);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.capsule-menu { pointer-events: auto; top: 6px; display: inline-flex; align-items: center; gap: 8px; }
+.capsule-inner { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; border-radius: 999px; border: 1px solid rgba(143, 143, 143, 0.45); background: #1d1d1d; backdrop-filter: blur(10px); }
+.capsule-generate { padding: 7px; }
+.capsule-group { display: inline-flex; align-items: center; gap: 6px; }
+.capsule-divider { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.12); }
+
+.capsule-select { border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02); color: #e7e8eb; border-radius: 999px; font-size: 12px; line-height: 1; padding: 7px 9px; max-width: 148px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.capsule-select:disabled { opacity: 0.45; cursor: not-allowed; }
+.capsule-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1); color: #b8bcc5; background: rgba(255, 255, 255, 0.02); }
+.capsule-icon-solid { background: #1d1d1d; color: #f6f8fc; border-color: rgba(143, 143, 143, 0.65); }
+.capsule-create { width: auto; min-width: 86px; padding: 0 11px; gap: 6px; }
+.capsule-create-label { font-size: 12px; line-height: 1; font-weight: 500; }
+
+.node-default { border-width: 0; border-color: transparent; box-shadow: none; }
+.node-selected { border-width: 0; border-color: transparent; box-shadow: none; }
+
+:deep(.node-handle-plus) {
+  width: 28px !important;
+  height: 28px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(214, 216, 222, 0.82) !important;
+  background: rgba(11, 13, 17, 0.96) !important;
+  color: #d6d8de !important;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.72);
+  z-index: 60 !important;
+  transition: none !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+:deep(.node-handle-plus::before) {
+  content: "+";
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  display: block;
+  margin: -1px 0 0 0;
+}
+
+:deep(.node-handle-plus-left) { left: -25px !important; }
+:deep(.node-handle-plus-right) { right: -25px !important; }
+
+:deep(.node-handle-plus-visible) {
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 </style>

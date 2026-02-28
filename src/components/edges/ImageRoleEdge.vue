@@ -18,13 +18,17 @@
         size="small"
       >
         <button 
-          class="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 shadow-sm hover:shadow transition-shadow"
+          class="flex items-center gap-1 text-xs text-black px-2 py-1 rounded-full bg-white border border-gray-200 shadow-sm hover:shadow transition-shadow"
         >
           {{ currentRoleLabel }}
           <n-icon :size="10"><ChevronDownOutline /></n-icon>
         </button>
       </n-dropdown>
     </div>
+  </EdgeLabelRenderer>
+  <EdgeLabelRenderer>
+    <div :style="sourceDotStyle" class="edge-anchor-dot nodrag nopan" />
+    <div :style="targetDotStyle" class="edge-anchor-dot nodrag nopan" />
   </EdgeLabelRenderer>
 </template>
 
@@ -49,15 +53,16 @@ const props = defineProps({
   sourcePosition: String,
   targetPosition: String,
   data: Object,
+  selected: Boolean,
   markerEnd: String,
   style: Object
 })
 
 // Image role options | 图片角色选项
 const imageRoleOptions = [
-  { label: '首帧', key: 'first_frame_image' },
-  { label: '尾帧', key: 'last_frame_image' },
-  { label: '参考图', key: 'input_reference' }
+  { label: 'First Frame', key: 'first_frame_image' },
+  { label: 'Second Frame', key: 'last_frame_image' },
+  { label: 'Reference Picture', key: 'input_reference' }
 ]
 
 // Current role from edge data | 从边数据获取当前角色
@@ -66,15 +71,25 @@ const currentRole = computed(() => props.data?.imageRole || 'first_frame_image')
 // Current role label | 当前角色标签
 const currentRoleLabel = computed(() => {
   const option = imageRoleOptions.find(o => o.key === currentRole.value)
-  return option?.label || '首帧'
+  return option?.label || 'First Frame'
 })
+const HANDLE_OFFSET = 25
+const normalizePosition = (position) => String(position || '').toLowerCase()
+const alignEdgeX = (x, position) => {
+  const p = normalizePosition(position)
+  if (p === 'right') return x - HANDLE_OFFSET
+  if (p === 'left') return x + HANDLE_OFFSET
+  return x
+}
+const alignedSourceX = computed(() => alignEdgeX(props.sourceX, props.sourcePosition))
+const alignedTargetX = computed(() => alignEdgeX(props.targetX, props.targetPosition))
 
 // Calculate bezier path | 计算贝塞尔路径
 const path = computed(() => {
   const [edgePath] = getBezierPath({
-    sourceX: props.sourceX,
+    sourceX: alignedSourceX.value,
     sourceY: props.sourceY,
-    targetX: props.targetX,
+    targetX: alignedTargetX.value,
     targetY: props.targetY,
     sourcePosition: props.sourcePosition,
     targetPosition: props.targetPosition
@@ -83,13 +98,24 @@ const path = computed(() => {
 })
 
 // Label position (center of edge) | 标签位置（边的中心）
-const labelX = computed(() => (props.sourceX + props.targetX) / 2)
+const labelX = computed(() => (alignedSourceX.value + alignedTargetX.value) / 2)
 const labelY = computed(() => (props.sourceY + props.targetY) / 2)
+const sourceDotStyle = computed(() => ({
+  position: 'absolute',
+  transform: `translate(-50%, -50%) translate(${alignedSourceX.value}px, ${props.sourceY}px)`,
+  pointerEvents: 'none'
+}))
+const targetDotStyle = computed(() => ({
+  position: 'absolute',
+  transform: `translate(-50%, -50%) translate(${alignedTargetX.value}px, ${props.targetY}px)`,
+  pointerEvents: 'none'
+}))
 
 // Edge style | 边样式
 const edgeStyle = computed(() => ({
-  stroke: '#6366f1',
-  strokeWidth: 2,
+  stroke: '#ffffff',
+  strokeWidth: props.selected ? 2 : 1,
+  strokeDasharray: '0',
   ...props.style
 }))
 
@@ -115,3 +141,12 @@ const handleRoleSelect = (role) => {
   updateEdgeData(props.id, { imageRole: role })
 }
 </script>
+
+<style scoped>
+.edge-anchor-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #ffffff;
+}
+</style>

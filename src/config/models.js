@@ -3,14 +3,27 @@
  * Centralized model configuration | 集中模型配置
  */
 
-// Gemini image size options | Gemini 图片尺寸选项
-export const GEMINI_IMAGE_SIZE_OPTIONS = [
-    { label: '1:1', key: '1024x1024' },
-    { label: '4:3', key: '1152x864' },
-    { label: '3:4', key: '864x1152' },
-    { label: '16:9', key: '1280x720' },
-    { label: '9:16', key: '720x1280' }
+const GEMINI_BASE_SIZES = [
+    { ratio: '1:1', width: 1024, height: 1024 },
+    { ratio: '4:3', width: 1152, height: 864 },
+    { ratio: '3:4', width: 864, height: 1152 },
+    { ratio: '16:9', width: 1280, height: 720 },
+    { ratio: '9:16', width: 720, height: 1280 }
 ]
+
+const GEMINI_RESOLUTION_LEVELS = [
+    { key: '1k', scale: 1 },
+    { key: '2k', scale: 2 },
+    { key: '4k', scale: 4 }
+]
+
+// Gemini image size options | Gemini 图片尺寸选项
+export const GEMINI_IMAGE_SIZE_OPTIONS = GEMINI_BASE_SIZES.flatMap((base) =>
+    GEMINI_RESOLUTION_LEVELS.map((level) => ({
+        label: `${base.ratio}`,
+        key: `${base.width * level.scale}x${base.height * level.scale}`
+    }))
+)
 
 export const GEMINI_IMAGE_QUALITY_OPTIONS = [
     { label: '标准', key: 'standard' },
@@ -72,6 +85,7 @@ export const VIDEO_MODELS = [
 
 // Chat/LLM models | 对话模型
 export const CHAT_MODELS = [
+    { label: 'Gemini 2.5 Flash', key: 'gemini-2.5-flash' },
     { label: 'Gemini 2.5 Flash Lite', key: 'gemini-2.5-flash-lite' }
 ]
 
@@ -103,7 +117,7 @@ export const VIDEO_DURATION_OPTIONS = [
 // Default values | 默认值
 export const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
 export const DEFAULT_VIDEO_MODEL = 'kling-o1'
-export const DEFAULT_CHAT_MODEL = 'gemini-2.5-flash-lite'
+export const DEFAULT_CHAT_MODEL = 'gemini-2.5-flash'
 export const DEFAULT_IMAGE_SIZE = '1024x1024'
 export const DEFAULT_VIDEO_RATIO = '16:9'
 export const DEFAULT_VIDEO_DURATION = 5

@@ -24,18 +24,6 @@
         </div>
       </div>
 
-      <div class="absolute right-4 top-4 z-20">
-        <button
-          @click="triggerAvatarUpload"
-          class="w-10 h-10 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center justify-center"
-          title="Upload avatar"
-        >
-          <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" class="w-full h-full object-cover" />
-          <span v-else class="text-xs">{{ avatarInitial }}</span>
-        </button>
-        <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
-      </div>
-
       <!-- Vue Flow canvas | Vue Flow 画布 -->
       <VueFlow
         :key="flowKey"
@@ -50,6 +38,8 @@
         :snap-to-grid="true"
         :snap-grid="[20, 20]"
         @connect="onConnect"
+        @connect-start="onConnectStart"
+        @connect-end="onConnectEnd"
         @node-click="onNodeClick"
         @pane-click="onPaneClick"
         @viewport-change="handleViewportChange"
@@ -62,71 +52,79 @@
           position="bottom-right"
           :pannable="true"
           :zoomable="true"
-          class="!bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl overflow-hidden"
+          class="!bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl overflow-hidden opacity-70"
           node-color="var(--accent-color)"
           mask-color="rgba(0,0,0,0.1)"
         />
       </VueFlow>
 
       <!-- Left toolbar | 左侧工具栏 -->
-      <aside class="flora-panel absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-1 p-2 rounded-2xl z-10">
+      <aside class="flora-panel absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 p-2 rounded-[36px] z-20 w-[64px]">
         <button 
           @click="showNodeMenu = !showNodeMenu"
-          class="flora-button-primary w-10 h-10 flex items-center justify-center rounded-xl"
+          class="w-12 h-12 flex items-center justify-center rounded-full bg-[#f1f1f1] text-[#111111] hover:brightness-95 transition-all"
           title="Add Node"
         >
           <n-icon :size="20"><AddOutline /></n-icon>
         </button>
         <button 
           @click="showWorkflowPanel = true"
-          class="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors"
+          class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors"
           title="Workflow Templates"
         >
-          <n-icon :size="20"><AppsOutline /></n-icon>
+          <n-icon :size="20"><FolderOutline /></n-icon>
         </button>
-        <div class="w-full h-px bg-[var(--border-color)] my-1"></div>
-        <button 
-          v-for="tool in tools" 
-          :key="tool.id"
-          @click="tool.action"
-          :disabled="tool.disabled && tool.disabled()"
-          class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          :title="tool.name"
-        >
-          <n-icon :size="20"><component :is="tool.icon" /></n-icon>
-        </button>
-        <div class="w-full h-px bg-[var(--border-color)] my-1"></div>
         <button
-          @click="showDownloadModal = true"
-          class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
-          :class="{ 'text-[var(--accent-color)]': hasDownloadableAssets }"
-          title="Download Assets"
+          @click="undo"
+          :disabled="!canUndo()"
+          class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors disabled:opacity-35"
+          title="Undo"
         >
-          <n-icon :size="20"><DownloadOutline /></n-icon>
+          <n-icon :size="20"><ArrowUndoOutline /></n-icon>
+        </button>
+        <button 
+          @click="redo"
+          :disabled="!canRedo()"
+          class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors disabled:opacity-35"
+          title="Redo"
+        >
+          <n-icon :size="20"><ArrowRedoOutline /></n-icon>
         </button>
         <button
           @click="showApiSettings = true"
-          class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors text-white"
+          class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors text-white"
           title="API Settings"
         >
           <n-icon :size="20"><SettingsOutline /></n-icon>
         </button>
+        <div class="w-full h-px bg-[var(--border-color)] my-1"></div>
+        <button
+          @click="triggerAvatarUpload"
+          class="w-12 h-12 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center justify-center mt-auto"
+          title="Upload avatar"
+        >
+          <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" class="w-full h-full object-cover" />
+          <span v-else class="text-xs">{{ avatarInitial }}</span>
+        </button>
+        <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
       </aside>
 
       <!-- Node menu popup | 节点菜单弹窗 -->
-      <div 
-        v-if="showNodeMenu"
-        class="flora-panel absolute left-20 top-1/2 -translate-y-1/2 rounded-2xl p-2 z-20"
-      >
-        <button 
-          v-for="nodeType in nodeTypeOptions" 
-          :key="nodeType.type"
-          @click="addNewNode(nodeType.type)"
-          class="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors text-left"
-        >
-          <n-icon :size="20" :color="nodeType.color"><component :is="nodeType.icon" /></n-icon>
-          <span class="text-sm">{{ nodeType.name }}</span>
-        </button>
+      <div v-if="showNodeMenu" class="flora-panel absolute left-[90px] top-1/2 -translate-y-1/2 rounded-xl p-2 z-30 w-[198px] border border-[rgba(143,143,143,0.24)] bg-[rgba(25,25,25,0.96)] backdrop-blur-xl">
+        <div class="text-[13px] leading-none font-semibold text-[#8f939e] mb-1.5 tracking-[0.02em]">TURN INTO</div>
+        <div class="space-y-2">
+          <button
+            v-for="nodeType in nodeTypeOptions"
+            :key="nodeType.type"
+            @click="addNewNode(nodeType.type)"
+            class="w-full h-9 flex items-center gap-2.5 rounded-lg px-2 hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+          >
+            <div class="w-7 h-7 rounded-lg bg-[#3b3e45] flex items-center justify-center shrink-0">
+              <n-icon :size="15" class="text-[#d6d8de]"><component :is="nodeType.icon" /></n-icon>
+            </div>
+            <span class="text-[12px] font-medium text-[#f2f3f5]">{{ nodeType.name }}</span>
+          </button>
+        </div>
       </div>
 
       <!-- Bottom controls | 底部控制 -->
@@ -157,76 +155,6 @@
         </div>
       </div>
 
-      <!-- Bottom input panel (floating) | 底部输入面板（悬浮） -->
-      <div class="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-20">
-        <!-- Processing indicator | 处理中指示器 -->
-        <div 
-          v-if="isProcessing" 
-          class="flora-panel mb-3 p-3 rounded-xl border-[var(--accent-color)] animate-pulse"
-        >
-          <div class="flex items-center gap-2 text-sm text-[var(--accent-color)] mb-2">
-            <n-spin :size="14" />
-            <span>Generating prompt...</span>
-          </div>
-          <div v-if="currentResponse" class="text-sm text-[var(--text-primary)] whitespace-pre-wrap">
-            {{ currentResponse }}
-          </div>
-        </div>
-
-        <div class="flora-input-shell p-3">
-          <textarea
-            v-model="chatInput"
-            :placeholder="inputPlaceholder"
-            :disabled="isProcessing"
-            class="w-full bg-transparent resize-none outline-none text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] min-h-[40px] max-h-[120px] disabled:opacity-50"
-            rows="1"
-            @keydown.enter.exact="handleEnterKey"
-            @keydown.enter.ctrl="sendMessage"
-          />
-          <div class="flex items-center justify-between mt-2">
-            <div class="flex items-center gap-2">
-              <button 
-                @click="handlePolish"
-                :disabled="isProcessing || !chatInput.trim()"
-                class="flora-button-ghost px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Polish Prompt"
-              >
-                ✨ Polish
-              </button>
-            </div>
-            <div class="flex items-center gap-3">
-              <label class="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                <n-switch v-model:value="autoExecute" size="small" />
-                Auto-run
-              </label>
-              <button 
-                @click="sendMessage"
-                :disabled="isProcessing"
-                class="flora-button-primary w-9 h-9 rounded-xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <n-spin v-if="isProcessing" :size="16" />
-                <n-icon v-else :size="20"><SendOutline /></n-icon>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Quick suggestions | 快捷建议 -->
-        <div class="flex flex-wrap items-center justify-center gap-2 mt-2">
-          <span class="text-xs text-[var(--text-secondary)]">Suggested:</span>
-          <button 
-            v-for="tag in suggestions" 
-            :key="tag"
-            @click="chatInput = tag"
-            class="flora-pill px-2.5 py-1 text-xs hover:text-[var(--accent-color)] hover:border-[var(--accent-color)] transition-colors"
-          >
-            {{ tag }}
-          </button>
-          <button class="p-1 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors">
-            <n-icon :size="14"><RefreshOutline /></n-icon>
-          </button>
-        </div>
-      </div>
     </div>
 
     <!-- API Settings Modal | API 设置弹窗 -->
@@ -250,9 +178,6 @@
       </template>
     </n-modal>
 
-    <!-- Download Modal | 下载弹窗 -->
-    <DownloadModal v-model:show="showDownloadModal" />
-
     <!-- Workflow Panel | 工作流面板 -->
     <WorkflowPanel v-model:show="showWorkflowPanel" @add-workflow="handleAddWorkflow" />
   </div>
@@ -268,75 +193,36 @@ import { useRouter, useRoute } from 'vue-router'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import { NIcon, NSwitch, NDropdown, NMessageProvider, NSpin, NModal, NInput, NButton } from 'naive-ui'
+import { NIcon, NDropdown, NModal, NInput, NButton } from 'naive-ui'
 import { 
   ChevronBackOutline,
   ChevronDownOutline,
   SettingsOutline,
   AddOutline,
   ImageOutline,
-  SendOutline,
-  RefreshOutline,
   TextOutline,
   VideocamOutline,
-  ColorPaletteOutline,
-  BookmarkOutline,
   ArrowUndoOutline,
   ArrowRedoOutline,
-  GridOutline,
   LocateOutline,
   RemoveOutline,
-  DownloadOutline,
-  AppsOutline,
-  ChatbubbleOutline
+  FolderOutline
 } from '../icons/coolicons'
-import { nodes, edges, addNode, addEdge, updateNode, initSampleData, loadProject, saveProject, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
-import { DEFAULT_CHAT_MODEL, loadAllModels } from '../stores/models'
-import { useApiConfig, useChat, useWorkflowExecutor, useNodesFactory } from '../hooks'
+import { nodes, edges, addEdge, loadProject, saveProject, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
+import { loadAllModels } from '../stores/models'
+import { useNodesFactory } from '../hooks'
 import { edgeStrategy } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
-import { projects, initProjectsStore, updateProject, renameProject, currentProject, duplicateProject, deleteProject } from '../stores/projects'
+import { projects, initProjectsStore, renameProject, duplicateProject, deleteProject } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 
 // API Settings component | API 设置组件
 import ApiSettings from '../components/ApiSettings.vue'
-import DownloadModal from '../components/DownloadModal.vue'
 import WorkflowPanel from '../components/WorkflowPanel.vue'
-
-// API Config hook | API 配置 hook
-const { isConfigured: isApiConfigured } = useApiConfig()
 
 // Initialize models on page load | 页面加载时初始化模型
 onMounted(() => {
   loadAllModels()
-})
-
-// Chat templates | 问答模板
-const CHAT_TEMPLATES = {
-  imagePrompt: {
-    name: 'Image Prompt',
-    systemPrompt: 'You are an expert prompt writer for image generation. Rewrite user input into a high-quality visual prompt with style, lighting, composition, and details. Return only the prompt.',
-    model: DEFAULT_CHAT_MODEL
-  },
-  videoPrompt: {
-    name: 'Video Prompt',
-    systemPrompt: 'You are an expert prompt writer for video generation. Rewrite user input into a high-quality video prompt with motion, scene setup, and camera direction. Return only the prompt.',
-    model: DEFAULT_CHAT_MODEL
-  }
-}
-
-// Current template | 当前模板
-const currentTemplate = ref('imagePrompt')
-
-// Chat hook with image prompt template | 问答 hook
-const { 
-  loading: chatLoading, 
-  status: chatStatus, 
-  currentResponse, 
-  send: sendChat 
-} = useChat({
-  systemPrompt: CHAT_TEMPLATES.imagePrompt.systemPrompt,
-  model: CHAT_TEMPLATES.imagePrompt.model
 })
 
 // Vue Flow instance | Vue Flow 实例
@@ -344,18 +230,6 @@ const { viewport, zoomIn, zoomOut, fitView, updateNodeInternals } = useVueFlow()
 
 // Nodes factory | 节点工厂
 const nodesFactory = useNodesFactory({ updateNodeInternals, viewport })
-
-// Workflow executor | 工作流执行器
-const {
-  isAnalyzing: workflowAnalyzing,
-  isExecuting: workflowExecuting,
-  isProcessing: workflowProcessing,
-  currentStep: workflowStep,
-  totalSteps: workflowTotalSteps,
-  executionLog: workflowLog,
-  executeFromInput,
-  WORKFLOW_TYPES
-} = useWorkflowExecutor()
 
 // Custom node components | 自定义节点组件
 import TextNode from '../components/nodes/TextNode.vue'
@@ -367,6 +241,7 @@ import LLMConfigNode from '../components/nodes/LLMConfigNode.vue'
 import ImageRoleEdge from '../components/edges/ImageRoleEdge.vue'
 import PromptOrderEdge from '../components/edges/PromptOrderEdge.vue'
 import ImageOrderEdge from '../components/edges/ImageOrderEdge.vue'
+import DefaultEdge from '../components/edges/DefaultEdge.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -410,6 +285,7 @@ const nodeTypes = {
 
 // Register custom edge types | 注册自定义边类型
 const edgeTypes = {
+  default: markRaw(DefaultEdge),
   imageRole: markRaw(ImageRoleEdge),
   promptOrder: markRaw(PromptOrderEdge),
   imageOrder: markRaw(ImageOrderEdge)
@@ -417,13 +293,9 @@ const edgeTypes = {
 
 // UI state | UI状态
 const showNodeMenu = ref(false)
-const chatInput = ref('')
-const autoExecute = ref(true)
 const isMobile = ref(false)
 const showGrid = ref(true)
 const showApiSettings = ref(false)
-const polishProcessing = ref(false)
-const isProcessing = computed(() => polishProcessing.value || workflowProcessing.value)
 
 // Flow key for forcing re-render on project switch | 项目切换时强制重新渲染的 key
 const flowKey = ref(Date.now())
@@ -431,16 +303,8 @@ const flowKey = ref(Date.now())
 // Modal state | 弹窗状态
 const showRenameModal = ref(false)
 const showDeleteModal = ref(false)
-const showDownloadModal = ref(false)
 const showWorkflowPanel = ref(false)
 const renameValue = ref('')
-
-// Check if has downloadable assets | 检查是否有可下载素材
-const hasDownloadableAssets = computed(() => {
-  return nodes.value.some(n => 
-    (n.type === 'image' || n.type === 'video') && n.data?.url
-  )
-})
 
 
 // Project info | 项目信息
@@ -456,35 +320,11 @@ const projectOptions = [
   { label: 'Delete', key: 'delete' }
 ]
 
-// Toolbar tools | 工具栏工具
-const tools = [
-  { id: 'text', name: 'Text', icon: TextOutline, action: () => addNewNode('text') },
-  { id: 'image', name: 'Image', icon: ImageOutline, action: () => addNewNode('image') },
-  { id: 'imageConfig', name: 'Image Gen', icon: ColorPaletteOutline, action: () => addNewNode('imageConfig') },
-  { id: 'videoConfig', name: 'Video Gen', icon: VideocamOutline, action: () => addNewNode('videoConfig') },
-  { id: 'undo', name: 'Undo', icon: ArrowUndoOutline, action: () => undo(), disabled: () => !canUndo() },
-  { id: 'redo', name: 'Redo', icon: ArrowRedoOutline, action: () => redo(), disabled: () => !canRedo() }
-]
-
 // Node type options for menu | 节点类型菜单选项
 const nodeTypeOptions = [
-  { type: 'text', name: 'Text Node', icon: TextOutline, color: '#3b82f6' },
-  // { type: 'llmConfig', name: 'LLM文本生成', icon: ChatbubbleOutline, color: '#a855f7' },
-  { type: 'imageConfig', name: 'Image Config', icon: ColorPaletteOutline, color: '#22c55e' },
-  { type: 'videoConfig', name: 'Video Config', icon: VideocamOutline, color: '#f59e0b' },
-  { type: 'image', name: 'Image Node', icon: ImageOutline, color: '#8b5cf6' },
-  { type: 'video', name: 'Video Node', icon: VideocamOutline, color: '#ef4444' }
-]
-
-// Input placeholder | 输入占位符
-const inputPlaceholder = 'Try: "Create an anime-style cartoon character"'
-
-// Quick suggestions | 快捷建议
-const suggestions = [
-  'A magical forest scene',
-  'Three different kittens',
-  'Build a multi-angle storyboard',
-  'Summer field cinematic walk'
+  { type: 'text', name: 'Text', icon: TextOutline },
+  { type: 'image', name: 'Image', icon: ImageOutline },
+  { type: 'video', name: 'Video', icon: VideocamOutline }
 ]
 
 // Add new node | 添加新节点
@@ -500,21 +340,67 @@ const handleAddWorkflow = async ({ workflow, options }) => {
 
 // Handle connection | 处理连接
 const onConnect = (params) => {
+  if (pendingConnect.value) {
+    connectSucceeded.value = true
+  }
   const edge = edgeStrategy.resolve(params)
   addEdge(edge)
 }
 
+const pendingConnect = ref(null)
+const connectSucceeded = ref(false)
+
+const readPointer = (eventLike) => {
+  if (!eventLike) return null
+  if (eventLike.touches?.length) {
+    return { x: eventLike.touches[0].clientX, y: eventLike.touches[0].clientY }
+  }
+  if (eventLike.changedTouches?.length) {
+    return { x: eventLike.changedTouches[0].clientX, y: eventLike.changedTouches[0].clientY }
+  }
+  const x = eventLike.clientX ?? eventLike.x ?? eventLike.pageX
+  const y = eventLike.clientY ?? eventLike.y ?? eventLike.pageY
+  if (typeof x === 'number' && typeof y === 'number') return { x, y }
+  return null
+}
+
+const onConnectStart = (params) => {
+  const nodeId = params?.nodeId
+  const handleId = params?.handleId
+  const handleType = params?.handleType
+  if (!nodeId || !handleId || !handleType) {
+    pendingConnect.value = null
+    return
+  }
+  pendingConnect.value = {
+    nodeId,
+    handleId,
+    handleType,
+    startPoint: readPointer(params?.event)
+  }
+  connectSucceeded.value = false
+}
+
+const onConnectEnd = (event) => {
+  const current = pendingConnect.value
+  if (!current) return
+
+  pendingConnect.value = null
+  connectSucceeded.value = false
+}
+
 // Handle node click | 处理节点点击
 const onNodeClick = (event) => {
-  // nodes.value.forEach(node => {
-  //   updateNode(node.id, { selected: false })
-  // })
-  
-  // // Select clicked node | 选中的节点
-  // const clickedNode = nodes.value.find(n => n.id === event.node.id)
-  // if (clickedNode) {
-  //   updateNode(event.node.id, { selected: true })
-  // }
+  const clickedNodeId = event?.node?.id
+  if (!clickedNodeId) return
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    selected: node.id === clickedNodeId,
+    data: {
+      ...(node.data || {}),
+      selected: node.id === clickedNodeId
+    }
+  }))
 }
 
 // Handle viewport change | 处理视口变化
@@ -538,11 +424,15 @@ const onEdgesChange = (changes) => {
 // Handle pane click | 处理画布点击
 const onPaneClick = () => {
   showNodeMenu.value = false
-  // Clear all selections | 清除所有选中
-  // nodes.value = nodes.value.map(node => ({
-  //   ...node,
-  //   selected: false
-  // }))
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    selected: false,
+    data: {
+      ...(node.data || {}),
+      selected: false,
+      openPortMenu: null
+    }
+  }))
 }
 
 // Handle project action | 处理项目操作
@@ -587,63 +477,6 @@ const confirmDelete = async () => {
   await deleteProject(projectId)
   notifier.success('Project deleted')
   router.push('/')
-}
-
-// Handle Enter key | 处理回车键
-const handleEnterKey = (e) => {
-  e.preventDefault()
-  sendMessage()
-}
-
-// Handle AI polish | 处理 AI 润色
-const handlePolish = async () => {
-  const input = chatInput.value.trim()
-  if (!input) return
-  
-  // Check API configuration | 检查 API 配置
-  if (!isApiConfigured.value) {
-    notifier.warning('Please configure API Key first')
-    showApiSettings.value = true
-    return
-  }
-
-  polishProcessing.value = true
-  const originalInput = chatInput.value
-
-  try {
-    // Call chat API to polish the prompt | 调用 AI 润色提示词
-    const result = await sendChat(input, true)
-    
-    if (result) {
-      chatInput.value = result
-      notifier.success('Prompt polished')
-    }
-  } catch (err) {
-    chatInput.value = originalInput
-    notifier.error(err.message || 'Polish failed')
-  } finally {
-    polishProcessing.value = false
-  }
-}
-
-// Send message | 发送消息
-const sendMessage = async () => {
-  const input = chatInput.value.trim()
-  if (!input) return
-
-  // Check API configuration | 检查 API 配置
-  if (!isApiConfigured.value) {
-    notifier.warning('Please configure API Key first')
-    showApiSettings.value = true
-    return
-  }
-
-  chatInput.value = ''
-
-  await executeFromInput(input, {
-    autoExecute: autoExecute.value,
-    nodesFactory
-  })
 }
 
 // Go back to home | 返回首页
@@ -694,17 +527,6 @@ onMounted(async () => {
   
   // Load project data | 加载项目数据
   loadProjectById(route.params.id)
-  
-  // Check for initial prompt from home page | 检查来自首页的初始提示词
-  const initialPrompt = sessionStorage.getItem('ai-canvas-initial-prompt')
-  if (initialPrompt) {
-    sessionStorage.removeItem('ai-canvas-initial-prompt')
-    chatInput.value = initialPrompt
-    // Auto-send the message | 自动发送消息
-    nextTick(() => {
-      sendMessage()
-    })
-  }
 })
 
 // Cleanup on unmount | 卸载时清理
@@ -724,5 +546,17 @@ onUnmounted(() => {
 .canvas-flow {
   width: 100%;
   height: 100%;
+}
+
+.canvas-flow :deep(.vue-flow__edge-path) {
+  stroke: #ffffff;
+  stroke-width: 1;
+  stroke-dasharray: 0;
+}
+
+.canvas-flow :deep(.vue-flow__edge.selected .vue-flow__edge-path) {
+  stroke: #ffffff;
+  stroke-width: 2;
+  stroke-dasharray: 0;
 }
 </style>
