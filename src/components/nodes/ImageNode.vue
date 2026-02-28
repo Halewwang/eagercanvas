@@ -242,6 +242,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon } from 'naive-ui'
 import { TrashOutline, ExpandOutline, ImageOutline, CloseCircleOutline, CopyOutline, VideocamOutline, DownloadOutline, EyeOutline, BrushOutline, RefreshOutline, ColorWandOutline } from '../../icons/coolicons'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes } from '../../stores/canvas'
+import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_SIZE } from '../../stores/models'
 
 const props = defineProps({
   id: String,
@@ -426,8 +427,8 @@ const createInpaintWorkflow = () => {
   
   // Create imageConfig node for inpainting | 创建Image to Image配置节点
   const configNodeId = addNode('imageConfig', { x: nodeX + 600, y: nodeY }, {
-    model: 'doubao-seedream-4-5-251128',
-    size: '2048x2048',
+    model: DEFAULT_IMAGE_MODEL,
+    size: DEFAULT_IMAGE_SIZE,
     label: 'Inpaint',
     inpaintMode: true
   })
@@ -564,8 +565,8 @@ const handleImageGen = () => {
 
   // Create imageConfig node | 创建Text to Image配置节点
   const configNodeId = addNode('imageConfig', { x: nodeX + 600, y: nodeY }, {
-    model: 'doubao-seedream-4-5-251128',
-    size: '2048x2048',
+    model: DEFAULT_IMAGE_MODEL,
+    size: DEFAULT_IMAGE_SIZE,
     label: 'Image to Image'
   })
 

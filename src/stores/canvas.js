@@ -215,8 +215,8 @@ export const initSampleData = () => {
   // Add image config node | 添加文生图配置节点
   addNode('imageConfig', { x: 450, y: 150 }, {
     prompt: '',
-    model: 'doubao-seedream-4-5-251128',
-    ratio: '16:9 | 4张 | 高清',
+    model: DEFAULT_IMAGE_MODEL,
+    size: '1024x1024',
     label: '文生图'
   })
   

@@ -8,7 +8,7 @@
           <n-form-item label="Base URL" path="baseUrl">
             <n-input 
               v-model:value="formData.baseUrl" 
-              placeholder="https://api.chatfire.site/v1"
+              placeholder="https://api.302.ai"
             />
           </n-form-item>
           <n-form-item label="API Key" path="apiKey">
@@ -47,7 +47,7 @@
             <div class="flex flex-col gap-2">
               <p>Please configure an API key to use AI features.</p>
               <a 
-                href="https://api.chatfire.site/login?inviteCode=EEE80324" 
+                href="https://302.ai" 
                 target="_blank"
                 class="text-[var(--accent-color)] hover:underline text-sm flex items-center gap-1"
               >
@@ -165,7 +165,7 @@
     <template #footer>
       <div class="flex justify-between items-center">
         <a 
-          href="https://api.chatfire.site/login?inviteCode=EEE80324" 
+          href="https://302.ai" 
           target="_blank"
           class="text-xs text-[var(--text-secondary)] hover:text-[var(--accent-color)] transition-colors"
         >

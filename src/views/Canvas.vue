@@ -291,7 +291,7 @@ import {
   ChatbubbleOutline
 } from '../icons/coolicons'
 import { nodes, edges, addNode, addEdge, updateNode, initSampleData, loadProject, saveProject, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
-import { loadAllModels } from '../stores/models'
+import { DEFAULT_CHAT_MODEL, loadAllModels } from '../stores/models'
 import { useApiConfig, useChat, useWorkflowExecutor, useNodesFactory } from '../hooks'
 import { edgeStrategy } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
@@ -316,12 +316,12 @@ const CHAT_TEMPLATES = {
   imagePrompt: {
     name: 'Image Prompt',
     systemPrompt: 'You are an expert prompt writer for image generation. Rewrite user input into a high-quality visual prompt with style, lighting, composition, and details. Return only the prompt.',
-    model: 'gpt-4o-mini'
+    model: DEFAULT_CHAT_MODEL
   },
   videoPrompt: {
     name: 'Video Prompt',
     systemPrompt: 'You are an expert prompt writer for video generation. Rewrite user input into a high-quality video prompt with motion, scene setup, and camera direction. Return only the prompt.',
-    model: 'gpt-4o-mini'
+    model: DEFAULT_CHAT_MODEL
   }
 }
 

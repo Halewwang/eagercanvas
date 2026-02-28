@@ -3,66 +3,40 @@
  * Centralized model configuration | 集中模型配置
  */
 
-// Seedream image size options | 豆包图片尺寸选项
-export const SEEDREAM_SIZE_OPTIONS = [
-    { label: '21:9', key: '3024x1296' },
-    { label: '16:9', key: '2560x1440' },
-    { label: '4:3', key: '2304x1728' },
-    { label: '3:2', key: '2496x1664' },
-    { label: '1:1', key: '2048x2048' },
-    { label: '2:3', key: '1664x2496' },
-    { label: '3:4', key: '1728x2304' },
-    { label: '9:16', key: '1440x2560' },
-    { label: '9:21', key: '1296x3024' }
+// Gemini image size options | Gemini 图片尺寸选项
+export const GEMINI_IMAGE_SIZE_OPTIONS = [
+    { label: '1:1', key: '1024x1024' },
+    { label: '4:3', key: '1152x864' },
+    { label: '3:4', key: '864x1152' },
+    { label: '16:9', key: '1280x720' },
+    { label: '9:16', key: '720x1280' }
 ]
 
-// Seedream 4K image size options | 豆包4K图片尺寸选项
-export const SEEDREAM_4K_SIZE_OPTIONS = [
-    { label: '21:9', key: '6198x2656' },
-    { label: '16:9', key: '5404x3040' },
-    { label: '4:3', key: '4694x3520' },
-    { label: '3:2', key: '4992x3328' },
-    { label: '1:1', key: '4096x4096' },
-    { label: '2:3', key: '3328x4992' },
-    { label: '3:4', key: '3520x4694' },
-    { label: '9:16', key: '3040x5404' },
-    { label: '9:21', key: '2656x6198' }
-]
-
-// Seedream quality options | 豆包画质选项
-export const SEEDREAM_QUALITY_OPTIONS = [
-    { label: '标准画质', key: 'standard' },
-    { label: '4K 高清', key: '4k' }
+export const GEMINI_IMAGE_QUALITY_OPTIONS = [
+    { label: '标准', key: 'standard' },
+    { label: '高清', key: 'hd' }
 ]
 
 // Image generation models | 图片生成模型
 export const IMAGE_MODELS = [
     {
-        label: 'Nano Banana Pro',
-        key: 'nano-banana-pro',
-        tips: 'Nano Banana 系列建议在提示词中描述画幅（如: vertical 9:16）。',
-        sizes: [],
+        label: 'Gemini 3.1 Flash Image Preview',
+        key: 'gemini-3.1-flash-image-preview',
+        sizes: GEMINI_IMAGE_SIZE_OPTIONS.map(s => s.key),
+        qualities: GEMINI_IMAGE_QUALITY_OPTIONS,
         defaultParams: {
+            size: '1024x1024',
+            quality: 'standard',
             style: 'vivid'
         }
     },
     {
-        label: 'Nano Banana',
-        key: 'nano-banana',
-        tips: 'Nano Banana 系列建议在提示词中描述画幅（如: vertical 9:16）。',
-        sizes: [],
+        label: 'Gemini 3 Pro Image Preview',
+        key: 'gemini-3-pro-image-preview',
+        sizes: GEMINI_IMAGE_SIZE_OPTIONS.map(s => s.key),
+        qualities: GEMINI_IMAGE_QUALITY_OPTIONS,
         defaultParams: {
-            style: 'vivid'
-        }
-    },
-    {
-        label: '豆包 Seedream 4.5',
-        key: 'doubao-seedream-4-5-251128',
-        sizes: SEEDREAM_SIZE_OPTIONS.map(s => s.key),
-        qualities: SEEDREAM_QUALITY_OPTIONS,
-        getSizesByQuality: (quality) => quality === '4k' ? SEEDREAM_4K_SIZE_OPTIONS : SEEDREAM_SIZE_OPTIONS,
-        defaultParams: {
-            size: '2048x2048',
+            size: '1024x1024',
             quality: 'standard',
             style: 'vivid'
         }
@@ -81,15 +55,15 @@ export const VIDEO_RATIO_LIST = [
 // Video generation models | 视频生成模型
 export const VIDEO_MODELS = [
     {
-        label: 'Veo 3.1 Pro',
-        key: 'veo3.1-pro',
+        label: 'Kling O1',
+        key: 'kling-o1',
         ratios: VIDEO_RATIO_LIST.map(s => s.key),
         durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
         defaultParams: { ratio: '16:9', duration: 5 }
     },
     {
-        label: 'Kling V1',
-        key: 'kling-v1',
+        label: 'Sora-2',
+        key: 'sora-2',
         ratios: VIDEO_RATIO_LIST.map(s => s.key),
         durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
         defaultParams: { ratio: '16:9', duration: 5 }
@@ -98,25 +72,17 @@ export const VIDEO_MODELS = [
 
 // Chat/LLM models | 对话模型
 export const CHAT_MODELS = [
-    { label: 'GPT-4o Mini', key: 'gpt-4o-mini' },
-    { label: 'GPT-4o', key: 'gpt-4o' },
-    { label: 'GPT-5.2', key: 'gpt-5.2' },
-    { label: 'DeepSeek Chat', key: 'deepseek-chat' },
-    { label: '豆包 Seed Flash', key: 'doubao-seed-1-6-flash-250615' },
-    { label: 'Gemini 3 Pro', key: 'gemini-3-pro' }
+    { label: 'Gemini 2.5 Flash Lite', key: 'gemini-2.5-flash-lite' }
 ]
 
 // Image size options | 图片尺寸选项
 export const IMAGE_SIZE_OPTIONS = [
-    { label: '2048x2048', key: '2048x2048' },
-    { label: '1792x1024 (横版)', key: '1792x1024' },
-    { label: '1024x1792 (竖版)', key: '1024x1792' }
+    ...GEMINI_IMAGE_SIZE_OPTIONS
 ]
 
 // Image quality options | 图片质量选项
 export const IMAGE_QUALITY_OPTIONS = [
-    { label: '标准', key: 'standard' },
-    { label: '高清', key: 'hd' }
+    ...GEMINI_IMAGE_QUALITY_OPTIONS
 ]
 
 // Image style options | 图片风格选项
@@ -135,10 +101,10 @@ export const VIDEO_DURATION_OPTIONS = [
 ]
 
 // Default values | 默认值
-export const DEFAULT_IMAGE_MODEL = 'nano-banana-pro'
-export const DEFAULT_VIDEO_MODEL = 'veo3.1-pro'
-export const DEFAULT_CHAT_MODEL = 'gpt-4o-mini'
-export const DEFAULT_IMAGE_SIZE = '2048x2048'
+export const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
+export const DEFAULT_VIDEO_MODEL = 'kling-o1'
+export const DEFAULT_CHAT_MODEL = 'gemini-2.5-flash-lite'
+export const DEFAULT_IMAGE_SIZE = '1024x1024'
 export const DEFAULT_VIDEO_RATIO = '16:9'
 export const DEFAULT_VIDEO_DURATION = 5
 

@@ -81,7 +81,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + nodeSpacing, y: startPosition.y + rowSpacing * 1.5 },
         data: {
           label: '主角色图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2048x2048'
         }
       })
@@ -145,7 +145,7 @@ export const WORKFLOW_TEMPLATES = [
           position: { x: currentX, y: angleY },
           data: {
             label: `${angleConfig.label} (${angleConfig.english})`,
-            model: 'doubao-seedream-4-5-251128',
+            model: 'gemini-3.1-flash-image-preview',
             size: '2048x2048'
           }
         })
@@ -281,7 +281,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 2, y: startPosition.y },
         data: {
           label: '生成模特图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2048x2048'
         }
       })
@@ -294,7 +294,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 2, y: startPosition.y + rowSpacing },
         data: {
           label: '侧面展示图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2048x2048'
         }
       })
@@ -307,7 +307,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 2, y: startPosition.y + rowSpacing * 2 },
         data: {
           label: '俯瞰展示图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2048x2048'
         }
       })
@@ -320,7 +320,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 2, y: startPosition.y + rowSpacing * 3 },
         data: {
           label: '拆解图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2048x2048'
         }
       })
@@ -507,7 +507,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 2, y: startPosition.y },
         data: {
           label: '生成正面全身图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '1440x2560'
         }
       })
@@ -569,7 +569,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing },
         data: {
           label: '侧面半身图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2048x2048'
         }
       })
@@ -582,7 +582,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing * 2 },
         data: {
           label: '表情特写图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2048x2048'
         }
       })
@@ -595,7 +595,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing * 3 },
         data: {
           label: '背面全身图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '1440x2560'
         }
       })
@@ -753,7 +753,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 2, y: startPosition.y },
         data: {
           label: '生成基础场景',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2560x1440'
         }
       })
@@ -815,7 +815,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing },
         data: {
           label: '傍晚场景',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2560x1440'
         }
       })
@@ -828,7 +828,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing * 2 },
         data: {
           label: '夜晚场景',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2560x1440'
         }
       })
@@ -841,7 +841,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing * 3 },
         data: {
           label: '雨天场景',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2560x1440'
         }
       })
@@ -996,7 +996,7 @@ export const WORKFLOW_TEMPLATES = [
   //       position: { x: startPosition.x + colSpacing * 2, y: startPosition.y + rowSpacing },
   //       data: {
   //         label: '分镜画面',
-  //         model: 'doubao-seedream-4-5-251128',
+  //         model: 'gemini-3.1-flash-image-preview',
   //         size: '2560x1440'
   //       }
   //     })
@@ -1123,7 +1123,7 @@ export const WORKFLOW_TEMPLATES = [
 2. 包含：外貌特征、服装、表情、姿态、背景色
 3. 使用绘本水彩风格描述
 4. 适合儿童绘本的可爱形象`,
-          model: 'gpt-4o-mini',
+          model: 'gemini-2.5-flash-lite',
           outputFormat: 'text'
         }
       })
@@ -1136,7 +1136,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 3, y: startPosition.y - rowSpacing * 1.5 },
         data: {
           label: '主角色1设计图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2048x2048'
         }
       })
@@ -1185,7 +1185,7 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 3, y: startPosition.y - rowSpacing * 0.5 },
         data: {
           label: '主角色2设计图',
-          model: 'doubao-seedream-4-5-251128',
+          model: 'gemini-3.1-flash-image-preview',
           size: '2048x2048'
         }
       })
@@ -1299,7 +1299,7 @@ export const WORKFLOW_TEMPLATES = [
           position: { x: startPosition.x + colSpacing * 4, y: pageY },
           data: {
             label: `第${pageNum}页插图`,
-            model: 'doubao-seedream-4-5-251128',
+            model: 'gemini-3.1-flash-image-preview',
             size: '2048x2048'
           }
         })

@@ -121,6 +121,7 @@ import { NIcon, NSpin, NSelect } from 'naive-ui'
 import { TrashOutline, CopyOutline, ChatbubbleOutline, SparklesOutline } from '../../icons/coolicons'
 import { updateNode, removeNode, duplicateNode, nodes, edges } from '../../stores/canvas'
 import { useChat, useApiConfig } from '../../hooks'
+import { chatModelSelectOptions, DEFAULT_CHAT_MODEL } from '../../stores/models'
 
 const props = defineProps({
   id: String,
@@ -135,19 +136,14 @@ const { isConfigured: isApiConfigured } = useApiConfig()
 
 // Local state | 本地状态
 const systemPrompt = ref(props.data?.systemPrompt || '')
-const model = ref(props.data?.model || 'gpt-4o-mini')
+const model = ref(props.data?.model || DEFAULT_CHAT_MODEL)
 const outputFormat = ref(props.data?.outputFormat || 'text')
 const outputContent = ref(props.data?.outputContent || '')
 const isGenerating = ref(false)
 const showActions = ref(false)
 
 // Model options | Model选项
-const modelOptions = [
-  { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
-  { label: 'GPT-4o', value: 'gpt-4o' },
-  { label: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20241022' },
-  { label: 'DeepSeek V3', value: 'deepseek-chat' }
-]
+const modelOptions = chatModelSelectOptions
 
 // Format options | 格式选项
 const formatOptions = [

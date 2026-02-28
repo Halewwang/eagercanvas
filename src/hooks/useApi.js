@@ -10,7 +10,7 @@ import {
   getVideoTaskStatus,
   streamChatCompletions
 } from '@/api'
-import { getModelByName } from '@/config/models'
+import { DEFAULT_CHAT_MODEL, getModelByName } from '@/config/models'
 import { useApiConfig } from './useApiConfig'
 
 /**
@@ -74,7 +74,7 @@ export const useChat = (options = {}) => {
         let fullResponse = ''
 
         for await (const chunk of streamChatCompletions(
-          { model: options.model || 'gpt-4o-mini', messages: msgList },
+          { model: options.model || DEFAULT_CHAT_MODEL, messages: msgList },
           abortController.signal
         )) {
           fullResponse += chunk
@@ -133,7 +133,6 @@ export const useImageGeneration = () => {
 
     try {
       const modelConfig = getModelByName(params.model)
-      const isNanoBanana = String(params.model || '').startsWith('nano-banana')
       
       // Build request data | 构建请求数据
       const requestData = {
@@ -142,11 +141,8 @@ export const useImageGeneration = () => {
         prompt: params.prompt
       }
 
-      // Seedream requires size/quality; nano banana family usually does not.
-      if (!isNanoBanana) {
-        requestData.size = params.size || modelConfig?.defaultParams?.size || '2048x2048'
-        requestData.quality = params.quality || modelConfig?.defaultParams?.quality || 'standard'
-      }
+      requestData.size = params.size || modelConfig?.defaultParams?.size || '1024x1024'
+      requestData.quality = params.quality || modelConfig?.defaultParams?.quality || 'standard'
 
       // Add reference image if provided | 添加参考图
       if (params.image) {
@@ -199,6 +195,9 @@ export const useVideoGeneration = () => {
       task?.task_id,
       task?.taskId,
       task?.id,
+      task?.task?.task_id,
+      task?.raw?.task_id,
+      task?.raw?.task?.task_id,
       task?.data?.task_id,
       task?.data?.taskId,
       task?.data?.id,
@@ -212,6 +211,10 @@ export const useVideoGeneration = () => {
   const getTaskStatus = (result) => {
     return String(
       result?.status ||
+      result?.task?.status ||
+      result?.raw?.status ||
+      result?.raw?.task?.status ||
+      result?.raw?.task?.task_status ||
       result?.task_status ||
       result?.data?.status ||
       result?.data?.task_status ||
@@ -234,6 +237,9 @@ export const useVideoGeneration = () => {
       result?.task_result?.video_url ||
       result?.task_result?.video?.url ||
       result?.task_result?.videos?.[0]?.url ||
+      result?.raw?.video_url ||
+      result?.raw?.task?.task_result?.videos?.[0]?.url ||
+      result?.raw?.output?.[0]?.url ||
       result?.detail?.draft_info?.downloadable_url ||
       result?.data?.detail?.draft_info?.downloadable_url ||
       result?.data?.[0]?.url ||

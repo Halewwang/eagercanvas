@@ -97,6 +97,7 @@ import { TrashOutline, ExpandOutline, CopyOutline, ImageOutline, VideocamOutline
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes } from '../../stores/canvas'
 import { useChat, useApiConfig } from '../../hooks'
 import { useModelConfig } from '../../hooks/useModelConfig'
+import { DEFAULT_CHAT_MODEL, DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_SIZE } from '../../stores/models'
 
 const props = defineProps({
   id: String,
@@ -113,7 +114,7 @@ const { selectedChatModel } = useModelConfig()
 // Chat hook for polish | 润色用的 Chat hook
 const { send: sendChat } = useChat({
   systemPrompt: 'You are an expert prompt writer for image generation. Rewrite user input into a high-quality visual prompt with style, lighting, composition, and details. Return only the prompt.',
-  model: selectedChatModel.value || 'gpt-4o-mini'
+  model: selectedChatModel.value || DEFAULT_CHAT_MODEL
 })
 
 // Local content state | 本地内容状态
@@ -192,8 +193,8 @@ const handleImageGen = () => {
 
   // Create imageConfig node | 创建text生图配置节点
   const configNodeId = addNode('imageConfig', { x: nodeX + 400, y: nodeY }, {
-    model: 'doubao-seedream-4-5-251128',
-    size: '2048x2048',
+    model: DEFAULT_IMAGE_MODEL,
+    size: DEFAULT_IMAGE_SIZE,
     label: 'Text to Image'
   })
 
