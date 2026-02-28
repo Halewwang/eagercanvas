@@ -221,8 +221,9 @@ const normalizeImageResponse = (response = {}) => {
 
 const normalizeKlingStatus = (value) => {
   if (typeof value === 'number') {
-    if (value === 99) return 'failed'
-    if (value >= 20) return 'completed'
+    // Kling O1: 10 processing, 50 failed, 99 success
+    if (value === 99) return 'completed'
+    if (value === 50) return 'failed'
     return 'processing'
   }
 
@@ -250,6 +251,8 @@ const extractVideoUrl = (data = {}) => {
     data?.task_result?.video_url ||
     data?.data?.task_result?.videos?.[0]?.url ||
     data?.data?.task_result?.video_url ||
+    data?.outputs?.[0] ||
+    data?.data?.outputs?.[0] ||
     ''
   )
 }
@@ -369,7 +372,7 @@ export const providerCreateVideo = async (payload = {}) => {
       aspect_ratio: aspectRatio || 'auto'
     }
     if (firstFrameImage && lastFrameImage) requestBody.o1_type = 'firstTail'
-    else if (referenceImages.length > 0) requestBody.o1_type = 'imageRef'
+    else requestBody.o1_type = 'referImage'
 
     const raw = await callProviderWithFallback(
       [
@@ -437,7 +440,8 @@ export const providerVideoStatus = async (taskId) => {
   ]
   const openAiStatusPaths = [
     `/openai/v1/videos/${taskId}`,
-    `/v1/videos/${taskId}`
+    `/v1/videos/${taskId}`,
+    `/sora/v2/video/${taskId}`
   ]
 
   if (mayBeKling) {
@@ -470,8 +474,8 @@ export const providerVideoStatus = async (taskId) => {
     try {
       const content = await callProviderWithFallback(
         [
-          `/openai/v1/videos/${taskId}/content`,
-          `/v1/videos/${taskId}/content`
+          `/openai/v1/videos/${taskId}/content?variant=video`,
+          `/v1/videos/${taskId}/content?variant=video`
         ],
         'GET'
       )

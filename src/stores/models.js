@@ -13,6 +13,7 @@ import {
   VIDEO_RATIO_LIST,
   VIDEO_RATIO_OPTIONS,
   VIDEO_DURATION_OPTIONS,
+  VIDEO_RESOLUTION_OPTIONS,
   DEFAULT_IMAGE_MODEL,
   DEFAULT_VIDEO_MODEL,
   DEFAULT_CHAT_MODEL,
@@ -109,6 +110,27 @@ export const getModelDurationOptions = (modelKey) => {
   
   // durs is already in { label, key } format | durs 已经是 { label, key } 格式
   return model.durs
+}
+
+/**
+ * Get resolution options for video model | 获取视频模型分辨率选项
+ */
+export const getModelResolutionOptions = (modelKey, ratio = '16:9') => {
+  const model = VIDEO_MODELS.find(m => m.key === modelKey)
+  const sizes = Array.isArray(model?.sizes) ? model.sizes : []
+  const filtered = sizes.filter((s) => s.ratio === ratio)
+  if (!filtered.length) return VIDEO_RESOLUTION_OPTIONS
+
+  const seen = new Set()
+  return filtered
+    .map((item) => item.label || '')
+    .filter((label) => {
+      const key = String(label || '').toUpperCase()
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .map((label) => ({ label: String(label).toUpperCase(), key: String(label).toLowerCase() }))
 }
 
 // Dropdown options (built-in + custom) | 下拉选项（内置 + 自定义）

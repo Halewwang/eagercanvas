@@ -275,11 +275,15 @@ export const useVideoGeneration = () => {
       if (params.last_frame_image) requestData.last_frame_image = params.last_frame_image
       if (params.ratio) {
         requestData.aspect_ratio = params.ratio
-        requestData.size = params.ratio
+        requestData.size = params.size || params.ratio
       }
+      if (params.size && !requestData.size) requestData.size = params.size
       if (params.dur) {
         requestData.duration = params.dur
         requestData.seconds = params.dur
+      }
+      if (Array.isArray(params.images) && params.images.length > 0) {
+        requestData.images = params.images
       }
 
       // Call API | 调用 API

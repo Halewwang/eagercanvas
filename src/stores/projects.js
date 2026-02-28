@@ -59,14 +59,43 @@ const loadLocalCache = () => {
   }
 }
 
+const toTs = (value) => {
+  const ts = new Date(value || 0).getTime()
+  return Number.isFinite(ts) ? ts : 0
+}
+
+const mergeRemoteWithLocalDrafts = (remoteProjects, localProjects) => {
+  const localMap = new Map((localProjects || []).map((p) => [p.id, p]))
+  const merged = (remoteProjects || []).map((remote) => {
+    const local = localMap.get(remote.id)
+    if (!local) return remote
+
+    const remoteTs = toTs(remote.updatedAt)
+    const localTs = toTs(local.updatedAt)
+    // Keep local draft when it is newer than cloud data.
+    if (localTs > remoteTs) return local
+    return remote
+  })
+
+  // Keep local-only drafts when cloud list temporarily misses them.
+  const mergedIds = new Set(merged.map((p) => p.id))
+  for (const local of localProjects || []) {
+    if (!mergedIds.has(local.id)) merged.push(local)
+  }
+
+  return merged
+}
+
 export const loadProjects = async () => {
+  const localDrafts = loadLocalCache()
   try {
     const response = await apiListProjects()
-    projects.value = (response?.data || []).map(mapProjectFromApi)
+    const remote = (response?.data || []).map(mapProjectFromApi)
+    projects.value = mergeRemoteWithLocalDrafts(remote, localDrafts)
     saveLocalCache()
     return projects.value
   } catch (error) {
-    projects.value = loadLocalCache()
+    projects.value = localDrafts
     return projects.value
   }
 }

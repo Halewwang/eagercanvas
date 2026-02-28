@@ -10,6 +10,7 @@
         <div class="capsule-group">
           <n-dropdown :options="modelOptions" @select="setModel"><button class="capsule-select">{{ displayModel }}</button></n-dropdown>
           <n-dropdown :options="ratioOptions" @select="setRatio"><button class="capsule-select">{{ localRatio }}</button></n-dropdown>
+          <n-dropdown :options="resolutionOptions" @select="setResolution"><button class="capsule-select">{{ displayResolution }}</button></n-dropdown>
           <n-dropdown :options="durationOptions" @select="setDuration"><button class="capsule-select">{{ localDuration }}s</button></n-dropdown>
         </div>
 
@@ -107,7 +108,7 @@ import { NDropdown, NIcon, NModal, NSpin } from 'naive-ui'
 import { AddOutline, CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, SparklesOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
 import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
-import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, videoModelOptions } from '../../stores/models'
+import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelResolutionOptions, videoModelOptions } from '../../stores/models'
 
 const props = defineProps({ id: String, data: Object, selected: Boolean })
 
@@ -129,6 +130,8 @@ const progressFinishTimer = ref(null)
 
 const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
 const localRatio = ref(props.data?.ratio || DEFAULT_VIDEO_RATIO)
+const localSize = ref(props.data?.size || '1280x720')
+const localResolution = ref(props.data?.resolution || '1k')
 const localDuration = ref(props.data?.dur || DEFAULT_VIDEO_DURATION)
 
 const createLinkOptions = [
@@ -145,8 +148,37 @@ const imageRoleStatusMap = {
 
 const modelOptions = computed(() => videoModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const ratioOptions = computed(() => getModelRatioOptions(localModel.value))
+const resolutionOptions = computed(() => getModelResolutionOptions(localModel.value, localRatio.value))
 const durationOptions = computed(() => getModelDurationOptions(localModel.value))
 const displayModel = computed(() => videoModelOptions.value.find(m => m.key === localModel.value)?.label || localModel.value)
+const displayResolution = computed(() => String(localResolution.value || '1k').toUpperCase())
+
+const VIDEO_BASE_BY_RATIO = {
+  '16:9': { w: 1280, h: 720 },
+  '9:16': { w: 720, h: 1280 },
+  '4:3': { w: 960, h: 720 },
+  '3:4': { w: 720, h: 960 },
+  '1:1': { w: 1024, h: 1024 }
+}
+const scaleByResolution = (key) => {
+  if (key === '4k') return 4
+  if (key === '2k') return 2
+  return 1
+}
+const computeSizeByRatioAndResolution = (ratio, resolution) => {
+  const base = VIDEO_BASE_BY_RATIO[ratio] || VIDEO_BASE_BY_RATIO['16:9']
+  const scale = scaleByResolution(resolution)
+  return `${base.w * scale}x${base.h * scale}`
+}
+const inferResolutionFromSize = (size, ratio) => {
+  const base = VIDEO_BASE_BY_RATIO[ratio] || VIDEO_BASE_BY_RATIO['16:9']
+  const [w, h] = String(size || '').split('x').map(Number)
+  if (!w || !h) return '1k'
+  const scale = Math.max(w / base.w, h / base.h)
+  if (scale >= 3.5) return '4k'
+  if (scale >= 1.8) return '2k'
+  return '1k'
+}
 const activeImageRoleSet = computed(() => {
   const incomingEdges = edges.value.filter((edge) => edge.target === props.id)
   const activeRoleKeys = []
@@ -251,12 +283,20 @@ const setModel = (key) => {
   localModel.value = key
   const config = getModelConfig(key)
   if (config?.defaultParams?.ratio) localRatio.value = config.defaultParams.ratio
+  if (config?.defaultParams?.size) localSize.value = config.defaultParams.size
   if (config?.defaultParams?.duration) localDuration.value = config.defaultParams.duration
-  updateNode(props.id, { model: localModel.value, ratio: localRatio.value, dur: localDuration.value })
+  localResolution.value = inferResolutionFromSize(localSize.value, localRatio.value)
+  updateNode(props.id, { model: localModel.value, ratio: localRatio.value, size: localSize.value, resolution: localResolution.value, dur: localDuration.value })
 }
 const setRatio = (key) => {
   localRatio.value = key
-  updateNode(props.id, { ratio: key })
+  localSize.value = computeSizeByRatioAndResolution(localRatio.value, localResolution.value)
+  updateNode(props.id, { ratio: key, size: localSize.value, resolution: localResolution.value })
+}
+const setResolution = (key) => {
+  localResolution.value = String(key || '1k').toLowerCase()
+  localSize.value = computeSizeByRatioAndResolution(localRatio.value, localResolution.value)
+  updateNode(props.id, { resolution: localResolution.value, size: localSize.value })
 }
 const setDuration = (key) => {
   localDuration.value = key
@@ -307,6 +347,8 @@ const runVideoGeneration = async (mode = 'create') => {
       prompt,
       first_frame_image,
       last_frame_image,
+      images,
+      size: localSize.value,
       ratio: localRatio.value,
       dur: localDuration.value
     })
@@ -315,6 +357,8 @@ const runVideoGeneration = async (mode = 'create') => {
       url: result?.url || '',
       model: localModel.value,
       ratio: localRatio.value,
+      size: localSize.value,
+      resolution: localResolution.value,
       dur: localDuration.value,
       updatedAt: Date.now()
     })
@@ -334,11 +378,29 @@ const triggerUpload = () => {
   uploadInputRef.value?.click()
 }
 
-const handleFileUpload = (event) => {
+const fileToBase64 = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+
+const handleFileUpload = async (event) => {
   const file = event.target.files?.[0]
   if (!file) return
-  const url = URL.createObjectURL(file)
-  updateNode(props.id, { url, updatedAt: Date.now() })
+  try {
+    const base64 = await fileToBase64(file)
+    updateNode(props.id, {
+      url: base64,
+      base64,
+      fileName: file.name,
+      fileType: file.type,
+      updatedAt: Date.now()
+    })
+  } catch {
+    window.$message?.error('Video upload failed')
+  }
 }
 
 const handleUrlInput = () => {
@@ -413,7 +475,10 @@ watch(
     if (!val) return
     if (val.model && val.model !== localModel.value) localModel.value = val.model
     if (val.ratio && val.ratio !== localRatio.value) localRatio.value = val.ratio
+    if (val.size && val.size !== localSize.value) localSize.value = val.size
+    if (val.resolution && val.resolution !== localResolution.value) localResolution.value = val.resolution
     if (val.dur && val.dur !== localDuration.value) localDuration.value = val.dur
+    if (!val.resolution && val.size) localResolution.value = inferResolutionFromSize(val.size, localRatio.value)
   },
   { deep: true }
 )

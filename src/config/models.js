@@ -17,6 +17,31 @@ const GEMINI_RESOLUTION_LEVELS = [
     { key: '4k', scale: 4 }
 ]
 
+const VIDEO_BASE_BY_RATIO = {
+    '16:9': { w: 1280, h: 720 },
+    '9:16': { w: 720, h: 1280 },
+    '4:3': { w: 960, h: 720 },
+    '3:4': { w: 720, h: 960 },
+    '1:1': { w: 1024, h: 1024 }
+}
+
+const VIDEO_RESOLUTION_SCALES = [
+    { key: '1k', scale: 1 },
+    { key: '2k', scale: 2 },
+    { key: '4k', scale: 4 }
+]
+
+const buildVideoSizes = (ratios = []) =>
+    ratios.flatMap((ratio) => {
+        const base = VIDEO_BASE_BY_RATIO[ratio]
+        if (!base) return []
+        return VIDEO_RESOLUTION_SCALES.map((level) => ({
+            ratio,
+            label: level.key.toUpperCase(),
+            key: `${base.w * level.scale}x${base.h * level.scale}`
+        }))
+    })
+
 // Gemini image size options | Gemini 图片尺寸选项
 export const GEMINI_IMAGE_SIZE_OPTIONS = GEMINI_BASE_SIZES.flatMap((base) =>
     GEMINI_RESOLUTION_LEVELS.map((level) => ({
@@ -71,15 +96,17 @@ export const VIDEO_MODELS = [
         label: 'Kling O1',
         key: 'kling-o1',
         ratios: VIDEO_RATIO_LIST.map(s => s.key),
+        sizes: buildVideoSizes(VIDEO_RATIO_LIST.map(s => s.key)),
         durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-        defaultParams: { ratio: '16:9', duration: 5 }
+        defaultParams: { ratio: '16:9', duration: 5, size: '1280x720' }
     },
     {
         label: 'Sora-2',
         key: 'sora-2',
         ratios: VIDEO_RATIO_LIST.map(s => s.key),
+        sizes: buildVideoSizes(VIDEO_RATIO_LIST.map(s => s.key)),
         durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-        defaultParams: { ratio: '16:9', duration: 5 }
+        defaultParams: { ratio: '16:9', duration: 5, size: '1280x720' }
     }
 ]
 
@@ -113,6 +140,11 @@ export const VIDEO_DURATION_OPTIONS = [
     { label: '5 秒', key: 5 },
     { label: '10 秒', key: 10 }
 ]
+
+export const VIDEO_RESOLUTION_OPTIONS = VIDEO_RESOLUTION_SCALES.map((i) => ({
+    label: i.key.toUpperCase(),
+    key: i.key
+}))
 
 // Default values | 默认值
 export const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image-preview'

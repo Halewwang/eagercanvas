@@ -113,6 +113,8 @@ const getDefaultNodeData = (type) => {
         url: '',
         model: DEFAULT_VIDEO_MODEL,
         ratio: '16:9',
+        size: '1280x720',
+        resolution: '1k',
         dur: 5,
         duration: 0,
         label: '视频节点'
