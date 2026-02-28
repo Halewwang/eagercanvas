@@ -198,13 +198,19 @@ const extractVideoUrl = (data = {}) => {
   return (
     data?.url ||
     data?.video_url ||
+    data?.data?.url ||
+    data?.data?.video_url ||
     data?.video?.url ||
     data?.videos?.[0]?.url ||
+    data?.data?.videos?.[0]?.url ||
     data?.output?.[0]?.url ||
+    data?.data?.output?.[0]?.url ||
     data?.task?.task_result?.videos?.[0]?.url ||
     data?.task?.task_result?.video_url ||
     data?.task_result?.videos?.[0]?.url ||
     data?.task_result?.video_url ||
+    data?.data?.task_result?.videos?.[0]?.url ||
+    data?.data?.task_result?.video_url ||
     ''
   )
 }
@@ -227,6 +233,7 @@ const extractTaskId = (data = {}) => {
     data?.data?.taskId,
     data?.data?.id,
     data?.data?.task?.task_id,
+    data?.data?.task?.id,
     data?.output?.task_id,
     data?.output?.id
   ]
@@ -290,19 +297,35 @@ export const providerCreateVideo = async (payload = {}) => {
   const aspectRatio = payload.aspect_ratio || (typeof payload.size === 'string' && payload.size.includes(':') ? payload.size : undefined)
   const size = normalizeVideoSize(payload.size) || normalizeVideoSize(aspectRatio)
   const duration = Number(payload.duration || payload.seconds || 5)
+  const firstFrameImage = typeof payload.first_frame_image === 'string' ? payload.first_frame_image : ''
+  const lastFrameImage = typeof payload.last_frame_image === 'string' ? payload.last_frame_image : ''
+  const referenceImages = Array.isArray(payload.images) ? payload.images.filter(Boolean) : []
   const inputImage = pickFirstImageInput(payload)
 
   if (lowerModel.startsWith('kling-o1')) {
-    const requestBody = {
-      model_name: 'kling-v1-6',
-      input: {
-        mode: inputImage ? 'image2video' : 'text2video',
-        prompt,
-        image: inputImage || undefined,
-        duration,
-        aspect_ratio: aspectRatio
-      }
+    const images = []
+    if (firstFrameImage) images.push(firstFrameImage)
+    if (lastFrameImage) images.push(lastFrameImage)
+    if (images.length === 0 && referenceImages.length > 0) {
+      images.push(...referenceImages.slice(0, 4))
+    } else if (images.length > 0 && referenceImages.length > 0) {
+      // Keep first/last priority and fill up remaining slots from reference images.
+      images.push(...referenceImages.slice(0, Math.max(0, 4 - images.length)))
     }
+    if (images.length === 0 && inputImage) images.push(inputImage)
+    if (images.length === 0) {
+      throw new HttpError(400, 'Kling O1 requires at least one connected image input', 'INVALID_VIDEO_INPUT')
+    }
+
+    const requestBody = {
+      model_name: 'kling-o1',
+      images,
+      prompt,
+      duration,
+      aspect_ratio: aspectRatio || 'auto'
+    }
+    if (firstFrameImage && lastFrameImage) requestBody.o1_type = 'firstTail'
+    else if (referenceImages.length > 0) requestBody.o1_type = 'imageRef'
 
     const raw = await callProviderWithFallback(
       [
@@ -327,6 +350,8 @@ export const providerCreateVideo = async (payload = {}) => {
       size: size || '1280x720',
       n_seconds: duration
     }
+    if (firstFrameImage) requestBody.image = firstFrameImage
+    if (lastFrameImage) requestBody.end_image = lastFrameImage
 
     const raw = await callProviderWithFallback(
       [
@@ -386,8 +411,25 @@ export const providerVideoStatus = async (taskId) => {
   const raw = await callProviderWithFallback(
     mayBeKling ? openAiStatusPaths : [...openAiStatusPaths, ...klingStatusPaths]
   )
-  const videoUrl = extractVideoUrl(raw)
-  const status = videoUrl ? 'completed' : extractSoraStatus(raw)
+  let videoUrl = extractVideoUrl(raw)
+  let status = videoUrl ? 'completed' : extractSoraStatus(raw)
+
+  if (!videoUrl && status === 'completed') {
+    try {
+      const content = await callProviderWithFallback(
+        [
+          `/openai/v1/videos/${taskId}/content`,
+          `/v1/videos/${taskId}/content`
+        ],
+        'GET'
+      )
+      videoUrl = extractVideoUrl(content)
+    } catch {
+      // Keep polling from frontend if content is not immediately ready.
+    }
+  }
+
+  if (videoUrl) status = 'completed'
 
   return {
     task_id: taskId,
