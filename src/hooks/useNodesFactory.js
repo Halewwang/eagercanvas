@@ -90,29 +90,29 @@ export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
       label: 'Prompt' 
     })
     
-    const imageConfigNodeId = addNode('imageConfig', { x: position.x + 400, y: position.y }, {
-      label: 'Text to Image'
+    const imageNodeId = addNode('image', { x: position.x + 400, y: position.y }, {
+      label: 'Image Result'
     })
     
     addEdge({
       source: textNodeId,
-      target: imageConfigNodeId,
+      target: imageNodeId,
       sourceHandle: 'right',
       targetHandle: 'left'
     })
     
-    return { textNodeId, imageConfigNodeId }
+    return { textNodeId, imageNodeId }
   }
   
   /**
    * Add a single new node at center
    * 在中心添加单个新节点
    */
-  const addNewNode = async (type) => {
+  const addNewNode = async (type, offset = { x: 0, y: 0 }) => {
     const center = getViewportCenter()
     
     // Add node at viewport center | 在视口中心添加节点
-    const nodeId = addNode(type, { x: center.x - 100, y: center.y - 100 })
+    const nodeId = addNode(type, { x: center.x - 100 + (offset?.x || 0), y: center.y - 100 + (offset?.y || 0) })
     
     // Set highest z-index | 设置最高层级
     const maxZIndex = Math.max(0, ...nodes.value.map(n => n.zIndex || 0))

@@ -1,197 +1,55 @@
 <template>
-  <!-- API Settings Modal | API 设置弹窗 -->
-  <n-modal v-model:show="showModal" preset="card" title="API Settings" style="width: 560px;" class="custom-modal">
-    <n-tabs type="line" animated>
-      <!-- API 配置标签 -->
-      <n-tab-pane name="api" tab="API">
-        <n-form ref="formRef" :model="formData" label-placement="left" label-width="80">
-          <n-form-item label="Base URL" path="baseUrl">
-            <n-input 
-              v-model:value="formData.baseUrl" 
-              placeholder="https://api.302.ai"
-            />
-          </n-form-item>
-          <n-form-item label="API Key" path="apiKey">
-            <n-input 
-              v-model:value="formData.apiKey" 
-              type="password"
-              show-password-on="click"
-              placeholder="Enter API Key"
-            />
-          </n-form-item>
+  <n-modal v-model:show="showModal" :mask-closable="true" :auto-focus="false" :trap-focus="true">
+    <div class="profile-modal">
+      <div class="profile-header">
+        <h2 class="profile-title">Profile</h2>
+        <button class="close-btn" @click="showModal = false" aria-label="Close">
+          <n-icon :size="20"><CloseOutline /></n-icon>
+        </button>
+      </div>
 
-          <n-divider title-placement="left" class="!my-3">
-            <span class="text-xs text-[var(--text-secondary)]">Endpoints</span>
-          </n-divider>
-          
-          <div class="endpoint-list">
-            <div class="endpoint-item">
-              <span class="endpoint-label">Chat</span>
-              <n-tag size="small" class="endpoint-tag" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">/chat/completions</n-tag>
-            </div>
-            <div class="endpoint-item">
-              <span class="endpoint-label">Image</span>
-              <n-tag size="small" class="endpoint-tag" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">/images/generations</n-tag>
-            </div>
-            <div class="endpoint-item">
-              <span class="endpoint-label">Video Create</span>
-              <n-tag size="small" class="endpoint-tag" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">/videos</n-tag>
-            </div>
-            <div class="endpoint-item">
-              <span class="endpoint-label">Video Status</span>
-              <n-tag size="small" class="endpoint-tag" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">/videos/{taskId}</n-tag>
-            </div>
-          </div>
-
-          <n-alert v-if="!isConfigured" type="warning" title="Not Configured" class="mb-4">
-            <div class="flex flex-col gap-2">
-              <p>Please configure an API key to use AI features.</p>
-              <a 
-                href="https://302.ai" 
-                target="_blank"
-                class="text-[var(--accent-color)] hover:underline text-sm flex items-center gap-1"
-              >
-                🔗 Get API Key
-                <span class="text-xs">(new account)</span>
-              </a>
-            </div>
-          </n-alert>
-
-          <n-alert v-else type="success" title="Configured" class="mb-4">
-            API is ready.
-          </n-alert>
-        </n-form>
-      </n-tab-pane>
-
-      <!-- 模型配置标签 -->
-      <n-tab-pane name="models" tab="Models">
-        <div class="model-config-section">
-          <!-- 问答模型 -->
-          <div class="model-group">
-            <div class="model-group-header">
-              <span class="model-group-title">Chat Models</span>
-              <n-tag size="tiny" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">{{ allChatModels.length }}</n-tag>
-            </div>
-            <div class="model-input-row">
-              <n-input 
-                v-model:value="newChatModel" 
-                placeholder="Model name, e.g. gpt-4o"
-                size="small"
-                @keyup.enter="handleAddChatModel"
-              />
-              <n-button size="small" color="#A58163" @click="handleAddChatModel" :disabled="!newChatModel">
-                Add
-              </n-button>
-            </div>
-            <div class="model-tags">
-              <n-tag 
-                v-for="model in allChatModels" 
-                :key="model.key"
-                size="small"
-                :closable="model.isCustom"
-                :color="model.isCustom ? { color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' } : undefined"
-                @close="removeCustomChatModel(model.key)"
-              >
-                {{ model.label }}
-              </n-tag>
-            </div>
-          </div>
-
-          <!-- 图片模型 -->
-          <div class="model-group">
-            <div class="model-group-header">
-              <span class="model-group-title">Image Models</span>
-              <n-tag size="tiny" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">{{ allImageModels.length }}</n-tag>
-            </div>
-            <div class="model-input-row">
-              <n-input 
-                v-model:value="newImageModel" 
-                placeholder="Model name, e.g. dall-e-3"
-                size="small"
-                @keyup.enter="handleAddImageModel"
-              />
-              <n-button size="small" color="#A58163" @click="handleAddImageModel" :disabled="!newImageModel">
-                Add
-              </n-button>
-            </div>
-            <div class="model-tags">
-              <n-tag 
-                v-for="model in allImageModels" 
-                :key="model.key"
-                size="small"
-                :closable="model.isCustom"
-                :color="model.isCustom ? { color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' } : undefined"
-                @close="removeCustomImageModel(model.key)"
-              >
-                {{ model.label }}
-              </n-tag>
-            </div>
-          </div>
-
-          <!-- 视频模型 -->
-          <div class="model-group">
-            <div class="model-group-header">
-              <span class="model-group-title">Video Models</span>
-              <n-tag size="tiny" :color="{ color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' }">{{ allVideoModels.length }}</n-tag>
-            </div>
-            <div class="model-input-row">
-              <n-input 
-                v-model:value="newVideoModel" 
-                placeholder="Model name, e.g. sora-2"
-                size="small"
-                @keyup.enter="handleAddVideoModel"
-              />
-              <n-button size="small" color="#A58163" @click="handleAddVideoModel" :disabled="!newVideoModel">
-                Add
-              </n-button>
-            </div>
-            <div class="model-tags">
-              <n-tag 
-                v-for="model in allVideoModels" 
-                :key="model.key"
-                size="small"
-                :closable="model.isCustom"
-                :color="model.isCustom ? { color: 'rgba(165, 129, 99, 0.1)', textColor: '#A58163', borderColor: 'rgba(165, 129, 99, 0.2)' } : undefined"
-                @close="removeCustomVideoModel(model.key)"
-              >
-                {{ model.label }}
-              </n-tag>
-            </div>
-          </div>
+      <div class="profile-body">
+        <div class="avatar-column">
+          <button class="avatar-wrap" @click="triggerAvatarUpload" title="Edit avatar">
+            <img v-if="avatarPreview" :src="avatarPreview" alt="avatar" class="avatar-image" />
+            <div v-else class="avatar-fallback">{{ avatarInitial }}</div>
+          </button>
+          <button class="avatar-edit-btn" @click="triggerAvatarUpload">Edit</button>
+          <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
         </div>
-      </n-tab-pane>
-    </n-tabs>
 
-    <template #footer>
-      <div class="flex justify-between items-center">
-        <a 
-          href="https://302.ai" 
-          target="_blank"
-          class="text-xs text-[var(--text-secondary)] hover:text-[var(--accent-color)] transition-colors"
-        >
-          No API key? Register here
-        </a>
-        <div class="flex gap-2">
-          <n-button @click="handleClear" tertiary>Clear</n-button>
-          <n-button @click="showModal = false">Cancel</n-button>
-          <n-button type="primary" color="#A58163" @click="handleSave">Save</n-button>
+        <div class="form-column">
+          <div class="field-grid">
+            <div class="field-card">
+              <label class="field-label">ID</label>
+              <n-input v-model:value="formData.profileId" placeholder="Enter your ID" />
+            </div>
+            <div class="field-card">
+              <label class="field-label">Email</label>
+              <n-input :value="formData.email" readonly />
+            </div>
+          </div>
+
+          <div class="field-card field-card-full">
+            <label class="field-label">User UID</label>
+            <n-input :value="formData.userId" readonly />
+          </div>
+
+          <div class="actions-row">
+            <n-button class="save-btn" :loading="saving" :disabled="saving" @click="handleSave">Save changes</n-button>
+          </div>
         </div>
       </div>
-    </template>
+    </div>
   </n-modal>
 </template>
 
 <script setup>
-/**
- * API Settings Component | API 设置组件
- * Modal for configuring API key, base URL, and custom models
- */
-import { ref, reactive, watch } from 'vue'
-import { NModal, NForm, NFormItem, NInput, NButton, NAlert, NDivider, NTag, NTabs, NTabPane } from 'naive-ui'
-import { useApiConfig, useModelConfig } from '../hooks'
-import { DEFAULT_API_BASE_URL, DEFAULT_API_KEY } from '../utils/constants'
+import { computed, reactive, ref, watch } from 'vue'
+import { NButton, NIcon, NInput, NModal } from 'naive-ui'
+import { useAuthStore } from '@/stores/auth'
+import { CloseOutline } from '../icons/coolicons'
 
-// Props | 属性
 const props = defineProps({
   show: {
     type: Boolean,
@@ -199,167 +57,326 @@ const props = defineProps({
   }
 })
 
-// Emits | 事件
 const emit = defineEmits(['update:show', 'saved'])
 
-// API Config hook | API 配置 hook
-const { apiKey, baseUrl, isConfigured, setApiKey, setBaseUrl, clear: clearConfig } = useApiConfig()
+const { user, updateProfile } = useAuthStore()
 
-// Model Config hook | 模型配置 hook
-const { 
-  customChatModels, 
-  customImageModels, 
-  customVideoModels,
-  allChatModels,
-  allImageModels,
-  allVideoModels,
-  addCustomChatModel,
-  addCustomImageModel,
-  addCustomVideoModel,
-  removeCustomChatModel,
-  removeCustomImageModel,
-  removeCustomVideoModel,
-  clearCustomModels
-} = useModelConfig()
-
-// Modal visibility | 弹窗可见性
 const showModal = ref(props.show)
+const saving = ref(false)
+const avatarInputRef = ref(null)
+const avatarPreview = ref('')
+const hasAvatarChange = ref(false)
 
-// Form data | 表单数据
 const formData = reactive({
-  apiKey: apiKey.value,
-  baseUrl: baseUrl.value
+  profileId: '',
+  email: '',
+  userId: ''
 })
 
-// New model inputs | 新模型输入
-const newChatModel = ref('')
-const newImageModel = ref('')
-const newVideoModel = ref('')
+const avatarInitial = computed(() => (formData.profileId || formData.email || 'U').charAt(0).toUpperCase())
 
-// Watch prop changes | 监听属性变化
-watch(() => props.show, (val) => {
-  showModal.value = val
-  if (val) {
-    formData.apiKey = apiKey.value
-    formData.baseUrl = baseUrl.value
+const syncForm = () => {
+  const current = user.value || {}
+  formData.profileId = current.displayName || ''
+  formData.email = current.email || ''
+  formData.userId = current.id || ''
+  avatarPreview.value = current.avatarUrl || ''
+  hasAvatarChange.value = false
+}
+
+watch(
+  () => props.show,
+  (val) => {
+    showModal.value = val
+    if (val) syncForm()
   }
-})
+)
 
-// Watch modal changes | 监听弹窗变化
 watch(showModal, (val) => {
   emit('update:show', val)
 })
 
-// Handle add models | 处理添加模型
-const handleAddChatModel = () => {
-  if (newChatModel.value.trim()) {
-    addCustomChatModel(newChatModel.value.trim())
-    newChatModel.value = ''
-  }
+watch(
+  () => user.value,
+  () => {
+    if (showModal.value) syncForm()
+  },
+  { deep: true }
+)
+
+const triggerAvatarUpload = () => {
+  avatarInputRef.value?.click()
 }
 
-const handleAddImageModel = () => {
-  if (newImageModel.value.trim()) {
-    addCustomImageModel(newImageModel.value.trim())
-    newImageModel.value = ''
+const handleAvatarChange = (event) => {
+  const file = event.target?.files?.[0]
+  if (!file) return
+
+  if (!file.type.startsWith('image/')) {
+    window.$message?.warning('Please choose an image file')
+    return
   }
+
+  if (file.size > 2 * 1024 * 1024) {
+    window.$message?.warning('Avatar must be <= 2MB')
+    return
+  }
+
+  const reader = new FileReader()
+  reader.onload = () => {
+    avatarPreview.value = String(reader.result || '')
+    hasAvatarChange.value = true
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
 }
 
-const handleAddVideoModel = () => {
-  if (newVideoModel.value.trim()) {
-    addCustomVideoModel(newVideoModel.value.trim())
-    newVideoModel.value = ''
-  }
-}
+const handleSave = async () => {
+  const nextId = formData.profileId.trim()
+  const currentUser = user.value || {}
 
-// Handle save | 处理保存
-const handleSave = () => {
-  if (formData.apiKey) {
-    setApiKey(formData.apiKey)
+  if (!nextId || nextId.length < 2) {
+    window.$message?.warning('ID must be at least 2 characters')
+    return
   }
-  if (formData.baseUrl) {
-    setBaseUrl(formData.baseUrl)
-  }
-  showModal.value = false
-  emit('saved')
-}
 
-// Handle clear | 处理清除
-const handleClear = () => {
-  clearConfig()
-  clearCustomModels()
-  formData.apiKey = DEFAULT_API_KEY
-  formData.baseUrl = DEFAULT_API_BASE_URL
+  const payload = {}
+  if (nextId !== (currentUser.displayName || '')) {
+    payload.displayName = nextId
+  }
+  if (hasAvatarChange.value) {
+    payload.avatarUrl = avatarPreview.value || null
+  }
+
+  if (Object.keys(payload).length === 0) {
+    window.$message?.info('No changes to save')
+    return
+  }
+
+  saving.value = true
+  try {
+    await updateProfile(payload)
+    window.$message?.success('Profile updated')
+    emit('saved')
+    showModal.value = false
+  } catch (err) {
+    window.$message?.error(err?.response?.data?.message || err?.message || 'Failed to update profile')
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 
 <style scoped>
-.endpoint-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: var(--bg-secondary, #f5f5f5);
-  border-radius: 6px;
+.profile-modal {
+  width: min(760px, calc(100vw - 48px));
+  min-height: 400px;
+  padding: 18px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(143, 143, 143, 0.24);
+  background: radial-gradient(120% 120% at 80% 45%, rgba(114, 40, 40, 0.16), transparent 60%), #090a0d;
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.5);
 }
 
-.endpoint-item {
+.profile-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 14px;
 }
 
-.endpoint-label {
-  font-size: 13px;
-  color: var(--text-secondary, #666);
-  min-width: 70px;
+.profile-title {
+  margin: 0;
+  color: #f3f4f7;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-.endpoint-tag {
-  font-family: monospace;
-  font-size: 12px;
+.close-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8f939e;
+  border: 1px solid transparent;
 }
 
-.model-config-section {
+.close-btn:hover {
+  border-color: rgba(143, 143, 143, 0.3);
+  color: #d7dbe3;
+}
+
+.profile-body {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.avatar-column {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-}
-
-.model-group {
-  padding: 12px;
-  background: var(--bg-secondary, #f5f5f5);
-  border-radius: 8px;
-}
-
-.model-group-header {
-  display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
 }
 
-.model-group-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary, #333);
+.avatar-wrap {
+  width: 100px;
+  height: 100px;
+  border-radius: 999px;
+  border: 1px solid rgba(143, 143, 143, 0.28);
+  overflow: hidden;
+  background: #101218;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.model-input-row {
+.avatar-wrap:hover {
+  border-color: rgba(226, 229, 235, 0.5);
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-fallback {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f2f3f5;
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.avatar-edit-btn {
+  color: #8f939e;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.avatar-edit-btn:hover {
+  color: #f2f3f5;
+}
+
+.form-column {
   display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 8px;
 }
 
-.model-input-row .n-input {
-  flex: 1;
+.field-card {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(143, 143, 143, 0.24);
+  background: rgba(9, 11, 15, 0.85);
 }
 
-.model-tags {
+.field-card-full {
+  width: 100%;
+}
+
+.field-label {
+  display: block;
+  color: #9ea4af;
+  font-size: 11px;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+
+.actions-row {
+  margin-top: auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  justify-content: flex-end;
+}
+
+:deep(.n-input .n-input__input-el) {
+  color: #f2f3f5;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+:deep(.n-input.n-input--disabled .n-input__input-el) {
+  color: #7f8590;
+}
+
+:deep(.n-input .n-input__border),
+:deep(.n-input .n-input__state-border) {
+  display: none;
+}
+
+:deep(.n-input) {
+  background: transparent;
+}
+
+.save-btn {
+  min-width: 112px;
+  height: 34px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(143, 143, 143, 0.36);
+}
+
+.save-btn:hover {
+  border-color: rgba(226, 229, 235, 0.72);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+@media (max-width: 1200px) {
+  .profile-modal {
+    width: min(620px, calc(100vw - 24px));
+    min-height: auto;
+    padding: 14px;
+  }
+
+  .profile-title {
+    font-size: 16px;
+  }
+
+  .profile-body {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar-column {
+    align-items: flex-start;
+  }
+
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar-wrap {
+    width: 88px;
+    height: 88px;
+  }
+
+  .field-label {
+    font-size: 10px;
+  }
+
+  :deep(.n-input .n-input__input-el) {
+    font-size: 12px;
+  }
+
+  .save-btn {
+    min-width: 102px;
+    height: 32px;
+    font-size: 11px;
+  }
 }
 </style>

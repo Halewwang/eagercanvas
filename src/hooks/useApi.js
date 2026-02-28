@@ -73,8 +73,9 @@ export const useChat = (options = {}) => {
         abortController = new AbortController()
         let fullResponse = ''
 
+        const resolvedModel = typeof options.model === 'function' ? options.model() : options.model
         for await (const chunk of streamChatCompletions(
-          { model: options.model || DEFAULT_CHAT_MODEL, messages: msgList },
+          { model: resolvedModel || DEFAULT_CHAT_MODEL, messages: msgList },
           abortController.signal
         )) {
           fullResponse += chunk

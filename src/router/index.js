@@ -33,6 +33,11 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  const bypassAuthInDev = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH !== 'false'
+  if (bypassAuthInDev) {
+    return true
+  }
+
   const auth = useAuthStore()
   await auth.bootstrapAuth()
 

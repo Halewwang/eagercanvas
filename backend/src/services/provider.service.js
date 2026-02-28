@@ -63,11 +63,11 @@ const callProvider = async (path, body, method = 'POST') => {
   return data || {}
 }
 
-const callProviderWithFallback = async (paths, method = 'GET') => {
+const callProviderWithFallback = async (paths, method = 'GET', body = null) => {
   let lastError
   for (const path of paths) {
     try {
-      return await callProvider(path, null, method)
+      return await callProvider(path, body, method)
     } catch (error) {
       lastError = error
     }
@@ -174,6 +174,44 @@ const normalizeSoraStatus = (value) => {
   return status || 'processing'
 }
 
+const extractTaskId = (data = {}) => {
+  const candidates = [
+    data?.task_id,
+    data?.taskId,
+    data?.id,
+    data?.task?.task_id,
+    data?.task?.id,
+    data?.data?.task_id,
+    data?.data?.taskId,
+    data?.data?.id,
+    data?.data?.task?.task_id,
+    data?.output?.task_id,
+    data?.output?.id
+  ]
+
+  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+  return found ? String(found) : ''
+}
+
+const extractKlingStatus = (data = {}) =>
+  normalizeKlingStatus(
+    data?.task?.task_status ??
+    data?.task?.status ??
+    data?.status ??
+    data?.data?.task?.task_status ??
+    data?.data?.task?.status ??
+    data?.data?.status
+  )
+
+const extractSoraStatus = (data = {}) =>
+  normalizeSoraStatus(
+    data?.status ??
+    data?.state ??
+    data?.task?.status ??
+    data?.data?.status ??
+    data?.data?.state
+  )
+
 export const providerChatCompletions = (payload) =>
   callProvider('/v1/chat/completions', payload)
 
@@ -213,7 +251,7 @@ export const providerCreateVideo = async (payload = {}) => {
   const inputImage = pickFirstImageInput(payload)
 
   if (lowerModel.startsWith('kling-o1')) {
-    const raw = await callProvider('/klingai/v1/videos/m2v_omni_video', {
+    const requestBody = {
       model_name: 'kling-v1-6',
       input: {
         mode: inputImage ? 'image2video' : 'text2video',
@@ -222,26 +260,44 @@ export const providerCreateVideo = async (payload = {}) => {
         duration,
         aspect_ratio: aspectRatio
       }
-    })
+    }
+
+    const raw = await callProviderWithFallback(
+      [
+        '/klingai/m2v_omni_video',
+        '/klingai/v1/videos/m2v_omni_video'
+      ],
+      'POST',
+      requestBody
+    )
 
     return {
-      task_id: raw?.task?.task_id || raw?.task_id || raw?.id || '',
-      status: normalizeKlingStatus(raw?.task?.task_status || raw?.task?.status || raw?.status),
+      task_id: extractTaskId(raw),
+      status: extractKlingStatus(raw),
       raw
     }
   }
 
   if (lowerModel === 'sora-2') {
-    const raw = await callProvider('/v1/videos', {
+    const requestBody = {
       model: 'sora-2',
       prompt,
       size: size || '1280x720',
       n_seconds: duration
-    })
+    }
+
+    const raw = await callProviderWithFallback(
+      [
+        '/openai/v1/videos',
+        '/v1/videos'
+      ],
+      'POST',
+      requestBody
+    )
 
     return {
-      task_id: raw?.id || raw?.task_id || '',
-      status: normalizeSoraStatus(raw?.status),
+      task_id: extractTaskId(raw),
+      status: extractSoraStatus(raw),
       raw
     }
   }
@@ -250,29 +306,46 @@ export const providerCreateVideo = async (payload = {}) => {
 }
 
 export const providerVideoStatus = async (taskId) => {
-  if (String(taskId).startsWith('kling_')) {
-    const raw = await callProviderWithFallback([
-      `/klingai/v1/videos/m2v_omni_video/${taskId}`,
-      `/klingai/v1/videos/m2v_omni_video?task_id=${taskId}`,
-      `/klingai/v1/videos/m2v_omni_video/status/${taskId}`
-    ])
+  const safeTaskId = String(taskId || '')
+  const mayBeKling = safeTaskId.startsWith('kling_') || safeTaskId.startsWith('task_')
+  const klingStatusPaths = [
+    `/klingai/m2v_omni_video/${taskId}`,
+    `/klingai/m2v_omni_video?task_id=${taskId}`,
+    `/klingai/m2v_omni_video/status/${taskId}`,
+    `/klingai/v1/videos/m2v_omni_video/${taskId}`,
+    `/klingai/v1/videos/m2v_omni_video?task_id=${taskId}`,
+    `/klingai/v1/videos/m2v_omni_video/status/${taskId}`
+  ]
+  const openAiStatusPaths = [
+    `/openai/v1/videos/${taskId}`,
+    `/v1/videos/${taskId}`
+  ]
 
-    const videoUrl = extractVideoUrl(raw)
-    const status = videoUrl
-      ? 'completed'
-      : normalizeKlingStatus(raw?.task?.task_status || raw?.task?.status || raw?.status)
+  if (mayBeKling) {
+    try {
+      const raw = await callProviderWithFallback(klingStatusPaths)
 
-    return {
-      task_id: taskId,
-      status,
-      video_url: videoUrl || undefined,
-      raw
+      const videoUrl = extractVideoUrl(raw)
+      const status = videoUrl
+        ? 'completed'
+        : extractKlingStatus(raw)
+
+      return {
+        task_id: taskId,
+        status,
+        video_url: videoUrl || undefined,
+        raw
+      }
+    } catch {
+      // Fall through to OpenAI-compatible status endpoints.
     }
   }
 
-  const raw = await callProvider(`/v1/videos/${taskId}`, null, 'GET')
+  const raw = await callProviderWithFallback(
+    mayBeKling ? openAiStatusPaths : [...openAiStatusPaths, ...klingStatusPaths]
+  )
   const videoUrl = extractVideoUrl(raw)
-  const status = videoUrl ? 'completed' : normalizeSoraStatus(raw?.status)
+  const status = videoUrl ? 'completed' : extractSoraStatus(raw)
 
   return {
     task_id: taskId,

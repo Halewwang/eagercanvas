@@ -1,696 +1,921 @@
 <template>
-  <!-- Image node wrapper for hover area | 图片节点包裹层，扩展悬浮区域 -->
-  <div class="image-node-wrapper" @mouseenter="showActions = true" @mouseleave="showActions = false">
-    <!-- Image node | 图片节点 -->
+  <div class="image-node-wrapper" @mouseenter="showCapsule = true" @mouseleave="showCapsule = false">
+    <div class="node-meta-row" @mousedown="handleMetaMouseDown">
+      <n-icon :size="16" class="meta-icon"><ImageOutline /></n-icon>
+      <span class="meta-title">Image</span>
+    </div>
+
+    <div v-show="showCapsule || isSelected" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
+      <div class="capsule-inner">
+        <div class="capsule-group">
+          <n-dropdown :options="imageModelDropdownOptions" @select="setImageModel">
+            <button class="capsule-select">{{ displayImageModel }}</button>
+          </n-dropdown>
+
+          <n-dropdown :options="ratioDropdownOptions" @select="setImageRatio">
+            <button class="capsule-select">{{ displayRatio }}</button>
+          </n-dropdown>
+
+          <n-dropdown :options="resolutionDropdownOptions" @select="setResolution">
+            <button class="capsule-select capsule-resolution">{{ displayResolution }}</button>
+          </n-dropdown>
+        </div>
+
+        <div class="capsule-divider" />
+
+        <div class="capsule-group">
+          <n-dropdown :options="createLinkOptions" @select="createLinkedNode">
+            <button class="capsule-icon" title="Create linked module">
+              <n-icon :size="14"><AddOutline /></n-icon>
+            </button>
+          </n-dropdown>
+          <button class="capsule-icon" :disabled="!data.url" @click="openPreviewModal" title="Preview">
+            <n-icon :size="14"><ExpandOutline /></n-icon>
+          </button>
+          <button class="capsule-icon" @click="handleDuplicate" title="Duplicate">
+            <n-icon :size="14"><CopyOutline /></n-icon>
+          </button>
+
+          <button class="capsule-icon" @click="handleDelete" title="Delete">
+            <n-icon :size="14"><TrashOutline /></n-icon>
+          </button>
+        </div>
+      </div>
+      <div class="capsule-inner capsule-generate">
+        <button class="capsule-icon capsule-icon-solid capsule-create" :disabled="isImageBusy" @click="handleGenerateImage" title="Create">
+          <n-spin v-if="imageActionLoading === 'create'" :size="12" />
+          <template v-else>
+            <n-icon :size="14"><SparklesOutline /></n-icon>
+            <span class="capsule-create-label">Create</span>
+          </template>
+        </button>
+        <button class="capsule-icon" :disabled="isImageBusy" @click="handleRegenerateImage" title="Regenerate">
+          <n-spin v-if="imageActionLoading === 'regenerate'" :size="12" />
+          <n-icon v-else :size="14"><RefreshOutline /></n-icon>
+        </button>
+      </div>
+    </div>
+
     <div
-      class="image-node bg-[var(--bg-secondary)] rounded-xl border min-w-[200px] max-w-[280px] relative transition-all duration-200"
-      :class="data.selected ? 'border-1 border-blue-500 shadow-lg shadow-blue-500/20' : 'border border-[var(--border-color)]'">
-      <!-- Header | 头部 -->
-      <div class="px-3 py-2 border-b border-[var(--border-color)]">
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-medium text-[var(--text-primary)]">{{ data.label || 'Image Result' }}</span>
-          <div class="flex items-center gap-1">
-            <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
-              <n-icon :size="14">
-                <TrashOutline />
-              </n-icon>
-            </button>
-            <!-- <button class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
-              <n-icon :size="14">
-                <ExpandOutline />
-              </n-icon>
-            </button> -->
-          </div>
-        </div>
-        <!-- Model name | Model名称 -->
-        <div v-if="data.model" class="mt-1 text-xs text-[var(--text-secondary)] truncate">
-          {{ data.model }}
-        </div>
-      </div>
-
-      <!-- Image preview area | 图片Preview区域 -->
-      <div class="p-3">
-        <!-- Loading state | 加载状态 -->
-        <div v-if="data.loading"
-          class="aspect-square rounded-xl bg-gradient-to-br from-cyan-400 via-blue-300 to-amber-200 flex flex-col items-center justify-center gap-3 relative overflow-hidden">
-          <!-- Animated gradient overlay | 动画渐变遮罩 -->
-          <div
-            class="absolute inset-0 bg-gradient-to-br from-cyan-500/20 via-blue-400/20 to-amber-300/20 animate-pulse">
-          </div>
-
-          <!-- Loading image | 加载图片 -->
-          <div class="relative z-10">
-            <img src="../../assets/loading.webp" alt="Loading" class="w-14 h-12" />
-          </div>
-
-          <span class="text-sm text-white font-medium relative z-10">In progress</span>
+      class="image-node rounded-2xl border relative transition-all duration-200 overflow-visible"
+      :class="isSelected ? 'node-selected' : 'node-default'"
+      :style="moduleStyle"
+    >
+      <div class="module-stage" :style="stageStyle">
+        <div v-if="showProgress" class="module-progress-shell">
+          <div class="module-progress-track"></div>
+          <div class="module-progress-bar" :style="progressBarStyle"></div>
+          <div class="module-progress-label">Generating image... {{ progressPercent }}%</div>
         </div>
 
-        <!-- Error state | 错误状态 -->
-        <div v-else-if="data.error"
-          class="aspect-square rounded-xl bg-red-50 dark:bg-red-900/20 flex flex-col items-center justify-center gap-2 border border-red-200 dark:border-red-800">
-          <n-icon :size="32" class="text-red-500">
-            <CloseCircleOutline />
-          </n-icon>
-          <span class="text-sm text-red-600 dark:text-red-400 text-center px-2">{{ data.error }}</span>
-        </div>
-
-        <!-- Image display | 图片显示 -->
-        <div 
-          v-else-if="data.url" 
-          class="rounded-xl overflow-hidden relative" 
-          ref="imageContainerRef"
+        <div
+          v-else-if="data.error"
+          class="w-full h-full bg-[#231a1d] flex flex-col items-center justify-center gap-2"
         >
-          <img 
-            :src="data.url" 
-            :alt="data.label" 
-            class="w-full h-auto object-cover"
-            :class="{ 'pointer-events-none': isInpaintMode }"
-          />
-          
-          <!-- Inpaint canvas with events | 涂抹画布（带事件） -->
-          <canvas 
-            v-if="isInpaintMode"
-            ref="canvasRef"
-            class="absolute inset-0 w-full h-full cursor-none z-10"
-            @mousedown.stop.prevent="onCanvasPaint"
-            @mousemove.stop="onCanvasMove"
-            @mouseup.stop="onPaintEnd"
-            @mouseleave="onPaintEnd"
-          />
-          
-          <!-- Brush cursor | 画笔光标 -->
-          <div 
-            v-show="brushCursor.visible && isInpaintMode"
-            class="absolute pointer-events-none border-2 border-purple-500 rounded-full bg-purple-400/30 transition-none"
-            :style="{
-              width: brushSize * 2 + 'px',
-              height: brushSize * 2 + 'px',
-              left: brushCursor.x - brushSize + 'px',
-              top: brushCursor.y - brushSize + 'px'
-            }"
-          />
-          
-          <!-- Inpaint toolbar | 涂抹工具栏 -->
-          <div 
-            v-show="isInpaintMode"
-            class="absolute top-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2 py-1 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm rounded-full shadow-md border border-gray-200/80 dark:border-gray-700 z-[9999]"
-            @mousedown.stop
-            @click.stop
-          >
-            <!-- Mode indicator | 模式指示 -->
-            <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 pr-1.5 border-r border-gray-200 dark:border-gray-600">
-              <n-icon :size="12"><BrushOutline /></n-icon>
-              <span>Erase</span>
-            </div>
-            
-            <!-- Size slider | 大小滑块 -->
-            <div class="flex items-center gap-1 w-16">
-              <div class="w-1.5 h-1.5 rounded-full bg-purple-400"></div>
-              <input 
-                type="range" 
-                v-model="brushSize" 
-                min="10" 
-                max="80" 
-                class="w-full h-0.5 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-purple"
-              />
-              <div class="w-2.5 h-2.5 rounded-full bg-purple-400"></div>
-            </div>
-            
-            <!-- Reset button | 重置按钮 -->
-            <button 
-              @click="clearMask"
-              class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              title="Clear"
-            >
-              <n-icon :size="12" class="text-gray-400"><RefreshOutline /></n-icon>
-            </button>
-            
-            <!-- Apply button | Apply按钮 -->
-            <button 
-              @click="applyInpaint"
-              class="px-2 py-0.5 bg-purple-500 hover:bg-purple-600 text-white text-xs rounded transition-colors"
-            >
-              Apply
-            </button>
-          </div>
+          <n-icon :size="30" class="text-red-500"><CloseCircleOutline /></n-icon>
+          <span class="text-sm text-red-400 text-center px-3">{{ data.error }}</span>
         </div>
 
-        <!-- URL Loading state | URL 加载状态 -->
-        <div v-else-if="urlLoading"
-          class="aspect-square rounded-xl bg-gradient-to-br from-cyan-400 via-blue-300 to-amber-200 flex flex-col items-center justify-center gap-3 relative overflow-hidden">
-          <div class="absolute inset-0 bg-gradient-to-br from-cyan-500/20 via-blue-400/20 to-amber-300/20 animate-pulse"></div>
-          <div class="relative z-10">
-            <img src="../../assets/loading.webp" alt="Loading" class="w-14 h-12" />
-          </div>
-          <span class="text-sm text-white font-medium relative z-10">Loading...</span>
+        <img
+          v-else-if="data.url"
+          :src="data.url"
+          :alt="data.label || 'Image'"
+          class="w-full h-full object-cover"
+        />
+
+        <div
+          v-else-if="urlLoading"
+          class="w-full h-full bg-[#1a1c21] flex flex-col items-center justify-center gap-3"
+        >
+          <img src="../../assets/loading.webp" alt="Loading" class="w-14 h-12" />
+          <span class="text-sm text-white font-medium">Loading...</span>
         </div>
 
-        <!-- Upload placeholder | 上传占位 -->
-        <div v-else class="rounded-xl bg-[var(--bg-tertiary)] border-2 border-dashed border-[var(--border-color)] p-3">
-          <!-- Upload area | 上传区域 -->
-          <div class="aspect-video flex flex-col items-center justify-center gap-2 relative cursor-pointer hover:bg-[var(--bg-secondary)] rounded-lg transition-colors text-center">
-            <n-icon :size="32" class="text-[var(--text-secondary)]">
-              <ImageOutline />
-            </n-icon>
-            <span class="text-sm text-[var(--text-secondary)] text-center">Drop an image or click to upload</span>
-            <input type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer"
-              @change="handleFileUpload" />
-          </div>
+        <div v-else class="w-full h-full bg-[#0f0f0f] flex flex-col items-center justify-center gap-2 relative text-center px-4">
+          <n-icon :size="32" class="text-[#7b818c]"><ImageOutline /></n-icon>
+          <span class="text-sm text-[#7b818c]">Drop an image or click to upload</span>
+          <button class="upload-btn" @click="triggerUpload">Upload</button>
+          <input ref="uploadInputRef" type="file" accept="image/*" class="hidden" @change="handleFileUpload" />
         </div>
       </div>
 
-      <!-- Handles | 连接点 -->
-      <Handle type="source" :position="Position.Right" id="right" class="!bg-[var(--accent-color)]" />
-      <Handle type="target" :position="Position.Left" id="left" class="!bg-[var(--accent-color)]" />
+      <Handle type="source" :position="Position.Right" id="right" :class="['node-handle-plus', 'node-handle-plus-right', { 'node-handle-plus-visible': showHandles }]" />
+      <Handle type="target" :position="Position.Left" id="left" :class="['node-handle-plus', 'node-handle-plus-left', { 'node-handle-plus-visible': showHandles }]" />
+
     </div>
 
-    <!-- Hover action buttons | 悬浮操作按钮 -->
-    <!-- Top right - Copy button | 右上角 - Copy按钮 -->
-    <div v-show="showActions" class="absolute -top-5 right-12 z-[1000]">
-      <button @click="handleDuplicate"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5  w-max">
-        <n-icon :size="16" class="text-gray-600">
-          <CopyOutline />
-        </n-icon>
-        <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
-      </button>
-    </div>
+    <n-modal v-model:show="showPreviewModal" :mask-closable="true">
+      <div class="zoom-modal-card" @click.stop>
+        <img :src="data.url" alt="Preview" class="zoom-image-original" />
+      </div>
+    </n-modal>
 
-    <!-- Right side - Action buttons | 右侧 - 操作按钮 -->
-    <div v-show="showActions && data.url"
-      class="absolute right-10 top-1/2 -translate-y-1/2 translate-x-full flex flex-col gap-2 z-[1000]">
-      <!-- Inpaint button | 涂抹Repaint按钮 -->
-      <!-- <button @click="toggleInpaintMode"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max"
-        :class="{ 'border-purple-400 bg-purple-50': isInpaintMode }">
-        <n-icon :size="16" :class="isInpaintMode ? 'text-purple-500' : 'text-gray-600'">
-          <BrushOutline />
-        </n-icon>
-        <span
-          class="text-xs max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap"
-          :class="isInpaintMode ? 'text-purple-500' : 'text-gray-600'">Inpaint</span>
-      </button> -->
-      <!-- Image generation button | Image to Image按钮 -->
-      <button @click="handleImageGen"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5  w-max">
-        <n-icon :size="16" class="text-gray-600">
-          <ImageOutline />
-        </n-icon>
-        <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">Image to Image</span>
-      </button>
-      <!-- Preview button | Preview按钮 -->
-      <button @click="handlePreview"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5 w-max">
-        <n-icon :size="16" class="text-gray-600">
-          <EyeOutline />
-        </n-icon>
-        <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">Preview</span>
-      </button>
-      <!-- Download button | Download按钮 -->
-      <button @click="handleDownload"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5  w-max">
-        <n-icon :size="16" class="text-gray-600">
-          <DownloadOutline />
-        </n-icon>
-        <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">Download</span>
-      </button>
-      <!-- Video generation button | Video Gen按钮 -->
-      <button @click="handleVideoGen"
-        class="action-btn group p-2 bg-white rounded-lg transition-all border border-gray-200 flex items-center gap-0 hover:gap-1.5  w-max">
-        <n-icon :size="16" class="text-gray-600">
-          <VideocamOutline />
-        </n-icon>
-        <span
-          class="text-xs text-gray-600 max-w-0 overflow-hidden group-hover:max-w-[80px] transition-all duration-200 whitespace-nowrap">Video Gen</span>
-      </button>
+    <div class="binding-status-wrap">
+      <div class="binding-status-row">
+        <div
+          v-for="item in imageInputStatusList"
+          :key="item.key"
+          class="binding-status-pill"
+          :class="item.active ? 'binding-status-pill-active' : 'binding-status-pill-idle'"
+        >
+          {{ item.label }}
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-/**
- * Image node component | 图片节点组件
- * Displays and manages image content with loading state
- */
-import { ref, nextTick } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NIcon } from 'naive-ui'
-import { TrashOutline, ExpandOutline, ImageOutline, CloseCircleOutline, CopyOutline, VideocamOutline, DownloadOutline, EyeOutline, BrushOutline, RefreshOutline, ColorWandOutline } from '../../icons/coolicons'
-import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes } from '../../stores/canvas'
-import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_SIZE } from '../../stores/models'
+import { NDropdown, NIcon, NModal, NSpin } from 'naive-ui'
+import {
+  AddOutline,
+  CloseCircleOutline,
+  CopyOutline,
+  ExpandOutline,
+  ImageOutline,
+  RefreshOutline,
+  SparklesOutline,
+  TrashOutline
+} from '../../icons/coolicons'
+import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
+import {
+  DEFAULT_IMAGE_MODEL,
+  DEFAULT_IMAGE_SIZE,
+  getModelConfig,
+  getModelSizeOptions,
+  imageModelOptions
+} from '../../stores/models'
+import { useApiConfig, useImageGeneration } from '../../hooks'
 
 const props = defineProps({
   id: String,
-  data: Object
+  data: Object,
+  selected: Boolean
 })
 
-// Vue Flow instance | Vue Flow 实例
-const { updateNodeInternals } = useVueFlow()
+const { updateNodeInternals, viewport } = useVueFlow()
+const { isConfigured } = useApiConfig()
+const imageGen = useImageGeneration()
 
-// Hover state | 悬浮状态
-const showActions = ref(true)
-
-// URL input state | URL 输入状态
-const urlInput = ref('')
+const showCapsule = ref(false)
 const urlLoading = ref(false)
+const isSelected = computed(() => !!props.selected || !!props.data?.selected)
+const showHandles = computed(() => showCapsule.value || isSelected.value)
 
-// Inpainting state | 涂抹Repaint状态
-const isInpaintMode = ref(false)
-const brushSize = ref(40)
-const isDrawing = ref(false)
-const canvasRef = ref(null)
-const imageContainerRef = ref(null)
-const interactionLayerRef = ref(null)
-const brushCursor = ref({ x: 0, y: 0, visible: false })
-const maskData = ref(null)
+const localImageModel = ref(props.data?.model || DEFAULT_IMAGE_MODEL)
+const localImageSize = ref(props.data?.size || DEFAULT_IMAGE_SIZE)
+const localImageQuality = ref(props.data?.quality || 'standard')
+const localImageRatio = ref('1:1')
+const localResolution = ref('1k')
+const uploadInputRef = ref(null)
+const showPreviewModal = ref(false)
+const imageActionLoading = ref('')
+const progressValue = ref(0)
+const showProgress = ref(false)
+const progressTimer = ref(null)
+const progressFinishTimer = ref(null)
+const createLinkOptions = [
+  { label: 'Link Text Module', key: 'text' },
+  { label: 'Link Image Module', key: 'image' },
+  { label: 'Link Video Module', key: 'video' }
+]
+const imageInputStatusMap = {
+  prompt: 'Prompt',
+  reference: 'Reference Picture'
+}
 
-// Toggle inpaint mode | 切换涂抹模式
-const toggleInpaintMode = () => {
-  isInpaintMode.value = !isInpaintMode.value
-  if (isInpaintMode.value) {
-    nextTick(() => initCanvas())
-  } else {
-    clearMask()
+const BASE_SIZE_BY_RATIO = {
+  '1:1': { w: 1024, h: 1024 },
+  '4:3': { w: 1152, h: 864 },
+  '3:4': { w: 864, h: 1152 },
+  '16:9': { w: 1280, h: 720 },
+  '9:16': { w: 720, h: 1280 }
+}
+
+const ratioFromSizeKey = (sizeKey) => {
+  const [w, h] = String(sizeKey || '').split('x').map(Number)
+  if (!w || !h) return '1:1'
+  const ratio = w / h
+  if (Math.abs(ratio - 1) < 0.02) return '1:1'
+  if (Math.abs(ratio - 16 / 9) < 0.03) return '16:9'
+  if (Math.abs(ratio - 9 / 16) < 0.03) return '9:16'
+  if (Math.abs(ratio - 4 / 3) < 0.03) return '4:3'
+  if (Math.abs(ratio - 3 / 4) < 0.03) return '3:4'
+  return '1:1'
+}
+
+const resolutionFromSizeKey = (sizeKey) => {
+  const [w, h] = String(sizeKey || '').split('x').map(Number)
+  if (!w || !h) return '1k'
+  const ratio = ratioFromSizeKey(sizeKey)
+  const base = BASE_SIZE_BY_RATIO[ratio] || BASE_SIZE_BY_RATIO['1:1']
+  const scale = Math.max(w / base.w, h / base.h)
+  if (scale >= 3.5) return '4k'
+  if (scale >= 1.8) return '2k'
+  return '1k'
+}
+
+localImageRatio.value = props.data?.ratio || ratioFromSizeKey(localImageSize.value)
+localResolution.value = props.data?.resolution || resolutionFromSizeKey(localImageSize.value)
+
+watch(
+  () => props.data,
+  (val) => {
+    if (!val) return
+    if (val.model && val.model !== localImageModel.value) localImageModel.value = val.model
+    if (val.size && val.size !== localImageSize.value) localImageSize.value = val.size
+    if (val.quality && val.quality !== localImageQuality.value) localImageQuality.value = val.quality
+    localImageRatio.value = val.ratio || ratioFromSizeKey(localImageSize.value)
+    localResolution.value = val.resolution || resolutionFromSizeKey(localImageSize.value)
+  },
+  { deep: true }
+)
+
+const imageModelDropdownOptions = computed(() => imageModelOptions.value.map(m => ({ key: m.key, label: m.label })))
+const imageSizeOptions = computed(() => getModelSizeOptions(localImageModel.value, localImageQuality.value))
+const sizeMetaOptions = computed(() =>
+  imageSizeOptions.value.map((opt) => {
+    const key = String(opt.key || '')
+    const [w, h] = key.split('x').map(Number)
+    const ratio = ratioFromSizeKey(key)
+    const resolutionKey = resolutionFromSizeKey(key)
+    return {
+      key,
+      ratio,
+      resolutionKey,
+      pixels: (w || 0) * (h || 0)
+    }
+  })
+)
+
+const ratioDropdownOptions = computed(() => {
+  const seen = new Set()
+  return sizeMetaOptions.value
+    .map((opt) => opt.ratio)
+    .filter((ratio) => {
+      if (seen.has(ratio)) return false
+      seen.add(ratio)
+      return true
+    })
+    .map((ratio) => ({ key: ratio, label: ratio }))
+})
+
+const resolutionDropdownOptions = computed(() => {
+  const seen = new Set()
+  const list = sizeMetaOptions.value
+    .filter((opt) => opt.ratio === localImageRatio.value)
+    .sort((a, b) => a.pixels - b.pixels)
+    .filter((opt) => {
+      if (seen.has(opt.resolutionKey)) return false
+      seen.add(opt.resolutionKey)
+      return true
+    })
+    .map((opt) => ({ key: opt.resolutionKey, label: opt.resolutionKey.toUpperCase() }))
+  return list.length > 0 ? list : [{ key: '1k', label: '1K' }]
+})
+
+const displayImageModel = computed(() => {
+  return imageModelOptions.value.find(m => m.key === localImageModel.value)?.label || localImageModel.value
+})
+
+const displayRatio = computed(() => {
+  return localImageRatio.value
+})
+const displayResolution = computed(() => localResolution.value.toUpperCase())
+
+const ratioFromSize = computed(() => {
+  const [w, h] = String(localImageSize.value || '').split('x').map(Number)
+  if (!w || !h) return '1:1'
+  const ratio = w / h
+  if (Math.abs(ratio - 1) < 0.02) return '1:1'
+  if (Math.abs(ratio - 16 / 9) < 0.03) return '16:9'
+  if (Math.abs(ratio - 9 / 16) < 0.03) return '9:16'
+  if (Math.abs(ratio - 4 / 3) < 0.03) return '4:3'
+  if (Math.abs(ratio - 3 / 4) < 0.03) return '3:4'
+  return '1:1'
+})
+
+const stageStyle = computed(() => {
+  const ratio = ratioFromSize.value
+  const map = {
+    '1:1': { width: 320, height: 320 },
+    '16:9': { width: 420, height: 236 },
+    '9:16': { width: 260, height: 462 },
+    '4:3': { width: 360, height: 270 },
+    '3:4': { width: 280, height: 373 }
+  }
+  const picked = map[ratio] || map['1:1']
+  return {
+    width: `${picked.width}px`,
+    height: `${picked.height}px`
+  }
+})
+
+const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
+const progressPercent = computed(() => Math.round(progressValue.value))
+const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
+const capsuleStyle = computed(() => {
+  const zoom = viewport.value?.zoom || 1
+  const inverse = 1 / zoom
+  const safeScale = Math.min(1.06, Math.max(0.82, inverse))
+  return {
+    transform: `translateX(-50%) scale(${safeScale})`,
+    transformOrigin: 'top center'
+  }
+})
+const clearProgressTimers = () => {
+  if (progressTimer.value) {
+    clearInterval(progressTimer.value)
+    progressTimer.value = null
+  }
+  if (progressFinishTimer.value) {
+    clearTimeout(progressFinishTimer.value)
+    progressFinishTimer.value = null
   }
 }
 
-// Initialize canvas | 初始化画布
-const initCanvas = () => {
-  setTimeout(() => {
-    const canvas = canvasRef.value
-    if (!canvas) return
-    
-    // Set canvas internal size to match its CSS rendered size | 设置画布内部Size匹配 CSS 渲染Size
-    // clientWidth/clientHeight give the CSS box size
-    canvas.width = canvas.clientWidth
-    canvas.height = canvas.clientHeight
-    
-    const ctx = canvas.getContext('2d')
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-  }, 100)
+const startProgress = () => {
+  clearProgressTimers()
+  progressValue.value = 0
+  showProgress.value = true
+  progressTimer.value = setInterval(() => {
+    if (progressValue.value < 70) progressValue.value += 3
+    else if (progressValue.value < 90) progressValue.value += 1.2
+    else if (progressValue.value < 98) progressValue.value += 0.35
+    progressValue.value = Math.min(progressValue.value, 98)
+  }, 120)
 }
 
-// Ensure canvas size matches display | 确保画布Size匹配显示
-const syncCanvasSize = () => {
-  const canvas = canvasRef.value
-  if (!canvas) return
-  if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
-    canvas.width = canvas.clientWidth
-    canvas.height = canvas.clientHeight
-  }
+const finishProgress = () => {
+  clearProgressTimers()
+  progressTimer.value = setInterval(() => {
+    progressValue.value = Math.min(100, progressValue.value + 4.5)
+    if (progressValue.value >= 100) {
+      clearProgressTimers()
+      progressFinishTimer.value = setTimeout(() => {
+        showProgress.value = false
+        progressValue.value = 0
+      }, 120)
+    }
+  }, 16)
+}
+const isImageBusy = computed(() => !!props.data?.loading || imageGen.loading.value || !!imageActionLoading.value)
+watch(
+  () => props.data?.loading,
+  (loadingNow) => {
+    if (loadingNow) {
+      startProgress()
+      return
+    }
+    if (props.data?.error) {
+      clearProgressTimers()
+      showProgress.value = false
+      progressValue.value = 0
+      return
+    }
+    if (showProgress.value) finishProgress()
+  },
+  { immediate: true }
+)
+
+onUnmounted(() => clearProgressTimers())
+
+const pickNearestSizeKey = (ratioKey, resolutionKey) => {
+  let candidates = sizeMetaOptions.value.filter((opt) => opt.ratio === ratioKey)
+  if (candidates.length === 0) candidates = sizeMetaOptions.value
+  if (candidates.length === 0) return DEFAULT_IMAGE_SIZE
+  const exact = candidates.find((opt) => opt.resolutionKey === resolutionKey)
+  const picked = exact || [...candidates].sort((a, b) => a.pixels - b.pixels)[0]
+  localImageRatio.value = picked.ratio
+  localResolution.value = picked.resolutionKey
+  return picked.key
 }
 
-// Canvas paint handlers | 画布绘制处理器
-const onCanvasPaint = (e) => {
-  syncCanvasSize()
-  isDrawing.value = true
-  paintAt(e.offsetX, e.offsetY)
-  brushCursor.value = { x: e.offsetX, y: e.offsetY, visible: true }
+const setImageModel = (key) => {
+  localImageModel.value = key
+  const config = getModelConfig(key)
+  localImageSize.value = config?.defaultParams?.size || localImageSize.value || DEFAULT_IMAGE_SIZE
+  localImageQuality.value = config?.defaultParams?.quality || localImageQuality.value
+  localImageRatio.value = ratioFromSizeKey(localImageSize.value)
+  localResolution.value = resolutionFromSizeKey(localImageSize.value)
+  localImageSize.value = pickNearestSizeKey(localImageRatio.value, localResolution.value)
+  updateNode(props.id, {
+    model: localImageModel.value,
+    size: localImageSize.value,
+    quality: localImageQuality.value,
+    ratio: localImageRatio.value,
+    resolution: localResolution.value
+  })
 }
 
-const onCanvasMove = (e) => {
-  brushCursor.value = { x: e.offsetX, y: e.offsetY, visible: true }
-  if (isDrawing.value) {
-    paintAt(e.offsetX, e.offsetY)
-  }
+const setImageRatio = (ratioKey) => {
+  localImageSize.value = pickNearestSizeKey(ratioKey, localResolution.value)
+  updateNode(props.id, {
+    size: localImageSize.value,
+    ratio: localImageRatio.value,
+    resolution: localResolution.value
+  })
 }
 
-const onPaintEnd = () => {
-  isDrawing.value = false
-  brushCursor.value.visible = false
+const setResolution = (resolutionKey) => {
+  localImageSize.value = pickNearestSizeKey(localImageRatio.value, resolutionKey)
+  updateNode(props.id, {
+    size: localImageSize.value,
+    ratio: localImageRatio.value,
+    resolution: localResolution.value
+  })
 }
 
-// Paint at coordinates | 在坐标绘制
-const paintAt = (x, y) => {
-  const canvas = canvasRef.value
-  if (!canvas) return
-  
-  const ctx = canvas.getContext('2d')
-  ctx.beginPath()
-  ctx.arc(x, y, brushSize.value, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(139, 92, 246, 0.5)'
-  ctx.fill()
-}
+const getConnectedInputs = () => {
+  const incoming = edges.value.filter(e => e.target === props.id)
+  const promptParts = []
+  const imageRefs = []
 
-// Hide brush cursor | 隐藏画笔光标
-const hideBrushCursor = () => {
-  brushCursor.value.visible = false
-}
+  for (const edge of incoming) {
+    const source = nodes.value.find(n => n.id === edge.source)
+    if (!source || source.id === props.id) continue
 
-// Clear mask | Clear蒙版
-const clearMask = () => {
-  const canvas = canvasRef.value
-  if (!canvas) return
-  
-  const ctx = canvas.getContext('2d')
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  maskData.value = null
-}
+    if (source.type === 'text' && source.data?.content) {
+      promptParts.push({ order: edge.data?.promptOrder || 1, content: source.data.content })
+    }
 
-// Apply inpaint and create workflow | ApplyRepaint并创建工作流
-const applyInpaint = () => {
-  const canvas = canvasRef.value
-  if (!canvas || canvas.width === 0 || canvas.height === 0) {
-    window.$message?.error('Canvas not initialized')
-    return
-  }
-  
-  // Get the original image and resize mask to match | 获取原图并调整蒙版大小匹配
-  const container = imageContainerRef.value
-  const img = container?.querySelector('img')
-  if (!img) {
-    window.$message?.error('Image not found')
-    return
-  }
-  
-  // Create mask at original image resolution | 创建原图分辨率的蒙版
-  const maskCanvas = document.createElement('canvas')
-  const imgWidth = img.naturalWidth || img.width
-  const imgHeight = img.naturalHeight || img.height
-  maskCanvas.width = imgWidth
-  maskCanvas.height = imgHeight
-  const maskCtx = maskCanvas.getContext('2d')
-  
-  // Fill black background | 填充黑色背景
-  maskCtx.fillStyle = '#000000'
-  maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height)
-  
-  // Scale factor from display to original | 从显示Size到原图的缩放因子
-  const scaleX = imgWidth / canvas.width
-  const scaleY = imgHeight / canvas.height
-  
-  // Get painted areas and scale to original resolution | 获取绑制区域并缩放到原图分辨率
-  const originalData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height)
-  
-  // Draw scaled white areas on mask | 在蒙版上绘制缩放后的白色区域
-  maskCtx.fillStyle = '#FFFFFF'
-  for (let y = 0; y < canvas.height; y++) {
-    for (let x = 0; x < canvas.width; x++) {
-      const i = (y * canvas.width + x) * 4
-      if (originalData.data[i + 3] > 0) {
-        // Scale and draw | 缩放并绘制
-        maskCtx.fillRect(
-          Math.floor(x * scaleX),
-          Math.floor(y * scaleY),
-          Math.ceil(scaleX),
-          Math.ceil(scaleY)
-        )
-      }
+    if (source.type === 'image' && source.data?.url) {
+      imageRefs.push({ order: edge.data?.imageOrder || 1, image: source.data.base64 || source.data.url })
     }
   }
-  
-  // Convert to base64 (remove data URL prefix for API) | 转换为 base64（移除前缀用于 API）
-  const dataUrl = maskCanvas.toDataURL('image/png')
-  const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '')
-  maskData.value = base64Data
-  
-  // Create inpaint workflow | 创建Repaint工作流
-  createInpaintWorkflow()
-}
 
-// Create inpaint workflow | 创建Repaint工作流
-const createInpaintWorkflow = () => {
-  const currentNode = nodes.value.find(n => n.id === props.id)
-  const nodeX = currentNode?.position?.x || 0
-  const nodeY = currentNode?.position?.y || 0
-  
-  // Create text node for prompt | 创建文本节点用于Prompt
-  const textNodeId = addNode('text', { x: nodeX + 300, y: nodeY - 100 }, {
-    content: 'Describe the inpaint change...',
-    label: 'RepaintPrompt'
-  })
-  
-  // Create imageConfig node for inpainting | 创建Image to Image配置节点
-  const configNodeId = addNode('imageConfig', { x: nodeX + 600, y: nodeY }, {
-    model: DEFAULT_IMAGE_MODEL,
-    size: DEFAULT_IMAGE_SIZE,
-    label: 'Inpaint',
-    inpaintMode: true
-  })
-  
-  // Update current node with mask data | 更新当前节点的蒙版数据
-  updateNode(props.id, {
-    maskData: maskData.value,
-    hasInpaintMask: true
-  })
-  
-  // Connect image node to config node | 连接图片节点到配置节点
-  addEdge({
-    source: props.id,
-    target: configNodeId,
-    sourceHandle: 'right',
-    targetHandle: 'left'
-  })
-  
-  // Connect text node to config node | 连接文本节点到配置节点
-  addEdge({
-    source: textNodeId,
-    target: configNodeId,
-    sourceHandle: 'right',
-    targetHandle: 'left'
-  })
-  
-  // Exit inpaint mode | 退出涂抹模式
-  isInpaintMode.value = false
-  
-  // Force Vue Flow to recalculate | 强制重新计算
-  setTimeout(() => {
-    updateNodeInternals([textNodeId, configNodeId])
-  }, 50)
-  
-  window.$message?.success('Inpaint workflow created')
-}
+  promptParts.sort((a, b) => a.order - b.order)
+  imageRefs.sort((a, b) => a.order - b.order)
 
-// Convert file to base64 | 将文件转换为 base64
-const fileToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
+  return {
+    prompt: promptParts.map(p => p.content).join('\n\n').trim(),
+    refImages: imageRefs.map(i => i.image)
+  }
+}
+const activeImageInputSet = computed(() => {
+  const incoming = edges.value.filter((edge) => edge.target === props.id)
+  const activeKeys = []
+
+  for (const edge of incoming) {
+    const source = nodes.value.find((node) => node.id === edge.source)
+    if (!source) continue
+    if (source.type === 'text' && String(source.data?.content || '').trim()) activeKeys.push('prompt')
+    if (source.type === 'image' && String(source.data?.url || source.data?.base64 || '').trim()) activeKeys.push('reference')
+  }
+
+  return new Set(activeKeys)
+})
+const imageInputStatusList = computed(() => ([
+  { key: 'prompt', label: imageInputStatusMap.prompt, active: activeImageInputSet.value.has('prompt') },
+  { key: 'reference', label: imageInputStatusMap.reference, active: activeImageInputSet.value.has('reference') }
+]))
+
+const runImageGeneration = async (mode = 'create') => {
+  if (!isConfigured.value) {
+    window.$message?.warning('Please configure API Key first')
+    return
+  }
+
+  const { prompt, refImages } = getConnectedInputs()
+  const selfImage = props.data?.base64 || props.data?.url
+  const mergedRefs = [...refImages]
+  if (selfImage) mergedRefs.unshift(selfImage)
+
+  if (!prompt && mergedRefs.length === 0) {
+    window.$message?.warning('Connect a text node or provide a reference image')
+    return
+  }
+
+  imageActionLoading.value = mode
+  updateNode(props.id, { loading: true, error: '' })
+  try {
+    const result = await imageGen.generate({
+      model: localImageModel.value,
+      prompt: prompt || 'Generate a polished visual based on this reference.',
+      size: localImageSize.value,
+      quality: localImageQuality.value,
+      image: mergedRefs
+    })
+
+    if (!result?.[0]?.url) {
+      throw new Error('No image output')
+    }
+
+    updateNode(props.id, {
+      url: result[0].url,
+      loading: false,
+      model: localImageModel.value,
+      size: localImageSize.value,
+      quality: localImageQuality.value,
+      updatedAt: Date.now()
+    })
+    window.$message?.success(mode === 'regenerate' ? 'Image regenerated' : 'Image generated')
+  } catch (err) {
+    updateNode(props.id, { loading: false, error: err?.message || 'Generation failed' })
+    window.$message?.error(err?.message || 'Image generation failed')
+  } finally {
+    imageActionLoading.value = ''
+  }
+}
+const handleGenerateImage = () => runImageGeneration('create')
+const handleRegenerateImage = () => runImageGeneration('regenerate')
+
+const fileToBase64 = (file) =>
+  new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result)
     reader.onerror = reject
     reader.readAsDataURL(file)
   })
+
+const triggerUpload = () => {
+  uploadInputRef.value?.click()
 }
 
-// Handle file upload | 处理文件上传
 const handleFileUpload = async (event) => {
-  const file = event.target.files[0]
-  if (file) {
-    try {
-      // Convert to base64 | 转换为 base64
-      const base64 = await fileToBase64(file)
-      // Store both display URL and base64 | 同时存储显示 URL 和 base64
-      updateNode(props.id, {
-        url: base64,  // Use base64 as display URL | 使用 base64 作为显示 URL
-        base64: base64,  // Store base64 for API calls | 存储 base64 用于 API 调用
-        fileName: file.name,
-        fileType: file.type,
-        label: 'Reference',
-        updatedAt: Date.now()
-      })
-    } catch (err) {
-      console.error('File upload error:', err)
-      window.$message?.error('Image upload failed')
-    }
-  }
-}
+  const file = event.target.files?.[0]
+  if (!file) return
 
-// Handle URL submit | 处理 URL 提交
-const handleUrlSubmit = () => {
-  const url = urlInput.value.trim()
-  if (!url) return
-  
-  // Validate URL format | 验证 URL 格式
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    window.$message?.warning('Enter a valid image URL (http:// or https://)')
-    return
-  }
-  
-  // Show loading state | 显示加载状态
-  urlLoading.value = true
-  
-  // Preload image to check validity | 预加载图片检查有效性
-  const img = new Image()
-  img.onload = () => {
-    // Update node with URL | 更新节点 URL
+  try {
+    const base64 = await fileToBase64(file)
     updateNode(props.id, {
-      url: url,
-      label: 'Web Image',
+      url: base64,
+      base64,
+      fileName: file.name,
+      fileType: file.type,
+      label: 'Image',
       updatedAt: Date.now()
     })
-    urlInput.value = ''
-    urlLoading.value = false
+    setTimeout(() => updateNodeInternals(props.id), 30)
+  } catch {
+    window.$message?.error('Image upload failed')
   }
-  img.onerror = () => {
-    window.$message?.error('Failed to load image from URL')
-    urlLoading.value = false
-  }
-  img.src = url
 }
 
-// Handle delete | 处理删除
 const handleDelete = () => {
   removeNode(props.id)
 }
 
-// Handle duplicate | 处理Copy
 const handleDuplicate = () => {
   const newId = duplicateNode(props.id)
-  if (newId) {
-    // Clear selection and select the new node | Clear选中并选中新节点
-    updateNode(props.id, { selected: false })
-    updateNode(newId, { selected: true })
-    window.$message?.success('Node duplicated')
-    setTimeout(() => {
-      updateNodeInternals(newId)
-    }, 50)
-  }
+  if (!newId) return
+  updateNode(props.id, { selected: false })
+  updateNode(newId, { selected: true })
+  window.$message?.success('Node duplicated')
+  setTimeout(() => updateNodeInternals(newId), 50)
 }
 
-// Handle image generation | 处理Image to Image
-const handleImageGen = () => {
-  const currentNode = nodes.value.find(n => n.id === props.id)
-  const nodeX = currentNode?.position?.x || 0
-  const nodeY = currentNode?.position?.y || 0
+const selectNode = () => {
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    selected: node.id === props.id,
+    data: {
+      ...(node.data || {}),
+      selected: node.id === props.id
+    }
+  }))
+}
 
-  // Create text node for prompt | 创建文本节点用于Prompt
-  const textNodeId = addNode('text', { x: nodeX + 300, y: nodeY - 100 }, {
-    content: '',
-    label: 'Prompt'
-  })
+const handleMetaMouseDown = () => {
+  selectNode()
+}
 
-  // Create imageConfig node | 创建Text to Image配置节点
-  const configNodeId = addNode('imageConfig', { x: nodeX + 600, y: nodeY }, {
-    model: DEFAULT_IMAGE_MODEL,
-    size: DEFAULT_IMAGE_SIZE,
-    label: 'Image to Image'
-  })
+const openPreviewModal = () => {
+  if (!props.data?.url) return
+  showPreviewModal.value = true
+}
 
-  // Connect image node to config node | 连接图片节点到配置节点
-  addEdge({
-    source: props.id,
-    target: configNodeId,
-    sourceHandle: 'right',
-    targetHandle: 'left'
-  })
+const createLinkedNode = (type) => {
+  const side = 'right'
+  const currentNode = nodes.value.find((n) => n.id === props.id)
+  if (!currentNode) return
 
-  // Connect text node to config node | 连接文本节点到配置节点
-  addEdge({
-    source: textNodeId,
-    target: configNodeId,
-    sourceHandle: 'right',
-    targetHandle: 'left'
-  })
+  const stageWidth = Number.parseFloat(stageStyle.value.width) || 320
+  const moduleWidth = stageWidth + 2
+  const gapX = 172
+  const nextPosition = {
+    x: side === 'right' ? currentNode.position.x + moduleWidth + gapX : currentNode.position.x - gapX - moduleWidth,
+    y: currentNode.position.y
+  }
 
-  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点Size
+  const newNodeId = addNode(type, nextPosition)
+  if (!newNodeId) return
+
+  if (side === 'right') {
+    addEdge({
+      source: props.id,
+      target: newNodeId,
+      sourceHandle: 'right',
+      targetHandle: 'left'
+    })
+  } else {
+    addEdge({
+      source: newNodeId,
+      target: props.id,
+      sourceHandle: 'right',
+      targetHandle: 'left'
+    })
+  }
+
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    selected: node.id === newNodeId,
+    data: {
+      ...(node.data || {}),
+      selected: node.id === newNodeId
+    }
+  }))
+
   setTimeout(() => {
-    updateNodeInternals([textNodeId, configNodeId])
-  }, 50)
+    updateNodeInternals(props.id)
+    updateNodeInternals(newNodeId)
+  }, 60)
 }
 
-// Handle preview | 处理Preview
-const handlePreview = () => {
-  if (props.data.url) {
-    window.open(props.data.url, '_blank')
-  }
-}
-
-// Handle download | 处理Download
-const handleDownload = () => {
-  if (props.data.url) {
-    const link = document.createElement('a')
-    link.href = props.data.url
-    link.download = props.data.fileName || `image_${Date.now()}.png`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.$message?.success('Image download started')
-  }
-}
-
-// Handle video generation | 处理Video Gen
-const handleVideoGen = () => {
-  const currentNode = nodes.value.find(n => n.id === props.id)
-  const nodeX = currentNode?.position?.x || 0
-  const nodeY = currentNode?.position?.y || 0
-
-  // Create text node for prompt | 创建文本节点用于Prompt
-  const textNodeId = addNode('text', { x: nodeX + 300, y: nodeY - 100 }, {
-    content: '',
-    label: 'Prompt'
-  })
-
-  // Create videoConfig node | 创建视频配置节点
-  const configNodeId = addNode('videoConfig', { x: nodeX + 600, y: nodeY }, {
-    label: 'Video Gen'
-  })
-
-  // Connect image node to config node with role | 连接图片节点到配置节点并设置角色
-  addEdge({
-    source: props.id,
-    target: configNodeId,
-    sourceHandle: 'right',
-    targetHandle: 'left',
-    type: 'imageRole',
-    data: { imageRole: 'first_frame_image' } // Default to first frame | 默认First Frame
-  })
-
-  // Connect text node to config node | 连接文本节点到配置节点
-  addEdge({
-    source: textNodeId,
-    target: configNodeId,
-    sourceHandle: 'right',
-    targetHandle: 'left'
-  })
-
-  // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点Size
-  setTimeout(() => {
-    updateNodeInternals([textNodeId, configNodeId])
-  }, 50)
-}
 </script>
 
 <style scoped>
 .image-node-wrapper {
   position: relative;
-  padding-right: 50px;
-  padding-top: 20px;
+  padding-top: 88px;
 }
 
 .image-node {
   cursor: default;
   position: relative;
+  background: #0f0f0f;
 }
 
-/* Slider styling | 滑块样式 */
-.slider-purple::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #8b5cf6;
-  cursor: pointer;
-  border: 2px solid white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+.node-meta-row {
+  position: absolute;
+  top: 58px;
+  left: 0;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #9ca3af;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  border-radius: 10px;
+  cursor: grab;
 }
 
-.slider-purple::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #8b5cf6;
-  cursor: pointer;
-  border: 2px solid white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+.meta-icon {
+  color: #c9ccd2;
 }
 
-/* Inpaint mode cursor | 涂抹模式光标 */
-.cursor-none {
-  cursor: none;
+.meta-title {
+  color: #d7dbe3;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+
+.module-stage {
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.binding-status-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.binding-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.binding-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(143, 143, 143, 0.45);
+  background: #1d1d1d;
+  color: #8f939e;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.binding-status-pill-idle {
+  border-color: rgba(143, 143, 143, 0.36);
+  color: #818793;
+  background: #1a1a1a;
+}
+.binding-status-pill-active {
+  border-color: rgba(255, 255, 255, 0.62);
+  color: #f2f3f5;
+  background: #2a2a2a;
+}
+.module-progress-shell {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: #101010;
+}
+.module-progress-track {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+}
+.module-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: #2d2d2d;
+  transition: width 0.12s linear;
+}
+.module-progress-label {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  color: rgba(247, 249, 252, 0.9);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.capsule-menu {
+  pointer-events: auto;
+  top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.capsule-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(143, 143, 143, 0.45);
+  background: #1d1d1d;
+  backdrop-filter: blur(10px);
+}
+
+.capsule-generate {
+  padding: 7px;
+}
+
+.capsule-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.capsule-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.capsule-select {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  color: #e7e8eb;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 9px;
+  max-width: 148px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.capsule-resolution {
+  min-width: 0;
+  max-width: none;
+  text-align: left;
+}
+
+.capsule-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #b8bcc5;
+  background: rgba(255, 255, 255, 0.02);
+  transition: all 0.2s;
+}
+
+.capsule-icon-solid {
+  background: #1d1d1d;
+  color: #f6f8fc;
+  border-color: rgba(143, 143, 143, 0.65);
+}
+
+.capsule-create {
+  width: auto;
+  min-width: 86px;
+  padding: 0 11px;
+  gap: 6px;
+}
+
+.capsule-create-label {
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.capsule-icon:hover:not(:disabled) {
+  color: #f0f2f5;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.capsule-icon:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.node-default {
+  border-width: 0;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.node-selected {
+  border-width: 1px;
+  border-color: #8f8f8f;
+  box-shadow: none;
+}
+
+:deep(.node-handle-plus) {
+  width: 28px !important;
+  height: 28px !important;
+  display: grid !important;
+  place-items: center !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(214, 216, 222, 0.82) !important;
+  background: rgba(11, 13, 17, 0.96) !important;
+  color: #d6d8de !important;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.72);
+  z-index: 60 !important;
+  transition: none !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+:deep(.node-handle-plus::before) {
+  content: "+";
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  display: block;
+  margin: -1px 0 0 0;
+}
+
+:deep(.node-handle-plus-left) {
+  left: -25px !important;
+}
+
+:deep(.node-handle-plus-right) {
+  right: -25px !important;
+}
+
+:deep(.node-handle-plus-visible) {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.upload-btn {
+  margin-top: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d7dbe3;
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 6px 12px;
+  line-height: 1;
+}
+
+.zoom-modal-card {
+  max-width: calc(100vw - 80px);
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  background: #121212;
+  border: 1px solid rgba(143, 143, 143, 0.38);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.zoom-image-original {
+  display: block;
+  max-width: none;
+  max-height: none;
 }
 </style>

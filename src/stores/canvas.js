@@ -93,7 +93,7 @@ const getDefaultNodeData = (type) => {
       return {
         prompt: '',
         model: DEFAULT_IMAGE_MODEL,
-        size: imageModel?.defaultParams?.size || '1x1',
+        size: imageModel?.defaultParams?.size || '1024x1024',
         quality: imageModel?.defaultParams?.quality || 'standard',
         label: '文生图'
       }
@@ -111,12 +111,18 @@ const getDefaultNodeData = (type) => {
     case 'video':
       return {
         url: '',
+        model: DEFAULT_VIDEO_MODEL,
+        ratio: '16:9',
+        dur: 5,
         duration: 0,
         label: '视频节点'
       }
     case 'image':
       return {
         url: '',
+        model: DEFAULT_IMAGE_MODEL,
+        size: '1024x1024',
+        quality: 'standard',
         label: '图片节点'
       }
     case 'llmConfig':
