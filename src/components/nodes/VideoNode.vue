@@ -147,7 +147,13 @@ const imageRoleStatusMap = {
 
 const modelOptions = computed(() => videoModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const ratioOptions = computed(() => getModelRatioOptions(localModel.value))
-const sizeOptions = computed(() => getModelVideoSizeOptions(localModel.value, localRatio.value))
+const sizeOptions = computed(() => {
+  // Sora-2 size must strictly follow documented enum and should not be filtered by ratio.
+  if (localModel.value === 'sora-2') {
+    return getModelVideoSizeOptions(localModel.value)
+  }
+  return getModelVideoSizeOptions(localModel.value, localRatio.value)
+})
 const durationOptions = computed(() => getModelDurationOptions(localModel.value))
 const displayModel = computed(() => videoModelOptions.value.find(m => m.key === localModel.value)?.label || localModel.value)
 const displaySize = computed(() => String(localSize.value || '').trim())
