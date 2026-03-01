@@ -77,6 +77,19 @@
       <Handle type="source" :position="Position.Right" id="right" :class="['node-handle-plus', 'node-handle-plus-right', { 'node-handle-plus-visible': showHandles }]" />
       <Handle type="target" :position="Position.Left" id="left" :class="['node-handle-plus', 'node-handle-plus-left', { 'node-handle-plus-visible': showHandles }]" />
     </div>
+    <div class="binding-status-wrap">
+      <div class="binding-status-row">
+        <div
+          v-if="connectedTargets.length > 0"
+          class="binding-status-pill binding-status-pill-active"
+        >
+          Linked to {{ connectedTargets.length }} module{{ connectedTargets.length > 1 ? 's' : '' }}
+        </div>
+        <div v-else class="binding-status-pill binding-status-pill-idle">
+          Not linked
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -85,7 +98,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon, NSpin } from 'naive-ui'
 import { AddOutline, CloseCircleOutline, CopyOutline, RefreshOutline, SparklesOutline, TextOutline, TrashOutline } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, nodes, removeNode, updateNode } from '../../stores/canvas'
+import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useChat } from '../../hooks'
 import { chatModelOptions, DEFAULT_CHAT_MODEL } from '../../stores/models'
 
@@ -112,6 +125,10 @@ const createLinkOptions = [
   { label: 'Link Image Module', key: 'image' },
   { label: 'Link Video Module', key: 'video' }
 ]
+
+const connectedTargets = computed(() => {
+  return edges.value.filter(edge => edge.source === props.id).map(edge => edge.target)
+})
 
 const { send: sendChat } = useChat({
   systemPrompt: 'You are an expert writing assistant. Improve clarity, structure, and expression while keeping meaning accurate. Return only the rewritten text.',
@@ -396,5 +413,42 @@ const createLinkedNode = (type) => {
 :deep(.node-handle-plus-visible) {
   opacity: 1 !important;
   pointer-events: auto !important;
+}
+
+.binding-status-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.binding-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.binding-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(143, 143, 143, 0.45);
+  background: #1d1d1d;
+  color: #8f939e;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.binding-status-pill-idle {
+  border-color: rgba(143, 143, 143, 0.36);
+  color: #818793;
+  background: #1a1a1a;
+}
+.binding-status-pill-active {
+  border-color: rgba(255, 255, 255, 0.62);
+  color: #f2f3f5;
+  background: #2a2a2a;
 }
 </style>

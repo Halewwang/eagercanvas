@@ -10,8 +10,8 @@
         <div class="capsule-group">
           <n-dropdown :options="modelOptions" @select="setModel"><button class="capsule-select">{{ displayModel }}</button></n-dropdown>
           <n-dropdown :options="ratioOptions" @select="setRatio"><button class="capsule-select">{{ localRatio }}</button></n-dropdown>
-          <n-dropdown v-if="sizeOptions.length > 0" :options="sizeOptions" @select="setSize"><button class="capsule-select">{{ displaySize }}</button></n-dropdown>
-          <n-dropdown :options="durationOptions" @select="setDuration"><button class="capsule-select">{{ localDuration }}s</button></n-dropdown>
+          <n-dropdown v-if="sizeOptions.length > 0 && localModel !== 'veo-3.1'" :options="sizeOptions" @select="setSize"><button class="capsule-select">{{ displaySize }}</button></n-dropdown>
+          <n-dropdown v-if="durationOptions.length > 0" :options="durationOptions" @select="setDuration"><button class="capsule-select">{{ localDuration }}s</button></n-dropdown>
         </div>
 
         <div class="capsule-divider" />
@@ -53,7 +53,7 @@
           <span class="text-sm text-red-400 text-center px-3">{{ data.error }}</span>
         </div>
 
-        <div v-else-if="data.url" class="w-full h-full overflow-hidden bg-black">
+        <div v-else-if="data.url && !data.loading" class="w-full h-full overflow-hidden bg-black">
           <video :src="data.url" controls class="w-full h-full object-contain" />
         </div>
 

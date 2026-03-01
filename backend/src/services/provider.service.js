@@ -325,7 +325,20 @@ export const providerChatCompletions = (payload) =>
 export const providerGenerateImage = async (payload = {}) => {
   const model = String(payload.model_name || payload.model || '').trim()
   const size = String(payload.size || '')
-  const prompt = appendSizeHintToPrompt(payload.prompt || '', size)
+  let prompt = appendSizeHintToPrompt(payload.prompt || '', size)
+  
+  // Append style to prompt if provided | 如果提供了风格，追加到提示词
+  if (payload.style && payload.style !== 'natural') { // 'natural' is default/none
+    const styleMap = {
+      'vivid': 'Vivid, hyper-realistic, high contrast, 8k resolution',
+      'cinematic': 'Cinematic lighting, movie scene, dramatic atmosphere',
+      'anime': 'Anime style, japanese animation, cel shaded',
+      'digital-art': 'Digital art, trending on artstation, highly detailed'
+    }
+    const stylePrompt = styleMap[payload.style] || payload.style
+    prompt = `${prompt}\n\nStyle: ${stylePrompt}`
+  }
+
   const inputImage = pickFirstImageInput(payload)
   let imageInline = parseDataUrl(inputImage)
 

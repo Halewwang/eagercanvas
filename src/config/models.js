@@ -89,7 +89,7 @@ export const VIDEO_MODELS = [
         ratios: ['16:9', '9:16'],
         durs: [{ label: '4 秒', key: 4 }, { label: '6 秒', key: 6 }, { label: '8 秒', key: 8 }],
         defaultParams: { ratio: '16:9', duration: 8 },
-        endpoint: '/video/generations' // Add endpoint configuration
+        endpoint: '/v2/video/generations' // Updated to standard v2 endpoint
     }
 ]
 

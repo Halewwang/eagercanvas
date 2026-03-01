@@ -12,11 +12,11 @@
             <button class="capsule-select">{{ displayImageModel }}</button>
           </n-dropdown>
 
-          <n-dropdown :options="ratioDropdownOptions" @select="setImageRatio">
+          <n-dropdown v-if="ratioDropdownOptions.length > 0" :options="ratioDropdownOptions" @select="setImageRatio">
             <button class="capsule-select">{{ displayRatio }}</button>
           </n-dropdown>
 
-          <n-dropdown :options="resolutionDropdownOptions" @select="setResolution">
+          <n-dropdown v-if="resolutionDropdownOptions.length > 0 && localImageModel.includes('gemini')" :options="resolutionDropdownOptions" @select="setResolution">
             <button class="capsule-select capsule-resolution">{{ displayResolution }}</button>
           </n-dropdown>
         </div>
