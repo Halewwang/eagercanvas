@@ -253,6 +253,21 @@ export const loadProject = (projectId) => {
     edges.value = canvasData.edges || []
     canvasViewport.value = canvasData.viewport || { x: 100, y: 50, zoom: 0.8 }
     
+    // Clean up invalid animations on load | 加载时清除无效动画
+    nodes.value = nodes.value.map(node => {
+      // If node is in loading state but has content, reset loading | 如果节点处于加载状态但有内容，重置加载
+      if (node.data?.loading && (node.data?.url || node.data?.content || node.data?.outputContent)) {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            loading: false
+          }
+        }
+      }
+      return node
+    })
+
     // Update node ID counter | 更新节点ID计数器
     const maxId = nodes.value.reduce((max, node) => {
       const match = node.id.match(/node_(\d+)/)

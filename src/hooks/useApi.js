@@ -286,9 +286,10 @@ export const useVideoGeneration = () => {
       }
 
       // Call API | 调用 API
+      const endpoint = modelConfig?.endpoint || '/videos'
       const task = await createVideoTask(requestData, {
         requestType: 'json',
-        endpoint: modelConfig?.endpoint || '/videos'
+        endpoint: endpoint
       })
 
       // Check if async (need polling) | 检查是否异步

@@ -76,7 +76,7 @@
             :class="connectedPrompts.length > 0 ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
             Prompt {{ connectedPrompts.length > 0 ? `${connectedPrompts.length} items` : '○' }}
           </span>
-          <span class="px-3 py-1 rounded-full"
+          <span v-if="currentModelConfig?.supportImageReference" class="px-3 py-1 rounded-full"
             :class="connectedRefImages.length > 0 ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
             Reference {{ connectedRefImages.length > 0 ? `${connectedRefImages.length} images` : '○' }}
           </span>

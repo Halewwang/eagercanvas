@@ -246,11 +246,12 @@ const finishProgress = () => {
     }
   }, 16)
 }
-const isVideoBusy = computed(() => !!props.data?.loading || videoGen.loading.value || !!videoActionLoading.value)
+const isVideoBusy = computed(() => (!!props.data?.loading && !props.data?.url) || videoGen.loading.value || !!videoActionLoading.value)
 watch(
   () => props.data?.loading,
   (loadingNow) => {
-    if (loadingNow) {
+    // Only start progress if loading AND no URL (meaning it's generating, not just uploaded) | 仅当加载中且无 URL 时才开始进度条（意味着正在生成，而不仅仅是上传）
+    if (loadingNow && !props.data?.url) {
       startProgress()
       return
     }
@@ -392,7 +393,7 @@ const handleFileUpload = async (event) => {
       fileName: file.name,
       fileType: file.type,
       updatedAt: Date.now(),
-      loading: false
+      loading: false // Ensure loading is set to false after upload | 确保上传后 loading 为 false
     })
   } catch (err) {
     updateNode(props.id, { loading: false, error: 'Upload failed' })

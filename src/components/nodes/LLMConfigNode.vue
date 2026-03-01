@@ -203,6 +203,15 @@ const handleGenerate = async () => {
       outputContent.value = result
       updateNode(props.id, { outputContent: result })
       window.$message?.success('Generation completed')
+      // Force refresh view layer | 强制刷新视图层
+      setTimeout(() => {
+        const textarea = document.querySelector('.llm-node pre')
+        if (textarea) {
+          textarea.style.display = 'none'
+          textarea.offsetHeight // trigger reflow
+          textarea.style.display = 'block'
+        }
+      }, 0)
     }
   } catch (err) {
     window.$message?.error(err.message || 'Generation failed')
