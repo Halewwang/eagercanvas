@@ -7,6 +7,8 @@ import { projectsRouter } from './projects.routes.js'
 import { runsRouter } from './runs.routes.js'
 import { usageRouter } from './usage.routes.js'
 
+import { uploadRouter } from './upload.routes.js'
+
 export const apiRouter = Router()
 
 apiRouter.get('/health', (_req, res) => {
@@ -17,6 +19,7 @@ apiRouter.use('/auth', authRouter)
 apiRouter.use('/projects', projectsRouter)
 apiRouter.use('/runs', runsRouter)
 apiRouter.use('/usage', usageRouter)
+apiRouter.use('/upload', uploadRouter)
 
 // Compatibility endpoints for existing frontend hooks
 apiRouter.post('/chat/completions', authRequired, asyncHandler(async (req, res) => {

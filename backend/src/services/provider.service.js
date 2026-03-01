@@ -150,6 +150,22 @@ const parseDataUrl = (value = '') => {
   return { mimeType: match[1], data: match[2] }
 }
 
+const fetchImageAsBase64 = async (url) => {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) return null
+    const buffer = await response.arrayBuffer()
+    const mime = response.headers.get('content-type') || 'image/png'
+    return {
+      mimeType: mime,
+      data: Buffer.from(buffer).toString('base64')
+    }
+  } catch (e) {
+    console.error('Fetch image failed', e)
+    return null
+  }
+}
+
 const pickFirstImageInput = (payload = {}) => {
   if (typeof payload.image === 'string') return payload.image
   if (Array.isArray(payload.image) && payload.image.length > 0) return payload.image[0]
@@ -311,7 +327,11 @@ export const providerGenerateImage = async (payload = {}) => {
   const size = String(payload.size || '')
   const prompt = appendSizeHintToPrompt(payload.prompt || '', size)
   const inputImage = pickFirstImageInput(payload)
-  const imageInline = parseDataUrl(inputImage)
+  let imageInline = parseDataUrl(inputImage)
+
+  if (!imageInline && inputImage && /^https?:\/\//i.test(inputImage)) {
+    imageInline = await fetchImageAsBase64(inputImage)
+  }
 
   const parts = [{ text: prompt }]
   if (imageInline) {
@@ -360,26 +380,29 @@ export const providerCreateVideo = async (payload = {}) => {
       images.push(...referenceImages.slice(0, Math.max(0, 4 - images.length)))
     }
     if (images.length === 0 && inputImage) images.push(inputImage)
-    if (images.length === 0) {
-      throw new HttpError(400, 'Kling O1 requires at least one connected image input', 'INVALID_VIDEO_INPUT')
-    }
+
+    const isImageToVideo = images.length > 0
 
     const requestBody = {
-      model_name: 'kling-o1',
-      images,
+      model_name: 'kling-v1', // Standard 302.AI model name
       prompt: effectivePrompt,
-      duration,
-      aspect_ratio: aspectRatio || 'auto'
+      duration: duration || 5,
+      aspect_ratio: aspectRatio || '16:9'
     }
-    if (firstFrameImage && lastFrameImage) requestBody.o1_type = 'firstTail'
-    else requestBody.o1_type = 'referImage'
 
+    let endpoint = '/kling/v1/videos/text2video'
+
+    if (isImageToVideo) {
+        endpoint = '/kling/v1/videos/image2video'
+        requestBody.image = images[0] // Standard 302.AI expects 'image'
+        requestBody.image_tail = images[1] || undefined // Optional tail image
+    }
+
+    // Determine correct endpoint based on API provider base
     const raw = await callProviderWithFallback(
       [
-        '/v1/klingai/m2v_omni_video',
-        '/klingai/m2v_omni_video',
-        '/v1/klingai/v1/videos/m2v_omni_video',
-        '/klingai/v1/videos/m2v_omni_video'
+        endpoint,
+        `/v1${endpoint}`
       ],
       'POST',
       requestBody
@@ -392,28 +415,40 @@ export const providerCreateVideo = async (payload = {}) => {
     }
   }
 
-  if (lowerModel === 'sora-2') {
+  if (lowerModel.startsWith('veo-3.1')) {
+    let specificModel = 'google/veo-3.1-t2v-fast'
     const requestBody = {
-      model: 'sora-2',
       prompt: effectivePrompt,
-      size: size || '1280x720',
-      seconds: duration
+      aspect_ratio: aspectRatio || '16:9',
+      duration: duration || 8,
+      resolution: '1080p',
+      generate_audio: true
     }
-    if (firstFrameImage) requestBody.image = firstFrameImage
-    if (lastFrameImage) requestBody.end_image = lastFrameImage
+
+    // Determine specific model and parameters based on input images
+    if (firstFrameImage && lastFrameImage) {
+      specificModel = 'google/veo-3.1-first-last-image-to-video'
+      requestBody.image_url = firstFrameImage
+      requestBody.last_image_url = lastFrameImage
+    } else if (firstFrameImage || inputImage) {
+      specificModel = 'google/veo-3.1-i2v'
+      requestBody.image_url = firstFrameImage || inputImage
+    }
+
+    requestBody.model = specificModel
 
     const raw = await callProviderWithFallback(
       [
-        '/openai/v1/videos',
-        '/v1/videos'
+        '/v2/video/generations',
+        '/video/generations'
       ],
       'POST',
       requestBody
     )
 
     return {
-      task_id: extractTaskId(raw),
-      status: extractSoraStatus(raw),
+      task_id: raw.id,
+      status: raw.status,
       raw
     }
   }
@@ -424,24 +459,19 @@ export const providerCreateVideo = async (payload = {}) => {
 export const providerVideoStatus = async (taskId) => {
   const safeTaskId = String(taskId || '')
   const mayBeKling = safeTaskId.startsWith('kling_') || safeTaskId.startsWith('task_')
+  
+  // 302.AI Kling status endpoints
   const klingStatusPaths = [
-    `/v1/klingai/m2v_omni_video/${taskId}`,
-    `/v1/klingai/m2v_omni_video?task_id=${taskId}`,
-    `/v1/klingai/m2v_omni_video/status/${taskId}`,
-    `/v1/klingai/v1/videos/m2v_omni_video/${taskId}`,
-    `/v1/klingai/v1/videos/m2v_omni_video?task_id=${taskId}`,
-    `/v1/klingai/v1/videos/m2v_omni_video/status/${taskId}`,
-    `/klingai/m2v_omni_video/${taskId}`,
-    `/klingai/m2v_omni_video?task_id=${taskId}`,
-    `/klingai/m2v_omni_video/status/${taskId}`,
-    `/klingai/v1/videos/m2v_omni_video/${taskId}`,
-    `/klingai/v1/videos/m2v_omni_video?task_id=${taskId}`,
-    `/klingai/v1/videos/m2v_omni_video/status/${taskId}`
+    `/kling/v1/videos/text2video/${taskId}`,
+    `/kling/v1/videos/image2video/${taskId}`,
+    `/v1/kling/v1/videos/text2video/${taskId}`,
+    `/v1/kling/v1/videos/image2video/${taskId}`
   ]
-  const openAiStatusPaths = [
-    `/openai/v1/videos/${taskId}`,
-    `/v1/videos/${taskId}`,
-    `/sora/v2/video/${taskId}`
+  
+  // Veo uses UUIDs usually, so if not kling, try Veo paths
+  const veoStatusPaths = [
+    `/v2/video/generations?generation_id=${taskId}`,
+    `/video/generations?generation_id=${taskId}`
   ]
 
   if (mayBeKling) {
@@ -460,37 +490,23 @@ export const providerVideoStatus = async (taskId) => {
         raw
       }
     } catch {
-      // Fall through to OpenAI-compatible status endpoints.
+      // Fall through
     }
   }
 
-  const raw = await callProviderWithFallback(
-    mayBeKling ? openAiStatusPaths : [...openAiStatusPaths, ...klingStatusPaths]
-  )
-  let videoUrl = extractVideoUrl(raw)
-  let status = videoUrl ? 'completed' : extractSoraStatus(raw)
+  // Try Veo / Generic Video Generation API
+  try {
+    const raw = await callProviderWithFallback(veoStatusPaths, 'GET')
+    const status = raw.status
+    const videoUrl = raw.video?.url || raw.output?.url
 
-  if (!videoUrl && status === 'completed') {
-    try {
-      const content = await callProviderWithFallback(
-        [
-          `/openai/v1/videos/${taskId}/content?variant=video`,
-          `/v1/videos/${taskId}/content?variant=video`
-        ],
-        'GET'
-      )
-      videoUrl = extractVideoUrl(content)
-    } catch {
-      // Keep polling from frontend if content is not immediately ready.
+    return {
+      task_id: taskId,
+      status,
+      video_url: videoUrl || undefined,
+      raw
     }
-  }
-
-  if (videoUrl) status = 'completed'
-
-  return {
-    task_id: taskId,
-    status,
-    video_url: videoUrl || undefined,
-    raw
+  } catch (error) {
+    throw new HttpError(502, 'Failed to get video status', 'PROVIDER_ERROR')
   }
 }

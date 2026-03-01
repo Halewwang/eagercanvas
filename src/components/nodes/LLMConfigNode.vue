@@ -48,17 +48,6 @@
           />
         </div>
 
-        <!-- Output format | Output Format -->
-        <div>
-          <label class="text-xs text-[#8f939e] mb-1 block">Output Format</label>
-          <n-select
-            v-model:value="outputFormat"
-            :options="formatOptions"
-            size="small"
-            @update:value="updateConfig"
-          />
-        </div>
-
         <!-- Generate button | 生成按钮 -->
         <button 
           @click="handleGenerate"
@@ -137,20 +126,12 @@ const { isConfigured: isApiConfigured } = useApiConfig()
 // Local state | 本地状态
 const systemPrompt = ref(props.data?.systemPrompt || '')
 const model = ref(props.data?.model || DEFAULT_CHAT_MODEL)
-const outputFormat = ref(props.data?.outputFormat || 'text')
 const outputContent = ref(props.data?.outputContent || '')
 const isGenerating = ref(false)
 const showActions = ref(false)
 
 // Model options | Model选项
 const modelOptions = chatModelSelectOptions
-
-// Format options | 格式选项
-const formatOptions = [
-  { label: 'Plain Text', value: 'text' },
-  { label: 'JSON', value: 'json' },
-  { label: 'Markdown', value: 'markdown' }
-]
 
 // Chat hook | Chat hook
 const chatHook = computed(() => {
@@ -164,7 +145,6 @@ const chatHook = computed(() => {
 watch(() => props.data, (newData) => {
   if (newData?.systemPrompt !== undefined) systemPrompt.value = newData.systemPrompt
   if (newData?.model !== undefined) model.value = newData.model
-  if (newData?.outputFormat !== undefined) outputFormat.value = newData.outputFormat
   if (newData?.outputContent !== undefined) outputContent.value = newData.outputContent
 }, { deep: true })
 
@@ -173,7 +153,6 @@ const updateConfig = () => {
   updateNode(props.id, { 
     systemPrompt: systemPrompt.value,
     model: model.value,
-    outputFormat: outputFormat.value,
     outputContent: outputContent.value
   })
 }

@@ -108,6 +108,7 @@ import { NDropdown, NIcon, NModal, NSpin } from 'naive-ui'
 import { AddOutline, CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, SparklesOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
 import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
+import request from '../../utils/request'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoSizeOptions, videoModelOptions } from '../../stores/models'
 
 const props = defineProps({ id: String, data: Object, selected: Boolean })
@@ -369,27 +370,32 @@ const triggerUpload = () => {
   uploadInputRef.value?.click()
 }
 
-const fileToBase64 = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-
 const handleFileUpload = async (event) => {
   const file = event.target.files?.[0]
   if (!file) return
+  
+  updateNode(props.id, { loading: true, error: '' })
+  
+  const formData = new FormData()
+  formData.append('file', file)
+
   try {
-    const base64 = await fileToBase64(file)
+    const res = await request.post('/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    
+    const url = res?.url
+    if (!url) throw new Error('Upload failed')
+
     updateNode(props.id, {
-      url: base64,
-      base64,
+      url,
       fileName: file.name,
       fileType: file.type,
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      loading: false
     })
-  } catch {
+  } catch (err) {
+    updateNode(props.id, { loading: false, error: 'Upload failed' })
     window.$message?.error('Video upload failed')
   }
 }

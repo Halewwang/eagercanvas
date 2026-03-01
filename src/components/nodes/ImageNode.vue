@@ -148,6 +148,7 @@ import {
   imageModelOptions
 } from '../../stores/models'
 import { useApiConfig, useImageGeneration } from '../../hooks'
+import request from '../../utils/request'
 
 const props = defineProps({
   id: String,

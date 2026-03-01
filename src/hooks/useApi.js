@@ -323,23 +323,38 @@ export const useVideoGeneration = () => {
         progress.percentage = Math.min(Math.round((i / maxAttempts) * 100), 99)
         let result
         try {
-          result = await getVideoTaskStatus(id)
+          // Pass silentErrorToast option to request
+          result = await getVideoTaskStatus(id, {
+            silentErrorToast: true
+          })
         } catch (pollErr) {
           const statusCode = Number(pollErr?.response?.status || pollErr?.status || 0)
+          // 408, 429, 5xx are transient. 0/undefined (network error) also transient.
           const isTransient = transientErrorStatuses.has(statusCode) || !statusCode
           if (!isTransient) throw pollErr
+          
+          // Wait before retry
           await new Promise(resolve => setTimeout(resolve, interval))
           continue
         }
+        
         const resultStatus = getTaskStatus(result)
         const resultVideoUrl = getVideoUrl(result)
 
         // Check for completion | 检查是否完成
-        if (resultVideoUrl && (!resultStatus || doneStatuses.has(resultStatus))) {
+        if (resultVideoUrl) {
           progress.percentage = 100
           video.value = { url: resultVideoUrl, ...result }
           setSuccess()
           return video.value
+        }
+
+        if (doneStatuses.has(resultStatus) && resultVideoUrl) {
+           // Double check logic above covers this, but for clarity:
+           progress.percentage = 100
+           video.value = { url: resultVideoUrl, ...result }
+           setSuccess()
+           return video.value
         }
 
         // Check for failure | 检查是否失败

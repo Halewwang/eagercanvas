@@ -82,12 +82,11 @@ export const VIDEO_MODELS = [
         defaultParams: { ratio: '16:9', duration: 5 }
     },
     {
-        label: 'Sora-2',
-        key: 'sora-2',
-        ratios: [...new Set(SORA2_SIZE_OPTIONS.map((s) => s.ratio))],
-        sizes: SORA2_SIZE_OPTIONS,
-        durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-        defaultParams: { ratio: '16:9', duration: 5, size: '1280x720' }
+        label: 'Google Veo 3.1',
+        key: 'veo-3.1',
+        ratios: ['16:9', '9:16'],
+        durs: [{ label: '4 秒', key: 4 }, { label: '6 秒', key: 6 }, { label: '8 秒', key: 8 }],
+        defaultParams: { ratio: '16:9', duration: 8 }
     }
 ]
 
@@ -124,7 +123,7 @@ export const VIDEO_DURATION_OPTIONS = [
 
 // Default values | 默认值
 export const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
-export const DEFAULT_VIDEO_MODEL = 'kling-o1'
+export const DEFAULT_VIDEO_MODEL = 'veo-3.1'
 export const DEFAULT_CHAT_MODEL = 'gemini-2.5-flash'
 export const DEFAULT_IMAGE_SIZE = '1024x1024'
 export const DEFAULT_VIDEO_RATIO = '16:9'
