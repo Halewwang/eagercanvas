@@ -386,7 +386,7 @@ const handleFileUpload = async (event) => {
     })
     
     const url = res?.url
-    if (!url) throw new Error('Upload failed')
+    if (!url) throw new Error('Upload failed: No URL returned')
 
     updateNode(props.id, {
       url,
@@ -396,8 +396,9 @@ const handleFileUpload = async (event) => {
       loading: false // Ensure loading is set to false after upload | 确保上传后 loading 为 false
     })
   } catch (err) {
-    updateNode(props.id, { loading: false, error: 'Upload failed' })
-    window.$message?.error('Video upload failed')
+    console.error('Video upload error:', err)
+    updateNode(props.id, { loading: false, error: err.message || 'Upload failed' })
+    window.$message?.error(`Video upload failed: ${err.message || 'Unknown error'}`)
   }
 }
 
