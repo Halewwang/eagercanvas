@@ -107,6 +107,34 @@
         <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeErrorModal">Close</button>
       </template>
     </n-modal>
+    <n-modal
+      v-model:show="showPersistModal"
+      preset="dialog"
+      title="Saving Uploaded Image"
+      :show-icon="false"
+      :mask-closable="false"
+      :closable="canClosePersistModal"
+    >
+      <div class="flex items-start gap-3 text-sm text-[#d9dce3] whitespace-pre-wrap">
+        <n-spin v-if="persistPhase === 'uploading' || persistPhase === 'saving'" :size="16" />
+        <span>{{ persistMessage }}</span>
+      </div>
+      <template #action>
+        <button
+          class="flora-button-primary px-4 py-2 rounded-lg disabled:opacity-50"
+          :disabled="!canClosePersistModal"
+          @click="closePersistModal"
+        >
+          OK
+        </button>
+      </template>
+    </n-modal>
+    <n-modal v-model:show="showValidationModal" preset="dialog" title="Upload Limit" :show-icon="false">
+      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ validationMessage }}</div>
+      <template #action>
+        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeValidationModal">OK</button>
+      </template>
+    </n-modal>
 
     <div class="binding-status-wrap">
       <div class="binding-status-row">
@@ -126,7 +154,7 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NDropdown, NIcon, NModal } from 'naive-ui'
+import { NDropdown, NIcon, NModal, NSpin } from 'naive-ui'
 import {
   AddOutline,
   CloseCircleOutline,
@@ -137,7 +165,7 @@ import {
   SparklesOutline,
   TrashOutline
 } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, updateNode } from '../../stores/canvas'
+import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode } from '../../stores/canvas'
 import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_IMAGE_SIZE,
@@ -171,6 +199,11 @@ const localResolution = ref('1k')
 const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
 const showErrorModal = ref(false)
+const showValidationModal = ref(false)
+const validationMessage = ref('')
+const showPersistModal = ref(false)
+const persistPhase = ref('idle') // idle | uploading | saving | success | error
+const persistMessage = ref('')
 const imageActionLoading = ref('')
 const isUploading = ref(false)
 const progressValue = ref(0)
@@ -194,6 +227,8 @@ const BASE_SIZE_BY_RATIO = {
   '16:9': { w: 1280, h: 720 },
   '9:16': { w: 720, h: 1280 }
 }
+const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024
+const MAX_IMAGE_DIMENSION = 2048
 
 const ratioFromSizeKey = (sizeKey) => {
   const [w, h] = String(sizeKey || '').split('x').map(Number)
@@ -384,6 +419,7 @@ const finishProgress = () => {
   }, 16)
 }
 const isImageBusy = computed(() => !!props.data?.loading || imageGen.loading.value || !!imageActionLoading.value)
+const canClosePersistModal = computed(() => !['uploading', 'saving'].includes(persistPhase.value))
 watch(
   () => props.data?.loading,
   (loadingNow) => {
@@ -403,6 +439,24 @@ watch(
 )
 
 onUnmounted(() => clearProgressTimers())
+
+const beforeUnloadGuard = (event) => {
+  if (!isUploading.value) return
+  event.preventDefault()
+  event.returnValue = 'Image upload is still in progress. Leaving now may lose it.'
+}
+
+watch(isUploading, (uploading) => {
+  if (uploading) {
+    window.addEventListener('beforeunload', beforeUnloadGuard)
+  } else {
+    window.removeEventListener('beforeunload', beforeUnloadGuard)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', beforeUnloadGuard)
+})
 
 const pickNearestSizeKey = (ratioKey, resolutionKey) => {
   let candidates = sizeMetaOptions.value.filter((opt) => opt.ratio === ratioKey)
@@ -603,10 +657,22 @@ const handleFileUpload = async (event) => {
   if (!file) return
 
   try {
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      validationMessage.value = 'Image is too large. Maximum file size is 5MB.'
+      showValidationModal.value = true
+      return
+    }
+
+    const { width: w, height: h } = await getImageDimensions(file)
+    if (w > MAX_IMAGE_DIMENSION || h > MAX_IMAGE_DIMENSION) {
+      validationMessage.value = `Image resolution is too high (${w}x${h}). Maximum supported resolution is 2048x2048.`
+      showValidationModal.value = true
+      return
+    }
+
     // Local upload should not trigger generation loading animation.
     // Keep local preview immediately, then best-effort sync to cloud storage.
     const base64 = await fileToBase64(file)
-    const { width: w, height: h } = await getImageDimensions(file)
     let ratio = '1:1'
     
     if (w && h) {
@@ -638,11 +704,16 @@ const handleFileUpload = async (event) => {
     
     setTimeout(() => updateNodeInternals(props.id), 30)
 
-    // Best-effort persistent upload, keep local image if cloud upload fails.
+    // Upload + project save must both succeed before image is safe across refresh/login.
     isUploading.value = true
+    showPersistModal.value = true
+    persistPhase.value = 'uploading'
+    persistMessage.value = 'Uploading image to cloud storage... Please do not refresh.'
     try {
       const uploadedUrl = await uploadImageFile(file)
       if (uploadedUrl) {
+        persistPhase.value = 'saving'
+        persistMessage.value = 'Upload complete. Saving project...'
         updateNode(props.id, {
           url: uploadedUrl,
           base64: '',
@@ -651,12 +722,32 @@ const handleFileUpload = async (event) => {
           updatedAt: Date.now(),
           error: ''
         })
-        await saveProject()
+        const savedOk = await flushSave()
+        if (savedOk) {
+          persistPhase.value = 'success'
+          persistMessage.value = 'Upload and save completed. It is now safe to refresh.'
+          window.$message?.success('Image upload saved')
+          setTimeout(() => {
+            if (persistPhase.value === 'success') {
+              showPersistModal.value = false
+              persistPhase.value = 'idle'
+              persistMessage.value = ''
+            }
+          }, 1200)
+        } else {
+          persistPhase.value = 'error'
+          persistMessage.value = 'Upload succeeded but project save failed. Please retry save before refreshing.'
+          window.$message?.warning('Project save failed after upload. Please retry save.')
+        }
       } else {
-        window.$message?.warning('Cloud persistence unavailable, image not saved to project storage')
+        persistPhase.value = 'error'
+        persistMessage.value = 'Cloud upload failed. This image may be lost after refresh.'
+        window.$message?.warning('Cloud upload failed. Please retry.')
       }
-    } catch {
-      window.$message?.warning('Cloud persistence failed, image not saved to project storage')
+    } catch (err) {
+      persistPhase.value = 'error'
+      persistMessage.value = err?.message || 'Upload/save failed. This image may be lost after refresh.'
+      window.$message?.warning('Upload/save failed. Please retry.')
     } finally {
       isUploading.value = false
     }
@@ -703,6 +794,18 @@ const openPreviewModal = () => {
 const closeErrorModal = () => {
   showErrorModal.value = false
   updateNode(props.id, { error: '' })
+}
+
+const closePersistModal = () => {
+  if (!canClosePersistModal.value) return
+  showPersistModal.value = false
+  persistPhase.value = 'idle'
+  persistMessage.value = ''
+}
+
+const closeValidationModal = () => {
+  showValidationModal.value = false
+  validationMessage.value = ''
 }
 
 const createLinkedNode = (type) => {

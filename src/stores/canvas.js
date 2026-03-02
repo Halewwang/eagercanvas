@@ -328,6 +328,7 @@ export const saveProject = async () => {
   }
 
   const runSave = async () => {
+    let saved = true
     const snapshot = {
       nodes: JSON.parse(JSON.stringify(nodes.value)),
       edges: JSON.parse(JSON.stringify(edges.value)),
@@ -346,6 +347,7 @@ export const saveProject = async () => {
         currentProjectVersion.value = updatedProject.updatedAt
       }
     } catch (error) {
+      saved = false
       if (error.status === 409 || error.code === 'PROJECT_CONFLICT') {
         // Handle conflict: Show dialog to user
         window.$message?.error('Project has been updated elsewhere. Please refresh.')
@@ -361,6 +363,7 @@ export const saveProject = async () => {
         await saveProject()
       }
     }
+    return saved
   }
 
   saveInFlight = runSave()
