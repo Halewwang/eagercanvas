@@ -4,6 +4,8 @@
 
 export * from './constants'
 export * from './schema'
+export * from './error'
+export { getErrorMessage } from './error'
 import request, { setBaseUrl, getBaseUrl } from './request'
 
 export { request, setBaseUrl, getBaseUrl }
