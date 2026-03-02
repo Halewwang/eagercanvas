@@ -79,7 +79,7 @@ export const VIDEO_MODELS = [
     {
         label: 'Kling O1',
         key: 'kling-o1',
-        ratios: VIDEO_RATIO_LIST.map(s => s.key),
+        ratios: ['16:9', '9:16', '1:1'],
         durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
         defaultParams: { ratio: '16:9', duration: 5 }
     },
