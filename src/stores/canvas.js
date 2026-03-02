@@ -26,6 +26,8 @@ export const selectedNode = ref(null)
 // Auto-save flag | 自动保存标志
 let autoSaveEnabled = false
 let saveTimeout = null
+let saveInFlight = null
+let saveQueued = false
 
 // History for undo/redo | 撤销/重做历史
 const history = ref([])
@@ -236,6 +238,9 @@ export const initSampleData = () => {
   })
 }
 
+// Current project metadata | 当前项目元数据
+export const currentProjectVersion = ref(null) // Stores updated_at for optimistic locking
+
 /**
  * Load project data | 加载项目数据
  * @param {string} projectId - Project ID | 项目ID
@@ -248,24 +253,39 @@ export const loadProject = (projectId) => {
   const canvasData = getProjectCanvas(projectId)
   
   if (canvasData) {
+    // Restore project version
+    if (canvasData._meta && canvasData._meta.updatedAt) {
+      currentProjectVersion.value = canvasData._meta.updatedAt
+    } else {
+      currentProjectVersion.value = null
+    }
+
     // Restore nodes | 恢复节点
     nodes.value = canvasData.nodes || []
     edges.value = canvasData.edges || []
     canvasViewport.value = canvasData.viewport || { x: 100, y: 50, zoom: 0.8 }
     
-    // Clean up invalid animations on load | 加载时清除无效动画
+    // Normalize stale runtime state after page refresh.
+    // 刷新后清理遗留运行态，避免再次触发生成动画或自动执行。
     nodes.value = nodes.value.map(node => {
-      // If node is in loading state but has content, reset loading | 如果节点处于加载状态但有内容，重置加载
-      if (node.data?.loading && (node.data?.url || node.data?.content || node.data?.outputContent)) {
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            loading: false
-          }
-        }
+      const data = { ...(node.data || {}) }
+      const wasLoading = !!data.loading
+
+      if (data.autoExecute) data.autoExecute = false
+      if (data.loading) data.loading = false
+
+      // Runtime status should not survive hard refresh as "running".
+      if ((node.type === 'imageConfig' || node.type === 'videoConfig' || node.type === 'llmConfig') && data.status === 'running') {
+        data.status = 'failed'
+        if (!data.error) data.error = 'Task interrupted by page refresh. Please run again.'
       }
-      return node
+
+      // For output nodes, mark interrupted tasks explicitly when no URL exists.
+      if ((node.type === 'image' || node.type === 'video') && wasLoading && !data.url && !data.error) {
+        data.error = 'Task interrupted by page refresh. Please regenerate.'
+      }
+
+      return { ...node, data }
     })
 
     // Update node ID counter | 更新节点ID计数器
@@ -299,13 +319,63 @@ export const loadProject = (projectId) => {
 /**
  * Save current project | 保存当前项目
  */
-export const saveProject = () => {
+export const saveProject = async () => {
   if (!currentProjectId.value) return
-  updateProjectCanvas(currentProjectId.value, {
-    nodes: nodes.value,
-    edges: edges.value,
-    viewport: canvasViewport.value
-  })
+
+  if (saveInFlight) {
+    saveQueued = true
+    return saveInFlight
+  }
+
+  const runSave = async () => {
+    const snapshot = {
+      nodes: JSON.parse(JSON.stringify(nodes.value)),
+      edges: JSON.parse(JSON.stringify(edges.value)),
+      viewport: { ...canvasViewport.value }
+    }
+
+    try {
+      const updatedProject = await updateProjectCanvas(
+        currentProjectId.value,
+        snapshot,
+        currentProjectVersion.value
+      )
+
+      // Update local version after successful save
+      if (updatedProject?.updatedAt) {
+        currentProjectVersion.value = updatedProject.updatedAt
+      }
+    } catch (error) {
+      if (error.status === 409 || error.code === 'PROJECT_CONFLICT') {
+        // Handle conflict: Show dialog to user
+        window.$message?.error('Project has been updated elsewhere. Please refresh.')
+        // Ideally show a modal to chose: Overwrite or Refresh
+      } else {
+        console.error('Save failed:', error)
+      }
+    } finally {
+      saveInFlight = null
+      if (saveQueued) {
+        saveQueued = false
+        // Fire next save with latest canvas snapshot.
+        await saveProject()
+      }
+    }
+  }
+
+  saveInFlight = runSave()
+  return saveInFlight
+}
+
+/**
+ * Flush pending autosave immediately | 立即刷新待保存内容
+ */
+export const flushSave = async () => {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout)
+    saveTimeout = null
+  }
+  return saveProject()
 }
 
 /**

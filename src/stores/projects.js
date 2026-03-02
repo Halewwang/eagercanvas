@@ -249,13 +249,9 @@ export const getProjectCanvas = (id) => {
 }
 
 export const deleteProject = async (id) => {
+  await apiDeleteProject(id)
   projects.value = projects.value.filter((p) => p.id !== id)
   saveLocalCache()
-  try {
-    await apiDeleteProject(id)
-  } catch (error) {
-    console.warn('Cloud delete failed:', error?.message)
-  }
 }
 
 export const duplicateProject = async (id) => {

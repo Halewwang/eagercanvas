@@ -208,11 +208,12 @@ import {
   RemoveOutline,
   FolderOutline
 } from '../icons/coolicons'
-import { nodes, edges, addEdge, loadProject, saveProject, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
+import { nodes, edges, addEdge, loadProject, saveProject, flushSave, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
 import { loadAllModels } from '../stores/models'
 import { useNodesFactory } from '../hooks'
 import { edgeStrategy } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
+import { getErrorMessage } from '@/utils'
 import { projects, initProjectsStore, renameProject, duplicateProject, deleteProject } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 
@@ -266,7 +267,9 @@ const handleAvatarChange = async (event) => {
       await updateProfile({ avatarUrl: String(reader.result || '') })
       notifier.success('Avatar updated')
     } catch (err) {
-      notifier.error(err?.response?.data?.message || err?.message || 'Failed to update avatar')
+      if (!err?.__handled) {
+        notifier.error(getErrorMessage(err, 'Failed to update avatar'))
+      }
     }
   }
   reader.readAsDataURL(file)
@@ -474,13 +477,20 @@ const confirmDelete = async () => {
   const projectId = route.params.id
   if (!projectId) return
   showDeleteModal.value = false
-  await deleteProject(projectId)
-  notifier.success('Project deleted')
-  router.push('/')
+  try {
+    await deleteProject(projectId)
+    notifier.success('Project deleted')
+    router.push('/')
+  } catch (err) {
+    if (!err?.__handled) {
+      notifier.error(getErrorMessage(err, 'Delete failed'))
+    }
+  }
 }
 
 // Go back to home | 返回首页
-const goBack = () => {
+const goBack = async () => {
+  await flushSave()
   router.push('/')
 }
 
@@ -505,11 +515,11 @@ const loadProjectById = (projectId) => {
 // Watch for route changes | 监听路由变化
 watch(
   () => route.params.id,
-  (newId, oldId) => {
+  async (newId, oldId) => {
     if (newId && newId !== oldId) {
       // Save current project before switching | 切换前保存当前项目
       if (oldId) {
-        saveProject()
+        await flushSave()
       }
       // Load new project | 加载新项目
       loadProjectById(newId)
@@ -517,10 +527,22 @@ watch(
   }
 )
 
+const handlePageHide = () => {
+  flushSave()
+}
+
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'hidden') {
+    flushSave()
+  }
+}
+
 // Initialize | 初始化
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  window.addEventListener('pagehide', handlePageHide)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   
   // Initialize projects store | 初始化项目存储
   await initProjectsStore()
@@ -532,8 +554,10 @@ onMounted(async () => {
 // Cleanup on unmount | 卸载时清理
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  window.removeEventListener('pagehide', handlePageHide)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   // Save project before leaving | 离开前保存项目
-  saveProject()
+  flushSave()
 })
 </script>
 
