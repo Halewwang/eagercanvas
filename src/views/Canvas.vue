@@ -213,7 +213,7 @@ import { loadAllModels } from '../stores/models'
 import { useNodesFactory } from '../hooks'
 import { edgeStrategy } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
-import { getErrorMessage } from '@/utils/error'
+import { getErrorMessage } from '@/utils'
 import { projects, initProjectsStore, renameProject, duplicateProject, deleteProject } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 
