@@ -110,16 +110,20 @@ const getDefaultNodeData = (type) => {
         label: '图生视频'
       }
     }
-    case 'video':
+    case 'video': {
+      const defaultVideoModel = VIDEO_MODELS.find(m => m.key === DEFAULT_VIDEO_MODEL) || VIDEO_MODELS[0]
+      const defaultVideoRatio = defaultVideoModel?.defaultParams?.ratio || '16:9'
+      const defaultVideoDuration = Number(defaultVideoModel?.defaultParams?.duration || 5)
       return {
         url: '',
         model: DEFAULT_VIDEO_MODEL,
-        ratio: '16:9',
+        ratio: defaultVideoRatio,
         size: '',
-        dur: 5,
-        duration: 0,
+        dur: defaultVideoDuration,
+        duration: defaultVideoDuration,
         label: '视频节点'
       }
+    }
     case 'image':
       return {
         url: '',

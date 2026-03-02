@@ -142,7 +142,7 @@ import { NIcon, NDropdown, NSpin } from 'naive-ui'
 import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject } from '../../stores/canvas'
-import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, DEFAULT_VIDEO_MODEL } from '../../stores/models'
+import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION } from '../../stores/models'
 
 const props = defineProps({
   id: String,
@@ -164,7 +164,12 @@ const showActions = ref(false)
 // Local state | 本地状态
 const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
 const localRatio = ref(props.data?.ratio || '16:9')
-const localDuration = ref(props.data?.dur || 5)
+const getDurationFromData = (data) => {
+  const raw = data?.duration ?? data?.dur
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_VIDEO_DURATION
+}
+const localDuration = ref(getDurationFromData(props.data))
 
 // Get connected images with roles | 获取连接的图片及其角色
 const connectedImages = computed(() => {
@@ -233,8 +238,12 @@ const handleModelSelect = (key) => {
     updates.ratio = config.defaultParams.ratio
   }
   if (config?.defaultParams?.duration) {
-    localDuration.value = config.defaultParams.duration
-    updates.dur = config.defaultParams.duration
+    const modelDurationOptions = getModelDurationOptions(key)
+    const defaultDuration = Number(config.defaultParams.duration)
+    const optionKeys = modelDurationOptions.map((item) => Number(item.key)).filter((v) => Number.isFinite(v))
+    localDuration.value = optionKeys.includes(defaultDuration) ? defaultDuration : (optionKeys[0] || defaultDuration)
+    updates.duration = localDuration.value
+    updates.dur = localDuration.value
   }
   updateNode(props.id, updates)
 }
@@ -258,8 +267,10 @@ const handleRatioSelect = (key) => {
 
 // Handle duration selection | 处理Duration选择
 const handleDurationSelect = (key) => {
-  localDuration.value = key
-  updateNode(props.id, { dur: key })
+  const parsed = Number(key)
+  if (!Number.isFinite(parsed) || parsed <= 0) return
+  localDuration.value = parsed
+  updateNode(props.id, { duration: parsed, dur: parsed })
 }
 
 // Get connected inputs by role | 根据角色获取连接的输入
@@ -384,7 +395,7 @@ const handleGenerate = async () => {
 
     // Add duration | 添加Duration
     if (localDuration.value) {
-      params.dur = localDuration.value
+      params.duration = localDuration.value
     }
 
     const result = await generate(params)
@@ -396,6 +407,9 @@ const handleGenerate = async () => {
         loading: false,
         label: 'Video Gen',
         model: localModel.value,
+        ratio: localRatio.value,
+        duration: localDuration.value,
+        dur: localDuration.value,
         updatedAt: Date.now()
       })
       
@@ -436,6 +450,15 @@ watch(() => props.data?.model, (newModel) => {
     localModel.value = newModel
   }
 })
+
+watch(() => props.data, (val) => {
+  if (!val) return
+  if (val.ratio && val.ratio !== localRatio.value) localRatio.value = val.ratio
+  const nextDuration = Number(val.duration ?? val.dur)
+  if (Number.isFinite(nextDuration) && nextDuration > 0 && nextDuration !== localDuration.value) {
+    localDuration.value = nextDuration
+  }
+}, { deep: true })
 
 // Watch for auto-execute flag | 监听自动执行标志
 watch(

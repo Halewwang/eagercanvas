@@ -284,9 +284,10 @@ export const useVideoGeneration = () => {
         requestData.aspect_ratio = params.ratio
       }
       if (params.size) requestData.size = params.size
-      if (params.dur) {
-        requestData.duration = params.dur
-        requestData.seconds = params.dur
+      const normalizedDuration = Number(params.duration ?? params.dur)
+      if (Number.isFinite(normalizedDuration) && normalizedDuration > 0) {
+        requestData.duration = normalizedDuration
+        requestData.seconds = normalizedDuration
       }
       if (Array.isArray(params.images) && params.images.length > 0) {
         requestData.images = params.images

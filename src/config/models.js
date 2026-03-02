@@ -88,8 +88,7 @@ export const VIDEO_MODELS = [
         key: 'veo-3.1',
         ratios: ['16:9', '9:16'],
         durs: [{ label: '4 秒', key: 4 }, { label: '6 秒', key: 6 }, { label: '8 秒', key: 8 }],
-        defaultParams: { ratio: '16:9', duration: 8 },
-        endpoint: '/v2/video/generations' // Updated to standard v2 endpoint
+        defaultParams: { ratio: '16:9', duration: 8 }
     }
 ]
 
@@ -130,7 +129,7 @@ export const DEFAULT_VIDEO_MODEL = 'veo-3.1'
 export const DEFAULT_CHAT_MODEL = 'gemini-2.5-flash'
 export const DEFAULT_IMAGE_SIZE = '1024x1024'
 export const DEFAULT_VIDEO_RATIO = '16:9'
-export const DEFAULT_VIDEO_DURATION = 5
+export const DEFAULT_VIDEO_DURATION = 8
 
 // Get model by key | 根据 key 获取模型
 export const getModelByName = (key) => {

@@ -6,7 +6,7 @@
     </div>
 
     <div v-show="showCapsule || isSelected" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
-      <div class="capsule-inner">
+      <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
         <div class="capsule-group">
           <n-dropdown :options="modelOptions" @select="setModel"><button class="capsule-select">{{ displayModel }}</button></n-dropdown>
           <n-dropdown :options="ratioOptions" @select="setRatio"><button class="capsule-select">{{ localRatio }}</button></n-dropdown>
@@ -25,17 +25,17 @@
           <button class="capsule-icon" @click="handleDelete" title="Delete"><n-icon :size="14"><TrashOutline /></n-icon></button>
         </div>
       </div>
-      <div class="capsule-inner capsule-generate">
-        <button class="capsule-icon capsule-icon-solid capsule-create" :disabled="isVideoBusy" @click="handleGenerateVideo" title="Create">
-          <n-spin v-if="videoActionLoading === 'create'" :size="12" />
-          <template v-else>
-            <n-icon :size="14"><SparklesOutline /></n-icon>
-            <span class="capsule-create-label">Create</span>
-          </template>
+      <div class="capsule-inner capsule-generate" :class="{ 'capsule-inner-selected': isSelected }">
+        <button v-if="!isVideoBusy" class="capsule-icon capsule-icon-solid capsule-create" @click="handleGenerateVideo" title="Create">
+          <n-icon :size="14"><SparklesOutline /></n-icon>
+          <span class="capsule-create-label">Create</span>
         </button>
-        <button class="capsule-icon" :disabled="isVideoBusy" @click="handleRegenerateVideo" title="Regenerate">
-          <n-spin v-if="videoActionLoading === 'regenerate'" :size="12" />
-          <n-icon v-else :size="14"><RefreshOutline /></n-icon>
+        <button v-if="!isVideoBusy" class="capsule-icon" @click="handleRegenerateVideo" title="Regenerate">
+          <n-icon :size="14"><RefreshOutline /></n-icon>
+        </button>
+        <button v-if="isVideoBusy" class="capsule-icon capsule-icon-solid capsule-create" @click="handleStopGeneration" title="Stop">
+          <n-icon :size="14"><CloseCircleOutline /></n-icon>
+          <span class="capsule-create-label">Stop</span>
         </button>
       </div>
     </div>
@@ -48,30 +48,23 @@
           <div class="module-progress-label">Generating video... {{ progressPercent }}%</div>
         </div>
 
-        <div v-else-if="data.error" class="w-full h-full bg-[#231a1d] flex flex-col items-center justify-center gap-2">
-          <n-icon :size="30" class="text-red-500"><CloseCircleOutline /></n-icon>
-          <span class="text-sm text-red-400 text-center px-3">{{ data.error }}</span>
-        </div>
-
         <div v-else-if="data.url && !data.loading" class="w-full h-full overflow-hidden bg-black">
           <video :src="data.url" controls class="w-full h-full object-contain" />
         </div>
 
-        <div v-else class="w-full h-full bg-[#0f0f0f] flex flex-col items-center justify-center gap-2 relative text-center px-4">
-          <n-icon :size="32" class="text-[#7b818c]"><VideocamOutline /></n-icon>
-          <span class="text-sm text-[#7b818c]">Drop a video or click to upload</span>
-          <button class="upload-btn" @click="triggerUpload">Upload</button>
-          <input ref="uploadInputRef" type="file" accept="video/*" class="hidden" @change="handleFileUpload" />
-          <div class="w-full px-4 flex gap-2 relative z-10 pointer-events-auto">
-            <input
-              type="text"
-              v-model="inputUrl"
-              placeholder="Enter video URL..."
-              class="flex-1 px-2 py-1 text-sm bg-[#14161a] border border-[rgba(143,143,143,0.45)] rounded-lg outline-none text-[#d7dbe3] placeholder:text-[#7b818c] min-w-0"
-              @keydown.enter.stop="handleUrlInput"
-              @click.stop
-            />
-            <button @click.stop="handleUrlInput" :disabled="!inputUrl" class="capsule-select !rounded-lg !px-3">Load</button>
+        <div v-else class="w-full h-full bg-[#0f0f0f] flex flex-col items-center justify-center gap-4 relative text-center px-4">
+          <div v-if="activeImageRoleSet.keys.size > 0" class="flex items-center gap-3">
+            <div v-for="item in imageRoleStatusList.filter(i => i.active && i.previewUrl)" :key="item.key" class="flex flex-col items-center gap-1">
+              <div class="w-16 h-16 rounded-lg overflow-hidden border border-[#2d2d2d] bg-black">
+                <img :src="item.previewUrl" class="w-full h-full object-cover" />
+              </div>
+              <span class="text-[10px] text-[#7b818c]">{{ item.label }}</span>
+            </div>
+          </div>
+          
+          <div class="flex flex-col items-center gap-2">
+            <n-icon :size="32" class="text-[#7b818c]"><VideocamOutline /></n-icon>
+            <span class="text-sm text-[#7b818c]">Connect Text/Image node to generate</span>
           </div>
         </div>
       </div>
@@ -84,6 +77,12 @@
       <div class="zoom-modal-card" @click.stop>
         <video :src="data.url" controls autoplay class="zoom-video-original" />
       </div>
+    </n-modal>
+    <n-modal v-model:show="showErrorModal" preset="dialog" title="Video Module Error" :show-icon="false">
+      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ data.error }}</div>
+      <template #action>
+        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeErrorModal">Close</button>
+      </template>
     </n-modal>
 
     <div class="binding-status-wrap">
@@ -104,9 +103,9 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NDropdown, NIcon, NModal, NSpin } from 'naive-ui'
+import { NDropdown, NIcon, NModal } from 'naive-ui'
 import { AddOutline, CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, SparklesOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
+import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
 import request from '../../utils/request'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoSizeOptions, videoModelOptions } from '../../stores/models'
@@ -123,6 +122,7 @@ const isSelected = computed(() => !!props.selected || !!props.data?.selected)
 const showHandles = computed(() => showCapsule.value || isSelected.value)
 const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
+const showErrorModal = ref(false)
 const videoActionLoading = ref('')
 const progressValue = ref(0)
 const showProgress = ref(false)
@@ -132,7 +132,12 @@ const progressFinishTimer = ref(null)
 const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
 const localRatio = ref(props.data?.ratio || DEFAULT_VIDEO_RATIO)
 const localSize = ref(props.data?.size || '')
-const localDuration = ref(props.data?.dur || DEFAULT_VIDEO_DURATION)
+const getDurationFromData = (data) => {
+  const raw = data?.duration ?? data?.dur
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_VIDEO_DURATION
+}
+const localDuration = ref(getDurationFromData(props.data))
 
 const createLinkOptions = [
   { label: 'Link Text Module', key: 'text' },
@@ -168,25 +173,33 @@ const ratioFromSize = (size) => {
 const activeImageRoleSet = computed(() => {
   const incomingEdges = edges.value.filter((edge) => edge.target === props.id)
   const activeRoleKeys = []
+  const rolePreviews = {}
 
   for (const edge of incomingEdges) {
     const sourceNode = nodes.value.find((node) => node.id === edge.source)
     if (sourceNode?.type === 'image') {
-      activeRoleKeys.push(edge.data?.imageRole || 'first_frame_image')
+      const role = edge.data?.imageRole || 'first_frame_image'
+      activeRoleKeys.push(role)
+      if (sourceNode.data?.url) {
+        rolePreviews[role] = sourceNode.data.url
+      }
     }
     if (sourceNode?.type === 'text' && sourceNode.data?.content) {
       activeRoleKeys.push('prompt')
     }
   }
 
-  return new Set(activeRoleKeys)
+  return { keys: new Set(activeRoleKeys), previews: rolePreviews }
 })
-const imageRoleStatusList = computed(() => ([
-  { key: 'prompt', label: imageRoleStatusMap.prompt, active: activeImageRoleSet.value.has('prompt') },
-  { key: 'first_frame_image', label: imageRoleStatusMap.first_frame_image, active: activeImageRoleSet.value.has('first_frame_image') },
-  { key: 'last_frame_image', label: imageRoleStatusMap.last_frame_image, active: activeImageRoleSet.value.has('last_frame_image') },
-  { key: 'input_reference', label: imageRoleStatusMap.input_reference, active: activeImageRoleSet.value.has('input_reference') }
-]))
+const imageRoleStatusList = computed(() => {
+  const { keys, previews } = activeImageRoleSet.value
+  return [
+    { key: 'prompt', label: imageRoleStatusMap.prompt, active: keys.has('prompt') },
+    { key: 'first_frame_image', label: imageRoleStatusMap.first_frame_image, active: keys.has('first_frame_image'), previewUrl: previews.first_frame_image },
+    { key: 'last_frame_image', label: imageRoleStatusMap.last_frame_image, active: keys.has('last_frame_image'), previewUrl: previews.last_frame_image },
+    { key: 'input_reference', label: imageRoleStatusMap.input_reference, active: keys.has('input_reference'), previewUrl: previews.input_reference }
+  ]
+})
 
 const stageStyle = computed(() => {
   const map = {
@@ -268,14 +281,34 @@ watch(
 
 onUnmounted(() => clearProgressTimers())
 
+watch(
+  () => props.data?.error,
+  (newVal) => {
+    showErrorModal.value = !!newVal
+  }
+)
+
 const setModel = (key) => {
   localModel.value = key
   const config = getModelConfig(key)
   if (config?.defaultParams?.ratio) localRatio.value = config.defaultParams.ratio
   if (config?.defaultParams?.size) localSize.value = config.defaultParams.size
   else localSize.value = ''
-  if (config?.defaultParams?.duration) localDuration.value = config.defaultParams.duration
-  updateNode(props.id, { model: localModel.value, ratio: localRatio.value, size: localSize.value, dur: localDuration.value })
+  const modelDurationOptions = getModelDurationOptions(localModel.value)
+  const defaultDuration = Number(config?.defaultParams?.duration)
+  const optionKeys = modelDurationOptions.map((item) => Number(item.key)).filter((v) => Number.isFinite(v))
+  if (optionKeys.length > 0) {
+    localDuration.value = optionKeys.includes(defaultDuration) ? defaultDuration : optionKeys[0]
+  } else if (Number.isFinite(defaultDuration) && defaultDuration > 0) {
+    localDuration.value = defaultDuration
+  }
+  updateNode(props.id, {
+    model: localModel.value,
+    ratio: localRatio.value,
+    size: localSize.value,
+    duration: localDuration.value,
+    dur: localDuration.value
+  })
 }
 const setRatio = (key) => {
   localRatio.value = key
@@ -293,8 +326,10 @@ const setSize = (key) => {
   updateNode(props.id, { size: localSize.value, ratio: localRatio.value })
 }
 const setDuration = (key) => {
-  localDuration.value = key
-  updateNode(props.id, { dur: key })
+  const parsed = Number(key)
+  if (!Number.isFinite(parsed) || parsed <= 0) return
+  localDuration.value = parsed
+  updateNode(props.id, { duration: parsed, dur: parsed })
 }
 
 const getConnectedInputs = () => {
@@ -322,7 +357,7 @@ const getConnectedInputs = () => {
 
 const runVideoGeneration = async (mode = 'create') => {
   if (!isConfigured.value) {
-    window.$message?.warning('Please configure API Key first')
+    window.$message?.warning('Please sign in first')
     return
   }
 
@@ -344,7 +379,7 @@ const runVideoGeneration = async (mode = 'create') => {
       images,
       size: localSize.value || undefined,
       ratio: localRatio.value,
-      dur: localDuration.value
+      duration: localDuration.value
     })
     updateNode(props.id, {
       loading: false,
@@ -352,16 +387,33 @@ const runVideoGeneration = async (mode = 'create') => {
       model: localModel.value,
       ratio: localRatio.value,
       size: localSize.value,
+      duration: localDuration.value,
       dur: localDuration.value,
       updatedAt: Date.now()
     })
     window.$message?.success(mode === 'regenerate' ? 'Video regenerated' : 'Video generated')
   } catch (err) {
-    updateNode(props.id, { loading: false, error: err?.message || 'Generation failed' })
-    window.$message?.error(err?.message || 'Video generation failed')
+    const canceled = /已取消|cancel/i.test(String(err?.message || ''))
+    if (!canceled) {
+      updateNode(props.id, { loading: false, error: err?.message || 'Generation failed' })
+      window.$message?.error(err?.message || 'Video generation failed')
+    }
   } finally {
     videoActionLoading.value = ''
   }
+}
+
+const handleStopGeneration = () => {
+  videoGen.stop()
+  // Clear timers and reset UI
+  clearProgressTimers()
+  showProgress.value = false
+  progressValue.value = 0
+  videoActionLoading.value = ''
+  
+  // Reset node state
+  updateNode(props.id, { loading: false, error: 'Generation stopped' })
+  window.$message?.info('Generation stopped')
 }
 
 const handleGenerateVideo = () => runVideoGeneration('create')
@@ -395,6 +447,7 @@ const handleFileUpload = async (event) => {
       updatedAt: Date.now(),
       loading: false // Ensure loading is set to false after upload | 确保上传后 loading 为 false
     })
+    await saveProject()
   } catch (err) {
     console.error('Video upload error:', err)
     updateNode(props.id, { loading: false, error: err.message || 'Upload failed' })
@@ -436,6 +489,10 @@ const openPreviewModal = () => {
   if (!props.data?.url) return
   showPreviewModal.value = true
 }
+const closeErrorModal = () => {
+  showErrorModal.value = false
+  updateNode(props.id, { error: '' })
+}
 
 const createLinkedNode = (type) => {
   const side = 'right'
@@ -475,7 +532,10 @@ watch(
     if (val.model && val.model !== localModel.value) localModel.value = val.model
     if (val.ratio && val.ratio !== localRatio.value) localRatio.value = val.ratio
     if (val.size && val.size !== localSize.value) localSize.value = val.size
-    if (val.dur && val.dur !== localDuration.value) localDuration.value = val.dur
+    const incomingDuration = Number(val.duration ?? val.dur)
+    if (Number.isFinite(incomingDuration) && incomingDuration > 0 && incomingDuration !== localDuration.value) {
+      localDuration.value = incomingDuration
+    }
   },
   { deep: true }
 )
@@ -579,17 +639,128 @@ watch(
   line-height: 1;
 }
 
-.capsule-menu { pointer-events: auto; top: 6px; display: inline-flex; align-items: center; gap: 8px; }
-.capsule-inner { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; border-radius: 999px; border: 1px solid rgba(143, 143, 143, 0.45); background: #1d1d1d; backdrop-filter: blur(10px); }
-.capsule-generate { padding: 7px; }
-.capsule-group { display: inline-flex; align-items: center; gap: 6px; }
-.capsule-divider { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.12); }
+.capsule-menu {
+  pointer-events: auto;
+  top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
 
-.capsule-select { border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02); color: #e7e8eb; border-radius: 999px; font-size: 12px; line-height: 1; padding: 7px 9px; max-width: 148px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.capsule-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1); color: #b8bcc5; background: rgba(255, 255, 255, 0.02); }
-.capsule-icon-solid { background: #1d1d1d; color: #f6f8fc; border-color: rgba(143, 143, 143, 0.65); }
-.capsule-create { width: auto; min-width: 86px; padding: 0 11px; gap: 6px; }
-.capsule-create-label { font-size: 12px; line-height: 1; font-weight: 500; }
+.capsule-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: #1d1d1d;
+  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.capsule-inner:hover {
+  border-color: rgba(143, 143, 143, 0.25);
+  background: #232323;
+}
+
+.capsule-inner-selected {
+  border-color: rgba(143, 143, 143, 0.45);
+}
+
+.capsule-generate {
+  padding: 7px;
+}
+
+.capsule-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.capsule-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.capsule-select {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  color: #e7e8eb;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 9px;
+  max-width: 148px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.2s ease;
+}
+
+.capsule-select:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.capsule-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #b8bcc5;
+  background: rgba(255, 255, 255, 0.02);
+  transition: all 0.2s;
+}
+
+.capsule-icon:hover:not(:disabled) {
+  color: #f0f2f5;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.capsule-icon-solid {
+  background: #1d1d1d;
+  color: #f6f8fc;
+  border-color: rgba(143, 143, 143, 0.65);
+}
+
+.capsule-icon-solid:hover:not(:disabled) {
+  background: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
+.capsule-icon:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.capsule-create {
+  width: auto;
+  min-width: 86px;
+  padding: 0 14px;
+  gap: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 28px;
+}
+
+.capsule-create-label {
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 500;
+  white-space: nowrap;
+}
 
 .node-default { border-width: 0; border-color: transparent; box-shadow: none; }
 .node-selected { border-width: 1px; border-color: #8f8f8f; box-shadow: none; }
