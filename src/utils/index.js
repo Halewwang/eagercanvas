@@ -5,6 +5,7 @@
 export * from './constants'
 export * from './schema'
 export * from './error'
+export * from './media'
 export { getErrorMessage } from './error'
 import request, { setBaseUrl, getBaseUrl } from './request'
 

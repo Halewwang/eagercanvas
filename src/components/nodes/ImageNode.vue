@@ -146,7 +146,7 @@ import {
   imageModelOptions
 } from '../../stores/models'
 import { useApiConfig, useImageGeneration } from '../../hooks'
-import request from '../../utils/request'
+import { persistImageUrl, uploadImageFile } from '@/utils/media'
 
 const props = defineProps({
   id: String,
@@ -525,8 +525,20 @@ const runImageGeneration = async (mode = 'create') => {
       throw new Error('No image output')
     }
 
+    const rawUrl = String(result[0].url || '')
+    const stableUrl = await persistImageUrl(rawUrl, `generated-${Date.now()}.png`)
+    const finalUrl = stableUrl || rawUrl
+    if (!finalUrl) {
+      throw new Error('No image output')
+    }
+
+    if (!stableUrl && rawUrl.startsWith('data:image/')) {
+      throw new Error('Generated image persistence failed. Please retry.')
+    }
+
     updateNode(props.id, {
-      url: result[0].url,
+      url: finalUrl,
+      base64: '',
       loading: false,
       model: localImageModel.value,
       size: localImageSize.value,
@@ -625,22 +637,15 @@ const handleFileUpload = async (event) => {
     }
     
     setTimeout(() => updateNodeInternals(props.id), 30)
-    await saveProject()
 
     // Best-effort persistent upload, keep local image if cloud upload fails.
     isUploading.value = true
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const uploadRes = await request.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        silentErrorToast: true,
-        silentNetworkErrorToast: true
-      })
-      const uploadedUrl = uploadRes?.url
+      const uploadedUrl = await uploadImageFile(file)
       if (uploadedUrl) {
         updateNode(props.id, {
           url: uploadedUrl,
+          base64: '',
           fileName: file.name,
           fileType: file.type,
           updatedAt: Date.now(),
@@ -648,10 +653,10 @@ const handleFileUpload = async (event) => {
         })
         await saveProject()
       } else {
-        window.$message?.warning('Cloud persistence unavailable, keeping local image only')
+        window.$message?.warning('Cloud persistence unavailable, image not saved to project storage')
       }
     } catch {
-      window.$message?.warning('Cloud persistence failed, keeping local image only')
+      window.$message?.warning('Cloud persistence failed, image not saved to project storage')
     } finally {
       isUploading.value = false
     }

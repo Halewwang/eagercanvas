@@ -489,8 +489,8 @@ const confirmDelete = async () => {
 }
 
 // Go back to home | 返回首页
-const goBack = async () => {
-  await flushSave()
+const goBack = () => {
+  flushSave()
   router.push('/')
 }
 
@@ -515,11 +515,11 @@ const loadProjectById = (projectId) => {
 // Watch for route changes | 监听路由变化
 watch(
   () => route.params.id,
-  async (newId, oldId) => {
+  (newId, oldId) => {
     if (newId && newId !== oldId) {
       // Save current project before switching | 切换前保存当前项目
       if (oldId) {
-        await flushSave()
+        flushSave()
       }
       // Load new project | 加载新项目
       loadProjectById(newId)

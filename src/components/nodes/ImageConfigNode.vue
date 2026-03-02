@@ -164,6 +164,7 @@ import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline, R
 import { useImageGeneration, useApiConfig } from '../../hooks'
 import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject } from '../../stores/canvas'
 import { imageModelOptions, getModelSizeOptions, getModelQualityOptions, getModelConfig, DEFAULT_IMAGE_MODEL } from '../../stores/models'
+import { persistImageUrl } from '@/utils/media'
 
 const props = defineProps({
   id: String,
@@ -480,8 +481,19 @@ const handleGenerate = async (mode = 'auto') => {
 
     // Update image node with generated URL | 更新图片节点 URL
     if (result && result.length > 0) {
+      const rawUrl = String(result[0].url || '')
+      const stableUrl = await persistImageUrl(rawUrl, `generated-${Date.now()}.png`)
+      const finalUrl = stableUrl || rawUrl
+      if (!finalUrl) {
+        throw new Error('No image output')
+      }
+      if (!stableUrl && rawUrl.startsWith('data:image/')) {
+        throw new Error('Generated image persistence failed. Please retry.')
+      }
+
       updateNode(imageNodeId, {
-        url: result[0].url,
+        url: finalUrl,
+        base64: '',
         loading: false,
         label: 'Text to Image',
         model: localModel.value,

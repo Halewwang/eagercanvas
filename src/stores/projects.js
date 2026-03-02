@@ -38,7 +38,11 @@ const mapProjectFromApi = (row) => ({
 const mapProjectToApi = (project) => ({
   name: project.name,
   canvasData: project.canvasData,
-  thumbnailUrl: project.thumbnail || null
+  // Only persist stable public URLs as project thumbnail.
+  // Data URLs can break backend validation and autosave flow.
+  thumbnailUrl: /^https?:\/\//i.test(String(project.thumbnail || ''))
+    ? String(project.thumbnail)
+    : null
 })
 
 const getNodeMediaUrl = (node) => {

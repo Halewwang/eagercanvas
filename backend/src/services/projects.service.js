@@ -5,14 +5,20 @@ import { HttpError } from '../utils/http.js'
 const createSchema = z.object({
   name: z.string().min(1).max(120),
   canvasData: z.any().default({ nodes: [], edges: [], viewport: { x: 100, y: 50, zoom: 0.8 } }),
-  thumbnailUrl: z.string().url().optional().nullable()
+  thumbnailUrl: z.string().optional().nullable()
 })
 
 const updateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   canvasData: z.any().optional(),
-  thumbnailUrl: z.string().url().optional().nullable()
+  thumbnailUrl: z.string().optional().nullable()
 })
+
+const normalizeThumbnailUrl = (value) => {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  return /^https?:\/\//i.test(raw) ? raw : null
+}
 
 export const listProjects = async (userId) => {
   const { data, error } = await supabase
@@ -48,7 +54,7 @@ export const createProject = async (userId, input) => {
       user_id: userId,
       name: payload.name,
       canvas_json: payload.canvasData,
-      thumbnail_url: payload.thumbnailUrl || null
+      thumbnail_url: normalizeThumbnailUrl(payload.thumbnailUrl)
     })
     .select('*')
     .single()
@@ -66,18 +72,34 @@ export const updateProject = async (userId, id, input) => {
 
   if (payload.name !== undefined) patch.name = payload.name
   if (payload.canvasData !== undefined) patch.canvas_json = payload.canvasData
-  if (payload.thumbnailUrl !== undefined) patch.thumbnail_url = payload.thumbnailUrl
+  if (payload.thumbnailUrl !== undefined) patch.thumbnail_url = normalizeThumbnailUrl(payload.thumbnailUrl)
 
-  const { data, error } = await supabase
+  // Optimistic locking: If client provided updatedAt, check it matches
+  // 如果客户端提供了 updatedAt（版本号），则检查是否匹配
+  let query = supabase
     .from('projects')
     .update(patch)
     .eq('id', id)
     .eq('user_id', userId)
-    .select('*')
-    .maybeSingle()
+
+  if (input.currentUpdatedAt) {
+    query = query.eq('updated_at', input.currentUpdatedAt)
+  }
+
+  const { data, error } = await query.select('*').maybeSingle()
 
   if (error) throw new HttpError(500, error.message, 'PROJECT_UPDATE_FAILED')
-  if (!data) throw new HttpError(404, 'Project not found', 'PROJECT_NOT_FOUND')
+  
+  // If we had a version check and no data returned, it means conflict
+  // 如果进行了版本检查但未返回数据，说明发生了冲突（updated_at 不匹配）
+  if (input.currentUpdatedAt && !data) {
+    throw new HttpError(409, 'Project has been modified by another session', 'PROJECT_CONFLICT')
+  }
+
+  if (!data && !input.currentUpdatedAt) {
+    // Fallback for cases without version check (e.g. name update only)
+    throw new HttpError(404, 'Project not found', 'PROJECT_NOT_FOUND')
+  }
 
   return data
 }
