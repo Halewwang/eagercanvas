@@ -6,7 +6,7 @@
     </div>
 
     <div v-show="showCapsule || isSelected" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
-      <div class="capsule-inner">
+      <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
         <div class="capsule-group">
           <n-dropdown :options="imageModelDropdownOptions" @select="setImageModel">
             <button class="capsule-select">{{ displayImageModel }}</button>
@@ -41,17 +41,17 @@
           </button>
         </div>
       </div>
-      <div class="capsule-inner capsule-generate">
-        <button class="capsule-icon capsule-icon-solid capsule-create" :disabled="isImageBusy" @click="handleGenerateImage" title="Create">
-          <n-spin v-if="imageActionLoading === 'create'" :size="12" />
-          <template v-else>
-            <n-icon :size="14"><SparklesOutline /></n-icon>
-            <span class="capsule-create-label">Create</span>
-          </template>
+      <div class="capsule-inner capsule-generate" :class="{ 'capsule-inner-selected': isSelected }">
+        <button v-if="!isImageBusy" class="capsule-icon capsule-icon-solid capsule-create" @click="handleGenerateImage" title="Create">
+          <n-icon :size="14"><SparklesOutline /></n-icon>
+          <span class="capsule-create-label">Create</span>
         </button>
-        <button class="capsule-icon" :disabled="isImageBusy" @click="handleRegenerateImage" title="Regenerate">
-          <n-spin v-if="imageActionLoading === 'regenerate'" :size="12" />
-          <n-icon v-else :size="14"><RefreshOutline /></n-icon>
+        <button v-if="!isImageBusy" class="capsule-icon" @click="handleRegenerateImage" title="Regenerate">
+          <n-icon :size="14"><RefreshOutline /></n-icon>
+        </button>
+        <button v-if="isImageBusy" class="capsule-icon capsule-icon-solid capsule-create" @click="handleStopGeneration" title="Stop">
+          <n-icon :size="14"><CloseCircleOutline /></n-icon>
+          <span class="capsule-create-label">Stop</span>
         </button>
       </div>
     </div>
@@ -66,14 +66,6 @@
           <div class="module-progress-track"></div>
           <div class="module-progress-bar" :style="progressBarStyle"></div>
           <div class="module-progress-label">Generating image... {{ progressPercent }}%</div>
-        </div>
-
-        <div
-          v-else-if="data.error"
-          class="w-full h-full bg-[#231a1d] flex flex-col items-center justify-center gap-2"
-        >
-          <n-icon :size="30" class="text-red-500"><CloseCircleOutline /></n-icon>
-          <span class="text-sm text-red-400 text-center px-3">{{ data.error }}</span>
         </div>
 
         <img
@@ -109,6 +101,12 @@
         <img :src="data.url" alt="Preview" class="zoom-image-original" />
       </div>
     </n-modal>
+    <n-modal v-model:show="showErrorModal" preset="dialog" title="Image Module Error" :show-icon="false">
+      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ data.error }}</div>
+      <template #action>
+        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeErrorModal">Close</button>
+      </template>
+    </n-modal>
 
     <div class="binding-status-wrap">
       <div class="binding-status-row">
@@ -128,7 +126,7 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NDropdown, NIcon, NModal, NSpin } from 'naive-ui'
+import { NDropdown, NIcon, NModal } from 'naive-ui'
 import {
   AddOutline,
   CloseCircleOutline,
@@ -139,7 +137,7 @@ import {
   SparklesOutline,
   TrashOutline
 } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
+import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, updateNode } from '../../stores/canvas'
 import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_IMAGE_SIZE,
@@ -172,7 +170,9 @@ const localImageRatio = ref('1:1')
 const localResolution = ref('1k')
 const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
+const showErrorModal = ref(false)
 const imageActionLoading = ref('')
+const isUploading = ref(false)
 const progressValue = ref(0)
 const showProgress = ref(false)
 const progressTimer = ref(null)
@@ -233,6 +233,12 @@ watch(
   },
   { deep: true }
 )
+watch(
+  () => props.data?.error,
+  (newVal) => {
+    showErrorModal.value = !!newVal
+  }
+)
 
 const imageModelDropdownOptions = computed(() => imageModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const imageSizeOptions = computed(() => getModelSizeOptions(localImageModel.value, localImageQuality.value))
@@ -287,15 +293,19 @@ const displayRatio = computed(() => {
 const displayResolution = computed(() => localResolution.value.toUpperCase())
 
 const ratioFromSize = computed(() => {
+  if (localImageRatio.value && localImageRatio.value.includes(':')) {
+    return localImageRatio.value
+  }
+  
   const [w, h] = String(localImageSize.value || '').split('x').map(Number)
   if (!w || !h) return '1:1'
   const ratio = w / h
-  if (Math.abs(ratio - 1) < 0.02) return '1:1'
-  if (Math.abs(ratio - 16 / 9) < 0.03) return '16:9'
-  if (Math.abs(ratio - 9 / 16) < 0.03) return '9:16'
-  if (Math.abs(ratio - 4 / 3) < 0.03) return '4:3'
-  if (Math.abs(ratio - 3 / 4) < 0.03) return '3:4'
-  return '1:1'
+  if (Math.abs(ratio - 1) < 0.05) return '1:1'
+  if (Math.abs(ratio - 16 / 9) < 0.05) return '16:9'
+  if (Math.abs(ratio - 9 / 16) < 0.05) return '9:16'
+  if (Math.abs(ratio - 4 / 3) < 0.05) return '4:3'
+  if (Math.abs(ratio - 3 / 4) < 0.05) return '3:4'
+  return `${w}:${h}` // Fallback to custom ratio
 })
 
 const stageStyle = computed(() => {
@@ -307,10 +317,21 @@ const stageStyle = computed(() => {
     '4:3': { width: 360, height: 270 },
     '3:4': { width: 280, height: 373 }
   }
-  const picked = map[ratio] || map['1:1']
+  
+  if (map[ratio]) return { width: `${map[ratio].width}px`, height: `${map[ratio].height}px` }
+
+  // Handle custom ratio
+  const [w, h] = ratio.includes(':') ? ratio.split(':').map(Number) : [1, 1]
+  if (!w || !h) return { width: '320px', height: '320px' }
+  
+  // Calculate size fitting within max bounds (e.g. 420x462) while maintaining aspect ratio
+  const MAX_W = 420
+  const MAX_H = 462
+  const scale = Math.min(MAX_W / w, MAX_H / h)
+  
   return {
-    width: `${picked.width}px`,
-    height: `${picked.height}px`
+    width: `${Math.round(w * scale)}px`,
+    height: `${Math.round(h * scale)}px`
   }
 })
 
@@ -475,7 +496,7 @@ const imageInputStatusList = computed(() => ([
 
 const runImageGeneration = async (mode = 'create') => {
   if (!isConfigured.value) {
-    window.$message?.warning('Please configure API Key first')
+    window.$message?.warning('Please sign in first')
     return
   }
 
@@ -512,6 +533,7 @@ const runImageGeneration = async (mode = 'create') => {
       quality: localImageQuality.value,
       updatedAt: Date.now()
     })
+    await saveProject()
     window.$message?.success(mode === 'regenerate' ? 'Image regenerated' : 'Image generated')
   } catch (err) {
     updateNode(props.id, { loading: false, error: err?.message || 'Generation failed' })
@@ -520,13 +542,42 @@ const runImageGeneration = async (mode = 'create') => {
     imageActionLoading.value = ''
   }
 }
+const handleStopGeneration = () => {
+  // Clear timers and reset UI
+  clearProgressTimers()
+  showProgress.value = false
+  progressValue.value = 0
+  imageActionLoading.value = ''
+  
+  // Reset node state
+  updateNode(props.id, { loading: false, error: 'Generation stopped' })
+  window.$message?.info('Generation stopped')
+  
+  // Note: Actual API cancellation would require AbortController support in useImageGeneration
+}
+
 const handleGenerateImage = () => runImageGeneration('create')
 const handleRegenerateImage = () => runImageGeneration('regenerate')
+
+const getImageDimensions = (file) =>
+  new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      resolve({ width: img.width || 0, height: img.height || 0 })
+      URL.revokeObjectURL(objectUrl)
+    }
+    img.onerror = () => {
+      resolve({ width: 0, height: 0 })
+      URL.revokeObjectURL(objectUrl)
+    }
+    img.src = objectUrl
+  })
 
 const fileToBase64 = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
+    reader.onload = () => resolve(String(reader.result || ''))
     reader.onerror = reject
     reader.readAsDataURL(file)
   })
@@ -540,18 +591,75 @@ const handleFileUpload = async (event) => {
   if (!file) return
 
   try {
+    // Local upload should not trigger generation loading animation.
+    // Keep local preview immediately, then best-effort sync to cloud storage.
     const base64 = await fileToBase64(file)
+    const { width: w, height: h } = await getImageDimensions(file)
+    let ratio = '1:1'
+    
+    if (w && h) {
+      const r = w / h
+      if (Math.abs(r - 1) < 0.05) ratio = '1:1'
+      else if (Math.abs(r - 16 / 9) < 0.05) ratio = '16:9'
+      else if (Math.abs(r - 9 / 16) < 0.05) ratio = '9:16'
+      else if (Math.abs(r - 4 / 3) < 0.05) ratio = '4:3'
+      else if (Math.abs(r - 3 / 4) < 0.05) ratio = '3:4'
+      else ratio = `${w}:${h}` // Custom ratio for non-standard sizes
+    }
+
     updateNode(props.id, {
       url: base64,
       base64,
       fileName: file.name,
       fileType: file.type,
       label: 'Image',
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      loading: false,
+      error: '',
+      ratio: ratio,
+      size: w && h ? `${w}x${h}` : localImageSize.value
     })
+    localImageRatio.value = ratio
+    if (w && h) {
+      localImageSize.value = `${w}x${h}`
+    }
+    
     setTimeout(() => updateNodeInternals(props.id), 30)
-  } catch {
+    await saveProject()
+
+    // Best-effort persistent upload, keep local image if cloud upload fails.
+    isUploading.value = true
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const uploadRes = await request.post('/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        silentErrorToast: true,
+        silentNetworkErrorToast: true
+      })
+      const uploadedUrl = uploadRes?.url
+      if (uploadedUrl) {
+        updateNode(props.id, {
+          url: uploadedUrl,
+          fileName: file.name,
+          fileType: file.type,
+          updatedAt: Date.now(),
+          error: ''
+        })
+        await saveProject()
+      } else {
+        window.$message?.warning('Cloud persistence unavailable, keeping local image only')
+      }
+    } catch {
+      window.$message?.warning('Cloud persistence failed, keeping local image only')
+    } finally {
+      isUploading.value = false
+    }
+  } catch (err) {
+    updateNode(props.id, { loading: false, error: err?.message || 'Upload failed' })
     window.$message?.error('Image upload failed')
+  } finally {
+    if (event?.target) event.target.value = ''
   }
 }
 
@@ -586,6 +694,10 @@ const handleMetaMouseDown = () => {
 const openPreviewModal = () => {
   if (!props.data?.url) return
   showPreviewModal.value = true
+}
+const closeErrorModal = () => {
+  showErrorModal.value = false
+  updateNode(props.id, { error: '' })
 }
 
 const createLinkedNode = (type) => {
@@ -750,17 +862,31 @@ const createLinkedNode = (type) => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
+  flex-wrap: nowrap;
 }
 
 .capsule-inner {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 9px;
+  gap: 12px;
+  padding: 7px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(143, 143, 143, 0.45);
+  border: 1px solid transparent;
   background: #1d1d1d;
   backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.capsule-inner:hover {
+  border-color: rgba(143, 143, 143, 0.25);
+  background: #232323;
+}
+
+.capsule-inner-selected {
+  border-color: rgba(143, 143, 143, 0.45);
 }
 
 .capsule-generate {
@@ -770,7 +896,7 @@ const createLinkedNode = (type) => {
 .capsule-group {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .capsule-divider {
@@ -791,12 +917,12 @@ const createLinkedNode = (type) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: all 0.2s ease;
 }
 
-.capsule-resolution {
-  min-width: 0;
-  max-width: none;
-  text-align: left;
+.capsule-select:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .capsule-icon {
@@ -812,33 +938,45 @@ const createLinkedNode = (type) => {
   transition: all 0.2s;
 }
 
+.capsule-icon:hover:not(:disabled) {
+  color: #f0f2f5;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .capsule-icon-solid {
   background: #1d1d1d;
   color: #f6f8fc;
   border-color: rgba(143, 143, 143, 0.65);
 }
 
+.capsule-icon-solid:hover:not(:disabled) {
+  background: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
+.capsule-icon:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .capsule-create {
   width: auto;
   min-width: 86px;
-  padding: 0 11px;
-  gap: 6px;
+  padding: 0 14px;
+  gap: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 28px;
 }
 
 .capsule-create-label {
   font-size: 12px;
   line-height: 1;
   font-weight: 500;
-}
-
-.capsule-icon:hover:not(:disabled) {
-  color: #f0f2f5;
-  border-color: rgba(255, 255, 255, 0.28);
-}
-
-.capsule-icon:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+  white-space: nowrap;
 }
 
 .node-default {

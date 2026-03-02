@@ -9,8 +9,9 @@ import {
   apiListProjects,
   apiPatchProject
 } from '@/api/projects'
+import { useAuthStore } from '@/stores/auth'
 
-const STORAGE_KEY = 'ai-canvas-projects-draft-cache'
+const STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-cache'
 
 export const projects = ref([])
 export const currentProjectId = ref(null)
@@ -40,17 +41,67 @@ const mapProjectToApi = (project) => ({
   thumbnailUrl: project.thumbnail || null
 })
 
+const getNodeMediaUrl = (node) => {
+  const url = String(node?.data?.url || '').trim()
+  // Blob URLs are session-scoped and cannot survive refresh.
+  if (!url || url.startsWith('blob:')) return ''
+  return url
+}
+
+const getNodeUpdatedTs = (node) => {
+  const data = node?.data || {}
+  return Math.max(toTs(data.updatedAt), toTs(data.createdAt), 0)
+}
+
+const pickLatestNodeUrl = (list) => {
+  let latestNode = null
+  let latestTs = -1
+
+  for (const node of list) {
+    const url = getNodeMediaUrl(node)
+    if (!url) continue
+    const ts = getNodeUpdatedTs(node)
+    if (ts >= latestTs) {
+      latestTs = ts
+      latestNode = node
+    }
+  }
+
+  return latestNode ? getNodeMediaUrl(latestNode) : ''
+}
+
+const resolveProjectThumbnail = (canvasData, currentThumbnail = '') => {
+  const list = Array.isArray(canvasData?.nodes) ? canvasData.nodes : []
+  if (list.length === 0) return currentThumbnail || ''
+
+  const imageThumbnail = pickLatestNodeUrl(list.filter((node) => node?.type === 'image'))
+  if (imageThumbnail) return imageThumbnail
+
+  const videoThumbnail = pickLatestNodeUrl(list.filter((node) => node?.type === 'video'))
+  if (videoThumbnail) return videoThumbnail
+
+  return currentThumbnail || ''
+}
+
 const saveLocalCache = () => {
+  const { user, isAuthenticated } = useAuthStore()
+  if (!isAuthenticated.value) return
+  const userId = user.value?.id
+  if (!userId) return
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects.value))
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}:${userId}`, JSON.stringify(projects.value))
   } catch {
     // ignore cache write failures
   }
 }
 
 const loadLocalCache = () => {
+  const { user, isAuthenticated } = useAuthStore()
+  if (!isAuthenticated.value) return []
+  const userId = user.value?.id
+  if (!userId) return []
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}:${userId}`)
     if (!raw) return []
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed : []
@@ -87,6 +138,11 @@ const mergeRemoteWithLocalDrafts = (remoteProjects, localProjects) => {
 }
 
 export const loadProjects = async () => {
+  const { isAuthenticated } = useAuthStore()
+  if (!isAuthenticated.value) {
+    projects.value = []
+    return projects.value
+  }
   const localDrafts = loadLocalCache()
   try {
     const response = await apiListProjects()
@@ -141,9 +197,9 @@ export const updateProject = async (id, data) => {
   return true
 }
 
-export const updateProjectCanvas = async (id, canvasData) => {
+export const updateProjectCanvas = async (id, canvasData, currentVersion = null) => {
   const project = projects.value.find((p) => p.id === id)
-  if (!project) return false
+  if (!project) return null
 
   const next = {
     ...project,
@@ -151,42 +207,45 @@ export const updateProjectCanvas = async (id, canvasData) => {
       ...project.canvasData,
       ...canvasData
     },
-    updatedAt: new Date().toISOString()
+    thumbnail: resolveProjectThumbnail(
+      {
+        ...project.canvasData,
+        ...canvasData
+      },
+      project.thumbnail
+    ),
+    // Don't update local timestamp immediately to avoid race conditions with server
+    // updatedAt: new Date().toISOString() 
   }
-
-  if (canvasData.nodes) {
-    // Cover image rule: always use the first generated image in the project.
-    const imageNodes = canvasData.nodes
-      .filter((node) => node.type === 'image' && node.data?.url)
-      .sort((a, b) => {
-        const aTime = Number(a.data?.createdAt || a.data?.updatedAt || 0)
-        const bTime = Number(b.data?.createdAt || b.data?.updatedAt || 0)
-        return aTime - bTime
-      })
-
-    if (imageNodes.length > 0) {
-      next.thumbnail = imageNodes[0].data.url
-    }
-  }
-
-  const idx = projects.value.findIndex((p) => p.id === id)
-  projects.value[idx] = next
-  saveLocalCache()
 
   try {
-    const response = await apiPatchProject(id, mapProjectToApi(next))
-    projects.value[idx] = mapProjectFromApi(response.data)
+    const payload = mapProjectToApi(next)
+    // Pass currentVersion to API if provided
+    if (currentVersion) {
+      payload.currentUpdatedAt = currentVersion
+    }
+    
+    const response = await apiPatchProject(id, payload)
+    const updatedProject = mapProjectFromApi(response.data)
+    
+    // Update local store with server response
+    const idx = projects.value.findIndex((p) => p.id === id)
+    if (idx !== -1) {
+      projects.value[idx] = updatedProject
+    }
     saveLocalCache()
+    
+    return updatedProject // Return full project object including new updatedAt
   } catch (error) {
-    console.warn('Cloud autosave failed, local draft kept:', error?.message)
+    console.warn('Cloud autosave failed:', error?.message)
+    throw error // Re-throw to let caller handle conflict
   }
-
-  return true
 }
 
 export const getProjectCanvas = (id) => {
   const project = projects.value.find((p) => p.id === id)
-  return project?.canvasData || null
+  // Return full project to access metadata like updatedAt
+  return project ? { ...project.canvasData, _meta: project } : null
 }
 
 export const deleteProject = async (id) => {

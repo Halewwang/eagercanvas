@@ -190,6 +190,8 @@ export const useVideoGeneration = () => {
     maxAttempts: 120,
     percentage: 0
   })
+  let pollAbortController = null
+  const cancelRequested = ref(false)
 
   const getTaskId = (task) => {
     const candidates = [
@@ -255,6 +257,11 @@ export const useVideoGeneration = () => {
    * @param {Object} params - { model, prompt, first_frame_image, last_frame_image, ratio, duration }
    */
   const generate = async (params) => {
+    if (loading.value) {
+      throw new Error('已有视频任务正在执行')
+    }
+
+    cancelRequested.value = false
     setLoading(true)
     video.value = null
     taskId.value = null
@@ -286,7 +293,7 @@ export const useVideoGeneration = () => {
       }
 
       // Call API | 调用 API
-      const endpoint = modelConfig?.endpoint || '/videos'
+      const endpoint = '/videos'
       const task = await createVideoTask(requestData, {
         requestType: 'json',
         endpoint: endpoint
@@ -322,13 +329,23 @@ export const useVideoGeneration = () => {
       for (let i = 0; i < maxAttempts; i++) {
         progress.attempt = i + 1
         progress.percentage = Math.min(Math.round((i / maxAttempts) * 100), 99)
+        if (cancelRequested.value) {
+          throw new Error('视频生成已取消')
+        }
+
         let result
         try {
+          pollAbortController = new AbortController()
           // Pass silentErrorToast option to request
           result = await getVideoTaskStatus(id, {
-            silentErrorToast: true
+            silentErrorToast: true,
+            signal: pollAbortController.signal
           })
         } catch (pollErr) {
+          if (cancelRequested.value) {
+            throw new Error('视频生成已取消')
+          }
+
           const statusCode = Number(pollErr?.response?.status || pollErr?.status || 0)
           // 408, 429, 5xx are transient. 0/undefined (network error) also transient.
           const isTransient = transientErrorStatuses.has(statusCode) || !statusCode
@@ -337,6 +354,9 @@ export const useVideoGeneration = () => {
           // Wait before retry
           await new Promise(resolve => setTimeout(resolve, interval))
           continue
+        }
+        finally {
+          pollAbortController = null
         }
         
         const resultStatus = getTaskStatus(result)
@@ -371,10 +391,24 @@ export const useVideoGeneration = () => {
     } catch (err) {
       setError(err)
       throw err
+    } finally {
+      pollAbortController = null
+      cancelRequested.value = false
     }
   }
 
-  return { loading, error, status, video, taskId, progress, generate, reset }
+  const stop = () => {
+    if (!loading.value && status.value !== 'polling') return
+    cancelRequested.value = true
+    if (pollAbortController) {
+      pollAbortController.abort()
+      pollAbortController = null
+    }
+    loading.value = false
+    status.value = 'idle'
+  }
+
+  return { loading, error, status, video, taskId, progress, generate, stop, reset }
 }
 
 /**

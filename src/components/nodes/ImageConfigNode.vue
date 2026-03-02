@@ -162,7 +162,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NDropdown, NSpin } from 'naive-ui'
 import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline, RefreshOutline, AddOutline } from '../../icons/coolicons'
 import { useImageGeneration, useApiConfig } from '../../hooks'
-import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode } from '../../stores/canvas'
+import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject } from '../../stores/canvas'
 import { imageModelOptions, getModelSizeOptions, getModelQualityOptions, getModelConfig, DEFAULT_IMAGE_MODEL } from '../../stores/models'
 
 const props = defineProps({
@@ -390,9 +390,16 @@ const handleGenerate = async (mode = 'auto') => {
   }
 
   if (!isConfigured.value) {
-    window.$message?.warning('Please configure API Key first')
+    window.$message?.warning('Please sign in first')
     return
   }
+
+  updateNode(props.id, {
+    status: 'running',
+    executed: false,
+    outputNodeId: null,
+    error: ''
+  })
 
   let imageNodeId = null
   
@@ -482,10 +489,12 @@ const handleGenerate = async (mode = 'auto') => {
       })
       
       // Mark this config node as executed | 标记配置节点已执行
-      updateNode(props.id, { executed: true, outputNodeId: imageNodeId })
+      updateNode(props.id, { status: 'completed', executed: true, outputNodeId: imageNodeId, error: '' })
+      await saveProject()
     }
     window.$message?.success('Image generated')
   } catch (err) {
+    updateNode(props.id, { status: 'failed', error: err.message || 'Generation failed' })
     // Update node to show error | 更新节点显示错误
     updateNode(imageNodeId, {
       loading: false,

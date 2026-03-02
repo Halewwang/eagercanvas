@@ -141,7 +141,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NDropdown, NSpin } from 'naive-ui'
 import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
-import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges } from '../../stores/canvas'
+import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject } from '../../stores/canvas'
 import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, DEFAULT_VIDEO_MODEL } from '../../stores/models'
 
 const props = defineProps({
@@ -313,9 +313,16 @@ const handleGenerate = async () => {
   }
 
   if (!isConfigured.value) {
-    window.$message?.warning('Please configure API Key first')
+    window.$message?.warning('Please sign in first')
     return
   }
+
+  updateNode(props.id, {
+    status: 'running',
+    executed: false,
+    outputNodeId: null,
+    error: ''
+  })
 
   // Get current node position | 获取当前节点位置
   const currentNode = nodes.value.find(n => n.id === props.id)
@@ -393,10 +400,12 @@ const handleGenerate = async () => {
       })
       
       // Mark this config node as executed | 标记配置节点已执行
-      updateNode(props.id, { executed: true, outputNodeId: videoNodeId })
+      updateNode(props.id, { status: 'completed', executed: true, outputNodeId: videoNodeId, error: '' })
+      await saveProject()
     }
     window.$message?.success('Video generated')
   } catch (err) {
+    updateNode(props.id, { status: 'failed', error: err.message || 'Generation failed' })
     // Update node to show error | 更新节点显示错误
     updateNode(videoNodeId, {
       loading: false,
