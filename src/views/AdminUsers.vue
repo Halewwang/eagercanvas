@@ -1,5 +1,5 @@
 <template>
-  <div class="admin-shell min-h-screen overflow-y-auto px-3 py-4 md:px-6 md:py-6">
+  <div ref="adminShellRef" class="admin-shell min-h-screen overflow-y-auto px-3 py-4 md:px-6 md:py-6">
     <div class="admin-frame w-full rounded-[20px] border border-white/10">
       <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr]">
         <aside class="admin-sidebar hidden border-r border-white/10 lg:flex lg:flex-col">
@@ -404,6 +404,7 @@ const navItems = [
   { key: 'audit', label: 'Audit Logs' }
 ]
 const activeSection = ref('overview')
+const adminShellRef = ref(null)
 
 const dashboardRef = ref(null)
 const usersRef = ref(null)
@@ -528,10 +529,7 @@ const getSectionEl = (key) => {
 const scrollToSection = (key) => {
   activeSection.value = key
   const el = getSectionEl(key)
-  if (el) {
-    const top = el.getBoundingClientRect().top + window.scrollY - 16
-    window.scrollTo({ top, behavior: 'smooth' })
-  }
+  if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 const onMainScroll = () => {
@@ -859,11 +857,13 @@ onMounted(async () => {
   await loadAll()
   await nextTick()
   onMainScroll()
-  window.addEventListener('scroll', onMainScroll, { passive: true })
+  const scrollTarget = adminShellRef.value || window
+  scrollTarget.addEventListener('scroll', onMainScroll, { passive: true })
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('scroll', onMainScroll)
+  const scrollTarget = adminShellRef.value || window
+  scrollTarget.removeEventListener('scroll', onMainScroll)
 })
 </script>
 
