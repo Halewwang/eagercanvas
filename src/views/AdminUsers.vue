@@ -2,7 +2,7 @@
   <div ref="adminShellRef" class="admin-shell min-h-screen overflow-y-auto px-3 py-4 md:px-6 md:py-6">
     <div class="admin-frame w-full rounded-[20px] border border-white/10">
       <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr]">
-        <aside class="admin-sidebar hidden border-r border-white/10 lg:flex lg:flex-col">
+        <aside class="admin-sidebar hidden self-start border-r border-white/10 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
           <div class="px-5 pt-5">
             <div class="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
               <p class="text-xs uppercase tracking-[0.18em] text-white/45">EagerCanvas</p>
