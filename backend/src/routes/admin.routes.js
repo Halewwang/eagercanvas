@@ -5,9 +5,13 @@ import { requirePermission } from '../middleware/authz.js'
 import { asyncHandler } from '../utils/http.js'
 import {
   assignApiKeyToUser,
+  deleteUserAccount,
+  getAdminUsageSummary,
+  getAdminUsageTimeseries,
   listAdminOperationLogs,
   listUsersForAdmin,
   unassignApiKeyFromUser,
+  updateUserStatus,
   updateUserRoles
 } from '../services/admin-usage.service.js'
 
@@ -21,6 +25,11 @@ const updateRolesSchema = z.object({
 const apiKeyAssignSchema = z.object({
   userId: z.string().min(1),
   apiName: z.string().min(1)
+})
+
+const updateUserStatusSchema = z.object({
+  status: z.enum(['active', 'suspended']),
+  reason: z.string().max(200).optional()
 })
 
 adminRouter.get('/session', requirePermission(['admin.dashboard.read']), asyncHandler(async (req, res) => {
@@ -46,6 +55,31 @@ adminRouter.patch('/users/:userId/roles', requirePermission(['admin.user.role.up
     operatorRoles: req.user.roles || [],
     targetUserId: req.params.userId,
     roleCodes: payload.roleCodes,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || ''
+  })
+  res.json(result)
+}))
+
+adminRouter.patch('/users/:userId/status', requirePermission(['admin.user.status.update']), asyncHandler(async (req, res) => {
+  const payload = updateUserStatusSchema.parse(req.body || {})
+  const result = await updateUserStatus({
+    operatorUserId: req.user.id,
+    operatorRoles: req.user.roles || [],
+    targetUserId: req.params.userId,
+    status: payload.status,
+    reason: payload.reason,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || ''
+  })
+  res.json(result)
+}))
+
+adminRouter.delete('/users/:userId', requirePermission(['admin.user.status.update']), asyncHandler(async (req, res) => {
+  const result = await deleteUserAccount({
+    operatorUserId: req.user.id,
+    operatorRoles: req.user.roles || [],
+    targetUserId: req.params.userId,
     ip: req.ip,
     userAgent: req.headers['user-agent'] || ''
   })
@@ -82,4 +116,22 @@ adminRouter.get('/audit-logs', requirePermission(['admin.audit.read']), asyncHan
     limit: req.query.limit
   })
   res.json({ data: result.items, pagination: result.pagination })
+}))
+
+adminRouter.get('/usage/summary', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
+  const data = await getAdminUsageSummary({
+    from: req.query.from,
+    to: req.query.to,
+    userId: req.query.userId
+  })
+  res.json({ data })
+}))
+
+adminRouter.get('/usage/timeseries', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
+  const data = await getAdminUsageTimeseries({
+    from: req.query.from,
+    to: req.query.to,
+    userId: req.query.userId
+  })
+  res.json({ data, granularity: 'day' })
 }))

@@ -98,9 +98,19 @@ const createAdminLog = async ({ operatorUserId, targetUserId = null, action, met
   }
 }
 
+const toIsoDateStart = (value) => {
+  const val = String(value || '').trim()
+  return val ? `${val}T00:00:00.000Z` : ''
+}
+
+const toIsoDateEnd = (value) => {
+  const val = String(value || '').trim()
+  return val ? `${val}T23:59:59.999Z` : ''
+}
+
 export const listUsersForAdmin = async () => {
   const [usersRes, profilesRes, dailyAggRes, assignments] = await Promise.all([
-    supabase.from('users').select('id, email, created_at').order('created_at', { ascending: false }),
+    supabase.from('users').select('*').order('created_at', { ascending: false }),
     supabase.from('user_profiles').select('user_id, display_name, registered_at, last_login_at'),
     supabase.from('usage_daily_agg').select('user_id, total_calls, total_tokens, total_images, total_video_seconds, total_cost_usd'),
     loadAssignments()
@@ -145,6 +155,10 @@ export const listUsersForAdmin = async () => {
       id: user.id,
       email: user.email,
       createdAt: user.created_at,
+      status: user.status || 'active',
+      suspendedAt: user.suspended_at || null,
+      suspendedReason: user.suspended_reason || null,
+      deletedAt: user.deleted_at || null,
       displayName: profile?.display_name || '',
       registeredAt: profile?.registered_at || null,
       lastLoginAt: profile?.last_login_at || null,
@@ -271,6 +285,227 @@ export const updateUserRoles = async ({
     beforeRoles,
     roles: normalizedRoles
   }
+}
+
+export const updateUserStatus = async ({
+  operatorUserId,
+  operatorRoles = [],
+  targetUserId,
+  status,
+  reason,
+  ip,
+  userAgent
+}) => {
+  const safeTargetUserId = String(targetUserId || '').trim()
+  const safeStatus = String(status || '').trim()
+  const allowedStatuses = new Set(['active', 'suspended'])
+
+  if (!safeTargetUserId) throw new HttpError(400, 'targetUserId is required', 'INVALID_TARGET_USER')
+  if (!allowedStatuses.has(safeStatus)) throw new HttpError(400, 'Invalid status value', 'INVALID_STATUS')
+
+  const isOperatorSuperAdmin = (operatorRoles || []).includes('super_admin')
+  const { data: targetUser, error: targetUserError } = await supabase
+    .from('users')
+    .select('id, email, status, deleted_at')
+    .eq('id', safeTargetUserId)
+    .maybeSingle()
+  if (targetUserError) throw new HttpError(500, targetUserError.message, 'USER_QUERY_FAILED')
+  if (!targetUser) throw new HttpError(404, 'Target user not found', 'TARGET_USER_NOT_FOUND')
+  if (targetUser.deleted_at || targetUser.status === 'deleted') {
+    throw new HttpError(400, 'Deleted account cannot change status', 'ACCOUNT_ALREADY_DELETED')
+  }
+
+  const beforeRoles = await getUserRoleCodes(safeTargetUserId)
+  if (!isOperatorSuperAdmin && beforeRoles.includes('super_admin')) {
+    throw new HttpError(403, 'Only super_admin can modify a super_admin account', 'FORBIDDEN_SUPER_ADMIN_EDIT')
+  }
+
+  const patch = safeStatus === 'active'
+    ? { status: 'active', suspended_at: null, suspended_reason: null }
+    : { status: 'suspended', suspended_at: new Date().toISOString(), suspended_reason: String(reason || '').trim() || null }
+
+  const { data: updated, error: updateError } = await supabase
+    .from('users')
+    .update(patch)
+    .eq('id', safeTargetUserId)
+    .select('id, email, status, suspended_at, suspended_reason')
+    .single()
+  if (updateError) throw new HttpError(500, updateError.message, 'USER_STATUS_UPDATE_FAILED')
+
+  if (safeStatus === 'suspended') {
+    await supabase
+      .from('sessions')
+      .update({ revoked: true, revoked_at: new Date().toISOString() })
+      .eq('user_id', safeTargetUserId)
+      .eq('revoked', false)
+  }
+
+  invalidateUserAuthzCache(safeTargetUserId)
+  await createAdminLog({
+    operatorUserId,
+    targetUserId: safeTargetUserId,
+    action: 'admin.user.status.update',
+    metadata: {
+      beforeStatus: targetUser.status || 'active',
+      afterStatus: updated.status,
+      reason: updated.suspended_reason || null,
+      ip: String(ip || ''),
+      userAgent: String(userAgent || '')
+    }
+  })
+
+  return {
+    ok: true,
+    user: {
+      id: updated.id,
+      email: updated.email,
+      status: updated.status,
+      suspendedAt: updated.suspended_at || null,
+      suspendedReason: updated.suspended_reason || null
+    }
+  }
+}
+
+export const deleteUserAccount = async ({
+  operatorUserId,
+  operatorRoles = [],
+  targetUserId,
+  ip,
+  userAgent
+}) => {
+  const safeTargetUserId = String(targetUserId || '').trim()
+  if (!safeTargetUserId) throw new HttpError(400, 'targetUserId is required', 'INVALID_TARGET_USER')
+  if (safeTargetUserId === String(operatorUserId || '').trim()) {
+    throw new HttpError(400, 'Cannot delete your own account', 'SELF_DELETE_NOT_ALLOWED')
+  }
+
+  const isOperatorSuperAdmin = (operatorRoles || []).includes('super_admin')
+  const beforeRoles = await getUserRoleCodes(safeTargetUserId)
+  if (!isOperatorSuperAdmin && beforeRoles.includes('super_admin')) {
+    throw new HttpError(403, 'Only super_admin can delete a super_admin account', 'FORBIDDEN_SUPER_ADMIN_DELETE')
+  }
+
+  const { data: targetUser, error: targetUserError } = await supabase
+    .from('users')
+    .select('id, email, status, deleted_at')
+    .eq('id', safeTargetUserId)
+    .maybeSingle()
+  if (targetUserError) throw new HttpError(500, targetUserError.message, 'USER_QUERY_FAILED')
+  if (!targetUser) throw new HttpError(404, 'Target user not found', 'TARGET_USER_NOT_FOUND')
+  if (targetUser.deleted_at || targetUser.status === 'deleted') {
+    return { ok: true, alreadyDeleted: true }
+  }
+
+  const now = new Date().toISOString()
+  const { error: updateError } = await supabase
+    .from('users')
+    .update({
+      status: 'deleted',
+      deleted_at: now,
+      deleted_by: operatorUserId || null,
+      suspended_at: now,
+      suspended_reason: 'Deleted by admin'
+    })
+    .eq('id', safeTargetUserId)
+  if (updateError) throw new HttpError(500, updateError.message, 'USER_DELETE_FAILED')
+
+  await Promise.all([
+    supabase
+      .from('sessions')
+      .update({ revoked: true, revoked_at: now })
+      .eq('user_id', safeTargetUserId)
+      .eq('revoked', false),
+    supabase
+      .from(ASSIGNMENT_TABLE)
+      .delete()
+      .eq('user_id', safeTargetUserId)
+  ])
+
+  invalidateUserAuthzCache(safeTargetUserId)
+  await createAdminLog({
+    operatorUserId,
+    targetUserId: safeTargetUserId,
+    action: 'admin.user.delete',
+    metadata: {
+      beforeStatus: targetUser.status || 'active',
+      ip: String(ip || ''),
+      userAgent: String(userAgent || '')
+    }
+  })
+
+  return { ok: true }
+}
+
+export const getAdminUsageSummary = async ({ from, to, userId } = {}) => {
+  const query = supabase
+    .from('usage_events')
+    .select('user_id,input_tokens,output_tokens,image_count,video_seconds,cost_usd,created_at')
+
+  if (userId) query.eq('user_id', String(userId))
+  if (from) query.gte('created_at', toIsoDateStart(from))
+  if (to) query.lte('created_at', toIsoDateEnd(to))
+
+  const { data, error } = await query
+  if (error) throw new HttpError(500, error.message, 'ADMIN_USAGE_SUMMARY_FAILED')
+
+  const users = new Set()
+  const summary = (data || []).reduce((acc, item) => {
+    users.add(item.user_id)
+    acc.totalCalls += 1
+    acc.totalInputTokens += Number(item.input_tokens || 0)
+    acc.totalOutputTokens += Number(item.output_tokens || 0)
+    acc.totalImages += Number(item.image_count || 0)
+    acc.totalVideoSeconds += Number(item.video_seconds || 0)
+    acc.totalCostUsd += Number(item.cost_usd || 0)
+    return acc
+  }, {
+    totalCalls: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalImages: 0,
+    totalVideoSeconds: 0,
+    totalCostUsd: 0
+  })
+
+  return {
+    ...summary,
+    totalUsers: users.size
+  }
+}
+
+export const getAdminUsageTimeseries = async ({ from, to, userId } = {}) => {
+  const query = supabase
+    .from('usage_daily_agg')
+    .select('date,user_id,total_calls,total_tokens,total_images,total_video_seconds,total_cost_usd')
+    .order('date', { ascending: true })
+
+  if (userId) query.eq('user_id', String(userId))
+  if (from) query.gte('date', String(from))
+  if (to) query.lte('date', String(to))
+
+  const { data, error } = await query
+  if (error) throw new HttpError(500, error.message, 'ADMIN_USAGE_SERIES_FAILED')
+
+  const map = new Map()
+  for (const row of data || []) {
+    const key = String(row.date)
+    const current = map.get(key) || {
+      date: key,
+      total_calls: 0,
+      total_tokens: 0,
+      total_images: 0,
+      total_video_seconds: 0,
+      total_cost_usd: 0
+    }
+    current.total_calls += Number(row.total_calls || 0)
+    current.total_tokens += Number(row.total_tokens || 0)
+    current.total_images += Number(row.total_images || 0)
+    current.total_video_seconds += Number(row.total_video_seconds || 0)
+    current.total_cost_usd += Number(row.total_cost_usd || 0)
+    map.set(key, current)
+  }
+
+  return [...map.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)))
 }
 
 export const listAdminOperationLogs = async ({ page = 1, limit = 20 }) => {

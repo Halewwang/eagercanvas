@@ -102,6 +102,18 @@ const getUserByEmail = async (email) => {
   return data
 }
 
+const ensureUserCanAccess = (user) => {
+  if (!user) {
+    throw new HttpError(404, 'Account does not exist. Please register first.', 'USER_NOT_FOUND')
+  }
+  if (user.deleted_at || user.status === 'deleted') {
+    throw new HttpError(403, 'Account is deleted', 'ACCOUNT_DELETED')
+  }
+  if (user.status === 'suspended') {
+    throw new HttpError(403, 'Account is suspended', 'ACCOUNT_SUSPENDED')
+  }
+}
+
 const getUserById = async (userId) => {
   const { data, error } = await supabase
     .from('users')
@@ -340,9 +352,7 @@ export const verifyCode = async ({ email, code, ip, purpose = CODE_PURPOSES.LOGI
   }
 
   const user = await getUserByEmail(payload.email)
-  if (!user) {
-    throw new HttpError(404, 'Account does not exist. Please register first.', 'USER_NOT_FOUND')
-  }
+  ensureUserCanAccess(user)
 
   await markLogin({ userId: user.id })
 
@@ -369,6 +379,7 @@ export const refreshAccessToken = async ({ refreshToken }) => {
   }
 
   const user = await getUserById(session.user_id)
+  ensureUserCanAccess(user)
   const profile = await getProfileByUserId(user.id)
 
   return {
@@ -387,6 +398,7 @@ export const refreshAccessToken = async ({ refreshToken }) => {
 
 export const getMe = async ({ userId }) => {
   const user = await getUserById(userId)
+  ensureUserCanAccess(user)
   const profile = await getProfileByUserId(user.id)
 
   return {
