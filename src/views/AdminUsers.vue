@@ -16,7 +16,7 @@
               :key="item.key"
               class="menu-item"
               :class="{ 'menu-item-active': activeSection === item.key }"
-              @click="goSection(item.route)"
+              @click="scrollToSection(item.key)"
             >
               {{ item.label }}
             </button>
@@ -25,19 +25,19 @@
           <div class="mt-auto p-4">
             <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p class="text-sm font-medium text-white/90">Control Center</p>
-              <p class="mt-2 text-xs leading-5 text-white/55">User lifecycle, role assignment and global usage governance.</p>
+              <p class="mt-2 text-xs leading-5 text-white/55">User lifecycle, role assignment and Eager Service governance.</p>
             </div>
           </div>
         </aside>
 
-        <main class="admin-main p-4 md:p-6">
+        <main class="admin-main p-4 md:p-6" @scroll.passive="onMainScroll">
           <div class="mb-4 flex flex-wrap gap-2 lg:hidden">
             <button
               v-for="item in navItems"
               :key="`mobile-${item.key}`"
               class="tiny-btn"
               :class="{ 'tiny-btn-primary': activeSection === item.key }"
-              @click="goSection(item.route)"
+              @click="scrollToSection(item.key)"
             >
               {{ item.label }}
             </button>
@@ -45,7 +45,7 @@
 
           <header class="mb-6 flex flex-col gap-4 border-b border-white/10 pb-5 md:flex-row md:items-start md:justify-between">
             <div>
-              <p class="text-xs uppercase tracking-[0.2em] text-white/45">{{ sectionTitle }}</p>
+              <p class="text-xs uppercase tracking-[0.2em] text-white/45">Admin Dashboard</p>
               <h1 class="mt-2 text-2xl font-semibold text-white md:text-3xl">Welcome Back, {{ displayName }}</h1>
               <p class="mt-2 text-sm text-white/55">
                 {{ usageSummary.totalUsers || 0 }} active members · {{ usageSummary.totalCalls || 0 }} calls ·
@@ -53,26 +53,27 @@
               </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <button class="action-btn" :disabled="loadingUsage || loadingUsers || loadingLogs" @click="loadAll">
-                {{ loadingUsage || loadingUsers || loadingLogs ? 'Refreshing...' : 'Refresh All' }}
+              <button class="action-btn" :disabled="isRefreshing" @click="loadAll">
+                {{ isRefreshing ? 'Refreshing...' : 'Refresh All' }}
               </button>
               <button class="action-btn" @click="goHome">Back</button>
             </div>
           </header>
 
-          <template v-if="activeSection === 'dashboard'">
-            <section class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <section ref="dashboardRef" class="mb-6 scroll-mt-6">
+            <h2 class="section-title">Overview</h2>
+            <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
               <article v-for="card in cards" :key="card.label" class="stat-card rounded-2xl p-4">
                 <p class="text-[11px] uppercase tracking-[0.16em] text-white/40">{{ card.label }}</p>
                 <p class="mt-3 text-3xl font-semibold text-white">{{ card.value }}</p>
                 <p class="mt-2 text-xs text-white/55">{{ card.note }}</p>
               </article>
-            </section>
+            </div>
 
-            <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1.6fr_1fr]">
+            <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.6fr_1fr]">
               <div class="panel-card rounded-2xl p-4 md:p-5">
                 <div class="mb-4 flex items-center justify-between">
-                  <h2 class="text-lg font-medium text-white">Usage Trend (Daily)</h2>
+                  <h3 class="text-lg font-medium text-white">Usage Trend (Daily)</h3>
                   <span class="text-xs text-white/45">Updated {{ new Date().toLocaleDateString() }}</span>
                 </div>
                 <div v-if="usageSeries.length === 0" class="rounded-xl border border-dashed border-white/15 p-6 text-sm text-white/50">
@@ -90,7 +91,7 @@
               </div>
 
               <div class="panel-card rounded-2xl p-4 md:p-5">
-                <h2 class="text-lg font-medium text-white">Admin Session</h2>
+                <h3 class="text-lg font-medium text-white">Admin Session</h3>
                 <div class="mt-4 space-y-3 text-sm">
                   <div class="info-line"><span>Account</span><strong>{{ auth.user.value?.email || '-' }}</strong></div>
                   <div class="info-line"><span>Roles</span><strong>{{ auth.roles.value.join(', ') || '-' }}</strong></div>
@@ -98,12 +99,12 @@
                   <div class="info-line"><span>Status</span><strong class="text-white">Active</strong></div>
                 </div>
               </div>
-            </section>
-          </template>
+            </div>
+          </section>
 
-          <section v-if="activeSection === 'users'" class="panel-card rounded-2xl p-4 md:p-5">
+          <section ref="usersRef" class="panel-card mb-6 scroll-mt-6 rounded-2xl p-4 md:p-5">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 class="text-lg font-medium text-white">Users & Roles</h2>
+              <h2 class="section-title">Users & Roles</h2>
               <span class="text-xs text-white/45">Role assignment · account lifecycle</span>
             </div>
 
@@ -157,12 +158,8 @@
                         <button class="tiny-btn tiny-btn-primary" :disabled="saving[item.id] || item.status === 'deleted'" @click="saveRoles(item)">
                           {{ saving[item.id] ? 'Saving...' : 'Save Roles' }}
                         </button>
-                        <button v-if="item.status === 'active'" class="tiny-btn" :disabled="statusLoading[item.id]" @click="suspendUser(item)">
-                          Suspend
-                        </button>
-                        <button v-if="item.status === 'suspended'" class="tiny-btn" :disabled="statusLoading[item.id]" @click="activateUser(item)">
-                          Activate
-                        </button>
+                        <button v-if="item.status === 'active'" class="tiny-btn" :disabled="statusLoading[item.id]" @click="suspendUser(item)">Suspend</button>
+                        <button v-if="item.status === 'suspended'" class="tiny-btn" :disabled="statusLoading[item.id]" @click="activateUser(item)">Activate</button>
                         <button class="tiny-btn tiny-btn-danger" :disabled="deleting[item.id] || item.status === 'deleted'" @click="deleteUser(item)">
                           {{ deleting[item.id] ? 'Deleting...' : 'Delete' }}
                         </button>
@@ -174,9 +171,137 @@
             </div>
           </section>
 
-          <section v-if="activeSection === 'audit'" class="panel-card rounded-2xl p-4 md:p-5">
+          <section ref="ai302Ref" class="panel-card mb-6 scroll-mt-6 rounded-2xl p-4 md:p-5 space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="section-title">Eager Service Management</h2>
+              <button class="tiny-btn" :disabled="loading302" @click="load302All">Refresh Service Data</button>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div class="stat-card rounded-xl p-4">
+                <p class="text-xs uppercase tracking-[0.12em] text-white/40">Account Balance</p>
+                <p class="mt-2 text-2xl font-semibold text-white">{{ balanceDisplay }}</p>
+              </div>
+              <div class="stat-card rounded-xl p-4 md:col-span-3">
+                <p class="text-xs uppercase tracking-[0.12em] text-white/40">Deduction Detail (request-id)</p>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <input v-model="recordRequestId" class="query-text" placeholder="Paste request-id" />
+                  <button class="tiny-btn" :disabled="loadingRecord" @click="queryRecord">{{ loadingRecord ? 'Querying...' : 'Query' }}</button>
+                </div>
+                <div v-if="recordData" class="mt-3 grid grid-cols-2 gap-2 text-xs text-white/75 md:grid-cols-5">
+                  <div>Model: {{ recordData.model || '-' }}</div>
+                  <div>Cost: {{ recordData.cost ?? '-' }}</div>
+                  <div>Input: {{ recordData.input_token ?? '-' }}</div>
+                  <div>Output: {{ recordData.output_token ?? '-' }}</div>
+                  <div>Latency: {{ recordData.process_time ?? '-' }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-sm font-medium text-white">API Log Query</h3>
+                <div class="flex flex-wrap items-center gap-2">
+                  <input v-model="log302Query.start" type="datetime-local" class="query-text !w-[190px]" />
+                  <input v-model="log302Query.end" type="datetime-local" class="query-text !w-[190px]" />
+                  <input v-model.number="log302Query.page" type="number" min="1" class="query-input" />
+                  <input v-model.number="log302Query.limit" type="number" min="1" max="50" class="query-input" />
+                  <button class="tiny-btn" :disabled="loadingApiLogs" @click="loadApiLogs">Search</button>
+                </div>
+              </div>
+              <div v-if="apiLogs.length === 0" class="rounded-xl border border-dashed border-white/15 p-4 text-sm text-white/50">No API logs</div>
+              <div v-else class="overflow-x-auto">
+                <table class="w-full min-w-[860px] text-sm">
+                  <thead>
+                    <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.12em] text-white/40">
+                      <th class="px-2 py-2">Request ID</th>
+                      <th class="px-2 py-2">Model</th>
+                      <th class="px-2 py-2">Cost</th>
+                      <th class="px-2 py-2">Status</th>
+                      <th class="px-2 py-2">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, idx) in apiLogs" :key="item.request_id || item.id || idx" class="border-b border-white/5">
+                      <td class="px-2 py-2 text-white/80">{{ item.request_id || item.requestId || item.id || '-' }}</td>
+                      <td class="px-2 py-2 text-white/80">{{ item.model || item.model_name || '-' }}</td>
+                      <td class="px-2 py-2 text-white/80">{{ item.cost ?? item.cost_usd ?? '-' }}</td>
+                      <td class="px-2 py-2 text-white/70">{{ item.status || item.code || '-' }}</td>
+                      <td class="px-2 py-2 text-white/60">{{ item.created_at || item.createdAt || item.time || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <h3 class="text-sm font-medium text-white">Create API Key</h3>
+              <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-4">
+                <input v-model="createKeyForm.api_name" class="query-text" placeholder="api_name" />
+                <input v-model.number="createKeyForm.limit_cost" type="number" min="0" class="query-text" placeholder="limit_cost" />
+                <input v-model.number="createKeyForm.limit_daily_cost" type="number" min="0" class="query-text" placeholder="limit_daily_cost" />
+                <input v-model.number="createKeyForm.expired_on" type="number" min="0" class="query-text" placeholder="expired_on(unix)" />
+              </div>
+              <div class="mt-2 flex flex-wrap gap-3 text-xs text-white/65">
+                <label><input v-model="createKeyForm.allow_save_logs" type="checkbox" /> allow_save_logs</label>
+                <label><input v-model="createKeyForm.allow_custom_model" type="checkbox" /> allow_custom_model</label>
+                <label><input v-model="createKeyForm.allow_manage_key" type="checkbox" /> allow_manage_key</label>
+              </div>
+              <button class="tiny-btn tiny-btn-primary mt-2" :disabled="creatingApiKey" @click="createApiKey">
+                {{ creatingApiKey ? 'Creating...' : 'Create Key' }}
+              </button>
+            </div>
+
+            <div>
+              <h3 class="text-sm font-medium text-white">API Keys (Create / Update / Delete)</h3>
+              <div v-if="apiKeys.length === 0" class="mt-2 rounded-xl border border-dashed border-white/15 p-4 text-sm text-white/50">No API keys</div>
+              <div v-else class="mt-2 overflow-x-auto">
+                <table class="w-full min-w-[1100px] text-sm">
+                  <thead>
+                    <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.12em] text-white/40">
+                      <th class="px-2 py-2">Name</th>
+                      <th class="px-2 py-2">API Key</th>
+                      <th class="px-2 py-2">Current Cost</th>
+                      <th class="px-2 py-2">Limit Cost</th>
+                      <th class="px-2 py-2">Daily Limit</th>
+                      <th class="px-2 py-2">Expire</th>
+                      <th class="px-2 py-2">Flags</th>
+                      <th class="px-2 py-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in apiKeys" :key="item.id || item.api_name" class="border-b border-white/5 align-top">
+                      <td class="px-2 py-2 text-white/85">{{ item.api_name }}</td>
+                      <td class="px-2 py-2 text-white/70">{{ maskApiKey(item.api_key) }}</td>
+                      <td class="px-2 py-2 text-white/75">{{ item.current_cost ?? 0 }}</td>
+                      <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].limit_cost" type="number" min="0" class="query-text !w-[110px]" /></td>
+                      <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].limit_daily_cost" type="number" min="0" class="query-text !w-[110px]" /></td>
+                      <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].expired_on" type="number" min="0" class="query-text !w-[120px]" /></td>
+                      <td class="px-2 py-2 text-xs text-white/65">
+                        <label class="block"><input v-model="keyDrafts[item.api_name].allow_save_logs" type="checkbox" /> logs</label>
+                        <label class="block"><input v-model="keyDrafts[item.api_name].allow_custom_model" type="checkbox" /> custom model</label>
+                        <label class="block"><input v-model="keyDrafts[item.api_name].allow_manage_key" type="checkbox" /> manage key</label>
+                      </td>
+                      <td class="px-2 py-2">
+                        <div class="flex flex-wrap gap-2">
+                          <button class="tiny-btn" :disabled="updatingKeys[item.api_name]" @click="updateApiKey(item)">
+                            {{ updatingKeys[item.api_name] ? 'Saving...' : 'Update' }}
+                          </button>
+                          <button class="tiny-btn tiny-btn-danger" :disabled="deletingKeys[item.api_name]" @click="removeApiKey(item)">
+                            {{ deletingKeys[item.api_name] ? 'Deleting...' : 'Delete' }}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section ref="auditRef" class="panel-card scroll-mt-6 rounded-2xl p-4 md:p-5">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 class="text-lg font-medium text-white">Admin Audit Logs</h2>
+              <h2 class="section-title">Admin Audit Logs</h2>
               <div class="flex items-center gap-2 text-xs">
                 <input v-model.number="logQuery.page" type="number" min="1" class="query-input" />
                 <input v-model.number="logQuery.limit" type="number" min="1" max="100" class="query-input" />
@@ -202,9 +327,7 @@
                     <td class="px-3 py-3 text-white/85">{{ log.action }}</td>
                     <td class="px-3 py-3 text-white/75">{{ log.operator?.email || '-' }}</td>
                     <td class="px-3 py-3 text-white/75">{{ log.target?.email || '-' }}</td>
-                    <td class="px-3 py-3">
-                      <pre class="max-w-[420px] whitespace-pre-wrap text-xs text-white/55">{{ toPrettyJson(log.metadata) }}</pre>
-                    </td>
+                    <td class="px-3 py-3"><pre class="max-w-[420px] whitespace-pre-wrap text-xs text-white/55">{{ toPrettyJson(log.metadata) }}</pre></td>
                   </tr>
                 </tbody>
               </table>
@@ -219,29 +342,42 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
+  createAdmin302ApiKey,
+  deleteAdmin302ApiKey,
   deleteAdminUser,
+  getAdmin302ApiKeys,
+  getAdmin302ApiRecord,
+  getAdmin302Balance,
+  getAdmin302Record,
   getAdminAuditLogs,
   getAdminUsageSummary,
   getAdminUsageTimeseries,
   getAdminUsers,
+  updateAdmin302ApiKey,
   updateAdminUserRoles,
   updateAdminUserStatus
 } from '@/api/admin'
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils'
 
-const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
 const navItems = [
-  { key: 'dashboard', label: 'Dashboard', route: '/admin/dashboard' },
-  { key: 'users', label: 'Users & Roles', route: '/admin/users' },
-  { key: 'audit', label: 'Audit Logs', route: '/admin/audit' }
+  { key: 'overview', label: 'Overview' },
+  { key: 'users', label: 'Users & Roles' },
+  { key: 'ai302', label: 'Eager Service' },
+  { key: 'audit', label: 'Audit Logs' }
 ]
+const activeSection = ref('overview')
+
+const dashboardRef = ref(null)
+const usersRef = ref(null)
+const ai302Ref = ref(null)
+const auditRef = ref(null)
 
 const roleOptions = ['super_admin', 'admin', 'ops', 'support', 'user']
 const users = ref([])
@@ -268,12 +404,33 @@ const loadingLogs = ref(false)
 const pagination = ref({ page: 1, limit: 20, total: 0 })
 const logQuery = ref({ page: 1, limit: 20 })
 
-const activeSection = computed(() => String(route.meta?.adminSection || 'dashboard'))
-const sectionTitle = computed(() => {
-  if (activeSection.value === 'users') return 'Users'
-  if (activeSection.value === 'audit') return 'Audit Logs'
-  return 'Dashboard'
+const balance = ref('')
+const loadingBalance = ref(false)
+const recordRequestId = ref('')
+const recordData = ref(null)
+const loadingRecord = ref(false)
+const log302Query = reactive({ page: 1, limit: 20, start: '', end: '' })
+const apiLogs = ref([])
+const loadingApiLogs = ref(false)
+const apiKeys = ref([])
+const keyDrafts = ref({})
+const loadingKeys = ref(false)
+const creatingApiKey = ref(false)
+const updatingKeys = ref({})
+const deletingKeys = ref({})
+const createKeyForm = reactive({
+  api_name: '',
+  allow_save_logs: false,
+  allow_custom_model: false,
+  allow_manage_key: false,
+  limit_cost: 0,
+  limit_daily_cost: 0,
+  expired_on: 0
 })
+
+const isRefreshing = computed(() => loadingUsage.value || loadingUsers.value || loadingLogs.value || loading302.value)
+const loading302 = computed(() => loadingBalance.value || loadingRecord.value || loadingApiLogs.value || loadingKeys.value)
+const balanceDisplay = computed(() => (balance.value ? `$${balance.value}` : '--'))
 
 const displayName = computed(() => {
   const name = auth.user.value?.displayName || ''
@@ -290,7 +447,41 @@ const cards = computed(() => [
 ])
 
 const goHome = () => router.push('/')
-const goSection = (path) => router.push(path)
+
+const getSectionEl = (key) => {
+  if (key === 'users') return usersRef.value
+  if (key === 'ai302') return ai302Ref.value
+  if (key === 'audit') return auditRef.value
+  return dashboardRef.value
+}
+
+const scrollToSection = (key) => {
+  activeSection.value = key
+  const el = getSectionEl(key)
+  if (el && typeof el.scrollIntoView === 'function') {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
+
+const onMainScroll = () => {
+  const sections = [
+    { key: 'overview', el: dashboardRef.value },
+    { key: 'users', el: usersRef.value },
+    { key: 'ai302', el: ai302Ref.value },
+    { key: 'audit', el: auditRef.value }
+  ].filter((item) => !!item.el)
+
+  let candidate = sections[0]?.key || 'overview'
+  let min = Number.POSITIVE_INFINITY
+  for (const item of sections) {
+    const top = Math.abs(item.el.getBoundingClientRect().top - 100)
+    if (top < min) {
+      min = top
+      candidate = item.key
+    }
+  }
+  activeSection.value = candidate
+}
 
 const statusClass = (status) => {
   const val = String(status || 'active')
@@ -333,13 +524,32 @@ const toggleRole = (userId, role, event) => {
   selectedRoles.value[userId] = [...set]
 }
 
+const maskApiKey = (value) => {
+  const key = String(value || '')
+  if (key.length <= 10) return key || '-'
+  return `${key.slice(0, 6)}...${key.slice(-4)}`
+}
+
+const toUnixSeconds = (value) => {
+  if (!value) return undefined
+  const ts = Date.parse(value)
+  return Number.isFinite(ts) ? Math.floor(ts / 1000) : undefined
+}
+
+const buildDraft = (item) => ({
+  api_name: item.api_name,
+  allow_save_logs: !!item.allow_save_logs,
+  allow_custom_model: !!item.allow_custom_model,
+  allow_manage_key: !!item.allow_manage_key,
+  limit_cost: Number(item.limit_cost || 0),
+  limit_daily_cost: Number(item.limit_daily_cost || 0),
+  expired_on: Number(item.expired_on || 0)
+})
+
 const loadUsage = async () => {
   loadingUsage.value = true
   try {
-    const [summaryRsp, seriesRsp] = await Promise.all([
-      getAdminUsageSummary(),
-      getAdminUsageTimeseries()
-    ])
+    const [summaryRsp, seriesRsp] = await Promise.all([getAdminUsageSummary(), getAdminUsageTimeseries()])
     usageSummary.value = summaryRsp?.data || usageSummary.value
     usageSeries.value = Array.isArray(seriesRsp?.data) ? seriesRsp.data : []
   } catch (error) {
@@ -367,10 +577,7 @@ const loadUsers = async () => {
 
 const saveRoles = async (user) => {
   const roles = [...new Set((selectedRoles.value[user.id] || []).filter(Boolean))]
-  if (!roles.length) {
-    window.$message?.warning('At least one role is required')
-    return
-  }
+  if (!roles.length) return window.$message?.warning('At least one role is required')
   saving.value = { ...saving.value, [user.id]: true }
   try {
     await updateAdminUserRoles(user.id, roles)
@@ -425,6 +632,122 @@ const deleteUser = async (user) => {
   }
 }
 
+const load302Balance = async () => {
+  loadingBalance.value = true
+  try {
+    const rsp = await getAdmin302Balance()
+    balance.value = String(rsp?.data?.balance ?? '')
+  } catch (error) {
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to load Eager Service balance'))
+  } finally {
+    loadingBalance.value = false
+  }
+}
+
+const queryRecord = async () => {
+  const id = String(recordRequestId.value || '').trim()
+  if (!id) return window.$message?.warning('Please input request-id')
+  loadingRecord.value = true
+  try {
+    const rsp = await getAdmin302Record(id)
+    recordData.value = rsp?.data || null
+  } catch (error) {
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to query record'))
+  } finally {
+    loadingRecord.value = false
+  }
+}
+
+const loadApiLogs = async () => {
+  loadingApiLogs.value = true
+  try {
+    const rsp = await getAdmin302ApiRecord({
+      page: log302Query.page,
+      limit: log302Query.limit,
+      start_time: toUnixSeconds(log302Query.start),
+      end_time: toUnixSeconds(log302Query.end)
+    })
+    apiLogs.value = Array.isArray(rsp?.data?.items) ? rsp.data.items : []
+  } catch (error) {
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to load API logs'))
+  } finally {
+    loadingApiLogs.value = false
+  }
+}
+
+const loadApiKeys = async () => {
+  loadingKeys.value = true
+  try {
+    const rsp = await getAdmin302ApiKeys()
+    const list = Array.isArray(rsp?.data) ? rsp.data : []
+    apiKeys.value = list
+    const drafts = {}
+    for (const item of list) drafts[item.api_name] = buildDraft(item)
+    keyDrafts.value = drafts
+  } catch (error) {
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to load API keys'))
+  } finally {
+    loadingKeys.value = false
+  }
+}
+
+const createApiKey = async () => {
+  if (!String(createKeyForm.api_name || '').trim()) return window.$message?.warning('api_name is required')
+  creatingApiKey.value = true
+  try {
+    await createAdmin302ApiKey({ ...createKeyForm, api_name: createKeyForm.api_name.trim() })
+    window.$message?.success('API key created')
+    createKeyForm.api_name = ''
+    createKeyForm.allow_save_logs = false
+    createKeyForm.allow_custom_model = false
+    createKeyForm.allow_manage_key = false
+    createKeyForm.limit_cost = 0
+    createKeyForm.limit_daily_cost = 0
+    createKeyForm.expired_on = 0
+    await loadApiKeys()
+  } catch (error) {
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to create API key'))
+  } finally {
+    creatingApiKey.value = false
+  }
+}
+
+const updateApiKey = async (item) => {
+  const name = item.api_name
+  const draft = keyDrafts.value[name]
+  if (!draft) return
+  updatingKeys.value = { ...updatingKeys.value, [name]: true }
+  try {
+    await updateAdmin302ApiKey(name, { ...draft, api_name: name })
+    window.$message?.success('API key updated')
+    await loadApiKeys()
+  } catch (error) {
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to update API key'))
+  } finally {
+    updatingKeys.value = { ...updatingKeys.value, [name]: false }
+  }
+}
+
+const removeApiKey = async (item) => {
+  const name = item.api_name
+  const ok = window.confirm(`Delete API key ${name}?`)
+  if (!ok) return
+  deletingKeys.value = { ...deletingKeys.value, [name]: true }
+  try {
+    await deleteAdmin302ApiKey(name)
+    window.$message?.success('API key deleted')
+    await loadApiKeys()
+  } catch (error) {
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to delete API key'))
+  } finally {
+    deletingKeys.value = { ...deletingKeys.value, [name]: false }
+  }
+}
+
+const load302All = async () => {
+  await Promise.all([load302Balance(), loadApiLogs(), loadApiKeys()])
+}
+
 const loadLogs = async () => {
   loadingLogs.value = true
   try {
@@ -443,7 +766,7 @@ const loadLogs = async () => {
 }
 
 const loadAll = async () => {
-  await Promise.all([loadUsage(), loadUsers(), loadLogs()])
+  await Promise.all([loadUsage(), loadUsers(), load302All(), loadLogs()])
 }
 
 onMounted(async () => {
@@ -469,6 +792,16 @@ onMounted(async () => {
   background: linear-gradient(180deg, rgba(8, 8, 9, 0.72) 0%, rgba(12, 12, 14, 0.8) 100%);
 }
 
+.admin-main {
+  background: linear-gradient(180deg, rgba(18, 18, 20, 0.72) 0%, rgba(11, 11, 13, 0.84) 100%);
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
 .menu-item {
   width: 100%;
   border-radius: 12px;
@@ -490,10 +823,6 @@ onMounted(async () => {
   color: rgba(255, 255, 255, 0.94);
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.2);
-}
-
-.admin-main {
-  background: linear-gradient(180deg, rgba(18, 18, 20, 0.72) 0%, rgba(11, 11, 13, 0.84) 100%);
 }
 
 .action-btn {
@@ -594,6 +923,16 @@ onMounted(async () => {
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.06);
   padding: 6px 8px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.query-text {
+  width: 100%;
+  min-width: 120px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 6px 10px;
   color: rgba(255, 255, 255, 0.9);
 }
 </style>

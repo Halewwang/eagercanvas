@@ -4,6 +4,15 @@ import { authRequired } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/authz.js'
 import { asyncHandler } from '../utils/http.js'
 import {
+  create302ApiKey,
+  delete302ApiKey,
+  get302ApiKeys,
+  get302ApiRecords,
+  get302Balance,
+  get302RecordByRequestId,
+  update302ApiKey
+} from '../services/dashboard302.service.js'
+import {
   assignApiKeyToUser,
   deleteUserAccount,
   getAdminUsageSummary,
@@ -25,6 +34,16 @@ const updateRolesSchema = z.object({
 const apiKeyAssignSchema = z.object({
   userId: z.string().min(1),
   apiName: z.string().min(1)
+})
+
+const admin302ApiKeySchema = z.object({
+  api_name: z.string().min(1),
+  allow_save_logs: z.boolean().default(false),
+  allow_custom_model: z.boolean().default(false),
+  allow_manage_key: z.boolean().default(false),
+  limit_cost: z.number().int().nonnegative().default(0),
+  limit_daily_cost: z.number().int().nonnegative().default(0),
+  expired_on: z.number().int().nonnegative().default(0)
 })
 
 const updateUserStatusSchema = z.object({
@@ -134,4 +153,51 @@ adminRouter.get('/usage/timeseries', requirePermission(['admin.usage.read_all'])
     userId: req.query.userId
   })
   res.json({ data, granularity: 'day' })
+}))
+
+adminRouter.get('/302/balance', requirePermission(['admin.usage.read_all']), asyncHandler(async (_req, res) => {
+  const result = await get302Balance()
+  res.json({ data: result?.data ?? result })
+}))
+
+adminRouter.get('/302/record/:requestId', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
+  const result = await get302RecordByRequestId(req.params.requestId)
+  res.json({ data: result?.data ?? result })
+}))
+
+adminRouter.get('/302/api-record', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
+  const result = await get302ApiRecords({
+    page: req.query.page,
+    limit: req.query.limit,
+    start_time: req.query.start_time,
+    end_time: req.query.end_time
+  })
+  res.json({
+    data: {
+      items: Array.isArray(result?.items) ? result.items : [],
+      pagination: result?.pagination || null
+    }
+  })
+}))
+
+adminRouter.get('/302/api-keys', requirePermission(['admin.api_key.manage']), asyncHandler(async (_req, res) => {
+  const result = await get302ApiKeys()
+  res.json({ data: Array.isArray(result?.data) ? result.data : [] })
+}))
+
+adminRouter.post('/302/api-keys', requirePermission(['admin.api_key.manage']), asyncHandler(async (req, res) => {
+  const payload = admin302ApiKeySchema.parse(req.body || {})
+  const result = await create302ApiKey(payload)
+  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
+}))
+
+adminRouter.put('/302/api-keys/:apiName', requirePermission(['admin.api_key.manage']), asyncHandler(async (req, res) => {
+  const payload = admin302ApiKeySchema.parse(req.body || {})
+  const result = await update302ApiKey(req.params.apiName, payload)
+  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
+}))
+
+adminRouter.delete('/302/api-keys/:apiName', requirePermission(['admin.api_key.manage']), asyncHandler(async (req, res) => {
+  const result = await delete302ApiKey(req.params.apiName)
+  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
 }))

@@ -53,3 +53,48 @@ export const getAdminUsageTimeseries = (params) =>
     method: 'get',
     params
   })
+
+export const getAdmin302Balance = () =>
+  request({
+    url: '/admin/302/balance',
+    method: 'get'
+  })
+
+export const getAdmin302Record = (requestId) =>
+  request({
+    url: `/admin/302/record/${encodeURIComponent(requestId)}`,
+    method: 'get'
+  })
+
+export const getAdmin302ApiRecord = (params) =>
+  request({
+    url: '/admin/302/api-record',
+    method: 'get',
+    params
+  })
+
+export const getAdmin302ApiKeys = () =>
+  request({
+    url: '/admin/302/api-keys',
+    method: 'get'
+  })
+
+export const createAdmin302ApiKey = (payload) =>
+  request({
+    url: '/admin/302/api-keys',
+    method: 'post',
+    data: payload
+  })
+
+export const updateAdmin302ApiKey = (apiName, payload) =>
+  request({
+    url: `/admin/302/api-keys/${encodeURIComponent(apiName)}`,
+    method: 'put',
+    data: payload
+  })
+
+export const deleteAdmin302ApiKey = (apiName) =>
+  request({
+    url: `/admin/302/api-keys/${encodeURIComponent(apiName)}`,
+    method: 'delete'
+  })
