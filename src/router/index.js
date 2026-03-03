@@ -37,12 +37,25 @@ const routes = [
   },
   {
     path: '/admin',
-    redirect: '/admin/users'
+    redirect: '/admin/dashboard'
+  },
+  {
+    path: '/admin/dashboard',
+    name: 'AdminDashboard',
+    component: () => import('../views/AdminUsers.vue'),
+    meta: { adminSection: 'dashboard' }
   },
   {
     path: '/admin/users',
     name: 'AdminUsers',
-    component: () => import('../views/AdminUsers.vue')
+    component: () => import('../views/AdminUsers.vue'),
+    meta: { adminSection: 'users' }
+  },
+  {
+    path: '/admin/audit',
+    name: 'AdminAudit',
+    component: () => import('../views/AdminUsers.vue'),
+    meta: { adminSection: 'audit' }
   }
 ]
 

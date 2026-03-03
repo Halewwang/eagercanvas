@@ -1,46 +1,51 @@
 <template>
-  <div class="admin-shell min-h-screen px-3 py-4 md:px-6 md:py-6">
-    <div class="admin-frame mx-auto max-w-[1380px] overflow-hidden rounded-[24px] border border-white/10">
-      <div class="grid min-h-[84vh] grid-cols-1 lg:grid-cols-[250px_1fr]">
+  <div class="admin-shell min-h-screen overflow-y-auto px-3 py-4 md:px-6 md:py-6">
+    <div class="admin-frame w-full rounded-[20px] border border-white/10">
+      <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr]">
         <aside class="admin-sidebar hidden border-r border-white/10 lg:flex lg:flex-col">
           <div class="px-5 pt-5">
-            <div class="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <div>
-                <p class="text-xs uppercase tracking-[0.18em] text-white/45">EagerCanvas</p>
-                <p class="text-sm font-medium text-white/90">Admin System</p>
-              </div>
-              <div class="h-8 w-8 rounded-full border border-white/20 bg-gradient-to-br from-indigo-400/60 to-cyan-300/40" />
+            <div class="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <p class="text-xs uppercase tracking-[0.18em] text-white/45">EagerCanvas</p>
+              <p class="mt-1 text-sm font-medium text-white/90">Admin Console</p>
             </div>
           </div>
 
-          <div class="mt-6 px-4">
-            <p class="px-3 text-[11px] uppercase tracking-[0.2em] text-white/35">Navigation</p>
-            <nav class="mt-3 space-y-1">
-              <button class="menu-item menu-item-active">Dashboard</button>
-              <button class="menu-item">Users</button>
-              <button class="menu-item">Usage</button>
-              <button class="menu-item">Audit Logs</button>
-              <button class="menu-item">Settings</button>
-            </nav>
-          </div>
+          <nav class="mt-6 space-y-1 px-4">
+            <button
+              v-for="item in navItems"
+              :key="item.key"
+              class="menu-item"
+              :class="{ 'menu-item-active': activeSection === item.key }"
+              @click="goSection(item.route)"
+            >
+              {{ item.label }}
+            </button>
+          </nav>
 
           <div class="mt-auto p-4">
-            <div class="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-4">
+            <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p class="text-sm font-medium text-white/90">Control Center</p>
-              <p class="mt-2 text-xs leading-5 text-white/55">
-                Account lifecycle, role assignment and usage governance are centralized here.
-              </p>
-              <button class="mt-4 w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white/90 hover:bg-white/15">
-                Security Policy
-              </button>
+              <p class="mt-2 text-xs leading-5 text-white/55">User lifecycle, role assignment and global usage governance.</p>
             </div>
           </div>
         </aside>
 
-        <main class="admin-main p-4 md:p-6 lg:p-7">
+        <main class="admin-main p-4 md:p-6">
+          <div class="mb-4 flex flex-wrap gap-2 lg:hidden">
+            <button
+              v-for="item in navItems"
+              :key="`mobile-${item.key}`"
+              class="tiny-btn"
+              :class="{ 'tiny-btn-primary': activeSection === item.key }"
+              @click="goSection(item.route)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+
           <header class="mb-6 flex flex-col gap-4 border-b border-white/10 pb-5 md:flex-row md:items-start md:justify-between">
             <div>
-              <p class="text-xs uppercase tracking-[0.2em] text-white/45">Dashboard</p>
+              <p class="text-xs uppercase tracking-[0.2em] text-white/45">{{ sectionTitle }}</p>
               <h1 class="mt-2 text-2xl font-semibold text-white md:text-3xl">Welcome Back, {{ displayName }}</h1>
               <p class="mt-2 text-sm text-white/55">
                 {{ usageSummary.totalUsers || 0 }} active members · {{ usageSummary.totalCalls || 0 }} calls ·
@@ -55,57 +60,55 @@
             </div>
           </header>
 
-          <section class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <article v-for="card in cards" :key="card.label" class="stat-card rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-[0.16em] text-white/40">{{ card.label }}</p>
-              <p class="mt-3 text-3xl font-semibold text-white">{{ card.value }}</p>
-              <p class="mt-2 text-xs text-emerald-300/70">{{ card.note }}</p>
-            </article>
-          </section>
+          <template v-if="activeSection === 'dashboard'">
+            <section class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <article v-for="card in cards" :key="card.label" class="stat-card rounded-2xl p-4">
+                <p class="text-[11px] uppercase tracking-[0.16em] text-white/40">{{ card.label }}</p>
+                <p class="mt-3 text-3xl font-semibold text-white">{{ card.value }}</p>
+                <p class="mt-2 text-xs text-white/55">{{ card.note }}</p>
+              </article>
+            </section>
 
-          <section class="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-[1.6fr_1fr]">
-            <div class="panel-card rounded-2xl p-4 md:p-5">
-              <div class="mb-4 flex items-center justify-between">
-                <h2 class="text-lg font-medium text-white">Usage Trend (Daily)</h2>
-                <span class="text-xs text-white/45">Updated {{ new Date().toLocaleDateString() }}</span>
-              </div>
-              <div v-if="usageSeries.length === 0" class="rounded-xl border border-dashed border-white/15 p-6 text-sm text-white/50">
-                No usage data
-              </div>
-              <div v-else class="space-y-3">
-                <div
-                  v-for="row in usageSeries"
-                  :key="row.date"
-                  class="grid grid-cols-[90px_1fr_80px] items-center gap-3"
-                >
-                  <span class="text-xs text-white/55">{{ row.date }}</span>
-                  <div class="h-2 overflow-hidden rounded bg-white/10">
-                    <div class="h-full rounded bg-gradient-to-r from-cyan-300/85 to-indigo-400/85" :style="{ width: `${barWidth(row.total_calls)}%` }" />
+            <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1.6fr_1fr]">
+              <div class="panel-card rounded-2xl p-4 md:p-5">
+                <div class="mb-4 flex items-center justify-between">
+                  <h2 class="text-lg font-medium text-white">Usage Trend (Daily)</h2>
+                  <span class="text-xs text-white/45">Updated {{ new Date().toLocaleDateString() }}</span>
+                </div>
+                <div v-if="usageSeries.length === 0" class="rounded-xl border border-dashed border-white/15 p-6 text-sm text-white/50">
+                  No usage data
+                </div>
+                <div v-else class="space-y-3">
+                  <div v-for="row in usageSeries" :key="row.date" class="grid grid-cols-[90px_1fr_80px] items-center gap-3">
+                    <span class="text-xs text-white/55">{{ row.date }}</span>
+                    <div class="h-2 overflow-hidden rounded bg-white/10">
+                      <div class="h-full rounded bg-white/50" :style="{ width: `${barWidth(row.total_calls)}%` }" />
+                    </div>
+                    <span class="text-right text-xs text-white/75">{{ row.total_calls }}</span>
                   </div>
-                  <span class="text-right text-xs text-white/75">{{ row.total_calls }}</span>
                 </div>
               </div>
-            </div>
 
-            <div class="panel-card rounded-2xl p-4 md:p-5">
-              <h2 class="text-lg font-medium text-white">Admin Session</h2>
-              <div class="mt-4 space-y-3 text-sm">
-                <div class="info-line"><span>Account</span><strong>{{ auth.user.value?.email || '-' }}</strong></div>
-                <div class="info-line"><span>Roles</span><strong>{{ auth.roles.value.join(', ') || '-' }}</strong></div>
-                <div class="info-line"><span>Permissions</span><strong>{{ auth.permissions.value.length }}</strong></div>
-                <div class="info-line"><span>Status</span><strong class="text-emerald-300">Active</strong></div>
+              <div class="panel-card rounded-2xl p-4 md:p-5">
+                <h2 class="text-lg font-medium text-white">Admin Session</h2>
+                <div class="mt-4 space-y-3 text-sm">
+                  <div class="info-line"><span>Account</span><strong>{{ auth.user.value?.email || '-' }}</strong></div>
+                  <div class="info-line"><span>Roles</span><strong>{{ auth.roles.value.join(', ') || '-' }}</strong></div>
+                  <div class="info-line"><span>Permissions</span><strong>{{ auth.permissions.value.length }}</strong></div>
+                  <div class="info-line"><span>Status</span><strong class="text-white">Active</strong></div>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          </template>
 
-          <section class="panel-card mb-6 rounded-2xl p-4 md:p-5">
+          <section v-if="activeSection === 'users'" class="panel-card rounded-2xl p-4 md:p-5">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 class="text-lg font-medium text-white">Users & Roles</h2>
               <span class="text-xs text-white/45">Role assignment · account lifecycle</span>
             </div>
 
             <div v-if="users.length === 0" class="rounded-xl border border-dashed border-white/15 p-6 text-sm text-white/50">No user data</div>
-            <div v-else class="overflow-auto">
+            <div v-else class="overflow-x-auto">
               <table class="w-full min-w-[1100px] text-sm">
                 <thead>
                   <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.12em] text-white/40">
@@ -154,20 +157,10 @@
                         <button class="tiny-btn tiny-btn-primary" :disabled="saving[item.id] || item.status === 'deleted'" @click="saveRoles(item)">
                           {{ saving[item.id] ? 'Saving...' : 'Save Roles' }}
                         </button>
-                        <button
-                          v-if="item.status === 'active'"
-                          class="tiny-btn"
-                          :disabled="statusLoading[item.id]"
-                          @click="suspendUser(item)"
-                        >
+                        <button v-if="item.status === 'active'" class="tiny-btn" :disabled="statusLoading[item.id]" @click="suspendUser(item)">
                           Suspend
                         </button>
-                        <button
-                          v-if="item.status === 'suspended'"
-                          class="tiny-btn"
-                          :disabled="statusLoading[item.id]"
-                          @click="activateUser(item)"
-                        >
+                        <button v-if="item.status === 'suspended'" class="tiny-btn" :disabled="statusLoading[item.id]" @click="activateUser(item)">
                           Activate
                         </button>
                         <button class="tiny-btn tiny-btn-danger" :disabled="deleting[item.id] || item.status === 'deleted'" @click="deleteUser(item)">
@@ -181,7 +174,7 @@
             </div>
           </section>
 
-          <section class="panel-card rounded-2xl p-4 md:p-5">
+          <section v-if="activeSection === 'audit'" class="panel-card rounded-2xl p-4 md:p-5">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 class="text-lg font-medium text-white">Admin Audit Logs</h2>
               <div class="flex items-center gap-2 text-xs">
@@ -192,7 +185,7 @@
             </div>
 
             <div v-if="auditLogs.length === 0" class="rounded-xl border border-dashed border-white/15 p-6 text-sm text-white/50">No audit logs</div>
-            <div v-else class="overflow-auto">
+            <div v-else class="overflow-x-auto">
               <table class="w-full min-w-[980px] text-sm">
                 <thead>
                   <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.12em] text-white/40">
@@ -227,7 +220,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   deleteAdminUser,
   getAdminAuditLogs,
@@ -240,8 +233,15 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils'
 
+const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+
+const navItems = [
+  { key: 'dashboard', label: 'Dashboard', route: '/admin/dashboard' },
+  { key: 'users', label: 'Users & Roles', route: '/admin/users' },
+  { key: 'audit', label: 'Audit Logs', route: '/admin/audit' }
+]
 
 const roleOptions = ['super_admin', 'admin', 'ops', 'support', 'user']
 const users = ref([])
@@ -268,6 +268,13 @@ const loadingLogs = ref(false)
 const pagination = ref({ page: 1, limit: 20, total: 0 })
 const logQuery = ref({ page: 1, limit: 20 })
 
+const activeSection = computed(() => String(route.meta?.adminSection || 'dashboard'))
+const sectionTitle = computed(() => {
+  if (activeSection.value === 'users') return 'Users'
+  if (activeSection.value === 'audit') return 'Audit Logs'
+  return 'Dashboard'
+})
+
 const displayName = computed(() => {
   const name = auth.user.value?.displayName || ''
   return name.trim() || auth.user.value?.email || 'Admin'
@@ -283,6 +290,7 @@ const cards = computed(() => [
 ])
 
 const goHome = () => router.push('/')
+const goSection = (path) => router.push(path)
 
 const statusClass = (status) => {
   const val = String(status || 'active')
@@ -347,11 +355,8 @@ const loadUsers = async () => {
     const rsp = await getAdminUsers()
     const list = Array.isArray(rsp?.data) ? rsp.data : []
     users.value = list
-
     const nextSelection = {}
-    for (const item of list) {
-      nextSelection[item.id] = Array.isArray(item.roles) ? [...item.roles] : ['user']
-    }
+    for (const item of list) nextSelection[item.id] = Array.isArray(item.roles) ? [...item.roles] : ['user']
     selectedRoles.value = nextSelection
   } catch (error) {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to load users'))
@@ -366,7 +371,6 @@ const saveRoles = async (user) => {
     window.$message?.warning('At least one role is required')
     return
   }
-
   saving.value = { ...saving.value, [user.id]: true }
   try {
     await updateAdminUserRoles(user.id, roles)
@@ -424,10 +428,7 @@ const deleteUser = async (user) => {
 const loadLogs = async () => {
   loadingLogs.value = true
   try {
-    const rsp = await getAdminAuditLogs({
-      page: logQuery.value.page,
-      limit: logQuery.value.limit
-    })
+    const rsp = await getAdminAuditLogs({ page: logQuery.value.page, limit: logQuery.value.limit })
     auditLogs.value = Array.isArray(rsp?.data) ? rsp.data : []
     pagination.value = {
       page: Number(rsp?.pagination?.page || logQuery.value.page || 1),
@@ -453,19 +454,19 @@ onMounted(async () => {
 <style scoped>
 .admin-shell {
   background:
-    radial-gradient(1200px 540px at 20% -20%, rgba(56, 189, 248, 0.22), transparent 60%),
-    radial-gradient(1100px 540px at 90% -25%, rgba(99, 102, 241, 0.24), transparent 60%),
-    linear-gradient(180deg, #0a0d13 0%, #090c12 100%);
+    radial-gradient(900px 420px at 16% -10%, rgba(255, 255, 255, 0.05), transparent 60%),
+    radial-gradient(900px 420px at 88% -12%, rgba(255, 255, 255, 0.04), transparent 60%),
+    linear-gradient(180deg, #0a0a0b 0%, #09090a 100%);
   font-family: 'Sora', 'Avenir Next', 'SF Pro Text', sans-serif;
 }
 
 .admin-frame {
-  background: linear-gradient(180deg, #11141d 0%, #0c1018 100%);
-  box-shadow: 0 22px 80px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(180deg, #141416 0%, #101012 100%);
+  box-shadow: 0 22px 80px rgba(0, 0, 0, 0.45);
 }
 
 .admin-sidebar {
-  background: linear-gradient(180deg, rgba(5, 7, 11, 0.68) 0%, rgba(10, 12, 18, 0.78) 100%);
+  background: linear-gradient(180deg, rgba(8, 8, 9, 0.72) 0%, rgba(12, 12, 14, 0.8) 100%);
 }
 
 .menu-item {
@@ -492,7 +493,7 @@ onMounted(async () => {
 }
 
 .admin-main {
-  background: linear-gradient(180deg, rgba(18, 22, 32, 0.7) 0%, rgba(11, 14, 22, 0.82) 100%);
+  background: linear-gradient(180deg, rgba(18, 18, 20, 0.72) 0%, rgba(11, 11, 13, 0.84) 100%);
 }
 
 .action-btn {
@@ -512,8 +513,8 @@ onMounted(async () => {
 .panel-card,
 .stat-card {
   border: 1px solid rgba(255, 255, 255, 0.11);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.012) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .info-line {
@@ -546,21 +547,21 @@ onMounted(async () => {
 }
 
 .status-pill-active {
-  border-color: rgba(16, 185, 129, 0.5);
-  background: rgba(16, 185, 129, 0.16);
-  color: rgba(110, 231, 183, 0.95);
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .status-pill-suspended {
-  border-color: rgba(245, 158, 11, 0.55);
-  background: rgba(245, 158, 11, 0.16);
-  color: rgba(251, 191, 36, 0.95);
+  border-color: rgba(180, 180, 180, 0.4);
+  background: rgba(180, 180, 180, 0.16);
+  color: rgba(232, 232, 232, 0.95);
 }
 
 .status-pill-deleted {
-  border-color: rgba(239, 68, 68, 0.52);
-  background: rgba(239, 68, 68, 0.18);
-  color: rgba(252, 165, 165, 0.95);
+  border-color: rgba(110, 110, 110, 0.48);
+  background: rgba(110, 110, 110, 0.18);
+  color: rgba(210, 210, 210, 0.92);
 }
 
 .tiny-btn {
@@ -578,13 +579,13 @@ onMounted(async () => {
 }
 
 .tiny-btn-primary {
-  border-color: rgba(56, 189, 248, 0.45);
-  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .tiny-btn-danger {
-  border-color: rgba(248, 113, 113, 0.45);
-  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(120, 120, 120, 0.45);
+  background: rgba(90, 90, 90, 0.2);
 }
 
 .query-input {
