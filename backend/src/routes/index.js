@@ -2,10 +2,12 @@ import { Router } from 'express'
 import { authRequired } from '../middleware/auth.js'
 import { asyncHandler } from '../utils/http.js'
 import { createChatCompletion, createImageGeneration, createVideoGeneration, getVideoTask } from '../services/runs.service.js'
+import { adminRouter } from './admin.routes.js'
 import { authRouter } from './auth.routes.js'
 import { projectsRouter } from './projects.routes.js'
 import { runsRouter } from './runs.routes.js'
 import { usageRouter } from './usage.routes.js'
+import { usageAdminRouter } from './usage-admin.routes.js'
 
 import { uploadRouter } from './upload.routes.js'
 
@@ -19,6 +21,8 @@ apiRouter.use('/auth', authRouter)
 apiRouter.use('/projects', projectsRouter)
 apiRouter.use('/runs', runsRouter)
 apiRouter.use('/usage', usageRouter)
+apiRouter.use('/admin', adminRouter)
+apiRouter.use('/usage-admin', usageAdminRouter)
 apiRouter.use('/upload', uploadRouter)
 
 // Compatibility endpoints for existing frontend hooks

@@ -1,0 +1,85 @@
+import { Router } from 'express'
+import { z } from 'zod'
+import { authRequired } from '../middleware/auth.js'
+import { requirePermission } from '../middleware/authz.js'
+import { asyncHandler } from '../utils/http.js'
+import {
+  assignApiKeyToUser,
+  listAdminOperationLogs,
+  listUsersForAdmin,
+  unassignApiKeyFromUser,
+  updateUserRoles
+} from '../services/admin-usage.service.js'
+
+export const adminRouter = Router()
+adminRouter.use(authRequired)
+
+const updateRolesSchema = z.object({
+  roleCodes: z.array(z.string().min(1)).min(1)
+})
+
+const apiKeyAssignSchema = z.object({
+  userId: z.string().min(1),
+  apiName: z.string().min(1)
+})
+
+adminRouter.get('/session', requirePermission(['admin.dashboard.read']), asyncHandler(async (req, res) => {
+  res.json({
+    user: {
+      id: req.user.id,
+      email: req.user.email
+    },
+    roles: req.user.roles || [],
+    permissions: req.user.permissions || []
+  })
+}))
+
+adminRouter.get('/users', requirePermission(['admin.user.read']), asyncHandler(async (_req, res) => {
+  const users = await listUsersForAdmin()
+  res.json({ data: users })
+}))
+
+adminRouter.patch('/users/:userId/roles', requirePermission(['admin.user.role.update']), asyncHandler(async (req, res) => {
+  const payload = updateRolesSchema.parse(req.body || {})
+  const result = await updateUserRoles({
+    operatorUserId: req.user.id,
+    operatorRoles: req.user.roles || [],
+    targetUserId: req.params.userId,
+    roleCodes: payload.roleCodes,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || ''
+  })
+  res.json(result)
+}))
+
+adminRouter.post('/api-keys/assign', requirePermission(['admin.api_key.assign']), asyncHandler(async (req, res) => {
+  const payload = apiKeyAssignSchema.parse(req.body || {})
+  const result = await assignApiKeyToUser({
+    userId: payload.userId,
+    apiName: payload.apiName,
+    operatorUserId: req.user.id,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || ''
+  })
+  res.json(result)
+}))
+
+adminRouter.delete('/api-keys/assign', requirePermission(['admin.api_key.assign']), asyncHandler(async (req, res) => {
+  const payload = apiKeyAssignSchema.parse(req.body || req.query || {})
+  const result = await unassignApiKeyFromUser({
+    userId: payload.userId,
+    apiName: payload.apiName,
+    operatorUserId: req.user.id,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || ''
+  })
+  res.json(result)
+}))
+
+adminRouter.get('/audit-logs', requirePermission(['admin.audit.read']), asyncHandler(async (req, res) => {
+  const result = await listAdminOperationLogs({
+    page: req.query.page,
+    limit: req.query.limit
+  })
+  res.json({ data: result.items, pagination: result.pagination })
+}))

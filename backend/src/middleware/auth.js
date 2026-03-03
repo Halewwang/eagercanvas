@@ -1,8 +1,9 @@
 import jwt from 'jsonwebtoken'
 import { env } from '../config/env.js'
+import { getUserAuthz } from '../services/rbac.service.js'
 import { HttpError } from '../utils/http.js'
 
-export const authRequired = (req, _res, next) => {
+export const authRequired = async (req, _res, next) => {
   const authHeader = req.headers.authorization || ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
 
@@ -10,14 +11,23 @@ export const authRequired = (req, _res, next) => {
     return next(new HttpError(401, 'Missing access token', 'UNAUTHORIZED'))
   }
 
+  let payload
   try {
-    const payload = jwt.verify(token, env.jwtAccessSecret)
+    payload = jwt.verify(token, env.jwtAccessSecret)
+  } catch {
+    return next(new HttpError(401, 'Invalid or expired access token', 'UNAUTHORIZED'))
+  }
+
+  try {
+    const authz = await getUserAuthz(payload.sub)
     req.user = {
       id: payload.sub,
-      email: payload.email
+      email: payload.email,
+      roles: authz.roles,
+      permissions: authz.permissions
     }
-    next()
-  } catch {
-    next(new HttpError(401, 'Invalid or expired access token', 'UNAUTHORIZED'))
+    return next()
+  } catch (error) {
+    return next(error)
   }
 }

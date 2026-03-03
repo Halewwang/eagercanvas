@@ -30,6 +30,37 @@ const updateProfileSchema = z.object({
 
 const refreshCookieName = 'ec_refresh_token'
 
+const isMissingRelation = (error) => {
+  const msg = String(error?.message || '').toLowerCase()
+  return msg.includes('relation') && msg.includes('does not exist')
+}
+
+const ensureDefaultUserRole = async (userId) => {
+  const { data: role, error: roleError } = await supabase
+    .from('roles')
+    .select('id')
+    .eq('code', 'user')
+    .maybeSingle()
+
+  if (roleError) {
+    if (isMissingRelation(roleError)) return
+    throw new HttpError(500, roleError.message, 'RBAC_ROLE_QUERY_FAILED')
+  }
+  if (!role?.id) return
+
+  const { error: assignError } = await supabase
+    .from('user_roles')
+    .upsert(
+      { user_id: userId, role_id: role.id },
+      { onConflict: 'user_id,role_id' }
+    )
+
+  if (assignError) {
+    if (isMissingRelation(assignError)) return
+    throw new HttpError(500, assignError.message, 'RBAC_ROLE_ASSIGN_FAILED')
+  }
+}
+
 const signAccessToken = (user, profile) => {
   return jwt.sign(
     {
@@ -144,6 +175,8 @@ const markLogin = async ({ userId }) => {
 }
 
 const buildAuthResult = async ({ user, ip, action }) => {
+  await ensureDefaultUserRole(user.id)
+
   const profile = (await getProfileByUserId(user.id)) || (await ensureProfile({ userId: user.id, email: user.email, ip }))
 
   const accessToken = signAccessToken(user, profile)
