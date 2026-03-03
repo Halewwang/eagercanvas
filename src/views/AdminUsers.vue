@@ -30,7 +30,7 @@
           </div>
         </aside>
 
-        <main class="admin-main p-4 md:p-6" @scroll.passive="onMainScroll">
+        <main class="admin-main p-5 md:p-7">
           <div class="mb-4 flex flex-wrap gap-2 lg:hidden">
             <button
               v-for="item in navItems"
@@ -43,7 +43,7 @@
             </button>
           </div>
 
-          <header class="mb-6 flex flex-col gap-4 border-b border-white/10 pb-5 md:flex-row md:items-start md:justify-between">
+          <header class="mb-8 flex flex-col gap-4 border-b border-white/10 pb-6 md:flex-row md:items-start md:justify-between">
             <div>
               <p class="text-xs uppercase tracking-[0.2em] text-white/45">Admin Dashboard</p>
               <h1 class="mt-2 text-2xl font-semibold text-white md:text-3xl">Welcome Back, {{ displayName }}</h1>
@@ -60,9 +60,9 @@
             </div>
           </header>
 
-          <section ref="dashboardRef" class="mb-6 scroll-mt-6">
+          <section ref="dashboardRef" class="mb-8 scroll-mt-6">
             <h2 class="section-title">Overview</h2>
-            <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
               <article v-for="card in cards" :key="card.label" class="stat-card rounded-2xl p-4">
                 <p class="text-[11px] uppercase tracking-[0.16em] text-white/40">{{ card.label }}</p>
                 <p class="mt-3 text-3xl font-semibold text-white">{{ card.value }}</p>
@@ -70,7 +70,7 @@
               </article>
             </div>
 
-            <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.6fr_1fr]">
+            <div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[1.6fr_1fr]">
               <div class="panel-card rounded-2xl p-4 md:p-5">
                 <div class="mb-4 flex items-center justify-between">
                   <h3 class="text-lg font-medium text-white">Usage Trend (Daily)</h3>
@@ -102,40 +102,57 @@
             </div>
           </section>
 
-          <section ref="usersRef" class="panel-card mb-6 scroll-mt-6 rounded-2xl p-4 md:p-5">
-            <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <section ref="usersRef" class="panel-card mb-8 scroll-mt-6 rounded-2xl p-5 md:p-6">
+            <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
               <h2 class="section-title">Users & Roles</h2>
               <span class="text-xs text-white/45">Role assignment · account lifecycle</span>
             </div>
 
-            <div v-if="users.length === 0" class="rounded-xl border border-dashed border-white/15 p-6 text-sm text-white/50">No user data</div>
+            <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto] md:items-end">
+              <div>
+                <p class="mb-2 text-xs uppercase tracking-[0.12em] text-white/45">Search User</p>
+                <input
+                  v-model.trim="userSearchQuery"
+                  class="query-text"
+                  placeholder="Search by user id or email"
+                />
+              </div>
+              <p class="text-xs text-white/55">
+                Showing {{ userPageStart }}-{{ userPageEnd }} of {{ filteredUsers.length }} users
+              </p>
+            </div>
+
+            <div v-if="filteredUsers.length === 0" class="rounded-xl border border-dashed border-white/15 p-6 text-sm text-white/50">
+              {{ users.length === 0 ? 'No user data' : 'No matched users' }}
+            </div>
             <div v-else class="overflow-x-auto">
               <table class="w-full min-w-[1100px] text-sm">
                 <thead>
                   <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.12em] text-white/40">
-                    <th class="px-3 py-3">User</th>
-                    <th class="px-3 py-3">Status</th>
-                    <th class="px-3 py-3">Current Roles</th>
-                    <th class="px-3 py-3">Role Select</th>
-                    <th class="px-3 py-3">Calls</th>
-                    <th class="px-3 py-3">Actions</th>
+                    <th class="px-3 py-4">User</th>
+                    <th class="px-3 py-4">Status</th>
+                    <th class="px-3 py-4">Current Roles</th>
+                    <th class="px-3 py-4">Role Select</th>
+                    <th class="px-3 py-4">Calls</th>
+                    <th class="px-3 py-4">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in users" :key="item.id" class="border-b border-white/5 align-top hover:bg-white/[0.03]">
-                    <td class="px-3 py-3">
+                  <tr v-for="item in pagedUsers" :key="item.id" class="border-b border-white/5 align-top hover:bg-white/[0.03]">
+                    <td class="px-3 py-4">
                       <p class="font-medium text-white/90">{{ item.displayName || '-' }}</p>
                       <p class="text-xs text-white/50">{{ item.email }}</p>
+                      <p class="mt-1 text-[11px] text-white/35">ID: {{ item.id }}</p>
                     </td>
-                    <td class="px-3 py-3">
+                    <td class="px-3 py-4">
                       <span class="status-pill" :class="statusClass(item.status)">{{ item.status || 'active' }}</span>
                     </td>
-                    <td class="px-3 py-3">
+                    <td class="px-3 py-4">
                       <div class="flex flex-wrap gap-1.5">
                         <span v-for="role in item.roles || []" :key="`${item.id}-${role}`" class="tag-pill">{{ role }}</span>
                       </div>
                     </td>
-                    <td class="px-3 py-3">
+                    <td class="px-3 py-4">
                       <div class="flex max-w-[260px] flex-wrap gap-2">
                         <label
                           v-for="role in roleOptions"
@@ -152,8 +169,8 @@
                         </label>
                       </div>
                     </td>
-                    <td class="px-3 py-3 text-white/85">{{ item.usage?.totalCalls || 0 }}</td>
-                    <td class="px-3 py-3">
+                    <td class="px-3 py-4 text-white/85">{{ item.usage?.totalCalls || 0 }}</td>
+                    <td class="px-3 py-4">
                       <div class="flex flex-wrap gap-2">
                         <button class="tiny-btn tiny-btn-primary" :disabled="saving[item.id] || item.status === 'deleted'" @click="saveRoles(item)">
                           {{ saving[item.id] ? 'Saving...' : 'Save Roles' }}
@@ -169,9 +186,23 @@
                 </tbody>
               </table>
             </div>
+
+            <div v-if="totalUserPages > 1" class="mt-5 flex flex-wrap items-center justify-end gap-2">
+              <button class="tiny-btn" :disabled="userPage <= 1" @click="setUserPage(userPage - 1)">Prev</button>
+              <button
+                v-for="page in visibleUserPages"
+                :key="`user-page-${page}`"
+                class="tiny-btn"
+                :class="{ 'tiny-btn-primary': page === userPage }"
+                @click="setUserPage(page)"
+              >
+                {{ page }}
+              </button>
+              <button class="tiny-btn" :disabled="userPage >= totalUserPages" @click="setUserPage(userPage + 1)">Next</button>
+            </div>
           </section>
 
-          <section ref="ai302Ref" class="panel-card mb-6 scroll-mt-6 rounded-2xl p-4 md:p-5 space-y-5">
+          <section ref="ai302Ref" class="panel-card mb-8 scroll-mt-6 rounded-2xl p-5 md:p-6 space-y-6">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h2 class="section-title">Eager Service Management</h2>
               <button class="tiny-btn" :disabled="loading302" @click="load302All">Refresh Service Data</button>
@@ -299,8 +330,8 @@
             </div>
           </section>
 
-          <section ref="auditRef" class="panel-card scroll-mt-6 rounded-2xl p-4 md:p-5">
-            <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <section ref="auditRef" class="panel-card scroll-mt-6 rounded-2xl p-5 md:p-6">
+            <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
               <h2 class="section-title">Admin Audit Logs</h2>
               <div class="flex items-center gap-2 text-xs">
                 <input v-model.number="logQuery.page" type="number" min="1" class="query-input" />
@@ -342,7 +373,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   createAdmin302ApiKey,
@@ -381,6 +412,9 @@ const auditRef = ref(null)
 
 const roleOptions = ['super_admin', 'admin', 'ops', 'support', 'user']
 const users = ref([])
+const userSearchQuery = ref('')
+const userPage = ref(1)
+const userPageSize = 10
 const selectedRoles = ref({})
 const saving = ref({})
 const statusLoading = ref({})
@@ -446,6 +480,42 @@ const cards = computed(() => [
   { label: 'Cost (USD)', value: Number(usageSummary.value.totalCostUsd || 0).toFixed(4), note: 'Aggregated spend' }
 ])
 
+const filteredUsers = computed(() => {
+  const keyword = String(userSearchQuery.value || '').trim().toLowerCase()
+  if (!keyword) return users.value
+  return users.value.filter((item) => {
+    const id = String(item.id || '').toLowerCase()
+    const email = String(item.email || '').toLowerCase()
+    return id.includes(keyword) || email.includes(keyword)
+  })
+})
+
+const totalUserPages = computed(() => Math.max(1, Math.ceil(filteredUsers.value.length / userPageSize)))
+
+const pagedUsers = computed(() => {
+  const start = (userPage.value - 1) * userPageSize
+  return filteredUsers.value.slice(start, start + userPageSize)
+})
+
+const userPageStart = computed(() => {
+  if (filteredUsers.value.length === 0) return 0
+  return (userPage.value - 1) * userPageSize + 1
+})
+
+const userPageEnd = computed(() => {
+  if (filteredUsers.value.length === 0) return 0
+  return Math.min(userPage.value * userPageSize, filteredUsers.value.length)
+})
+
+const visibleUserPages = computed(() => {
+  const total = totalUserPages.value
+  const current = userPage.value
+  if (total <= 5) return Array.from({ length: total }, (_, idx) => idx + 1)
+  if (current <= 3) return [1, 2, 3, 4, 5]
+  if (current >= total - 2) return [total - 4, total - 3, total - 2, total - 1, total]
+  return [current - 2, current - 1, current, current + 1, current + 2]
+})
+
 const goHome = () => router.push('/')
 
 const getSectionEl = (key) => {
@@ -458,8 +528,9 @@ const getSectionEl = (key) => {
 const scrollToSection = (key) => {
   activeSection.value = key
   const el = getSectionEl(key)
-  if (el && typeof el.scrollIntoView === 'function') {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (el) {
+    const top = el.getBoundingClientRect().top + window.scrollY - 16
+    window.scrollTo({ top, behavior: 'smooth' })
   }
 }
 
@@ -474,7 +545,7 @@ const onMainScroll = () => {
   let candidate = sections[0]?.key || 'overview'
   let min = Number.POSITIVE_INFINITY
   for (const item of sections) {
-    const top = Math.abs(item.el.getBoundingClientRect().top - 100)
+    const top = Math.abs(item.el.getBoundingClientRect().top - 120)
     if (top < min) {
       min = top
       candidate = item.key
@@ -482,6 +553,21 @@ const onMainScroll = () => {
   }
   activeSection.value = candidate
 }
+
+const setUserPage = (page) => {
+  const next = Math.min(Math.max(Number(page) || 1, 1), totalUserPages.value)
+  userPage.value = next
+}
+
+watch(userSearchQuery, () => {
+  userPage.value = 1
+})
+
+watch(filteredUsers, () => {
+  if (userPage.value > totalUserPages.value) {
+    userPage.value = totalUserPages.value
+  }
+})
 
 const statusClass = (status) => {
   const val = String(status || 'active')
@@ -771,6 +857,13 @@ const loadAll = async () => {
 
 onMounted(async () => {
   await loadAll()
+  await nextTick()
+  onMainScroll()
+  window.addEventListener('scroll', onMainScroll, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onMainScroll)
 })
 </script>
 
