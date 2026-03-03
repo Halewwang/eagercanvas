@@ -8,7 +8,12 @@ const routes = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('../views/Login.vue')
+    redirect: (to) => ({
+      path: '/',
+      query: {
+        auth: to.query.mode === 'register' ? 'register' : 'login'
+      }
+    })
   },
   {
     path: '/',
@@ -24,6 +29,20 @@ const routes = [
     path: '/usage',
     name: 'Usage',
     component: () => import('../views/Usage.vue')
+  },
+  {
+    path: '/usage-admin',
+    name: 'UsageAdmin',
+    component: () => import('../views/UsageAdmin.vue')
+  },
+  {
+    path: '/admin',
+    redirect: '/admin/users'
+  },
+  {
+    path: '/admin/users',
+    name: 'AdminUsers',
+    component: () => import('../views/AdminUsers.vue')
   }
 ]
 
@@ -33,7 +52,7 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  const bypassAuthInDev = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH !== 'false'
+  const bypassAuthInDev = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
   if (bypassAuthInDev) {
     return true
   }
@@ -41,15 +60,39 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
   await auth.bootstrapAuth()
 
-  if (to.path === '/login' && auth.isAuthenticated.value) {
-    return '/'
+  if (to.path === '/login') {
+    if (auth.isAuthenticated.value) return '/'
+    return {
+      path: '/',
+      query: {
+        auth: to.query.mode === 'register' ? 'register' : 'login',
+        ...(typeof to.query.redirect === 'string' && to.query.redirect ? { redirect: to.query.redirect } : {})
+      }
+    }
   }
 
-  const protectedPaths = ['/canvas', '/usage']
+  const protectedPaths = ['/canvas', '/usage', '/admin']
+  const isUsageAdmin = to.path.startsWith('/usage-admin')
+  if (isUsageAdmin) {
+    return true
+  }
   const requiresAuth = protectedPaths.some((path) => to.path.startsWith(path))
 
   if (requiresAuth && !auth.isAuthenticated.value) {
-    return '/login'
+    return {
+      path: '/',
+      query: {
+        auth: 'login',
+        redirect: to.fullPath
+      }
+    }
+  }
+
+  if (to.path.startsWith('/admin')) {
+    const allowed = await auth.loadAdminSession()
+    if (!allowed) {
+      return '/'
+    }
   }
 })
 

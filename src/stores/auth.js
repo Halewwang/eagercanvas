@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { getAdminSession } from '@/api/admin'
 import {
   getMe,
   logoutSession,
@@ -15,6 +16,10 @@ const ACCESS_TOKEN_KEY = 'ec_access_token'
 const user = ref(null)
 const accessToken = ref('')
 const bootstrapped = ref(false)
+const adminUser = ref(null)
+const roles = ref([])
+const permissions = ref([])
+const adminBootstrapped = ref(false)
 
 const readToken = () => {
   try {
@@ -26,6 +31,14 @@ const readToken = () => {
 
 const persistToken = (token) => {
   accessToken.value = token || ''
+  if (!token) {
+    adminUser.value = null
+    roles.value = []
+    permissions.value = []
+    adminBootstrapped.value = false
+  } else {
+    adminBootstrapped.value = false
+  }
   try {
     if (token) localStorage.setItem(ACCESS_TOKEN_KEY, token)
     else localStorage.removeItem(ACCESS_TOKEN_KEY)
@@ -36,6 +49,7 @@ const persistToken = (token) => {
 
 export const useAuthStore = () => {
   const isAuthenticated = computed(() => !!accessToken.value)
+  const isAdmin = computed(() => permissions.value.includes('admin.dashboard.read'))
 
   const sendCode = (email) => sendLoginCode(email)
   const sendRegister = (email) => sendRegisterCode(email)
@@ -82,12 +96,47 @@ export const useAuthStore = () => {
     bootstrapped.value = true
   }
 
+  const loadAdminSession = async ({ force = false } = {}) => {
+    if (!isAuthenticated.value) {
+      adminUser.value = null
+      roles.value = []
+      permissions.value = []
+      adminBootstrapped.value = true
+      return false
+    }
+
+    if (adminBootstrapped.value && !force) {
+      return isAdmin.value
+    }
+
+    try {
+      const session = await getAdminSession()
+      adminUser.value = session?.user || null
+      roles.value = Array.isArray(session?.roles) ? session.roles : []
+      permissions.value = Array.isArray(session?.permissions) ? session.permissions : []
+    } catch {
+      adminUser.value = null
+      roles.value = []
+      permissions.value = []
+    } finally {
+      adminBootstrapped.value = true
+    }
+
+    return isAdmin.value
+  }
+
+  const hasPermission = (code) => permissions.value.includes(String(code || ''))
+
   const logout = async () => {
     try {
       await logoutSession()
     } finally {
       persistToken('')
       user.value = null
+      adminUser.value = null
+      roles.value = []
+      permissions.value = []
+      adminBootstrapped.value = false
     }
   }
 
@@ -101,12 +150,19 @@ export const useAuthStore = () => {
     user,
     accessToken,
     isAuthenticated,
+    isAdmin,
     bootstrapped,
+    adminUser,
+    roles,
+    permissions,
+    adminBootstrapped,
     sendCode,
     sendRegister,
     verifyCode,
     verifyRegister,
     bootstrapAuth,
+    loadAdminSession,
+    hasPermission,
     logout,
     updateProfile,
     persistToken
