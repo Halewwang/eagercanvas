@@ -217,6 +217,7 @@ import { useNodesFactory } from '../hooks'
 import { edgeStrategy } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { getErrorMessage } from '@/utils'
+import { getWorkflowById } from '@/config/workflows'
 import { projects, initProjectsStore, renameProject, duplicateProject, deleteProject } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 
@@ -562,6 +563,28 @@ const loadProjectById = (projectId) => {
   }
 }
 
+const applyPendingWorkflowTemplate = async () => {
+  const raw = sessionStorage.getItem('ai-canvas-workflow-template')
+  if (!raw) return
+
+  sessionStorage.removeItem('ai-canvas-workflow-template')
+
+  let payload = null
+  try {
+    payload = JSON.parse(raw)
+  } catch {
+    return
+  }
+
+  const workflowId = String(payload?.workflowId || '')
+  if (!workflowId || nodes.value.length > 0) return
+
+  const workflow = getWorkflowById(workflowId)
+  if (!workflow) return
+
+  await nodesFactory.createFromWorkflow(workflow, {})
+}
+
 // Watch for route changes | 监听路由变化
 watch(
   () => route.params.id,
@@ -600,6 +623,8 @@ onMounted(async () => {
   
   // Load project data | 加载项目数据
   loadProjectById(route.params.id)
+  await nextTick()
+  await applyPendingWorkflowTemplate()
 })
 
 // Cleanup on unmount | 卸载时清理

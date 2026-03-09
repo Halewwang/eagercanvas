@@ -5,48 +5,69 @@
       <!-- Header | 头部 -->
       <div class="panel-header">
         <div class="panel-tabs">
-          <span 
+          <span
             class="tab-item" 
             :class="{ active: activeTab === 'public' }"
             @click="activeTab = 'public'"
-          >Public Workflows</span>
-          <span 
+          >Featured</span>
+          <span
             class="tab-item" 
             :class="{ active: activeTab === 'my' }"
             @click="activeTab = 'my'"
-          >My Workflows</span>
+          >My</span>
+          <span
+            class="tab-item"
+            :class="{ active: activeTab === 'system' }"
+            @click="activeTab = 'system'"
+          >System</span>
         </div>
         <button class="expand-btn" @click="visible = false">
           <n-icon :size="16"><CloseOutline /></n-icon>
         </button>
       </div>
-      
+
       <!-- Content | 内容 -->
       <div class="panel-content">
-        <!-- Public workflows | 公共工作流 -->
-        <div v-if="activeTab === 'public'" class="workflow-grid">
-          <div 
-            v-for="workflow in publicWorkflows" 
+        <div v-if="activeTab === 'my'" class="panel-toolbar">
+          <select v-model="newTemplateBaseId" class="workflow-select">
+            <option v-for="item in systemWorkflows" :key="item.id" :value="item.id">{{ item.name }}</option>
+          </select>
+          <button class="toolbar-btn" @click="handleCreateMyTemplate">Add to My</button>
+        </div>
+
+        <!-- Workflows grid -->
+        <div class="workflow-grid">
+          <div
+            v-for="workflow in currentList"
             :key="workflow.id"
             class="workflow-card"
-            @click="handleAddWorkflow(workflow)"
           >
-            <div class="card-cover">
+            <div class="card-cover" @click="handleAddWorkflow(workflow)">
               <img v-if="workflow.cover" :src="workflow.cover" :alt="workflow.name" class="cover-img" />
               <n-icon v-else :size="36" class="cover-icon">
                 <component :is="getIcon(workflow.icon)" />
               </n-icon>
             </div>
-            <div class="card-title">{{ workflow.name }}</div>
+            <div class="card-title-row">
+              <div class="card-title">{{ workflow.name }}</div>
+              <div v-if="activeTab === 'my'" class="card-actions">
+                <button class="tiny-btn" @click="handleTogglePublic(workflow)">
+                  {{ workflow.visibility === 'public' ? 'Unpublish' : 'Publish' }}
+                </button>
+                <button class="tiny-btn danger" @click="handleDeleteMyTemplate(workflow.id)">Delete</button>
+              </div>
+              <div v-else-if="activeTab === 'system'" class="card-actions">
+                <button class="tiny-btn" @click="handleCreateMyTemplate(workflow.id)">Save</button>
+              </div>
+            </div>
           </div>
         </div>
-        
-        <!-- My workflows | 我的工作流 -->
-        <div v-else class="empty-state">
+
+        <div v-if="currentList.length === 0" class="empty-state">
           <n-icon :size="36" class="text-gray-500">
             <FolderOpenOutline />
           </n-icon>
-          <p class="text-gray-500 text-sm mt-2">No custom workflows yet</p>
+          <p class="text-gray-500 text-sm mt-2">{{ emptyStateMessage }}</p>
         </div>
       </div>
     </div>
@@ -71,7 +92,7 @@ import {
   CartOutline,
   ChatbubbleOutline
 } from '../icons/coolicons'
-import { WORKFLOW_TEMPLATES } from '../config/workflows'
+import { useWorkflowsStore } from '@/stores/workflows'
 
 const props = defineProps({
   show: Boolean
@@ -88,21 +109,24 @@ const visible = computed({
   set: (val) => emit('update:show', val)
 })
 
-// Public workflows | 公共工作流
-const WORKFLOW_NAME_MAP = {
-  '多角度分镜': 'Multi-Angle Storyboard',
-  '通用产品全套电商图': 'E-commerce Product Set',
-  '短剧角色设计': 'Character Design Pack',
-  '多时段场景背景': 'Multi-Time Scene Pack',
-  '绘本生成器': 'Storybook Generator'
-}
+const {
+  systemWorkflows,
+  myWorkflows,
+  publicWorkflows,
+  loadWorkflowTemplates,
+  createMyWorkflowTemplate,
+  deleteMyWorkflowTemplate,
+  setWorkflowTemplateVisibility,
+  resolveWorkflowTemplate
+} = useWorkflowsStore()
 
-const publicWorkflows = computed(() =>
-  WORKFLOW_TEMPLATES.map((workflow) => ({
-    ...workflow,
-    name: WORKFLOW_NAME_MAP[workflow.name] || workflow.name
-  }))
-)
+loadWorkflowTemplates()
+
+const newTemplateBaseId = ref('')
+
+if (!newTemplateBaseId.value) {
+  newTemplateBaseId.value = systemWorkflows.value[0]?.id || ''
+}
 
 // Icon mapping | 图标映射
 const iconMap = {
@@ -119,11 +143,40 @@ const getIcon = (iconName) => {
   return iconMap[iconName] || GridOutline
 }
 
+const currentList = computed(() => {
+  if (activeTab.value === 'public') return publicWorkflows.value
+  if (activeTab.value === 'my') return myWorkflows.value
+  return systemWorkflows.value
+})
+
+const emptyStateMessage = computed(() => {
+  if (activeTab.value === 'public') return 'No public workflows yet'
+  if (activeTab.value === 'my') return 'No custom workflows yet'
+  return 'No system templates found'
+})
+
 // Handle add workflow | 处理添加工作流
 const handleAddWorkflow = (workflow) => {
-  // 直接添加工作流，节点内容由用户自己填写
-  emit('add-workflow', { workflow, options: {} })
+  const runtimeWorkflow = resolveWorkflowTemplate(workflow)
+  if (!runtimeWorkflow) return
+  emit('add-workflow', { workflow: runtimeWorkflow, options: {} })
   visible.value = false
+}
+
+const handleCreateMyTemplate = async (baseWorkflowId = '') => {
+  const id = baseWorkflowId || newTemplateBaseId.value
+  if (!id) return
+  await createMyWorkflowTemplate({ baseWorkflowId: id })
+  if (activeTab.value !== 'my') activeTab.value = 'my'
+}
+
+const handleDeleteMyTemplate = async (id) => {
+  await deleteMyWorkflowTemplate(id)
+}
+
+const handleTogglePublic = async (workflow) => {
+  const nextVisibility = workflow.visibility === 'public' ? 'private' : 'public'
+  await setWorkflowTemplateVisibility(workflow.id, nextVisibility)
 }
 
 // Handle click outside | 点击外部关闭
@@ -183,7 +236,7 @@ const vClickOutside = {
 
 .panel-tabs {
   display: flex;
-  gap: 24px;
+  gap: 18px;
 }
 
 .tab-item {
@@ -229,6 +282,40 @@ const vClickOutside = {
   padding: 16px;
 }
 
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.workflow-select {
+  flex: 1;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 8px;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.toolbar-btn {
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-radius: 8px;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.toolbar-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
 /* Workflow grid | 工作流网格 */
 .workflow-grid {
   display: grid;
@@ -238,7 +325,6 @@ const vClickOutside = {
 
 /* Workflow card | 工作流卡片 */
 .workflow-card {
-  cursor: pointer;
   transition: transform 0.2s;
 }
 
@@ -273,13 +359,46 @@ const vClickOutside = {
 }
 
 .card-title {
-  margin-top: 10px;
   font-size: 13px;
   color: var(--text-primary);
-  text-align: center;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+}
+
+.card-title-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.tiny-btn {
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tiny-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+.tiny-btn.danger:hover {
+  color: #ef4444;
+  border-color: #ef4444;
 }
 
 /* Empty state | 空状态 */
