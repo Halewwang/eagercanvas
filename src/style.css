@@ -120,7 +120,7 @@ body {
 
 .vue-flow__node {
   border-radius: 14px;
-  box-shadow: var(--panel-shadow);
+  box-shadow: none;
 }
 
 .vue-flow__edge-path {

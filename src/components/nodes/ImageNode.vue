@@ -1027,7 +1027,7 @@ const createLinkedNode = (type) => {
 }
 
 .capsule-inner-selected {
-  border-color: rgba(143, 143, 143, 0.45);
+  border-color: transparent;
 }
 
 .capsule-generate {

@@ -669,9 +669,10 @@ watch(
   background: #050505;
 }
 .module-video-frame {
+  --inner-radius: calc(var(--module-radius) - var(--module-inset));
   width: 100%;
   height: 100%;
-  border-radius: calc(var(--module-radius) - var(--module-inset));
+  border-radius: var(--inner-radius);
   overflow: hidden;
   background: #000;
 }
@@ -679,7 +680,9 @@ watch(
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  border-radius: var(--inner-radius);
+  clip-path: inset(0 round var(--inner-radius));
   background: #000;
 }
 .module-progress-shell {
@@ -805,7 +808,7 @@ watch(
 }
 
 .capsule-inner-selected {
-  border-color: rgba(143, 143, 143, 0.45);
+  border-color: transparent;
 }
 
 .capsule-generate {
