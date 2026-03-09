@@ -176,29 +176,60 @@
     <ApiSettings v-model:show="showApiSettings" />
 
     <!-- Rename Modal | 重命名弹窗 -->
-    <n-modal v-model:show="showRenameModal" preset="dialog" title="Rename Project">
-      <n-input v-model:value="renameValue" placeholder="Enter project name" />
-      <template #action>
-        <n-button @click="showRenameModal = false">Cancel</n-button>
-        <n-button type="primary" @click="confirmRename">Save</n-button>
-      </template>
+    <n-modal v-model:show="showRenameModal" :mask-closable="true">
+      <div class="ec-modal canvas-modal canvas-modal-sm">
+        <div class="ec-modal-header">
+          <h2 class="ec-modal-title">Rename Project</h2>
+          <button class="ec-modal-close" @click="showRenameModal = false" aria-label="Close">
+            <n-icon :size="20"><CloseOutline /></n-icon>
+          </button>
+        </div>
+        <div class="ec-modal-body">
+          <section class="ec-modal-section">
+            <n-input v-model:value="renameValue" placeholder="Enter project name" />
+          </section>
+        </div>
+        <div class="ec-modal-actions">
+          <button class="ec-btn ec-btn-secondary" @click="showRenameModal = false">Cancel</button>
+          <button class="ec-btn ec-btn-primary" @click="confirmRename">Save</button>
+        </div>
+      </div>
     </n-modal>
 
     <!-- Delete Confirm Modal | 删除确认弹窗 -->
-    <n-modal v-model:show="showDeleteModal" preset="dialog" title="Delete Project" type="warning">
-      <p>Delete "{{ projectName }}"? This action cannot be undone.</p>
-      <template #action>
-        <n-button @click="showDeleteModal = false">Cancel</n-button>
-        <n-button type="error" @click="confirmDelete">Delete</n-button>
-      </template>
+    <n-modal v-model:show="showDeleteModal" :mask-closable="true">
+      <div class="ec-modal canvas-modal canvas-modal-sm">
+        <div class="ec-modal-header">
+          <h2 class="ec-modal-title">Delete Project</h2>
+          <button class="ec-modal-close" @click="showDeleteModal = false" aria-label="Close">
+            <n-icon :size="20"><CloseOutline /></n-icon>
+          </button>
+        </div>
+        <div class="ec-modal-body">
+          <section class="ec-modal-section">
+            <p class="modal-copy">Delete "{{ projectName }}"? This action cannot be undone.</p>
+          </section>
+        </div>
+        <div class="ec-modal-actions">
+          <button class="ec-btn ec-btn-secondary" @click="showDeleteModal = false">Cancel</button>
+          <button class="ec-btn ec-btn-danger" @click="confirmDelete">Delete</button>
+        </div>
+      </div>
     </n-modal>
 
     <!-- Workflow Panel | 工作流面板 -->
     <WorkflowPanel v-model:show="showWorkflowPanel" @add-workflow="handleAddWorkflow" />
 
-    <n-modal v-model:show="showShareModal" preset="card" title="Share" style="max-width: 640px">
-      <div class="share-panel">
-        <section class="share-section">
+    <n-modal v-model:show="showShareModal" :mask-closable="true">
+      <div class="ec-modal canvas-modal canvas-share-modal">
+        <div class="ec-modal-header">
+          <h2 class="ec-modal-title">Share</h2>
+          <button class="ec-modal-close" @click="showShareModal = false" aria-label="Close">
+            <n-icon :size="20"><CloseOutline /></n-icon>
+          </button>
+        </div>
+        <div class="ec-modal-body share-panel">
+          <section class="ec-modal-section share-section">
           <div class="share-row">
             <h3>Share a Link</h3>
             <button class="toggle-btn" :class="{ on: shareLinkEnabled }" @click="shareLinkEnabled = !shareLinkEnabled">
@@ -208,11 +239,11 @@
           <p>Share a read-only link to your canvas.</p>
           <div class="share-link-box">
             <span class="share-link-text">{{ shareLinkUrl }}</span>
-            <button class="copy-btn" @click="copyShareLink">Copy Link</button>
+            <button class="ec-btn ec-btn-secondary copy-btn" @click="copyShareLink">Copy Link</button>
           </div>
         </section>
 
-        <section class="share-section">
+        <section class="ec-modal-section share-section">
           <div class="share-row">
             <h3>Allow Remixing</h3>
             <button class="toggle-btn" :class="{ on: allowRemixing }" @click="allowRemixing = !allowRemixing">
@@ -222,7 +253,7 @@
           <p>When enabled, this project is published to Featured templates.</p>
         </section>
 
-        <section class="share-section">
+        <section class="ec-modal-section share-section">
           <h3>Change Appearance</h3>
           <p>Set how this shared project appears in My Templates.</p>
           <n-input v-model:value="shareTemplateName" placeholder="Template title" />
@@ -235,10 +266,11 @@
           />
         </section>
       </div>
-      <template #action>
-        <n-button @click="showShareModal = false">Cancel</n-button>
-        <n-button type="primary" @click="saveSharedTemplate">Save To My Templates</n-button>
-      </template>
+      <div class="ec-modal-actions">
+        <button class="ec-btn ec-btn-secondary" @click="showShareModal = false">Cancel</button>
+        <button class="ec-btn ec-btn-primary" @click="saveSharedTemplate">Save To My Templates</button>
+      </div>
+      </div>
     </n-modal>
   </div>
 </template>
@@ -253,10 +285,11 @@ import { useRouter, useRoute } from 'vue-router'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import { NIcon, NDropdown, NModal, NInput, NButton } from 'naive-ui'
+import { NIcon, NDropdown, NModal, NInput } from 'naive-ui'
 import { 
   ChevronBackOutline,
   ChevronDownOutline,
+  CloseOutline,
   SettingsOutline,
   AddOutline,
   ImageOutline,
@@ -752,11 +785,22 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+.canvas-modal {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.canvas-modal-sm {
+  width: min(520px, calc(100vw - 48px));
+  min-height: auto;
+}
+
+.canvas-share-modal {
+  width: min(860px, calc(100vw - 48px));
+}
+
 .share-section {
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 12px;
-  background: var(--bg-secondary);
+  border-color: rgba(143, 143, 143, 0.24);
+  background: rgba(9, 11, 15, 0.85);
 }
 
 .share-section h3 {
@@ -766,7 +810,7 @@ onUnmounted(() => {
 
 .share-section p {
   margin: 8px 0 0;
-  color: var(--text-secondary);
+  color: #8d949e;
   font-size: 13px;
 }
 
@@ -807,13 +851,13 @@ onUnmounted(() => {
 
 .share-link-box {
   margin-top: 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(143, 143, 143, 0.24);
   border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  background: var(--bg-tertiary);
+  background: #101218;
 }
 
 .share-link-text {
@@ -826,14 +870,34 @@ onUnmounted(() => {
 }
 
 .copy-btn {
-  border: 1px solid var(--border-color);
-  background: transparent;
-  color: var(--text-primary);
-  border-radius: 8px;
-  height: 30px;
+  min-width: 102px;
+  border-radius: 10px;
+  height: 34px;
   padding: 0 10px;
   font-size: 12px;
-  cursor: pointer;
+}
+
+.modal-copy {
+  margin: 0;
+  color: #d7dbe3;
+  font-size: 14px;
+}
+
+.canvas-modal :deep(.n-input),
+.canvas-modal :deep(.n-input-wrapper),
+.canvas-modal :deep(.n-input .n-input__textarea-el),
+.canvas-modal :deep(.n-input .n-input__input-el) {
+  color: #f2f3f5;
+}
+
+.canvas-modal :deep(.n-input) {
+  background: #101218;
+  border-radius: 10px;
+}
+
+.canvas-modal :deep(.n-input .n-input__border),
+.canvas-modal :deep(.n-input .n-input__state-border) {
+  border-color: rgba(143, 143, 143, 0.24);
 }
 
 .canvas-flow {

@@ -1,9 +1,9 @@
 <template>
   <n-modal v-model:show="showModal" :mask-closable="true" :auto-focus="false" :trap-focus="true">
-    <div class="profile-modal">
-      <div class="profile-header">
-        <h2 class="profile-title">Profile</h2>
-        <button class="close-btn" @click="showModal = false" aria-label="Close">
+    <div class="profile-modal ec-modal">
+      <div class="profile-header ec-modal-header">
+        <h2 class="profile-title ec-modal-title">Profile</h2>
+        <button class="close-btn ec-modal-close" @click="showModal = false" aria-label="Close">
           <n-icon :size="20"><CloseOutline /></n-icon>
         </button>
       </div>
@@ -36,7 +36,7 @@
           </div>
 
           <div class="actions-row">
-            <n-button class="save-btn" :loading="saving" :disabled="saving" @click="handleSave">Save changes</n-button>
+            <button class="ec-btn ec-btn-primary" :disabled="saving" @click="handleSave">{{ saving ? 'Saving...' : 'Save changes' }}</button>
           </div>
         </div>
       </div>
@@ -46,7 +46,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { NButton, NIcon, NInput, NModal } from 'naive-ui'
+import { NIcon, NInput, NModal } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
 import { CloseOutline } from '../icons/coolicons'
 import { getErrorMessage } from '@/utils'
