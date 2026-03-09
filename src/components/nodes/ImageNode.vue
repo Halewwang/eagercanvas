@@ -58,7 +58,10 @@
 
     <div
       class="image-node rounded-2xl border relative transition-all duration-200 overflow-visible"
-      :class="isSelected ? 'node-selected' : 'node-default'"
+      :class="[
+        isSelected ? 'node-selected' : 'node-default',
+        { 'node-glow-active': isSelected }
+      ]"
       :style="moduleStyle"
     >
       <div class="module-stage" :style="stageStyle">
@@ -68,12 +71,13 @@
           <div class="module-progress-label">Generating image... {{ progressPercent }}%</div>
         </div>
 
-        <img
-          v-else-if="data.url"
-          :src="data.url"
-          :alt="data.label || 'Image'"
-          class="w-full h-full object-cover"
-        />
+        <div v-else-if="data.url" class="module-image-shell">
+          <img
+            :src="data.url"
+            :alt="data.label || 'Image'"
+            class="module-image"
+          />
+        </div>
 
         <div
           v-else-if="urlLoading"
@@ -862,6 +866,7 @@ const createLinkedNode = (type) => {
   cursor: default;
   position: relative;
   background: #0f0f0f;
+  isolation: isolate;
 }
 
 .node-meta-row {
@@ -894,6 +899,20 @@ const createLinkedNode = (type) => {
   margin: 0 auto;
   overflow: hidden;
   border-radius: inherit;
+}
+
+.module-image-shell {
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  background: #050505;
+}
+
+.module-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 16px;
 }
 .upload-progress-wrap {
   margin-top: 6px;
@@ -1106,8 +1125,28 @@ const createLinkedNode = (type) => {
 
 .node-selected {
   border-width: 1px;
-  border-color: #8f8f8f;
+  border-color: #7278a7;
   box-shadow: none;
+}
+
+.image-node::after {
+  content: '';
+  position: absolute;
+  inset: -16px;
+  border-radius: 28px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  background:
+    radial-gradient(44% 58% at 26% 78%, rgba(88, 124, 255, 0.26), transparent 72%),
+    radial-gradient(54% 46% at 76% 20%, rgba(255, 112, 90, 0.24), transparent 74%),
+    radial-gradient(86% 86% at 50% 50%, rgba(103, 123, 255, 0.15), transparent 76%);
+  filter: blur(18px);
+}
+
+.node-glow-active::after {
+  opacity: 1;
 }
 
 :deep(.node-handle-plus) {
