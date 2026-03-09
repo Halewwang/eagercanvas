@@ -12,6 +12,12 @@
     <div class="relative z-20 max-w-[1400px] mx-auto px-6 pt-6 flex justify-end items-center gap-3">
       <template v-if="isAuthenticated">
       <button
+        @click="router.push('/workspace')"
+        class="flora-button-ghost px-4 py-2 rounded-xl text-sm"
+      >
+        Workspace
+      </button>
+      <button
         @click="triggerAvatarUpload"
         class="w-9 h-9 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-tertiary)] flex items-center justify-center"
         title="Upload avatar"
@@ -116,13 +122,22 @@
             <h2 class="text-2xl md:text-3xl font-light mb-2">Recent Projects</h2>
             <p class="text-[var(--text-tertiary)] text-sm">Continue where you left off</p>
           </div>
-          <button 
-            @click="createNewProject"
-            class="hidden md:flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] transition-all duration-300 group"
-          >
-            <n-icon :size="18"><AddOutline /></n-icon>
-            <span>New Project</span>
-          </button>
+          <div class="hidden md:flex items-center gap-3">
+            <button
+              @click="router.push('/workspace')"
+              class="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] transition-all duration-300 group"
+            >
+              <n-icon :size="18"><AppsOutline /></n-icon>
+              <span>Project Workspace</span>
+            </button>
+            <button 
+              @click="createNewProject"
+              class="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] transition-all duration-300 group"
+            >
+              <n-icon :size="18"><AddOutline /></n-icon>
+              <span>New Project</span>
+            </button>
+          </div>
         </div>
         
         <!-- Empty state -->
@@ -328,6 +343,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { NIcon, NModal } from 'naive-ui'
 import { 
   AddOutline, 
+  AppsOutline,
   SendOutline,
   DocumentOutline,
   FolderOutline,

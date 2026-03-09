@@ -26,6 +26,11 @@ const routes = [
     component: () => import('../views/Canvas.vue')
   },
   {
+    path: '/workspace',
+    name: 'Workspace',
+    component: () => import('../views/Workspace.vue')
+  },
+  {
     path: '/usage',
     name: 'Usage',
     component: () => import('../views/Usage.vue')
@@ -79,7 +84,7 @@ router.beforeEach(async (to) => {
     }
   }
 
-  const protectedPaths = ['/canvas', '/usage', '/admin']
+  const protectedPaths = ['/canvas', '/workspace', '/usage', '/admin']
   const isUsageAdmin = to.path.startsWith('/usage-admin')
   if (isUsageAdmin) {
     return true
