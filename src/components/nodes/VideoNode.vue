@@ -56,7 +56,9 @@
         </div>
 
         <div v-else-if="data.url && !data.loading" class="module-video-shell">
-          <video :src="data.url" controls class="module-video" />
+          <div class="module-video-frame">
+            <video :src="data.url" controls class="module-video" />
+          </div>
         </div>
 
         <div v-else class="w-full h-full bg-[#0f0f0f] flex flex-col items-center justify-center gap-4 relative text-center px-4">
@@ -666,11 +668,18 @@ watch(
   padding: var(--module-inset);
   background: #050505;
 }
+.module-video-frame {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--module-radius) - var(--module-inset));
+  overflow: hidden;
+  background: #000;
+}
 .module-video {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
-  border-radius: calc(var(--module-radius) - var(--module-inset));
   background: #000;
 }
 .module-progress-shell {
@@ -783,7 +792,7 @@ watch(
   padding: 7px 12px;
   border-radius: 999px;
   border: 1px solid transparent;
-  background: #1d1d1d;
+  background: #0f0f0f;
   backdrop-filter: blur(10px);
   transition: all 0.2s ease;
   white-space: nowrap;
@@ -855,7 +864,7 @@ watch(
 }
 
 .capsule-icon-solid {
-  background: #1d1d1d;
+  background: #0f0f0f;
   color: #f6f8fc;
   border-color: rgba(143, 143, 143, 0.65);
 }

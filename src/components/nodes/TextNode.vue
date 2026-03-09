@@ -424,7 +424,7 @@ const createLinkedNode = (type) => {
   padding: 7px 12px;
   border-radius: 999px;
   border: 1px solid transparent;
-  background: #1d1d1d;
+  background: #0f0f0f;
   backdrop-filter: blur(10px);
   transition: all 0.2s ease;
   white-space: nowrap;
@@ -488,7 +488,7 @@ const createLinkedNode = (type) => {
 }
 
 .capsule-icon-solid {
-  background: #1d1d1d;
+  background: #0f0f0f;
   color: #f6f8fc;
   border-color: rgba(143, 143, 143, 0.65);
 }
