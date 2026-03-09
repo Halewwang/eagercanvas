@@ -40,7 +40,14 @@
       </div>
     </div>
 
-    <div class="video-node rounded-2xl border relative transition-all duration-200 overflow-visible" :class="isSelected ? 'node-selected' : 'node-default'" :style="moduleStyle">
+    <div
+      class="video-node rounded-2xl border relative transition-all duration-200 overflow-visible"
+      :class="[
+        isSelected ? 'node-selected' : 'node-default',
+        { 'node-glow-active': isSelected }
+      ]"
+      :style="moduleStyle"
+    >
       <div class="module-stage" :style="stageStyle">
         <div v-if="showProgress" class="module-progress-shell">
           <div class="module-progress-track"></div>
@@ -48,8 +55,8 @@
           <div class="module-progress-label">Generating video... {{ progressPercent }}%</div>
         </div>
 
-        <div v-else-if="data.url && !data.loading" class="w-full h-full overflow-hidden bg-black">
-          <video :src="data.url" controls class="w-full h-full object-contain" />
+        <div v-else-if="data.url && !data.loading" class="module-video-shell">
+          <video :src="data.url" controls class="module-video" />
         </div>
 
         <div v-else class="w-full h-full bg-[#0f0f0f] flex flex-col items-center justify-center gap-4 relative text-center px-4">
@@ -624,7 +631,15 @@ watch(
 
 <style scoped>
 .video-node-wrapper { position: relative; padding-top: 88px; }
-.video-node { cursor: default; position: relative; background: #0f0f0f; }
+.video-node {
+  cursor: default;
+  position: relative;
+  background: #0f0f0f;
+  isolation: isolate;
+  --module-radius: 24px;
+  --module-inset: 12px;
+  border-radius: var(--module-radius);
+}
 
 .node-meta-row {
   position: absolute;
@@ -644,7 +659,20 @@ watch(
 .meta-icon { color: #c9ccd2; }
 .meta-title { color: #d7dbe3; font-size: 14px; letter-spacing: 0.01em; }
 
-.module-stage { margin: 0 auto; overflow: hidden; border-radius: inherit; }
+.module-stage { margin: 0 auto; overflow: hidden; border-radius: var(--module-radius); }
+.module-video-shell {
+  width: 100%;
+  height: 100%;
+  padding: var(--module-inset);
+  background: #050505;
+}
+.module-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: calc(var(--module-radius) - var(--module-inset));
+  background: #000;
+}
 .module-progress-shell {
   width: 100%;
   height: 100%;
@@ -862,7 +890,31 @@ watch(
 }
 
 .node-default { border-width: 0; border-color: transparent; box-shadow: none; }
-.node-selected { border-width: 1px; border-color: #8f8f8f; box-shadow: none; }
+.node-selected {
+  border-width: 1px;
+  border-color: #7278a7;
+  box-shadow: 0 0 0 1px rgba(132, 142, 220, 0.42);
+}
+
+.video-node::after {
+  content: '';
+  position: absolute;
+  inset: -16px;
+  border-radius: 28px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  background:
+    radial-gradient(46% 60% at 24% 80%, rgba(92, 133, 255, 0.4), transparent 70%),
+    radial-gradient(58% 52% at 78% 18%, rgba(255, 123, 95, 0.38), transparent 72%),
+    radial-gradient(92% 92% at 50% 50%, rgba(115, 138, 255, 0.24), transparent 74%);
+  filter: blur(16px);
+}
+
+.node-glow-active::after {
+  opacity: 1;
+}
 
 :deep(.node-handle-plus) {
   width: 28px !important;

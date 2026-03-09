@@ -46,7 +46,10 @@
 
     <div
       class="text-node rounded-2xl relative transition-all duration-200 overflow-visible"
-      :class="isSelected ? 'node-selected' : 'node-default'"
+      :class="[
+        isSelected ? 'node-selected' : 'node-default',
+        { 'node-glow-active': isSelected }
+      ]"
       :style="moduleStyle"
     >
       <div class="module-stage" :style="stageStyle">
@@ -336,6 +339,10 @@ const createLinkedNode = (type) => {
   cursor: default;
   position: relative;
   background: #0f0f0f;
+  isolation: isolate;
+  --module-radius: 24px;
+  --module-inset: 12px;
+  border-radius: var(--module-radius);
 }
 
 .node-meta-row {
@@ -357,12 +364,12 @@ const createLinkedNode = (type) => {
 .meta-icon { color: #c9ccd2; }
 .meta-title { color: #d7dbe3; font-size: 14px; letter-spacing: 0.01em; }
 
-.module-stage { margin: 0 auto; overflow: hidden; border-radius: inherit; }
+.module-stage { margin: 0 auto; overflow: hidden; border-radius: var(--module-radius); }
 .text-area-wrap {
   width: 100%;
   height: 100%;
-  padding: 14px;
-  border-radius: 14px;
+  padding: var(--module-inset);
+  border-radius: calc(var(--module-radius) - var(--module-inset));
   background: #0f0f0f;
   border: 0;
   display: flex;
@@ -512,8 +519,28 @@ const createLinkedNode = (type) => {
 .node-default { border-width: 0; border-color: transparent; box-shadow: none; }
 .node-selected {
   border-width: 1px;
-  border-color: #8f8f8f;
-  box-shadow: none;
+  border-color: #7278a7;
+  box-shadow: 0 0 0 1px rgba(132, 142, 220, 0.42);
+}
+
+.text-node::after {
+  content: '';
+  position: absolute;
+  inset: -16px;
+  border-radius: 28px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  background:
+    radial-gradient(46% 60% at 24% 80%, rgba(92, 133, 255, 0.4), transparent 70%),
+    radial-gradient(58% 52% at 78% 18%, rgba(255, 123, 95, 0.38), transparent 72%),
+    radial-gradient(92% 92% at 50% 50%, rgba(115, 138, 255, 0.24), transparent 74%);
+  filter: blur(16px);
+}
+
+.node-glow-active::after {
+  opacity: 1;
 }
 
 :deep(.node-handle-plus) {

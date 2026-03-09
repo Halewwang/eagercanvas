@@ -1,6 +1,6 @@
 <template>
   <!-- Canvas page | 画布页面 -->
-  <div class="h-screen w-screen bg-[var(--bg-primary)]">
+  <div class="h-screen w-screen bg-[#1C1C1C]">
     <!-- Main canvas area | 主画布区域 -->
     <div class="h-full relative overflow-hidden">
       <!-- Top capsules | 顶部胶囊菜单 -->
@@ -839,6 +839,11 @@ onUnmounted(() => {
 .canvas-flow {
   width: 100%;
   height: 100%;
+  background: #1c1c1c;
+}
+
+.canvas-flow :deep(.vue-flow__pane) {
+  background: #1c1c1c;
 }
 
 .canvas-flow :deep(.vue-flow__edge-path) {

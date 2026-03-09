@@ -867,6 +867,9 @@ const createLinkedNode = (type) => {
   position: relative;
   background: #0f0f0f;
   isolation: isolate;
+  --module-radius: 24px;
+  --module-inset: 12px;
+  border-radius: var(--module-radius);
 }
 
 .node-meta-row {
@@ -898,13 +901,13 @@ const createLinkedNode = (type) => {
 .module-stage {
   margin: 0 auto;
   overflow: hidden;
-  border-radius: inherit;
+  border-radius: var(--module-radius);
 }
 
 .module-image-shell {
   width: 100%;
   height: 100%;
-  padding: 12px;
+  padding: var(--module-inset);
   background: #050505;
 }
 
@@ -912,7 +915,7 @@ const createLinkedNode = (type) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 16px;
+  border-radius: calc(var(--module-radius) - var(--module-inset));
 }
 .upload-progress-wrap {
   margin-top: 6px;
@@ -1126,7 +1129,7 @@ const createLinkedNode = (type) => {
 .node-selected {
   border-width: 1px;
   border-color: #7278a7;
-  box-shadow: none;
+  box-shadow: 0 0 0 1px rgba(132, 142, 220, 0.42);
 }
 
 .image-node::after {
@@ -1139,10 +1142,10 @@ const createLinkedNode = (type) => {
   opacity: 0;
   transition: opacity 0.22s ease;
   background:
-    radial-gradient(44% 58% at 26% 78%, rgba(88, 124, 255, 0.26), transparent 72%),
-    radial-gradient(54% 46% at 76% 20%, rgba(255, 112, 90, 0.24), transparent 74%),
-    radial-gradient(86% 86% at 50% 50%, rgba(103, 123, 255, 0.15), transparent 76%);
-  filter: blur(18px);
+    radial-gradient(46% 60% at 24% 80%, rgba(92, 133, 255, 0.4), transparent 70%),
+    radial-gradient(58% 52% at 78% 18%, rgba(255, 123, 95, 0.38), transparent 72%),
+    radial-gradient(92% 92% at 50% 50%, rgba(115, 138, 255, 0.24), transparent 74%);
+  filter: blur(16px);
 }
 
 .node-glow-active::after {
