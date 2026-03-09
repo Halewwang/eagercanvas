@@ -846,6 +846,13 @@ onUnmounted(() => {
   background: #1c1c1c;
 }
 
+.canvas-flow :deep(.vue-flow__node-text),
+.canvas-flow :deep(.vue-flow__node-image),
+.canvas-flow :deep(.vue-flow__node-video) {
+  box-shadow: none !important;
+  border-radius: 24px !important;
+}
+
 .canvas-flow :deep(.vue-flow__edge-path) {
   stroke: #ffffff;
   stroke-width: 1;
