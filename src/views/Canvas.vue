@@ -24,6 +24,18 @@
         </div>
       </div>
 
+      <div class="absolute right-4 top-4 z-20">
+        <div class="flora-panel rounded-full p-1.5">
+          <button
+            @click="openShareDialog"
+            class="h-9 flex items-center gap-2 px-4 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors"
+            title="Share"
+          >
+            <span class="text-sm font-medium">Share</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Vue Flow canvas | Vue Flow 画布 -->
       <VueFlow
         :key="flowKey"
@@ -183,6 +195,51 @@
 
     <!-- Workflow Panel | 工作流面板 -->
     <WorkflowPanel v-model:show="showWorkflowPanel" @add-workflow="handleAddWorkflow" />
+
+    <n-modal v-model:show="showShareModal" preset="card" title="Share" style="max-width: 640px">
+      <div class="share-panel">
+        <section class="share-section">
+          <div class="share-row">
+            <h3>Share a Link</h3>
+            <button class="toggle-btn" :class="{ on: shareLinkEnabled }" @click="shareLinkEnabled = !shareLinkEnabled">
+              <span />
+            </button>
+          </div>
+          <p>Share a read-only link to your canvas.</p>
+          <div class="share-link-box">
+            <span class="share-link-text">{{ shareLinkUrl }}</span>
+            <button class="copy-btn" @click="copyShareLink">Copy Link</button>
+          </div>
+        </section>
+
+        <section class="share-section">
+          <div class="share-row">
+            <h3>Allow Remixing</h3>
+            <button class="toggle-btn" :class="{ on: allowRemixing }" @click="allowRemixing = !allowRemixing">
+              <span />
+            </button>
+          </div>
+          <p>When enabled, this project is published to Featured templates.</p>
+        </section>
+
+        <section class="share-section">
+          <h3>Change Appearance</h3>
+          <p>Set how this shared project appears in My Templates.</p>
+          <n-input v-model:value="shareTemplateName" placeholder="Template title" />
+          <n-input
+            v-model:value="shareTemplateDescription"
+            type="textarea"
+            placeholder="Template description"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+            class="mt-2"
+          />
+        </section>
+      </div>
+      <template #action>
+        <n-button @click="showShareModal = false">Cancel</n-button>
+        <n-button type="primary" @click="saveSharedTemplate">Save To My Templates</n-button>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -220,6 +277,7 @@ import { getErrorMessage } from '@/utils'
 import { getWorkflowById } from '@/config/workflows'
 import { projects, initProjectsStore, renameProject, duplicateProject, deleteProject } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
+import { useWorkflowsStore } from '@/stores/workflows'
 
 // API Settings component | API 设置组件
 import ApiSettings from '../components/ApiSettings.vue'
@@ -251,6 +309,7 @@ import DefaultEdge from '../components/edges/DefaultEdge.vue'
 const router = useRouter()
 const route = useRoute()
 const { user, updateProfile } = useAuthStore()
+const { loadWorkflowTemplates, shareProjectAsMyTemplate } = useWorkflowsStore()
 const avatarInputRef = ref(null)
 const avatarInitial = computed(() => (user.value?.displayName || user.value?.email || 'U').charAt(0).toUpperCase())
 
@@ -311,7 +370,12 @@ const flowKey = ref(Date.now())
 const showRenameModal = ref(false)
 const showDeleteModal = ref(false)
 const showWorkflowPanel = ref(false)
+const showShareModal = ref(false)
 const renameValue = ref('')
+const shareLinkEnabled = ref(true)
+const allowRemixing = ref(false)
+const shareTemplateName = ref('')
+const shareTemplateDescription = ref('')
 
 
 // Project info | 项目信息
@@ -319,6 +383,8 @@ const projectName = computed(() => {
   const project = projects.value.find(p => p.id === route.params.id)
   return project?.name || 'Untitled'
 })
+const currentProject = computed(() => projects.value.find(p => p.id === route.params.id) || null)
+const shareLinkUrl = computed(() => `${window.location.origin}/canvas/${route.params.id}`)
 
 // Project dropdown options | 项目下拉选项
 const projectOptions = [
@@ -343,6 +409,41 @@ const addNewNode = async (type) => {
 // Handle add workflow from panel | 处理从面板添加工作流
 const handleAddWorkflow = async ({ workflow, options }) => {
   await nodesFactory.createFromWorkflow(workflow, options)
+}
+
+const copyShareLink = async () => {
+  try {
+    await navigator.clipboard.writeText(shareLinkUrl.value)
+    notifier.success('Share link copied')
+  } catch {
+    notifier.warning('Copy failed')
+  }
+}
+
+const openShareDialog = async () => {
+  await loadWorkflowTemplates()
+  shareTemplateName.value = projectName.value
+  shareTemplateDescription.value = ''
+  showShareModal.value = true
+}
+
+const saveSharedTemplate = async () => {
+  const project = currentProject.value
+  if (!project?.id || !project?.canvasData) {
+    notifier.error('Project data unavailable')
+    return
+  }
+  const visibility = allowRemixing.value ? 'public' : (shareLinkEnabled.value ? 'unlisted' : 'private')
+  await shareProjectAsMyTemplate({
+    projectId: project.id,
+    name: shareTemplateName.value || project.name || 'Untitled',
+    description: shareTemplateDescription.value || '',
+    cover: project.thumbnail || '',
+    canvasData: project.canvasData,
+    visibility
+  })
+  notifier.success('Shared to My Templates')
+  showShareModal.value = false
 }
 
 // Handle connection | 处理连接
@@ -620,6 +721,7 @@ onMounted(async () => {
   
   // Initialize projects store | 初始化项目存储
   await initProjectsStore()
+  await loadWorkflowTemplates()
   
   // Load project data | 加载项目数据
   loadProjectById(route.params.id)
@@ -643,6 +745,96 @@ onUnmounted(() => {
 @import '@vue-flow/core/dist/style.css';
 @import '@vue-flow/core/dist/theme-default.css';
 @import '@vue-flow/minimap/dist/style.css';
+
+.share-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.share-section {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--bg-secondary);
+}
+
+.share-section h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.share-section p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.share-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toggle-btn {
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  padding: 2px;
+  position: relative;
+  cursor: pointer;
+}
+
+.toggle-btn span {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s;
+}
+
+.toggle-btn.on {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.toggle-btn.on span {
+  transform: translateX(20px);
+}
+
+.share-link-box {
+  margin-top: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+}
+
+.share-link-text {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-btn {
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: 8px;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
 
 .canvas-flow {
   width: 100%;

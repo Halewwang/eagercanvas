@@ -145,7 +145,7 @@ const getIcon = (iconName) => {
 
 const currentList = computed(() => {
   if (activeTab.value === 'public') return publicWorkflows.value
-  if (activeTab.value === 'my') return myWorkflows.value
+  if (activeTab.value === 'my') return myWorkflows.value.filter((item) => item.sourceType !== 'project')
   return systemWorkflows.value
 })
 

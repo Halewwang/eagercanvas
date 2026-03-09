@@ -112,9 +112,47 @@ const buildTemplatePayload = ({ baseWorkflowId, name }) => {
   }
 }
 
+const buildProjectTemplatePayload = ({ projectId, name, description = '', cover = '', canvasData, visibility = 'private' }) => {
+  const now = new Date().toISOString()
+  return {
+    id: `wf_tpl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    projectId,
+    name: name?.trim() || 'Untitled Project Template',
+    description,
+    cover,
+    canvasData: canvasData ? JSON.parse(JSON.stringify(canvasData)) : null,
+    visibility,
+    sourceType: 'project',
+    createdAt: now,
+    updatedAt: now
+  }
+}
+
 export const createMyWorkflowTemplate = async ({ baseWorkflowId, name }) => {
   if (!systemTemplateMap.has(baseWorkflowId)) return null
   const next = buildTemplatePayload({ baseWorkflowId, name })
+  userTemplates.value = [next, ...userTemplates.value]
+  saveLocalTemplates()
+  return next
+}
+
+export const shareProjectAsMyTemplate = async ({
+  projectId,
+  name,
+  description = '',
+  cover = '',
+  canvasData,
+  visibility = 'private'
+}) => {
+  if (!projectId || !canvasData) return null
+  const next = buildProjectTemplatePayload({
+    projectId,
+    name,
+    description,
+    cover,
+    canvasData,
+    visibility
+  })
   userTemplates.value = [next, ...userTemplates.value]
   saveLocalTemplates()
   return next
@@ -141,6 +179,7 @@ export const setWorkflowTemplateVisibility = async (id, visibility) => {
 }
 
 export const resolveWorkflowTemplate = (item) => {
+  if (item?.sourceType === 'project') return null
   const workflowId = item?.baseWorkflowId || item?.id
   return systemTemplateMap.get(workflowId) || null
 }
@@ -152,6 +191,7 @@ export const useWorkflowsStore = () => ({
   loadWorkflowTemplates,
   resetWorkflowTemplates,
   createMyWorkflowTemplate,
+  shareProjectAsMyTemplate,
   deleteMyWorkflowTemplate,
   setWorkflowTemplateVisibility,
   resolveWorkflowTemplate

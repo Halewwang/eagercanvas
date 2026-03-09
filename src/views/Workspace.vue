@@ -3,7 +3,7 @@
     <aside class="workspace-sidebar">
       <div class="brand">
         <img src="/project-logo.svg" alt="logo" class="brand-logo" />
-        <div class="brand-text">Eager Canvas</div>
+        <div class="brand-text">{{ workspaceBrand }}</div>
       </div>
 
       <div class="search-box">
@@ -54,8 +54,8 @@
             <n-icon :size="44"><AddOutline /></n-icon>
           </div>
           <div class="card-body">
-            <h3>Empty Project</h3>
-            <p>Create a new canvas project</p>
+            <h3>Blank Project</h3>
+            <p>Create a new blank project</p>
           </div>
         </article>
 
@@ -75,21 +75,29 @@
               </div>
             </template>
           </div>
+
           <div class="card-body">
             <div class="title-row">
               <h3>{{ item.name }}</h3>
               <span v-if="activeSection === 'featured'" class="badge">Public</span>
               <span v-if="activeSection === 'my-templates'" class="badge mine">Mine</span>
-              <span v-if="activeSection === 'starter'" class="badge starter">System</span>
+              <n-dropdown
+                v-if="activeSection === 'projects'"
+                trigger="click"
+                placement="bottom-end"
+                :options="projectMenuOptions(item)"
+                @select="(key) => handleProjectMenuSelect(key, item)"
+              >
+                <button class="menu-btn" @click.stop>
+                  <n-icon :size="16"><EllipsisHorizontalOutline /></n-icon>
+                </button>
+              </n-dropdown>
             </div>
+
             <p>{{ describeItem(item) }}</p>
-            <div class="card-actions" @click.stop>
-              <template v-if="activeSection === 'projects'">
-                <button class="mini-btn" @click="openRename(item)">Rename</button>
-                <button class="mini-btn" @click="duplicate(item)">Duplicate</button>
-                <button class="mini-btn danger" @click="openDelete(item)">Delete</button>
-              </template>
-              <template v-else-if="activeSection === 'my-templates'">
+
+            <div v-if="activeSection !== 'projects'" class="card-actions" @click.stop>
+              <template v-if="activeSection === 'my-templates'">
                 <button class="mini-btn" @click="toggleTemplateVisibility(item)">
                   {{ item.visibility === 'public' ? 'Unpublish' : 'Publish' }}
                 </button>
@@ -131,14 +139,15 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NIcon, NModal } from 'naive-ui'
+import { NDropdown, NIcon, NModal } from 'naive-ui'
 import {
   AddOutline,
   FolderOpenOutline,
   BookmarkOutline,
   SparklesOutline,
   GridOutline,
-  SearchOutline
+  SearchOutline,
+  EllipsisHorizontalOutline
 } from '../icons/coolicons'
 import {
   projects,
@@ -146,12 +155,15 @@ import {
   createProject,
   renameProject,
   duplicateProject,
-  deleteProject
+  deleteProject,
+  updateProject
 } from '@/stores/projects'
 import { getErrorMessage } from '@/utils'
 import { useWorkflowsStore } from '@/stores/workflows'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const { user, bootstrapAuth } = useAuthStore()
 
 const activeSection = ref('projects')
 const keyword = ref('')
@@ -166,12 +178,10 @@ const deleteTargetName = ref('')
 const navItems = [
   { key: 'projects', label: 'Recent Projects', icon: FolderOpenOutline },
   { key: 'my-templates', label: 'My Templates', icon: BookmarkOutline },
-  { key: 'featured', label: 'Featured Templates', icon: SparklesOutline },
-  { key: 'starter', label: 'Starter Templates', icon: GridOutline }
+  { key: 'featured', label: 'Featured Templates', icon: SparklesOutline }
 ]
 
 const {
-  systemWorkflows,
   myWorkflows,
   publicWorkflows,
   loadWorkflowTemplates,
@@ -181,36 +191,37 @@ const {
   resolveWorkflowTemplate
 } = useWorkflowsStore()
 
+const workspaceBrand = computed(() => {
+  const raw = String(
+    user.value?.displayName ||
+    user.value?.id ||
+    user.value?.email?.split('@')?.[0] ||
+    'User'
+  )
+  const normalized = raw.split(/[\s_-]/).filter(Boolean)[0] || 'User'
+  const label = normalized.charAt(0).toUpperCase() + normalized.slice(1)
+  return `${label} WorkSpace`
+})
+
 const sectionTitle = computed(() => {
-  switch (activeSection.value) {
-    case 'my-templates':
-      return 'My Templates'
-    case 'featured':
-      return 'Featured Workflows'
-    case 'starter':
-      return 'Starter Templates'
-    default:
-      return 'Recent Projects'
-  }
+  if (activeSection.value === 'my-templates') return 'My Templates'
+  if (activeSection.value === 'featured') return 'Featured Workflows'
+  return 'Recent Projects'
 })
 
 const sectionDescription = computed(() => {
-  switch (activeSection.value) {
-    case 'my-templates':
-      return 'Create and manage your private or public workflow templates.'
-    case 'featured':
-      return 'Public templates published by you and your team.'
-    case 'starter':
-      return 'System templates to jumpstart common creative workflows.'
-    default:
-      return 'Manage projects, quickly duplicate ideas, and jump into canvas editing.'
+  if (activeSection.value === 'my-templates') {
+    return 'Manage templates shared from your own projects and system presets.'
   }
+  if (activeSection.value === 'featured') {
+    return 'Public templates published by users.'
+  }
+  return 'Project cover is shown as 16:9. Manage project actions from the menu.'
 })
 
 const sectionItems = computed(() => {
   if (activeSection.value === 'my-templates') return myWorkflows.value
   if (activeSection.value === 'featured') return publicWorkflows.value
-  if (activeSection.value === 'starter') return systemWorkflows.value
   return projects.value
 })
 
@@ -233,6 +244,43 @@ const resolveCardIcon = (item) => {
   return GridOutline
 }
 
+const projectMenuOptions = () => [
+  { label: 'Copy project link', key: 'copy-link' },
+  { label: 'Rename project', key: 'rename' },
+  { label: 'Duplicate project', key: 'duplicate' },
+  { type: 'divider', key: 'divider-1' },
+  { label: 'Delete project', key: 'delete' }
+]
+
+const copyText = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const handleProjectMenuSelect = async (key, project) => {
+  if (key === 'copy-link') {
+    const origin = window.location.origin
+    const ok = await copyText(`${origin}/canvas/${project.id}`)
+    window.$message?.[ok ? 'success' : 'warning'](ok ? 'Project link copied' : 'Copy failed')
+    return
+  }
+  if (key === 'rename') {
+    openRename(project)
+    return
+  }
+  if (key === 'duplicate') {
+    await duplicate(project)
+    return
+  }
+  if (key === 'delete') {
+    openDelete(project)
+  }
+}
+
 const createBlankProject = async () => {
   try {
     const id = await createProject('Untitled')
@@ -251,6 +299,20 @@ const handlePrimaryClick = async (item) => {
 }
 
 const useTemplate = async (item) => {
+  if (item.sourceType === 'project' && item.canvasData) {
+    try {
+      const id = await createProject(item.name || 'Untitled')
+      await updateProject(id, {
+        canvasData: JSON.parse(JSON.stringify(item.canvasData)),
+        thumbnail: item.cover || ''
+      })
+      await router.push(`/canvas/${id}`)
+    } catch (error) {
+      window.$message?.error(getErrorMessage(error, 'Failed to create project from template'))
+    }
+    return
+  }
+
   const workflow = resolveWorkflowTemplate(item)
   if (!workflow) {
     window.$message?.warning('Template unavailable')
@@ -326,13 +388,14 @@ const formatDate = (date) => {
   const now = new Date()
   const diff = now - d
   if (diff < 60000) return 'just now'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`
+  if (diff < 3600000) return `${Math.floor(diff / 60000)} minutes ago`
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)} days ago`
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
 onMounted(async () => {
+  await bootstrapAuth()
   await initProjectsStore()
   await loadWorkflowTemplates()
 })
@@ -341,18 +404,18 @@ onMounted(async () => {
 <style scoped>
 .workspace-shell {
   min-height: 100vh;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: #0f1014;
+  color: #eceef4;
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 280px 1fr;
 }
 
 .workspace-sidebar {
-  border-right: 1px solid var(--border-color);
-  padding: 24px 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 22px 14px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .brand {
@@ -369,18 +432,19 @@ onMounted(async () => {
 }
 
 .brand-text {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
+  line-height: 1;
 }
 
 .search-box {
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 10px;
   padding: 8px 10px;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .search-box input {
@@ -388,33 +452,33 @@ onMounted(async () => {
   background: transparent;
   border: none;
   outline: none;
-  color: var(--text-primary);
+  color: #eceef4;
   font-size: 13px;
 }
 
 .nav-menu {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .nav-item {
   height: 40px;
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: rgba(236, 238, 244, 0.72);
   border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 12px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .nav-item.active {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .sidebar-footer {
@@ -429,20 +493,20 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   padding-bottom: 16px;
   margin-bottom: 18px;
 }
 
 .main-header h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: 30px;
   font-weight: 600;
 }
 
 .main-header p {
   margin: 6px 0 0;
-  color: var(--text-secondary);
+  color: rgba(236, 238, 244, 0.65);
   font-size: 13px;
 }
 
@@ -453,15 +517,15 @@ onMounted(async () => {
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
 }
 
 .project-card {
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   overflow: hidden;
-  background: var(--bg-secondary);
+  background: #13141a;
   cursor: pointer;
 }
 
@@ -471,7 +535,7 @@ onMounted(async () => {
 
 .card-media {
   aspect-ratio: 16 / 9;
-  background: var(--bg-tertiary);
+  background: #1c1f27;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -484,22 +548,22 @@ onMounted(async () => {
 }
 
 .create-media {
-  color: var(--text-tertiary);
+  color: rgba(236, 238, 244, 0.45);
 }
 
 .fallback-icon {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: rgba(236, 238, 244, 0.7);
 }
 
 .card-body {
-  padding: 12px;
+  padding: 12px 12px 14px;
 }
 
 .title-row {
@@ -527,15 +591,28 @@ onMounted(async () => {
   color: #22c55e;
 }
 
-.badge.starter {
-  border-color: #a78bfa;
-  color: #a78bfa;
+.menu-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: rgba(236, 238, 244, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.menu-btn:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
 }
 
 .card-body p {
   margin: 8px 0 0;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: rgba(236, 238, 244, 0.65);
+  font-size: 13px;
 }
 
 .card-actions {
@@ -549,9 +626,9 @@ onMounted(async () => {
 .ghost-btn,
 .link-btn {
   border-radius: 8px;
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   background: transparent;
-  color: var(--text-primary);
+  color: #eceef4;
   height: 30px;
   padding: 0 10px;
   font-size: 12px;
@@ -559,9 +636,9 @@ onMounted(async () => {
 }
 
 .primary-btn {
-  background: var(--accent-color);
+  background: #4f46e5;
   color: #fff;
-  border-color: var(--accent-color);
+  border-color: #4f46e5;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -570,7 +647,7 @@ onMounted(async () => {
 .ghost-btn:hover,
 .mini-btn:hover,
 .link-btn:hover {
-  border-color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.38);
 }
 
 .mini-btn.danger {
@@ -580,10 +657,10 @@ onMounted(async () => {
 
 .modal-input {
   width: 100%;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
+  background: #1c1f27;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  color: var(--text-primary);
+  color: #eceef4;
   padding: 10px;
 }
 
@@ -594,8 +671,7 @@ onMounted(async () => {
 
   .workspace-sidebar {
     border-right: none;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 }
 </style>
-

@@ -12,12 +12,6 @@
     <div class="relative z-20 max-w-[1400px] mx-auto px-6 pt-6 flex justify-end items-center gap-3">
       <template v-if="isAuthenticated">
       <button
-        @click="router.push('/workspace')"
-        class="flora-button-ghost px-4 py-2 rounded-xl text-sm"
-      >
-        Workspace
-      </button>
-      <button
         @click="triggerAvatarUpload"
         class="w-9 h-9 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-tertiary)] flex items-center justify-center"
         title="Upload avatar"
