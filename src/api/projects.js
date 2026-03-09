@@ -1,33 +1,67 @@
 import { request } from '@/utils'
 
+const transientStatuses = new Set([408, 425, 429, 500, 502, 503, 504])
+
+const isTransientError = (error) => {
+  const status = Number(error?.response?.status || error?.status || 0)
+  return transientStatuses.has(status) || !status
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const withRetry = async (fn, { retries = 2, delayMs = 250 } = {}) => {
+  let lastError
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error
+      if (!isTransientError(error) || i === retries) throw error
+      await sleep(delayMs * (i + 1))
+    }
+  }
+  throw lastError
+}
+
 export const apiListProjects = () =>
   request({
     url: '/projects',
-    method: 'get'
+    method: 'get',
+    silentNetworkErrorToast: true
   })
 
 export const apiCreateProject = (payload) =>
-  request({
-    url: '/projects',
-    method: 'post',
-    data: payload
-  })
+  withRetry(() =>
+    request({
+      url: '/projects',
+      method: 'post',
+      data: payload,
+      silentNetworkErrorToast: true
+    })
+  )
 
 export const apiGetProject = (id) =>
   request({
     url: `/projects/${id}`,
-    method: 'get'
+    method: 'get',
+    silentNetworkErrorToast: true
   })
 
 export const apiPatchProject = (id, payload) =>
-  request({
-    url: `/projects/${id}`,
-    method: 'patch',
-    data: payload
-  })
+  withRetry(() =>
+    request({
+      url: `/projects/${id}`,
+      method: 'patch',
+      data: payload,
+      silentNetworkErrorToast: true
+    })
+  )
 
 export const apiDeleteProject = (id) =>
-  request({
-    url: `/projects/${id}`,
-    method: 'delete'
-  })
+  withRetry(() =>
+    request({
+      url: `/projects/${id}`,
+      method: 'delete',
+      silentNetworkErrorToast: true
+    })
+  )

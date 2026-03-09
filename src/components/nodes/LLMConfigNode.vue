@@ -179,7 +179,7 @@ const getInputFromConnections = () => {
 // Handle generate | 处理生成
 const handleGenerate = async () => {
   if (!isApiConfigured.value) {
-    window.$message?.warning('Please configure API Key first')
+    window.$message?.warning('Please sign in first')
     return
   }
 

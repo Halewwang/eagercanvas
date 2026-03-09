@@ -72,6 +72,7 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { getErrorMessage } from '@/utils'
 
 const route = useRoute()
 const router = useRouter()
@@ -106,8 +107,9 @@ const handleSendCode = async () => {
       window.$message?.success('Login code sent')
     }
   } catch (error) {
-    const msg = error?.response?.data?.message || error?.message || 'Failed to send code'
-    window.$message?.error(msg)
+    if (!error?.__handled) {
+      window.$message?.error(getErrorMessage(error, 'Failed to send code'))
+    }
   } finally {
     sending.value = false
   }
@@ -132,8 +134,9 @@ const handleVerify = async () => {
 
     router.push('/')
   } catch (error) {
-    const msg = error?.response?.data?.message || error?.message || (isRegister.value ? 'Register failed' : 'Sign in failed')
-    window.$message?.error(msg)
+    if (!error?.__handled) {
+      window.$message?.error(getErrorMessage(error, isRegister.value ? 'Register failed' : 'Sign in failed'))
+    }
   } finally {
     verifying.value = false
   }

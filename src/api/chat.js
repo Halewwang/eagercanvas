@@ -3,7 +3,7 @@
  */
 
 import { request, getBaseUrl } from '@/utils'
-import { DEFAULT_API_KEY, STORAGE_KEYS } from '@/utils/constants'
+import { STORAGE_KEYS } from '@/utils/constants'
 
 // 对话补全
 export const chatCompletions = (data) =>
@@ -16,66 +16,97 @@ export const chatCompletions = (data) =>
 // 流式对话补全
 export const streamChatCompletions = async function* (data, signal) {
   const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
-  const apiKey = localStorage.getItem('apiKey') || DEFAULT_API_KEY
   const baseUrl = getBaseUrl()
+  const authToken = accessToken
   
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken || apiKey}`
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
     },
     credentials: 'include',
-    body: JSON.stringify({ ...data, stream: true }),
+    // Backend currently returns JSON. Force non-stream to avoid empty parsed chunks.
+    body: JSON.stringify({ ...data, stream: false }),
     signal
   })
 
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error?.error?.message || error?.message || 'Stream request failed')
+    let message = 'Stream request failed'
+    try {
+      const error = await response.json()
+      message = error?.error?.message || error?.message || message
+    } catch {
+      const text = await response.text()
+      if (text?.trim()) message = text.trim()
+    }
+    throw new Error(message)
+  }
+
+  const extractTextFromContent = (content) => {
+    if (typeof content === 'string') return content
+    if (!Array.isArray(content)) return ''
+    for (const item of content) {
+      if (typeof item === 'string' && item.trim()) return item
+      if (typeof item?.text === 'string' && item.text.trim()) return item.text
+      if (typeof item?.content === 'string' && item.content.trim()) return item.content
+    }
+    return ''
+  }
+
+  const extractText = (payload) => {
+    if (!payload) return ''
+    if (typeof payload === 'string') return payload
+
+    const candidates = [
+      payload?.choices?.[0]?.message?.content,
+      payload?.choices?.[0]?.delta?.content,
+      payload?.choices?.[0]?.text,
+      payload?.data?.choices?.[0]?.message?.content,
+      payload?.data?.choices?.[0]?.text,
+      payload?.message,
+      payload?.result?.message,
+      payload?.result?.content,
+      payload?.data?.result?.message,
+      payload?.data?.result?.content,
+      payload?.output_text,
+      payload?.data?.output_text,
+      payload?.result?.text,
+      payload?.data?.result?.text,
+      payload?.raw
+    ]
+    for (const value of candidates) {
+      const direct = extractTextFromContent(value)
+      if (direct) return direct
+    }
+    if (Array.isArray(payload?.output)) {
+      for (const item of payload.output) {
+        const text = extractTextFromContent(item?.content)
+        if (text) return text
+        if (typeof item?.text === 'string' && item.text.trim()) return item.text
+      }
+    }
+    if (Array.isArray(payload?.data?.output)) {
+      for (const item of payload.data.output) {
+        const text = extractTextFromContent(item?.content)
+        if (text) return text
+      }
+    }
+    return ''
   }
 
   const contentType = String(response.headers.get('content-type') || '').toLowerCase()
   if (contentType.includes('application/json')) {
     const payload = await response.json()
-    const text =
-      payload?.choices?.[0]?.message?.content ||
-      payload?.choices?.[0]?.delta?.content ||
-      payload?.choices?.[0]?.text ||
-      payload?.data?.choices?.[0]?.message?.content ||
-      payload?.data?.choices?.[0]?.text ||
-      ''
+    const text = extractText(payload)
 
     if (text) yield text
     return
   }
 
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed || !trimmed.startsWith('data:')) continue
-
-      const data = trimmed.slice(5).trim()
-      if (data === '[DONE]') return
-
-      try {
-        const parsed = JSON.parse(data)
-        const content = parsed.choices?.[0]?.delta?.content
-        if (content) yield content
-      } catch (e) {
-        // Skip invalid JSON
-      }
-    }
+  // Fallback for plain text response body.
+  const textBody = await response.text()
+  if (textBody && textBody.trim()) {
+    yield textBody.trim()
   }
 }

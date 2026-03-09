@@ -6,6 +6,7 @@ export const errorMiddleware = (err, req, res, _next) => {
 
   if (status >= 500) {
     console.error('[server:error]', {
+      requestId: req.requestId,
       method: req.method,
       path: req.path,
       message: err.message,
@@ -15,6 +16,7 @@ export const errorMiddleware = (err, req, res, _next) => {
 
   res.status(status).json({
     code,
-    message: err.message || 'Unexpected server error'
+    message: err.message || 'Unexpected server error',
+    requestId: req.requestId
   })
 }

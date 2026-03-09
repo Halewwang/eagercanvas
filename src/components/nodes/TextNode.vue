@@ -6,7 +6,7 @@
     </div>
 
     <div v-show="showCapsule || isSelected" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
-      <div class="capsule-inner">
+      <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
         <div class="capsule-group">
           <n-dropdown :options="chatModelDropdownOptions" @select="setChatModel">
             <button class="capsule-select">{{ displayChatModel }}</button>
@@ -29,17 +29,17 @@
           </button>
         </div>
       </div>
-      <div class="capsule-inner capsule-generate">
-        <button class="capsule-icon capsule-icon-solid capsule-create" :disabled="isGenerating" @click="handleGenerateText" title="Create">
-          <n-spin v-if="isGenerating" :size="12" />
-          <template v-else>
-            <n-icon :size="14"><SparklesOutline /></n-icon>
-            <span class="capsule-create-label">Create</span>
-          </template>
+      <div class="capsule-inner capsule-generate" :class="{ 'capsule-inner-selected': isSelected }">
+        <button v-if="!isGenerating" class="capsule-icon capsule-icon-solid capsule-create" @click="handleGenerateText" title="Create">
+          <n-icon :size="14"><SparklesOutline /></n-icon>
+          <span class="capsule-create-label">Create</span>
         </button>
-        <button class="capsule-icon" :disabled="isGenerating" @click="handleRegenerateText" title="Regenerate">
-          <n-spin v-if="isGenerating" :size="12" />
-          <n-icon v-else :size="14"><RefreshOutline /></n-icon>
+        <button v-if="!isGenerating" class="capsule-icon" @click="handleRegenerateText" title="Regenerate">
+          <n-icon :size="14"><RefreshOutline /></n-icon>
+        </button>
+        <button v-if="isGenerating" class="capsule-icon capsule-icon-solid capsule-create" @click="handleStopGeneration" title="Stop">
+          <n-icon :size="14"><CloseCircleOutline /></n-icon>
+          <span class="capsule-create-label">Stop</span>
         </button>
       </div>
     </div>
@@ -55,20 +55,13 @@
           <div class="module-progress-bar" :style="progressBarStyle"></div>
           <div class="module-progress-label">Generating text... {{ progressPercent }}%</div>
         </div>
-        <div
-          v-else-if="data.error"
-          class="w-full h-full bg-[#231a1d] flex flex-col items-center justify-center gap-2 rounded-[14px]"
-        >
-          <n-icon :size="28" class="text-red-500"><CloseCircleOutline /></n-icon>
-          <span class="text-sm text-red-400 text-center px-3">{{ data.error }}</span>
-        </div>
         <div v-else class="text-area-wrap">
           <textarea
             v-model="content"
             @blur="updateContent"
             @wheel.stop
             @mousedown.stop
-            class="w-full bg-transparent resize-none outline-none text-sm text-[#d9dce3] placeholder:text-[#7b818c] min-h-[180px]"
+            class="w-full bg-transparent resize-none outline-none text-sm text-[#d9dce3] placeholder:text-[#7b818c]"
             placeholder="Enter text..."
           />
         </div>
@@ -77,6 +70,12 @@
       <Handle type="source" :position="Position.Right" id="right" :class="['node-handle-plus', 'node-handle-plus-right', { 'node-handle-plus-visible': showHandles }]" />
       <Handle type="target" :position="Position.Left" id="left" :class="['node-handle-plus', 'node-handle-plus-left', { 'node-handle-plus-visible': showHandles }]" />
     </div>
+    <n-modal v-model:show="showErrorModal" preset="dialog" title="Text Module Error" :show-icon="false">
+      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ data.error }}</div>
+      <template #action>
+        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeErrorModal">Close</button>
+      </template>
+    </n-modal>
     <div class="binding-status-wrap">
       <div class="binding-status-row">
         <div
@@ -96,7 +95,7 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NDropdown, NIcon, NSpin } from 'naive-ui'
+import { NDropdown, NIcon, NModal } from 'naive-ui'
 import { AddOutline, CloseCircleOutline, CopyOutline, RefreshOutline, SparklesOutline, TextOutline, TrashOutline } from '../../icons/coolicons'
 import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useChat } from '../../hooks'
@@ -112,6 +111,7 @@ const { updateNodeInternals, viewport } = useVueFlow()
 
 const showCapsule = ref(false)
 const isGenerating = ref(false)
+const showErrorModal = ref(false)
 const content = ref(props.data?.content || '')
 const localChatModel = ref(props.data?.model || 'gemini-2.5-flash')
 const progressValue = ref(0)
@@ -130,8 +130,14 @@ const connectedTargets = computed(() => {
   return edges.value.filter(edge => edge.source === props.id).map(edge => edge.target)
 })
 
-const { send: sendChat } = useChat({
-  systemPrompt: 'You are an expert writing assistant. Improve clarity, structure, and expression while keeping meaning accurate. Return only the rewritten text.',
+const { send: sendChat, clear: clearChat } = useChat({
+  systemPrompt: [
+    '你是专业的文案与提示词优化助手。',
+    '严格遵守：',
+    '1) 输出语言必须与用户输入语言一致，禁止翻译（除非用户明确要求翻译）。',
+    '2) 保留原意和关键信息，不得擅自改主题。',
+    '3) 仅输出优化后的最终文本，不要解释。'
+  ].join('\n'),
   model: () => localChatModel.value || DEFAULT_CHAT_MODEL
 })
 const chatModelDropdownOptions = computed(() => chatModelOptions.value.map((m) => ({ key: m.key, label: m.label })))
@@ -142,6 +148,9 @@ watch(() => props.data?.content, (newVal) => {
 })
 watch(() => props.data?.model, (newVal) => {
   if (newVal && newVal !== localChatModel.value) localChatModel.value = newVal
+})
+watch(() => props.data?.error, (newVal) => {
+  showErrorModal.value = !!newVal
 })
 
 const stageStyle = computed(() => ({ width: '360px', height: '240px' }))
@@ -231,15 +240,19 @@ const runTextGeneration = async (isRegenerate = false) => {
   isGenerating.value = true
   updateNode(props.id, { loading: true, error: '' })
   const prompt = isRegenerate
-    ? `Regenerate the following text with a different writing style while preserving the original meaning:\n\n${source}`
-    : `Optimize the following text for clarity, flow, and readability while preserving the original meaning:\n\n${source}`
+    ? `请在不改变原意的前提下，使用不同表达方式重写以下文本；输出语言必须与原文一致，不得翻译：\n\n${source}`
+    : `请优化以下文本，使其更适合用于图像和视频生成（更清晰、可执行、细节充分）；输出语言必须与原文一致，不得翻译：\n\n${source}`
   try {
+    // Keep each click isolated to avoid previous rounds affecting language/style.
+    clearChat()
     const result = await sendChat(prompt, true)
     const optimized = String(result || '').trim()
     if (optimized) {
       content.value = optimized
       updateNode(props.id, { content: optimized, model: localChatModel.value, loading: false, error: '' })
       window.$message?.success(isRegenerate ? 'Text regenerated' : 'Text generated')
+    } else {
+      throw new Error('Model returned empty text content')
     }
   } catch (err) {
     updateNode(props.id, { loading: false, error: err?.message || 'Text generation failed' })
@@ -249,8 +262,24 @@ const runTextGeneration = async (isRegenerate = false) => {
     isGenerating.value = false
   }
 }
+const handleStopGeneration = () => {
+  // Clear timers and reset UI
+  clearProgressTimers()
+  showProgress.value = false
+  progressValue.value = 0
+  isGenerating.value = false
+  
+  // Reset node state
+  updateNode(props.id, { loading: false, error: 'Generation stopped' })
+  window.$message?.info('Generation stopped')
+}
+
 const handleGenerateText = () => runTextGeneration(false)
 const handleRegenerateText = () => runTextGeneration(true)
+const closeErrorModal = () => {
+  showErrorModal.value = false
+  updateNode(props.id, { error: '' })
+}
 
 const handleDelete = () => {
   removeNode(props.id)
@@ -262,16 +291,8 @@ const handleDuplicate = () => {
   setTimeout(() => updateNodeInternals(newNodeId), 50)
 }
 
-const selectNode = () => {
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    selected: node.id === props.id,
-    data: { ...(node.data || {}), selected: node.id === props.id }
-  }))
-}
-
-const handleMetaMouseDown = () => {
-  selectNode()
+const handleMetaMouseDown = (event) => {
+  if (event?.button !== 0) return
 }
 
 const createLinkedNode = (type) => {
@@ -337,7 +358,21 @@ const createLinkedNode = (type) => {
 .meta-title { color: #d7dbe3; font-size: 14px; letter-spacing: 0.01em; }
 
 .module-stage { margin: 0 auto; overflow: hidden; border-radius: inherit; }
-.text-area-wrap { width: 100%; height: 100%; padding: 14px; border-radius: 14px; background: #0f0f0f; border: 0; }
+.text-area-wrap {
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  background: #0f0f0f;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.text-area-wrap textarea {
+  flex: 1;
+  min-height: 92px;
+}
 .module-progress-shell {
   width: 100%;
   height: 100%;
@@ -366,21 +401,120 @@ const createLinkedNode = (type) => {
   line-height: 1;
 }
 
-.capsule-menu { pointer-events: auto; top: 6px; display: inline-flex; align-items: center; gap: 8px; }
-.capsule-inner { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; border-radius: 999px; border: 1px solid rgba(143, 143, 143, 0.45); background: #1d1d1d; backdrop-filter: blur(10px); }
+.capsule-menu { 
+  pointer-events: auto; 
+  top: 6px; 
+  display: inline-flex; 
+  align-items: center; 
+  gap: 8px;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
+.capsule-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: #1d1d1d;
+  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.capsule-inner:hover {
+  border-color: rgba(143, 143, 143, 0.25);
+  background: #232323;
+}
+
+.capsule-inner-selected {
+  border-color: rgba(143, 143, 143, 0.45);
+}
+
 .capsule-generate { padding: 7px; }
-.capsule-group { display: inline-flex; align-items: center; gap: 6px; }
+.capsule-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .capsule-divider { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.12); }
 
-.capsule-select { border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02); color: #e7e8eb; border-radius: 999px; font-size: 12px; line-height: 1; padding: 7px 9px; max-width: 148px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.capsule-select:disabled { opacity: 0.45; cursor: not-allowed; }
-.capsule-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1); color: #b8bcc5; background: rgba(255, 255, 255, 0.02); }
-.capsule-icon-solid { background: #1d1d1d; color: #f6f8fc; border-color: rgba(143, 143, 143, 0.65); }
-.capsule-create { width: auto; min-width: 86px; padding: 0 11px; gap: 6px; }
-.capsule-create-label { font-size: 12px; line-height: 1; font-weight: 500; }
+.capsule-select {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  color: #e7e8eb;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 9px;
+  max-width: 148px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.2s ease;
+}
+
+.capsule-select:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.capsule-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #b8bcc5;
+  background: rgba(255, 255, 255, 0.02);
+  transition: all 0.2s;
+}
+
+.capsule-icon:hover:not(:disabled) {
+  color: #f0f2f5;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.capsule-icon-solid {
+  background: #1d1d1d;
+  color: #f6f8fc;
+  border-color: rgba(143, 143, 143, 0.65);
+}
+
+.capsule-icon-solid:hover:not(:disabled) {
+  background: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.8);
+}
+.capsule-create {
+  width: auto;
+  min-width: 86px;
+  padding: 0 14px;
+  gap: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 28px;
+}
+
+.capsule-create-label {
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 500;
+  white-space: nowrap;
+}
 
 .node-default { border-width: 0; border-color: transparent; box-shadow: none; }
-.node-selected { border-width: 0; border-color: transparent; box-shadow: none; }
+.node-selected {
+  border-width: 1px;
+  border-color: #8f8f8f;
+  box-shadow: none;
+}
 
 :deep(.node-handle-plus) {
   width: 28px !important;

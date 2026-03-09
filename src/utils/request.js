@@ -4,7 +4,7 @@
  */
 
 import axios from 'axios'
-import { DEFAULT_API_KEY, STORAGE_KEYS } from './constants'
+import { STORAGE_KEYS } from './constants'
 
 // Base URL from environment or default
 const BASE_URL = import.meta.env.VITE_APP_API_BASE_URL || '/api/v1'
@@ -12,7 +12,7 @@ const BASE_URL = import.meta.env.VITE_APP_API_BASE_URL || '/api/v1'
 // Create axios instance | 创建 axios 实例
 const instance = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000000,
+  timeout: 60000,
   withCredentials: true
 })
 
@@ -35,17 +35,9 @@ const flushQueue = (error, token = '') => {
 instance.interceptors.request.use(
   (config) => {
     const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
-    const apiKey = localStorage.getItem(STORAGE_KEYS.API_KEY) || DEFAULT_API_KEY
-    
-    // Skip auth for certain endpoints | 跳过某些端点的认证
-    const noAuthEndpoints = ['/model/page', '/model/fullName', '/model/types']
-    const isNoAuth = noAuthEndpoints.some(ep => config.url?.includes(ep))
     
     if (accessToken) {
       config.headers['Authorization'] = `Bearer ${accessToken}`
-    } else if (apiKey && !isNoAuth) {
-      // Backward compatibility for legacy direct-provider mode
-      config.headers['Authorization'] = `Bearer ${apiKey}`
     }
     
     return config
@@ -85,6 +77,7 @@ instance.interceptors.response.use(
     const { response } = error
     const silent = !!error?.config?.silentErrorToast
     const silentNetwork = !!error?.config?.silentNetworkErrorToast
+    const isTimeout = error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''))
 
     if (response) {
       const { status, data } = response
@@ -149,6 +142,9 @@ instance.interceptors.response.use(
         })
       }
     } else {
+      if (isTimeout) {
+        error.message = '请求超时。图片生成时间较长，请稍后重试。'
+      }
       if (!silent && !silentNetwork) window.$message?.error(error.message || '网络错误')
       error.__handled = true
     }

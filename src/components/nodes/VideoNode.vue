@@ -65,6 +65,8 @@
           <div class="flex flex-col items-center gap-2">
             <n-icon :size="32" class="text-[#7b818c]"><VideocamOutline /></n-icon>
             <span class="text-sm text-[#7b818c]">Connect Text/Image node to generate</span>
+            <button class="upload-btn" @click="triggerUpload">Upload</button>
+            <input ref="uploadInputRef" type="file" accept="video/*" class="hidden" @change="handleFileUpload" />
           </div>
         </div>
       </div>
@@ -84,6 +86,18 @@
         <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeErrorModal">Close</button>
       </template>
     </n-modal>
+    <n-modal v-model:show="showValidationModal" preset="dialog" title="Upload Limit" :show-icon="false">
+      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ validationMessage }}</div>
+      <template #action>
+        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeValidationModal">OK</button>
+      </template>
+    </n-modal>
+
+    <div v-if="showUploadProgress" class="upload-progress-wrap" :style="moduleStyle">
+      <div class="upload-progress-track">
+        <div class="upload-progress-bar" :style="uploadProgressStyle"></div>
+      </div>
+    </div>
 
     <div class="binding-status-wrap">
       <div class="binding-status-row">
@@ -105,10 +119,10 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon, NModal } from 'naive-ui'
 import { AddOutline, CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, SparklesOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, updateNode } from '../../stores/canvas'
+import { addEdge, addNode, duplicateNode, edges, flushSave, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
-import request from '../../utils/request'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoSizeOptions, videoModelOptions } from '../../stores/models'
+import { uploadImageFile } from '@/utils/media'
 
 const props = defineProps({ id: String, data: Object, selected: Boolean })
 
@@ -117,17 +131,23 @@ const { isConfigured } = useApiConfig()
 const videoGen = useVideoGeneration()
 
 const showCapsule = ref(false)
-const inputUrl = ref('')
 const isSelected = computed(() => !!props.selected || !!props.data?.selected)
 const showHandles = computed(() => showCapsule.value || isSelected.value)
 const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
 const showErrorModal = ref(false)
+const showValidationModal = ref(false)
+const validationMessage = ref('')
 const videoActionLoading = ref('')
+const isUploading = ref(false)
+const showUploadProgress = ref(false)
+const uploadProgress = ref(0)
+const uploadStage = ref('idle')
 const progressValue = ref(0)
 const showProgress = ref(false)
 const progressTimer = ref(null)
 const progressFinishTimer = ref(null)
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 
 const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
 const localRatio = ref(props.data?.ratio || DEFAULT_VIDEO_RATIO)
@@ -217,6 +237,19 @@ const stageStyle = computed(() => {
 const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
 const progressPercent = computed(() => Math.round(progressValue.value))
 const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
+const uploadProgressStyle = computed(() => {
+  const percent = Math.max(0, Math.min(100, uploadProgress.value))
+  const color =
+    uploadStage.value === 'error'
+      ? '#ef4444'
+      : uploadStage.value === 'success'
+        ? '#22c55e'
+        : '#60a5fa'
+  return {
+    width: `${percent}%`,
+    background: color
+  }
+})
 const capsuleStyle = computed(() => {
   const zoom = viewport.value?.zoom || 1
   const inverse = 1 / zoom
@@ -280,6 +313,24 @@ watch(
 )
 
 onUnmounted(() => clearProgressTimers())
+
+const beforeUnloadGuard = (event) => {
+  if (!isUploading.value) return
+  event.preventDefault()
+  event.returnValue = 'Video upload is still in progress. Leaving now may lose it.'
+}
+
+watch(isUploading, (uploading) => {
+  if (uploading) {
+    window.addEventListener('beforeunload', beforeUnloadGuard)
+  } else {
+    window.removeEventListener('beforeunload', beforeUnloadGuard)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', beforeUnloadGuard)
+})
 
 watch(
   () => props.data?.error,
@@ -423,42 +474,75 @@ const triggerUpload = () => {
   uploadInputRef.value?.click()
 }
 
+const resetUploadProgress = (delayMs = 1500) => {
+  setTimeout(() => {
+    if (uploadStage.value === 'success' || uploadStage.value === 'error') {
+      showUploadProgress.value = false
+      uploadProgress.value = 0
+      uploadStage.value = 'idle'
+    }
+  }, delayMs)
+}
+
 const handleFileUpload = async (event) => {
   const file = event.target.files?.[0]
   if (!file) return
-  
-  updateNode(props.id, { loading: true, error: '' })
-  
-  const formData = new FormData()
-  formData.append('file', file)
 
   try {
-    const res = await request.post('/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      validationMessage.value = 'Video is too large. Maximum file size is 10MB.'
+      showValidationModal.value = true
+      return
+    }
+
+    updateNode(props.id, { loading: false, error: '' })
+    isUploading.value = true
+    showUploadProgress.value = true
+    uploadStage.value = 'uploading'
+    uploadProgress.value = 3
+
+    const url = await uploadImageFile(file, {
+      onProgress: (percent) => {
+        uploadStage.value = 'uploading'
+        uploadProgress.value = Math.max(uploadProgress.value, Math.min(92, percent))
+      }
     })
-    
-    const url = res?.url
+
     if (!url) throw new Error('Upload failed: No URL returned')
 
+    uploadStage.value = 'saving'
+    uploadProgress.value = Math.max(uploadProgress.value, 95)
     updateNode(props.id, {
       url,
       fileName: file.name,
       fileType: file.type,
       updatedAt: Date.now(),
-      loading: false // Ensure loading is set to false after upload | 确保上传后 loading 为 false
+      loading: false,
+      error: ''
     })
-    await saveProject()
+    const savedOk = await flushSave()
+    if (savedOk) {
+      uploadStage.value = 'success'
+      uploadProgress.value = 100
+      window.$message?.success('Upload complete and saved')
+      resetUploadProgress(900)
+    } else {
+      uploadStage.value = 'error'
+      uploadProgress.value = 100
+      window.$message?.warning('Project save failed after upload. Please retry save.')
+      resetUploadProgress(2200)
+    }
   } catch (err) {
     console.error('Video upload error:', err)
     updateNode(props.id, { loading: false, error: err.message || 'Upload failed' })
+    uploadStage.value = 'error'
+    uploadProgress.value = 100
+    resetUploadProgress(2200)
     window.$message?.error(`Video upload failed: ${err.message || 'Unknown error'}`)
+  } finally {
+    isUploading.value = false
+    if (event?.target) event.target.value = ''
   }
-}
-
-const handleUrlInput = () => {
-  if (!inputUrl.value) return
-  updateNode(props.id, { url: inputUrl.value, updatedAt: Date.now() })
-  inputUrl.value = ''
 }
 
 const handleDelete = () => {
@@ -473,16 +557,8 @@ const handleDuplicate = () => {
   window.$message?.success('Node duplicated')
 }
 
-const selectNode = () => {
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    selected: node.id === props.id,
-    data: { ...(node.data || {}), selected: node.id === props.id }
-  }))
-}
-
-const handleMetaMouseDown = () => {
-  selectNode()
+const handleMetaMouseDown = (event) => {
+  if (event?.button !== 0) return
 }
 
 const openPreviewModal = () => {
@@ -492,6 +568,10 @@ const openPreviewModal = () => {
 const closeErrorModal = () => {
   showErrorModal.value = false
   updateNode(props.id, { error: '' })
+}
+const closeValidationModal = () => {
+  showValidationModal.value = false
+  validationMessage.value = ''
 }
 
 const createLinkedNode = (type) => {
@@ -627,6 +707,25 @@ watch(
   border-color: rgba(255, 255, 255, 0.62);
   color: #f2f3f5;
   background: #2a2a2a;
+}
+.upload-progress-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+.upload-progress-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.upload-progress-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  transition: width 0.2s ease, background 0.2s ease;
 }
 .upload-btn {
   margin-top: 4px;

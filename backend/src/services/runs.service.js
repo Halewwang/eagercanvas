@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
+import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 import {
   providerChatCompletions,
@@ -18,6 +19,122 @@ const runSchema = z.object({
 const eventBase = {
   provider: 'openai-compatible',
   event_type: 'generation'
+}
+
+const extractProviderTaskId = (result = {}) => {
+  const candidates = [
+    result?.task_id,
+    result?.taskId,
+    result?.id,
+    result?.raw?.task_id,
+    result?.raw?.task?.task_id,
+    result?.data?.task_id,
+    result?.data?.taskId,
+    result?.data?.id
+  ]
+  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+  return found ? String(found) : ''
+}
+
+const extractProviderVideoUrl = (result = {}) =>
+  result?.url ||
+  result?.video_url ||
+  result?.data?.url ||
+  result?.data?.video_url ||
+  result?.raw?.url ||
+  result?.raw?.video_url ||
+  result?.raw?.task_result?.video_url ||
+  result?.raw?.task_result?.videos?.[0]?.url ||
+  ''
+
+const bindVideoTaskOwnership = async ({ userId, runId, taskId }) => {
+  if (!taskId) return
+  const { error } = await supabase.from('audit_logs').insert({
+    user_id: userId,
+    action: 'video.task.created',
+    metadata: {
+      run_id: runId,
+      task_id: taskId
+    }
+  })
+  if (error) {
+    console.warn('[video] bind task ownership failed', error.message)
+  }
+}
+
+const assertVideoTaskOwnership = async ({ userId, taskId }) => {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('action', 'video.task.created')
+    .contains('metadata', { task_id: String(taskId) })
+    .limit(1)
+
+  if (error) {
+    throw new HttpError(500, error.message, 'TASK_OWNERSHIP_CHECK_FAILED')
+  }
+
+  if (!Array.isArray(data) || data.length === 0) {
+    if (env.nodeEnv !== 'production') {
+      console.warn('[video] task ownership record missing in non-production', { userId, taskId })
+      return
+    }
+    throw new HttpError(404, 'Video task not found', 'VIDEO_TASK_NOT_FOUND')
+  }
+}
+
+const findVideoRunIdByTask = async ({ userId, taskId }) => {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('metadata')
+    .eq('user_id', userId)
+    .eq('action', 'video.task.created')
+    .contains('metadata', { task_id: String(taskId) })
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error) {
+    console.warn('[video] resolve run by task failed', error.message)
+    return ''
+  }
+
+  const runId = data?.[0]?.metadata?.run_id
+  return runId ? String(runId) : ''
+}
+
+const syncRunStatusFromVideoTask = async ({ userId, runId, taskResult }) => {
+  if (!runId || !taskResult) return
+  const status = String(taskResult?.status || '').toLowerCase()
+  const hasVideo = !!extractProviderVideoUrl(taskResult)
+
+  let nextStatus = ''
+  if (hasVideo || ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished'].includes(status)) {
+    nextStatus = 'completed'
+  } else if (['failed', 'error', 'cancelled', 'canceled', 'failure'].includes(status)) {
+    nextStatus = 'failed'
+  } else {
+    nextStatus = 'running'
+  }
+
+  const payload = {
+    status: nextStatus
+  }
+
+  if (nextStatus === 'completed' || nextStatus === 'failed') {
+    payload.finished_at = new Date().toISOString()
+    payload.error_msg = nextStatus === 'failed' ? (taskResult?.message || 'Video task failed') : null
+  }
+
+  const { error } = await supabase
+    .from('workflow_runs')
+    .update(payload)
+    .eq('id', runId)
+    .eq('user_id', userId)
+
+  if (error) {
+    console.warn('[video] sync run status failed', error.message)
+  }
 }
 
 const insertUsageEvent = async (userId, runId, input = {}) => {
@@ -69,6 +186,63 @@ export const createRun = async (userId, input) => {
     }
 
     const latencyMs = Date.now() - startedAt
+    const isVideoRun = payload.type === 'video'
+
+    if (isVideoRun) {
+      const providerTaskId = extractProviderTaskId(providerResponse)
+      const videoUrl = extractProviderVideoUrl(providerResponse)
+
+      await bindVideoTaskOwnership({
+        userId,
+        runId: run.id,
+        taskId: providerTaskId
+      })
+
+      if (videoUrl) {
+        await supabase
+          .from('workflow_runs')
+          .update({ status: 'completed', finished_at: new Date().toISOString() })
+          .eq('id', run.id)
+
+        await insertUsageEvent(userId, run.id, {
+          model: payload.model || payload.payload?.model,
+          videoSeconds: payload.payload?.seconds || payload.payload?.duration || 0,
+          latencyMs,
+          eventType: payload.type
+        })
+
+        return {
+          runId: run.id,
+          status: 'completed',
+          result: {
+            ...providerResponse,
+            run_id: run.id
+          }
+        }
+      }
+
+      // Asynchronous video tasks should remain running until provider status endpoint reports completion.
+      await supabase
+        .from('workflow_runs')
+        .update({ status: 'running', finished_at: null, error_msg: null })
+        .eq('id', run.id)
+
+      await insertUsageEvent(userId, run.id, {
+        model: payload.model || payload.payload?.model,
+        videoSeconds: payload.payload?.seconds || payload.payload?.duration || 0,
+        latencyMs,
+        eventType: 'video_task_created'
+      })
+
+      return {
+        runId: run.id,
+        status: 'running',
+        result: {
+          ...providerResponse,
+          run_id: run.id
+        }
+      }
+    }
 
     await supabase
       .from('workflow_runs')
@@ -126,5 +300,9 @@ export const createVideoGeneration = async (userId, payload) => {
 }
 
 export const getVideoTask = async (_userId, taskId) => {
-  return providerVideoStatus(taskId)
+  await assertVideoTaskOwnership({ userId: _userId, taskId })
+  const result = await providerVideoStatus(taskId)
+  const runId = await findVideoRunIdByTask({ userId: _userId, taskId })
+  await syncRunStatusFromVideoTask({ userId: _userId, runId, taskResult: result })
+  return result
 }

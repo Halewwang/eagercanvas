@@ -6,21 +6,23 @@ import { request } from '@/utils'
 
 // 创建视频任务
 export const createVideoTask = (data, options = {}) => {
-  const { endpoint = '/videos' } = options
+  const { endpoint = '/videos', ...requestOptions } = options
   return request({
     url: endpoint,
     method: 'post',
-    data
+    data,
+    ...requestOptions
   })
 }
 
 // 查询视频任务状态
-export const getVideoTaskStatus = (taskId) =>
+export const getVideoTaskStatus = (taskId, options = {}) =>
   request({
     url: `/videos/${taskId}`,
     method: 'get',
     silentErrorToast: true,
-    silentNetworkErrorToast: true
+    silentNetworkErrorToast: true,
+    ...options
   })
 
 // 轮询视频任务直到完成

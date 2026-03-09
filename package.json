@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "npx @react-grab/codex@latest && vite",
     "dev:api": "npm --prefix backend run dev",
     "build": "npx vite build",
     "preview": "vite preview"
@@ -27,5 +27,6 @@
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
+    "react-grab": "^0.1.23"
   }
 }

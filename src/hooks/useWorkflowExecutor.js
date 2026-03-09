@@ -67,7 +67,7 @@ export const useWorkflowExecutor = () => {
         } catch (err) {
           console.error('Workflow error:', err)
           const status = err?.response?.status
-          const message = err?.response?.data?.message || err?.message || ''
+          const message = err?.message || ''
           const shouldSkipFallback =
             [401, 403, 429, 500].includes(status) ||
             /too many requests|capacity|unauthorized|认证|登录已过期/i.test(message)

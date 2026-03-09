@@ -229,8 +229,63 @@
       </footer>
     </main>
 
+    <n-modal v-model:show="authModalVisible" preset="dialog" :title="isRegister ? 'Create account' : 'Sign in'" :show-icon="false">
+      <div class="space-y-3 py-2">
+        <div class="flex gap-2">
+          <button
+            class="flex-1 py-2 rounded-lg border transition-colors"
+            :class="!isRegister ? 'border-[var(--accent-color)] text-white bg-[var(--bg-tertiary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)]'"
+            @click="authMode = 'login'"
+          >
+            Login
+          </button>
+          <button
+            class="flex-1 py-2 rounded-lg border transition-colors"
+            :class="isRegister ? 'border-[var(--accent-color)] text-white bg-[var(--bg-tertiary)]' : 'border-[var(--border-color)] text-[var(--text-secondary)]'"
+            @click="authMode = 'register'"
+          >
+            Register
+          </button>
+        </div>
+
+        <input
+          v-if="isRegister"
+          v-model="authDisplayName"
+          type="text"
+          placeholder="Display name"
+          class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent-color)]"
+        />
+        <input
+          v-model="authEmail"
+          type="email"
+          placeholder="you@example.com"
+          class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent-color)]"
+        />
+        <div class="flex gap-2">
+          <input
+            v-model="authCode"
+            type="text"
+            maxlength="6"
+            placeholder="6-digit code"
+            class="flex-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent-color)]"
+          />
+          <button class="flora-button-ghost px-4 rounded-xl" :disabled="authSending" @click="handleSendAuthCode">
+            {{ authSending ? 'Sending' : 'Send Code' }}
+          </button>
+        </div>
+      </div>
+      <template #action>
+        <div class="flex justify-end gap-3">
+          <button @click="closeAuthModal" class="px-4 py-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>
+          <button class="flora-button-primary px-6 py-2 rounded-lg transition-opacity" :disabled="authVerifying" @click="handleSubmitAuth">
+            {{ authVerifying ? (isRegister ? 'Registering...' : 'Signing in...') : (isRegister ? 'Verify & Register' : 'Verify & Sign In') }}
+          </button>
+        </div>
+      </template>
+    </n-modal>
+
     <!-- API Settings Modal | API 设置弹窗 -->
-    <ApiSettings v-model:show="showApiSettings" @saved="refreshApiConfig" />
+    <ApiSettings v-model:show="showApiSettings" />
 
     <!-- Rename modal | 重命名弹窗 -->
     <n-modal v-model:show="showRenameModal" preset="dialog" title="Rename Project" :show-icon="false" class="custom-modal">
@@ -268,8 +323,8 @@
  * Home view component | 首页视图组件
  * Entry point with project list and creation input
  */
-import { computed, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { NIcon, NModal } from 'naive-ui'
 import { 
   AddOutline, 
@@ -288,26 +343,21 @@ import {
   duplicateProject, 
   renameProject 
 } from '../stores/projects'
-import { useApiConfig } from '../hooks/useApiConfig'
 import { useAuthStore } from '@/stores/auth'
 import ApiSettings from '../components/ApiSettings.vue'
+import { getErrorMessage } from '@/utils'
 
 const router = useRouter()
-const apiConfig = useApiConfig()
-const { user, logout, isAuthenticated, updateProfile } = useAuthStore()
+const route = useRoute()
+const { user, logout, isAuthenticated, updateProfile, sendCode, sendRegister, verifyCode, verifyRegister } = useAuthStore()
 
 // API Settings state | API 设置状态
 const showApiSettings = ref(false)
-const isApiConfigured = ref(apiConfig.isConfigured.value)
-
-// Refresh API config state | 刷新 API 配置状态
-const refreshApiConfig = () => {
-  isApiConfigured.value = apiConfig.isConfigured.value
-}
 
 const handleLogout = async () => {
   await logout()
-  router.push('/login')
+  await initProjectsStore()
+  router.push('/')
 }
 
 const avatarInputRef = ref(null)
@@ -332,7 +382,9 @@ const handleAvatarChange = async (event) => {
       await updateProfile({ avatarUrl: dataUrl })
       window.$message?.success('Avatar updated')
     } catch (err) {
-      window.$message?.error(err?.response?.data?.message || err?.message || 'Failed to update avatar')
+      if (!err?.__handled) {
+        window.$message?.error(getErrorMessage(err, 'Failed to update avatar'))
+      }
     }
   }
   reader.readAsDataURL(file)
@@ -340,11 +392,103 @@ const handleAvatarChange = async (event) => {
 }
 
 const openLogin = () => {
-  router.push('/login')
+  authMode.value = 'login'
+  authModalVisible.value = true
 }
 
 const openRegister = () => {
-  router.push('/login?mode=register')
+  authMode.value = 'register'
+  authModalVisible.value = true
+}
+
+const authModalVisible = ref(false)
+const authMode = ref('login')
+const authEmail = ref('')
+const authCode = ref('')
+const authDisplayName = ref('')
+const authSending = ref(false)
+const authVerifying = ref(false)
+const isRegister = computed(() => authMode.value === 'register')
+
+const closeAuthModal = () => {
+  authModalVisible.value = false
+  clearAuthQuery()
+}
+
+const openAuthByQuery = () => {
+  const authQuery = String(route.query.auth || '')
+  if (authQuery === 'login' || authQuery === 'register') {
+    authMode.value = authQuery
+    authModalVisible.value = true
+  }
+}
+
+const clearAuthQuery = () => {
+  const query = { ...route.query }
+  delete query.auth
+  delete query.redirect
+  router.replace({ path: route.path, query })
+}
+
+const handleSendAuthCode = async () => {
+  if (!authEmail.value.trim()) {
+    window.$message?.warning('Please enter email')
+    return
+  }
+
+  authSending.value = true
+  try {
+    if (isRegister.value) {
+      await sendRegister(authEmail.value.trim())
+      window.$message?.success('Registration code sent')
+    } else {
+      await sendCode(authEmail.value.trim())
+      window.$message?.success('Login code sent')
+    }
+  } catch (err) {
+    if (!err?.__handled) {
+      window.$message?.error(getErrorMessage(err, 'Failed to send code'))
+    }
+  } finally {
+    authSending.value = false
+  }
+}
+
+const handleSubmitAuth = async () => {
+  if (!authEmail.value.trim()) {
+    window.$message?.warning('Please enter email')
+    return
+  }
+  if (authCode.value.trim().length !== 6) {
+    window.$message?.warning('Please enter a 6-digit code')
+    return
+  }
+  if (isRegister.value && !authDisplayName.value.trim()) {
+    window.$message?.warning('Please enter display name')
+    return
+  }
+
+  authVerifying.value = true
+  try {
+    if (isRegister.value) {
+      await verifyRegister(authEmail.value.trim(), authCode.value.trim(), authDisplayName.value.trim())
+      window.$message?.success('Registered and signed in')
+    } else {
+      await verifyCode(authEmail.value.trim(), authCode.value.trim())
+      window.$message?.success('Signed in')
+    }
+
+    authModalVisible.value = false
+    clearAuthQuery()
+
+    router.replace('/')
+  } catch (err) {
+    if (!err?.__handled) {
+      window.$message?.error(getErrorMessage(err, isRegister.value ? 'Register failed' : 'Sign in failed'))
+    }
+  } finally {
+    authVerifying.value = false
+  }
 }
 
 // Video refs for hover play | 视频引用用于悬停播放
@@ -445,7 +589,9 @@ const confirmDeleteProject = async () => {
     await deleteProject(id)
     window.$message?.success('Project deleted')
   } catch (err) {
-    window.$message?.error(err?.response?.data?.message || err?.message || 'Delete failed')
+    if (!err?.__handled) {
+      window.$message?.error(getErrorMessage(err, 'Delete failed'))
+    }
   }
 }
 
@@ -466,7 +612,9 @@ const createNewProject = async () => {
     const id = await createProject('Untitled')
     await router.push(`/canvas/${id}`)
   } catch (err) {
-    window.$message?.error(err?.response?.data?.message || err?.message || 'Failed to create project')
+    if (!err?.__handled) {
+      window.$message?.error(getErrorMessage(err, 'Failed to create project'))
+    }
   }
 }
 
@@ -479,7 +627,9 @@ const handleCreateWithInput = async () => {
     inputText.value = ''
     await router.push(`/canvas/${id}`)
   } catch (err) {
-    window.$message?.error(err?.response?.data?.message || err?.message || 'Failed to create project')
+    if (!err?.__handled) {
+      window.$message?.error(getErrorMessage(err, 'Failed to create project'))
+    }
   }
 }
 
@@ -498,7 +648,13 @@ const isVideoUrl = (url) => {
 // Initialize projects store on mount | 挂载时初始化项目存储
 onMounted(async () => {
   await initProjectsStore()
+  openAuthByQuery()
 })
+
+watch(
+  () => route.query.auth,
+  () => openAuthByQuery()
+)
 </script>
 
 <style scoped>

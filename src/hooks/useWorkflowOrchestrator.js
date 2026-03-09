@@ -8,7 +8,7 @@
  * - 串行执行：等待上一步完成后再执行下一步
  */
 
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { streamChatCompletions } from '@/api'
 import { 
   nodes, 
@@ -139,9 +139,18 @@ export const useWorkflowOrchestrator = () => {
   const currentStep = ref(0)
   const totalSteps = ref(0)
   const executionLog = ref([])
-  
-  // Active watchers | 活跃的监听器
-  const activeWatchers = []
+  const workflowState = ref('idle') // idle | running | completed | failed | cancelled
+  const taskQueue = ref([])
+  const activeTaskId = ref('')
+  let taskCounter = 0
+
+  const TASK_STATES = {
+    PENDING: 'pending',
+    RUNNING: 'running',
+    COMPLETED: 'completed',
+    FAILED: 'failed',
+    CANCELLED: 'cancelled'
+  }
   
   /**
    * Add log entry | 添加日志
@@ -150,110 +159,128 @@ export const useWorkflowOrchestrator = () => {
     executionLog.value.push({ type, message, timestamp: Date.now() })
     console.log(`[Workflow ${type}] ${message}`)
   }
-  
-  /**
-   * Clear all watchers | 清除所有监听器
-   */
-  const clearWatchers = () => {
-    activeWatchers.forEach(stop => stop())
-    activeWatchers.length = 0
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  const updateWorkflowState = (state) => {
+    workflowState.value = state
   }
-  
+
+  const enqueueTask = (taskName, run, meta = {}) => {
+    const task = {
+      id: `wf_task_${++taskCounter}`,
+      name: taskName,
+      state: TASK_STATES.PENDING,
+      meta,
+      error: '',
+      result: null,
+      run
+    }
+    taskQueue.value.push(task)
+    return task.id
+  }
+
+  const setTaskState = (taskId, nextState, patch = {}) => {
+    const idx = taskQueue.value.findIndex((t) => t.id === taskId)
+    if (idx === -1) return
+    taskQueue.value[idx] = {
+      ...taskQueue.value[idx],
+      state: nextState,
+      ...patch
+    }
+  }
+
+  const runTaskQueue = async (context = {}) => {
+    const queue = taskQueue.value
+    totalSteps.value = queue.length
+    currentStep.value = 0
+
+    for (let i = 0; i < queue.length; i++) {
+      const task = queue[i]
+      currentStep.value = i + 1
+      activeTaskId.value = task.id
+      setTaskState(task.id, TASK_STATES.RUNNING)
+      addLog('info', `执行任务 ${i + 1}/${queue.length}: ${task.name}`)
+
+      try {
+        const result = await task.run(context)
+        setTaskState(task.id, TASK_STATES.COMPLETED, { result })
+      } catch (err) {
+        const message = err?.message || 'Task execution failed'
+        setTaskState(task.id, TASK_STATES.FAILED, { error: message })
+        throw err
+      } finally {
+        activeTaskId.value = ''
+      }
+    }
+  }
+
+  const waitForNode = async (nodeId, matcher, {
+    timeoutMs = 5 * 60 * 1000,
+    intervalMs = 250,
+    timeoutMessage = '等待节点超时'
+  } = {}) => {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+      const node = nodes.value.find((n) => n.id === nodeId)
+      const result = matcher(node)
+      if (result?.done) {
+        return result.value
+      }
+      await sleep(intervalMs)
+    }
+    throw new Error(timeoutMessage)
+  }
+
   /**
    * Wait for config node to complete and return output node ID
    * 等待配置节点完成并返回输出节点 ID
    */
-  const waitForConfigComplete = (configNodeId) => {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('执行超时'))
-      }, 5 * 60 * 1000)
-      
-      let stopWatcher = null
-      
-      const checkNode = (node) => {
-        if (!node) return false
-        
-        // Check for error | 检查错误
+  const waitForConfigComplete = async (configNodeId) => {
+    const outputNodeId = await waitForNode(
+      configNodeId,
+      (node) => {
+        if (!node) {
+          return { done: false }
+        }
         if (node.data?.error) {
-          clearTimeout(timeout)
-          if (stopWatcher) stopWatcher()
-          reject(new Error(node.data.error))
-          return true
+          throw new Error(node.data.error)
         }
-        
-        // Config node completed with output node ID | 配置节点完成并返回输出节点 ID
-        if (node.data?.executed && node.data?.outputNodeId) {
-          clearTimeout(timeout)
-          if (stopWatcher) stopWatcher()
-          addLog('success', `节点 ${configNodeId} 完成，输出节点: ${node.data.outputNodeId}`)
-          resolve(node.data.outputNodeId)
-          return true
+        if ((node.data?.status === 'completed' || node.data?.executed) && node.data?.outputNodeId) {
+          return { done: true, value: node.data.outputNodeId }
         }
-        return false
-      }
-      
-      // Check immediately first | 先立即检查一次
-      const node = nodes.value.find(n => n.id === configNodeId)
-      if (checkNode(node)) return
-      
-      // Then watch for changes | 然后监听变化
-      stopWatcher = watch(
-        () => nodes.value.find(n => n.id === configNodeId),
-        (node) => checkNode(node),
-        { deep: true }
-      )
-      
-      activeWatchers.push(stopWatcher)
-    })
+        if (node.data?.status === 'failed') {
+          throw new Error(node.data?.error || '节点执行失败')
+        }
+        return { done: false }
+      },
+      { timeoutMessage: `节点 ${configNodeId} 执行超时` }
+    )
+    addLog('success', `节点 ${configNodeId} 完成，输出节点: ${outputNodeId}`)
+    return outputNodeId
   }
-  
+
   /**
    * Wait for output node (image/video) to be ready
    * 等待输出节点准备好
    */
-  const waitForOutputReady = (outputNodeId) => {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('输出节点超时'))
-      }, 5 * 60 * 1000)
-      
-      let stopWatcher = null
-      
-      const checkNode = (node) => {
-        if (!node) return false
-        
-        if (node.data?.error) {
-          clearTimeout(timeout)
-          if (stopWatcher) stopWatcher()
-          reject(new Error(node.data.error))
-          return true
+  const waitForOutputReady = async (outputNodeId) => {
+    const node = await waitForNode(
+      outputNodeId,
+      (target) => {
+        if (!target) return { done: false }
+        if (target.data?.error) {
+          throw new Error(target.data.error)
         }
-        
-        // Output node ready when has URL and not loading
-        if (node.data?.url && !node.data?.loading) {
-          clearTimeout(timeout)
-          if (stopWatcher) stopWatcher()
-          addLog('success', `输出节点 ${outputNodeId} 已就绪`)
-          resolve(node)
-          return true
+        if (target.data?.url && !target.data?.loading) {
+          return { done: true, value: target }
         }
-        return false
-      }
-      
-      // Check immediately first | 先立即检查一次
-      const node = nodes.value.find(n => n.id === outputNodeId)
-      if (checkNode(node)) return
-      
-      // Then watch for changes | 然后监听变化
-      stopWatcher = watch(
-        () => nodes.value.find(n => n.id === outputNodeId),
-        (node) => checkNode(node),
-        { deep: true }
-      )
-      
-      activeWatchers.push(stopWatcher)
-    })
+        return { done: false }
+      },
+      { timeoutMessage: `输出节点 ${outputNodeId} 超时` }
+    )
+    addLog('success', `输出节点 ${outputNodeId} 已就绪`)
+    return node
   }
   
   /**
@@ -294,38 +321,41 @@ export const useWorkflowOrchestrator = () => {
    */
   const executeTextToImage = async (imagePrompt, position) => {
     const nodeSpacing = 400
-    let x = position.x
-    
     addLog('info', '开始执行文生图工作流')
-    currentStep.value = 1
-    totalSteps.value = 2
-    
-    // Step 1: Create text node for image | 创建图片提示词节点
-    const textNodeId = addNode('text', { x, y: position.y }, {
-      content: imagePrompt,
-      label: '图片提示词'
+    const context = { nodes: {} }
+    taskQueue.value = []
+
+    enqueueTask('create_image_prompt_node', async (ctx) => {
+      ctx.nodes.textNodeId = addNode('text', { x: position.x, y: position.y }, {
+        content: imagePrompt,
+        label: '图片提示词'
+      })
+      addLog('info', `创建图片提示词节点: ${ctx.nodes.textNodeId}`)
+      return ctx.nodes.textNodeId
     })
-    addLog('info', `创建图片提示词节点: ${textNodeId}`)
-    x += nodeSpacing
-    
-    // Step 2: Create imageConfig with autoExecute | 创建图片配置节点并自动执行
-    currentStep.value = 2
-    const imageConfigId = addNode('imageConfig', { x, y: position.y }, {
-      label: '文生图',
-      autoExecute: true
+
+    enqueueTask('create_image_config_node', async (ctx) => {
+      const x = position.x + nodeSpacing
+      ctx.nodes.imageConfigId = addNode('imageConfig', { x, y: position.y }, {
+        label: '文生图',
+        autoExecute: true
+      })
+      addLog('info', `创建图片配置节点: ${ctx.nodes.imageConfigId}`)
+      addEdge({
+        source: ctx.nodes.textNodeId,
+        target: ctx.nodes.imageConfigId,
+        sourceHandle: 'right',
+        targetHandle: 'left'
+      })
+      return ctx.nodes.imageConfigId
     })
-    addLog('info', `创建图片配置节点: ${imageConfigId}`)
-    
-    // Connect text → imageConfig
-    addEdge({
-      source: textNodeId,
-      target: imageConfigId,
-      sourceHandle: 'right',
-      targetHandle: 'left'
-    })
-    
+
+    await runTaskQueue(context)
     addLog('success', '文生图工作流已启动')
-    return { textNodeId, imageConfigId }
+    return {
+      textNodeId: context.nodes.textNodeId,
+      imageConfigId: context.nodes.imageConfigId
+    }
   }
   
   /**
@@ -337,86 +367,85 @@ export const useWorkflowOrchestrator = () => {
   const executeTextToImageToVideo = async (imagePrompt, videoPrompt, position) => {
     const nodeSpacing = 400
     const rowSpacing = 200
-    let x = position.x
-    
+
     addLog('info', '开始执行文生图生视频工作流')
-    currentStep.value = 1
-    totalSteps.value = 5
-    
-    // Step 1: Create image prompt text node | 创建图片提示词节点
-    const imageTextNodeId = addNode('text', { x, y: position.y }, {
-      content: imagePrompt,
-      label: '图片提示词'
+    const context = { nodes: {} }
+    taskQueue.value = []
+
+    enqueueTask('create_image_prompt_node', async (ctx) => {
+      ctx.nodes.imageTextNodeId = addNode('text', { x: position.x, y: position.y }, {
+        content: imagePrompt,
+        label: '图片提示词'
+      })
+      addLog('info', `创建图片提示词节点: ${ctx.nodes.imageTextNodeId}`)
+      return ctx.nodes.imageTextNodeId
     })
-    addLog('info', `创建图片提示词节点: ${imageTextNodeId}`)
-    
-    // Step 2: Create video prompt text node (below image prompt) | 创建视频提示词节点
-    currentStep.value = 2
-    const videoTextNodeId = addNode('text', { x, y: position.y + rowSpacing }, {
-      content: videoPrompt,
-      label: '视频提示词'
+
+    enqueueTask('create_video_prompt_node', async (ctx) => {
+      ctx.nodes.videoTextNodeId = addNode('text', { x: position.x, y: position.y + rowSpacing }, {
+        content: videoPrompt,
+        label: '视频提示词'
+      })
+      addLog('info', `创建视频提示词节点: ${ctx.nodes.videoTextNodeId}`)
+      return ctx.nodes.videoTextNodeId
     })
-    addLog('info', `创建视频提示词节点: ${videoTextNodeId}`)
-    x += nodeSpacing
-    
-    // Step 3: Create imageConfig with autoExecute | 创建图片配置节点
-    currentStep.value = 3
-    const imageConfigId = addNode('imageConfig', { x, y: position.y }, {
-      label: '文生图',
-      autoExecute: true
+
+    enqueueTask('create_image_config_node', async (ctx) => {
+      const x = position.x + nodeSpacing
+      ctx.nodes.imageConfigId = addNode('imageConfig', { x, y: position.y }, {
+        label: '文生图',
+        autoExecute: true
+      })
+      addLog('info', `创建图片配置节点: ${ctx.nodes.imageConfigId}`)
+      addEdge({
+        source: ctx.nodes.imageTextNodeId,
+        target: ctx.nodes.imageConfigId,
+        sourceHandle: 'right',
+        targetHandle: 'left'
+      })
+      return ctx.nodes.imageConfigId
     })
-    addLog('info', `创建图片配置节点: ${imageConfigId}`)
-    
-    // Connect imageText → imageConfig
-    addEdge({
-      source: imageTextNodeId,
-      target: imageConfigId,
-      sourceHandle: 'right',
-      targetHandle: 'left'
+
+    enqueueTask('wait_image_ready', async (ctx) => {
+      addLog('info', '等待图片生成完成...')
+      ctx.nodes.imageNodeId = await waitForConfigComplete(ctx.nodes.imageConfigId)
+      await waitForOutputReady(ctx.nodes.imageNodeId)
+      return ctx.nodes.imageNodeId
     })
-    
-    // Step 3: Wait for imageConfig to complete and get image node ID
-    // 等待图片配置完成并获取图片节点 ID
-    currentStep.value = 3
-    addLog('info', '等待图片生成完成...')
-    
-    try {
-      const imageNodeId = await waitForConfigComplete(imageConfigId)
-      
-      // Wait for image to be ready | 等待图片准备好
-      await waitForOutputReady(imageNodeId)
-      
-      // Get image node position | 获取图片节点位置
-      const imageNode = nodes.value.find(n => n.id === imageNodeId)
-      x = (imageNode?.position?.x || x) + nodeSpacing
-      
-      // Step 4: Create videoConfig connected to videoText and image nodes
-      // 创建视频配置节点，连接视频提示词和图片节点
-      currentStep.value = 4
-      const videoConfigId = addNode('videoConfig', { x, y: position.y + rowSpacing }, {
+
+    enqueueTask('create_video_config_node', async (ctx) => {
+      const imageNode = nodes.value.find((n) => n.id === ctx.nodes.imageNodeId)
+      const x = (imageNode?.position?.x || (position.x + nodeSpacing)) + nodeSpacing
+      ctx.nodes.videoConfigId = addNode('videoConfig', { x, y: position.y + rowSpacing }, {
         label: '图生视频',
         autoExecute: true
       })
-      addLog('info', `创建视频配置节点: ${videoConfigId}`)
-      
-      // Connect videoText → videoConfig (for video prompt)
+      addLog('info', `创建视频配置节点: ${ctx.nodes.videoConfigId}`)
       addEdge({
-        source: videoTextNodeId,
-        target: videoConfigId,
+        source: ctx.nodes.videoTextNodeId,
+        target: ctx.nodes.videoConfigId,
         sourceHandle: 'right',
         targetHandle: 'left'
       })
-      
-      // Connect image → videoConfig (for image input)
       addEdge({
-        source: imageNodeId,
-        target: videoConfigId,
+        source: ctx.nodes.imageNodeId,
+        target: ctx.nodes.videoConfigId,
         sourceHandle: 'right',
         targetHandle: 'left'
       })
-      
+      return ctx.nodes.videoConfigId
+    })
+
+    try {
+      await runTaskQueue(context)
       addLog('success', '文生图生视频工作流已启动')
-      return { imageTextNodeId, videoTextNodeId, imageConfigId, imageNodeId, videoConfigId }
+      return {
+        imageTextNodeId: context.nodes.imageTextNodeId,
+        videoTextNodeId: context.nodes.videoTextNodeId,
+        imageConfigId: context.nodes.imageConfigId,
+        imageNodeId: context.nodes.imageNodeId,
+        videoConfigId: context.nodes.videoConfigId
+      }
     } catch (err) {
       addLog('error', `工作流执行失败: ${err.message}`)
       throw err
@@ -436,113 +465,112 @@ export const useWorkflowOrchestrator = () => {
   const executeStoryboard = async (character, shots, position) => {
     const nodeSpacing = 400
     const rowSpacing = 250
-    let x = position.x
-    let y = position.y
-    
+    const x = position.x
+    const y = position.y
+
     const shotCount = shots?.length || 0
     addLog('info', `开始执行分镜工作流: ${character?.name || '未知角色'}, ${shotCount} 个分镜`)
-    currentStep.value = 1
-    totalSteps.value = 2 + shotCount * 2 // 角色生成 + 每个分镜(文本+生成)
-    
-    const createdNodes = {
-      characterTextId: null,
-      characterConfigId: null,
-      characterImageId: null,
-      shots: []
+    const context = {
+      nodes: {
+        characterTextId: null,
+        characterConfigId: null,
+        characterImageId: null,
+        shots: []
+      }
     }
-    
+    taskQueue.value = []
+
     try {
-      // Step 1: Create character description text node | 创建角色描述文本节点
-      const characterDesc = `${character?.name || '角色'}: ${character?.description || ''}`
-      createdNodes.characterTextId = addNode('text', { x, y }, {
-        content: characterDesc,
-        label: `角色: ${character?.name || '参考'}`
-      })
-      addLog('info', `创建角色描述节点: ${createdNodes.characterTextId}`)
-      x += nodeSpacing
-      
-      // Step 2: Create character imageConfig with autoExecute | 创建角色参考图配置
-      currentStep.value = 2
-      createdNodes.characterConfigId = addNode('imageConfig', { x, y }, {
-        label: '角色参考图',
-        autoExecute: true
-      })
-      addLog('info', `创建角色配置节点: ${createdNodes.characterConfigId}`)
-      
-      // Connect character text → imageConfig
-      addEdge({
-        source: createdNodes.characterTextId,
-        target: createdNodes.characterConfigId,
-        sourceHandle: 'right',
-        targetHandle: 'left'
-      })
-      
-      // Wait for character image to complete | 等待角色参考图完成
-      addLog('info', '等待角色参考图生成...')
-      createdNodes.characterImageId = await waitForConfigComplete(createdNodes.characterConfigId)
-      await waitForOutputReady(createdNodes.characterImageId)
-      addLog('success', '角色参考图已生成')
-      
-      // Get character image position for layout | 获取角色图位置用于布局
-      const charImageNode = nodes.value.find(n => n.id === createdNodes.characterImageId)
-      x = (charImageNode?.position?.x || x) + nodeSpacing
-      
-      // Step 3+: Create each shot | 创建每个分镜
-      for (let i = 0; i < shotCount; i++) {
-        const shot = shots[i]
-        const shotY = y + (i + 1) * rowSpacing
-        let shotX = position.x
-        
-        currentStep.value = 3 + i * 2
-        
-        // Create shot text node | 创建分镜文本节点
-        const shotTextId = addNode('text', { x: shotX, y: shotY }, {
-          content: shot.prompt,
-          label: `分镜${i + 1}: ${shot.title}`
+      enqueueTask('create_character_text_node', async (ctx) => {
+        const characterDesc = `${character?.name || '角色'}: ${character?.description || ''}`
+        ctx.nodes.characterTextId = addNode('text', { x, y }, {
+          content: characterDesc,
+          label: `角色: ${character?.name || '参考'}`
         })
-        addLog('info', `创建分镜${i + 1}文本节点: ${shotTextId}`)
-        shotX += nodeSpacing
-        
-        // Create shot imageConfig | 创建分镜配置节点
-        currentStep.value = 4 + i * 2
-        const shotConfigId = addNode('imageConfig', { x: shotX, y: shotY }, {
-          label: `分镜${i + 1}`,
+        addLog('info', `创建角色描述节点: ${ctx.nodes.characterTextId}`)
+        return ctx.nodes.characterTextId
+      })
+
+      enqueueTask('create_character_config_node', async (ctx) => {
+        ctx.nodes.characterConfigId = addNode('imageConfig', { x: x + nodeSpacing, y }, {
+          label: '角色参考图',
           autoExecute: true
         })
-        addLog('info', `创建分镜${i + 1}配置节点: ${shotConfigId}`)
-        
-        // Connect shot text → imageConfig
+        addLog('info', `创建角色配置节点: ${ctx.nodes.characterConfigId}`)
         addEdge({
-          source: shotTextId,
-          target: shotConfigId,
+          source: ctx.nodes.characterTextId,
+          target: ctx.nodes.characterConfigId,
           sourceHandle: 'right',
           targetHandle: 'left'
         })
-        
-        // Connect character image → shot imageConfig (as reference)
-        addEdge({
-          source: createdNodes.characterImageId,
-          target: shotConfigId,
-          sourceHandle: 'right',
-          targetHandle: 'left'
+        return ctx.nodes.characterConfigId
+      })
+
+      enqueueTask('wait_character_image_ready', async (ctx) => {
+        addLog('info', '等待角色参考图生成...')
+        ctx.nodes.characterImageId = await waitForConfigComplete(ctx.nodes.characterConfigId)
+        await waitForOutputReady(ctx.nodes.characterImageId)
+        addLog('success', '角色参考图已生成')
+        return ctx.nodes.characterImageId
+      })
+
+      for (let i = 0; i < shotCount; i++) {
+        const shot = shots[i] || {}
+        enqueueTask(`create_shot_${i + 1}_nodes`, async (ctx) => {
+          const shotY = y + (i + 1) * rowSpacing
+          const shotTextId = addNode('text', { x: position.x, y: shotY }, {
+            content: shot.prompt || '',
+            label: `分镜${i + 1}: ${shot.title || 'Untitled'}`
+          })
+          addLog('info', `创建分镜${i + 1}文本节点: ${shotTextId}`)
+
+          const shotConfigId = addNode('imageConfig', { x: position.x + nodeSpacing, y: shotY }, {
+            label: `分镜${i + 1}`,
+            autoExecute: true
+          })
+          addLog('info', `创建分镜${i + 1}配置节点: ${shotConfigId}`)
+
+          addEdge({
+            source: shotTextId,
+            target: shotConfigId,
+            sourceHandle: 'right',
+            targetHandle: 'left'
+          })
+          addEdge({
+            source: ctx.nodes.characterImageId,
+            target: shotConfigId,
+            sourceHandle: 'right',
+            targetHandle: 'left'
+          })
+
+          ctx.nodes.shots[i] = {
+            textId: shotTextId,
+            configId: shotConfigId,
+            imageId: null,
+            title: shot.title || `分镜${i + 1}`
+          }
+          return ctx.nodes.shots[i]
         })
-        
-        // Wait for this shot to complete before next | 等待当前分镜完成
-        addLog('info', `等待分镜${i + 1}生成...`)
-        const shotImageId = await waitForConfigComplete(shotConfigId)
-        await waitForOutputReady(shotImageId)
-        addLog('success', `分镜${i + 1}已生成`)
-        
-        createdNodes.shots.push({
-          textId: shotTextId,
-          configId: shotConfigId,
-          imageId: shotImageId,
-          title: shot.title
+
+        enqueueTask(`wait_shot_${i + 1}_image_ready`, async (ctx) => {
+          addLog('info', `等待分镜${i + 1}生成...`)
+          const shotInfo = ctx.nodes.shots[i]
+          const shotImageId = await waitForConfigComplete(shotInfo.configId)
+          await waitForOutputReady(shotImageId)
+          shotInfo.imageId = shotImageId
+          addLog('success', `分镜${i + 1}已生成`)
+          return shotImageId
         })
       }
-      
+
+      await runTaskQueue(context)
       addLog('success', `分镜工作流完成，共生成 ${shotCount} 个分镜`)
-      return createdNodes
+      return {
+        characterTextId: context.nodes.characterTextId,
+        characterConfigId: context.nodes.characterConfigId,
+        characterImageId: context.nodes.characterImageId,
+        shots: context.nodes.shots
+      }
     } catch (err) {
       addLog('error', `分镜工作流执行失败: ${err.message}`)
       throw err
@@ -564,8 +592,8 @@ export const useWorkflowOrchestrator = () => {
   const executeMultiAngleStoryboard = async (multiAngle, position) => {
     const nodeSpacing = 400
     const rowSpacing = 300
-    let x = position.x
-    let y = position.y
+    const x = position.x
+    const y = position.y
     
     const characterDesc = multiAngle?.character_description || ''
     const angles = ['front', 'side', 'back', 'top']
@@ -663,13 +691,17 @@ export const useWorkflowOrchestrator = () => {
    */
   const executeWorkflow = async (params, position) => {
     isExecuting.value = true
-    clearWatchers()
+    updateWorkflowState('running')
     executionLog.value = []
+    taskQueue.value = []
+    activeTaskId.value = ''
+    taskCounter = 0
     
     const { workflow_type, image_prompt, video_prompt, character, shots, multi_angle } = params
     
     try {
-      switch (workflow_type) {
+      const result = await (async () => {
+        switch (workflow_type) {
         case WORKFLOW_TYPES.MULTI_ANGLE_STORYBOARD:
           return await executeMultiAngleStoryboard(multi_angle, position)
         case WORKFLOW_TYPES.STORYBOARD:
@@ -679,11 +711,31 @@ export const useWorkflowOrchestrator = () => {
         case WORKFLOW_TYPES.TEXT_TO_IMAGE:
         default:
           return await executeTextToImage(image_prompt, position)
-      }
+        }
+      })()
+      updateWorkflowState('completed')
+      return result
+    } catch (err) {
+      updateWorkflowState('failed')
+      throw err
     } finally {
       isExecuting.value = false
-      clearWatchers()
+      activeTaskId.value = ''
     }
+  }
+
+  /**
+   * Cancel current queue execution marker
+   * (ongoing API requests still rely on node-level hooks to stop themselves)
+   */
+  const cancel = () => {
+    updateWorkflowState('cancelled')
+    taskQueue.value = taskQueue.value.map((task) => {
+      if (task.state === TASK_STATES.PENDING || task.state === TASK_STATES.RUNNING) {
+        return { ...task, state: TASK_STATES.CANCELLED }
+      }
+      return task
+    })
   }
   
   /**
@@ -714,8 +766,10 @@ export const useWorkflowOrchestrator = () => {
     isExecuting.value = false
     currentStep.value = 0
     totalSteps.value = 0
+    workflowState.value = 'idle'
+    taskQueue.value = []
+    activeTaskId.value = ''
     executionLog.value = []
-    clearWatchers()
   }
   
   return {
@@ -725,17 +779,22 @@ export const useWorkflowOrchestrator = () => {
     currentStep,
     totalSteps,
     executionLog,
+    workflowState,
+    taskQueue,
+    activeTaskId,
     
     // Methods
     analyzeIntent,
     executeWorkflow,
     createTextToImageWorkflow,
     createMultiAngleStoryboard,
+    cancel,
     reset,
     
     // Constants
     WORKFLOW_TYPES,
-    MULTI_ANGLE_PROMPTS
+    MULTI_ANGLE_PROMPTS,
+    TASK_STATES
   }
 }
 

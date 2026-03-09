@@ -187,6 +187,39 @@ const showActions = ref(false)
 const localModel = ref(props.data?.model || DEFAULT_IMAGE_MODEL)
 const localSize = ref(props.data?.size || '2048x2048')
 const localQuality = ref(props.data?.quality || 'standard')
+const localRatio = ref(props.data?.ratio || '1:1')
+const localResolution = ref(props.data?.resolution || '1k')
+
+const BASE_SIZE_BY_RATIO = {
+  '1:1': { w: 1024, h: 1024 },
+  '4:3': { w: 1152, h: 864 },
+  '3:4': { w: 864, h: 1152 },
+  '16:9': { w: 1280, h: 720 },
+  '9:16': { w: 720, h: 1280 }
+}
+
+const ratioFromSizeKey = (sizeKey) => {
+  const [w, h] = String(sizeKey || '').split('x').map(Number)
+  if (!w || !h) return '1:1'
+  const ratio = w / h
+  if (Math.abs(ratio - 1) < 0.02) return '1:1'
+  if (Math.abs(ratio - 16 / 9) < 0.03) return '16:9'
+  if (Math.abs(ratio - 9 / 16) < 0.03) return '9:16'
+  if (Math.abs(ratio - 4 / 3) < 0.03) return '4:3'
+  if (Math.abs(ratio - 3 / 4) < 0.03) return '3:4'
+  return '1:1'
+}
+
+const resolutionFromSizeKey = (sizeKey) => {
+  const [w, h] = String(sizeKey || '').split('x').map(Number)
+  if (!w || !h) return '1k'
+  const ratio = ratioFromSizeKey(sizeKey)
+  const base = BASE_SIZE_BY_RATIO[ratio] || BASE_SIZE_BY_RATIO['1:1']
+  const scale = Math.max(w / base.w, h / base.h)
+  if (scale >= 3.5) return '4k'
+  if (scale >= 1.8) return '2k'
+  return '1k'
+}
 
 // Get current model config | 获取当前Model配置
 const currentModelConfig = computed(() => getModelConfig(localModel.value))
@@ -233,6 +266,33 @@ const displaySize = computed(() => {
   return option?.label || localSize.value
 })
 
+const sizeMetaOptions = computed(() =>
+  sizeOptions.value.map((opt) => {
+    const key = String(opt.key || '')
+    const [w, h] = key.split('x').map(Number)
+    return {
+      key,
+      ratio: ratioFromSizeKey(key),
+      resolution: resolutionFromSizeKey(key),
+      pixels: (w || 0) * (h || 0)
+    }
+  })
+)
+
+const pickNearestSizeKey = (ratioKey, resolutionKey) => {
+  let candidates = sizeMetaOptions.value.filter((opt) => opt.ratio === ratioKey)
+  if (candidates.length === 0) candidates = sizeMetaOptions.value
+  if (candidates.length === 0) return localSize.value || '1024x1024'
+  const exact = candidates.find((opt) => opt.resolution === resolutionKey)
+  const picked = exact || [...candidates].sort((a, b) => a.pixels - b.pixels)[0]
+  localRatio.value = picked.ratio
+  localResolution.value = picked.resolution
+  return picked.key
+}
+
+localRatio.value = props.data?.ratio || ratioFromSizeKey(localSize.value)
+localResolution.value = props.data?.resolution || resolutionFromSizeKey(localSize.value)
+
 // Initialize on mount | 挂载时初始化
 onMounted(() => {
   // Set default model if not set | 如果未设置则设置默认Model
@@ -241,6 +301,19 @@ onMounted(() => {
     updateNode(props.id, { model: localModel.value })
   }
 })
+
+watch(
+  () => props.data,
+  (val) => {
+    if (!val) return
+    if (val.model && val.model !== localModel.value) localModel.value = val.model
+    if (val.size && val.size !== localSize.value) localSize.value = val.size
+    if (val.quality && val.quality !== localQuality.value) localQuality.value = val.quality
+    localRatio.value = val.ratio || ratioFromSizeKey(localSize.value)
+    localResolution.value = val.resolution || resolutionFromSizeKey(localSize.value)
+  },
+  { deep: true }
+)
 
 // Get connected nodes | 获取连接的节点
 const getConnectedInputs = () => {
@@ -304,32 +377,50 @@ const handleModelSelect = (key) => {
     localQuality.value = config.defaultParams.quality
     updates.quality = config.defaultParams.quality
   }
+  localRatio.value = ratioFromSizeKey(localSize.value)
+  localResolution.value = resolutionFromSizeKey(localSize.value)
+  localSize.value = pickNearestSizeKey(localRatio.value, localResolution.value)
+  updates.size = localSize.value
+  updates.ratio = localRatio.value
+  updates.resolution = localResolution.value
   updateNode(props.id, updates)
 }
 
 // Handle quality selection | 处理Quality选择
 const handleQualitySelect = (quality) => {
   localQuality.value = quality
-  // Update size to first option of new quality | 更新Size为新Quality的第一 items选项
-  const newSizeOptions = getModelSizeOptions(localModel.value, quality)
-  if (newSizeOptions.length > 0) {
-    const defaultSize = quality === '4k' ? newSizeOptions.find(o => o.key.includes('4096'))?.key || newSizeOptions[4]?.key : newSizeOptions[4]?.key
-    localSize.value = defaultSize || newSizeOptions[0].key
-    updateNode(props.id, { quality, size: localSize.value })
-  } else {
-    updateNode(props.id, { quality })
-  }
+  localRatio.value = ratioFromSizeKey(localSize.value)
+  localResolution.value = resolutionFromSizeKey(localSize.value)
+  localSize.value = pickNearestSizeKey(localRatio.value, localResolution.value)
+  updateNode(props.id, {
+    quality,
+    size: localSize.value,
+    ratio: localRatio.value,
+    resolution: localResolution.value
+  })
 }
 
 // Handle size selection | 处理Size选择
 const handleSizeSelect = (size) => {
   localSize.value = size
-  updateNode(props.id, { size })
+  localRatio.value = ratioFromSizeKey(size)
+  localResolution.value = resolutionFromSizeKey(size)
+  updateNode(props.id, {
+    size,
+    ratio: localRatio.value,
+    resolution: localResolution.value
+  })
 }
 
 // Update size from manual input | 更新手动输入的Size
 const updateSize = () => {
-  updateNode(props.id, { size: localSize.value })
+  localRatio.value = ratioFromSizeKey(localSize.value)
+  localResolution.value = resolutionFromSizeKey(localSize.value)
+  updateNode(props.id, {
+    size: localSize.value,
+    ratio: localRatio.value,
+    resolution: localResolution.value
+  })
 }
 
 // Created image node ID | 创建的图片节点 ID
@@ -462,7 +553,10 @@ const handleGenerate = async (mode = 'auto') => {
     const params = {
       model: localModel.value,
       prompt: prompt,
-      n: 1
+      n: 1,
+      ratio: localRatio.value || ratioFromSizeKey(localSize.value),
+      aspect_ratio: localRatio.value || ratioFromSizeKey(localSize.value),
+      resolution: localResolution.value || resolutionFromSizeKey(localSize.value)
     }
 
     if (hasSizeOptions.value && localSize.value) {

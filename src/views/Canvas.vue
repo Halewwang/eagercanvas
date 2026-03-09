@@ -37,10 +37,13 @@
         :max-zoom="2"
         :snap-to-grid="true"
         :snap-grid="[20, 20]"
+        selection-key-code="Shift"
+        multi-selection-key-code="Shift"
         @connect="onConnect"
         @connect-start="onConnectStart"
         @connect-end="onConnectEnd"
         @node-click="onNodeClick"
+        @nodes-change="onNodesChange"
         @pane-click="onPaneClick"
         @viewport-change="handleViewportChange"
         @edges-change="onEdgesChange"
@@ -392,18 +395,35 @@ const onConnectEnd = (event) => {
   connectSucceeded.value = false
 }
 
-// Handle node click | 处理节点点击
-const onNodeClick = (event) => {
-  const clickedNodeId = event?.node?.id
-  if (!clickedNodeId) return
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    selected: node.id === clickedNodeId,
-    data: {
-      ...(node.data || {}),
-      selected: node.id === clickedNodeId
+// Keep runtime selected flag in node.data synchronized with VueFlow selected state.
+const syncNodeSelectedState = () => {
+  const nextNodes = nodes.value.map((node) => {
+    const selected = !!node.selected
+    const current = !!node.data?.selected
+    if (selected === current) return node
+    return {
+      ...node,
+      data: {
+        ...(node.data || {}),
+        selected
+      }
     }
-  }))
+  })
+  if (nextNodes.some((node, index) => node !== nodes.value[index])) {
+    nodes.value = nextNodes
+  }
+}
+
+// Handle node click | 处理节点点击
+const onNodeClick = () => {
+  showNodeMenu.value = false
+}
+
+// Handle node changes | 处理节点变化（包含多选/框选）
+const onNodesChange = () => {
+  nextTick(() => {
+    syncNodeSelectedState()
+  })
 }
 
 // Handle viewport change | 处理视口变化
@@ -436,6 +456,36 @@ const onPaneClick = () => {
       openPortMenu: null
     }
   }))
+}
+
+const isTypingElement = (target) => {
+  if (!target) return false
+  const el = target
+  const tag = String(el.tagName || '').toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
+  return !!el.closest?.('[contenteditable="true"]')
+}
+
+const removeSelectedElements = () => {
+  const selectedNodeIds = new Set(
+    nodes.value.filter((node) => node.selected || node.data?.selected).map((node) => node.id)
+  )
+  const selectedEdgeIds = new Set(edges.value.filter((edge) => edge.selected).map((edge) => edge.id))
+  if (selectedNodeIds.size === 0 && selectedEdgeIds.size === 0) return
+
+  nodes.value = nodes.value.filter((node) => !selectedNodeIds.has(node.id))
+  edges.value = edges.value.filter((edge) => {
+    if (selectedEdgeIds.has(edge.id)) return false
+    if (selectedNodeIds.has(edge.source) || selectedNodeIds.has(edge.target)) return false
+    return true
+  })
+  manualSaveHistory()
+}
+
+const handleGlobalKeydown = (event) => {
+  if (isTypingElement(event.target)) return
+  if (event.key !== 'Delete' && event.key !== 'Backspace') return
+  removeSelectedElements()
 }
 
 // Handle project action | 处理项目操作
@@ -542,6 +592,7 @@ onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
   window.addEventListener('pagehide', handlePageHide)
+  window.addEventListener('keydown', handleGlobalKeydown)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   
   // Initialize projects store | 初始化项目存储
@@ -555,6 +606,7 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   window.removeEventListener('pagehide', handlePageHide)
+  window.removeEventListener('keydown', handleGlobalKeydown)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   // Save project before leaving | 离开前保存项目
   flushSave()

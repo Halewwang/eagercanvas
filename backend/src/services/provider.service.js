@@ -153,6 +153,55 @@ const appendSizeHintToPrompt = (prompt = '', size = '') => {
   return `${safePrompt}\n\nAspect ratio: ${ratioHint}.`
 }
 
+const IMAGE_BASE_SIZE_BY_RATIO = {
+  '1:1': { w: 1024, h: 1024 },
+  '4:3': { w: 1152, h: 864 },
+  '3:4': { w: 864, h: 1152 },
+  '16:9': { w: 1280, h: 720 },
+  '9:16': { w: 720, h: 1280 }
+}
+
+const normalizeAspectRatioFromSize = (size = '') => {
+  if (!size || typeof size !== 'string' || !size.includes('x')) return ''
+  const [w, h] = String(size).split('x').map(Number)
+  if (!w || !h) return ''
+  const ratio = w / h
+  if (Math.abs(ratio - 1) < 0.02) return '1:1'
+  if (Math.abs(ratio - 16 / 9) < 0.03) return '16:9'
+  if (Math.abs(ratio - 9 / 16) < 0.03) return '9:16'
+  if (Math.abs(ratio - 4 / 3) < 0.03) return '4:3'
+  if (Math.abs(ratio - 3 / 4) < 0.03) return '3:4'
+  return ''
+}
+
+const normalizeImageResolution = (value = '') => {
+  const safe = String(value || '').trim().toLowerCase()
+  if (safe === '1k' || safe === '2k' || safe === '4k') return safe
+  return ''
+}
+
+const normalizeResolutionFromSize = (size = '', ratio = '') => {
+  if (!size || typeof size !== 'string' || !size.includes('x')) return ''
+  const [w, h] = String(size).split('x').map(Number)
+  if (!w || !h) return ''
+  const ratioKey = ratio || normalizeAspectRatioFromSize(size) || '1:1'
+  const base = IMAGE_BASE_SIZE_BY_RATIO[ratioKey] || IMAGE_BASE_SIZE_BY_RATIO['1:1']
+  const scale = Math.max(w / base.w, h / base.h)
+  if (scale >= 3.5) return '4k'
+  if (scale >= 1.8) return '2k'
+  return '1k'
+}
+
+const isEndpointNotFoundError = (error) => {
+  const status = Number(error?.status || 0)
+  const message = String(error?.message || '').toLowerCase()
+  return (
+    status === 404 ||
+    status === 405 ||
+    /not found|no such endpoint|unknown endpoint|unsupported route/.test(message)
+  )
+}
+
 const parseDataUrl = (value = '') => {
   const match = String(value).match(/^data:(.+?);base64,(.+)$/)
   if (!match) return null
@@ -403,9 +452,56 @@ export const providerGenerateImage = async (payload = {}) => {
 
   const inputImage = pickFirstImageInput(payload)
   let imageInline = parseDataUrl(inputImage)
+  const aspectRatio = String(
+    payload.aspect_ratio ||
+    payload.ratio ||
+    normalizeAspectRatioFromSize(size) ||
+    '1:1'
+  ).trim()
+  const resolution =
+    normalizeImageResolution(payload.resolution) ||
+    normalizeImageResolution(payload.quality) ||
+    normalizeResolutionFromSize(size, aspectRatio) ||
+    '1k'
 
   if (!imageInline && inputImage && /^https?:\/\//i.test(inputImage)) {
     imageInline = await fetchImageAsBase64(inputImage)
+  }
+
+  const lowerModel = model.toLowerCase()
+  const isNanoBananaModel =
+    lowerModel.includes('gemini-3.1-flash-image-preview') ||
+    lowerModel.includes('gemini-3-pro-image-preview')
+
+  if (isNanoBananaModel) {
+    const requestBody = {
+      model,
+      prompt,
+      size: size || undefined,
+      aspect_ratio: aspectRatio,
+      resolution,
+      enable_sync_mode: payload.enable_sync_mode ?? true,
+      enable_base64_output: payload.enable_base64_output ?? false
+    }
+    if (inputImage) {
+      requestBody.image = inputImage
+    }
+
+    try {
+      const endpoint = inputImage
+        ? '/ws/api/v3/google/nano-banana/edit-by-times'
+        : '/ws/api/v3/google/nano-banana/sync-generate'
+      const raw = await callProvider(endpoint, requestBody)
+      const normalized = normalizeImageResponse(raw)
+      if (Array.isArray(normalized.data) && normalized.data.length > 0) {
+        return normalized
+      }
+    } catch (error) {
+      if (!isEndpointNotFoundError(error)) {
+        throw error
+      }
+      // Fallback to legacy Gemini endpoint.
+    }
   }
 
   const parts = [{ text: prompt }]

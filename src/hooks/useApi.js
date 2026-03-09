@@ -13,6 +13,8 @@ import {
 import { DEFAULT_CHAT_MODEL, getModelByName } from '@/config/models'
 import { useApiConfig } from './useApiConfig'
 
+const IMAGE_REQUEST_TIMEOUT_MS = 120000
+
 /**
  * Base API state hook | 基础 API 状态 Hook
  */
@@ -45,6 +47,43 @@ export const useApiState = () => {
   }
 
   return { loading, error, status, reset, setLoading, setError, setSuccess }
+}
+
+const IMAGE_BASE_SIZE_BY_RATIO = {
+  '1:1': { w: 1024, h: 1024 },
+  '4:3': { w: 1152, h: 864 },
+  '3:4': { w: 864, h: 1152 },
+  '16:9': { w: 1280, h: 720 },
+  '9:16': { w: 720, h: 1280 }
+}
+
+const ratioFromSize = (size) => {
+  const [w, h] = String(size || '').split('x').map(Number)
+  if (!w || !h) return '1:1'
+  const ratio = w / h
+  if (Math.abs(ratio - 1) < 0.02) return '1:1'
+  if (Math.abs(ratio - 16 / 9) < 0.03) return '16:9'
+  if (Math.abs(ratio - 9 / 16) < 0.03) return '9:16'
+  if (Math.abs(ratio - 4 / 3) < 0.03) return '4:3'
+  if (Math.abs(ratio - 3 / 4) < 0.03) return '3:4'
+  return '1:1'
+}
+
+const normalizeResolution = (value) => {
+  const safe = String(value || '').trim().toLowerCase()
+  if (safe === '1k' || safe === '2k' || safe === '4k') return safe
+  return ''
+}
+
+const resolutionFromSize = (size, ratioKey = '') => {
+  const [w, h] = String(size || '').split('x').map(Number)
+  if (!w || !h) return '1k'
+  const ratio = ratioKey || ratioFromSize(size)
+  const base = IMAGE_BASE_SIZE_BY_RATIO[ratio] || IMAGE_BASE_SIZE_BY_RATIO['1:1']
+  const scale = Math.max(w / base.w, h / base.h)
+  if (scale >= 3.5) return '4k'
+  if (scale >= 1.8) return '2k'
+  return '1k'
 }
 
 /**
@@ -145,15 +184,32 @@ export const useImageGeneration = () => {
       requestData.size = params.size || modelConfig?.defaultParams?.size || '1024x1024'
       requestData.quality = params.quality || modelConfig?.defaultParams?.quality || 'standard'
 
+      const aspectRatio = String(params.aspect_ratio || params.ratio || ratioFromSize(requestData.size) || '1:1')
+      const resolution =
+        normalizeResolution(params.resolution) ||
+        normalizeResolution(params.quality) ||
+        resolutionFromSize(requestData.size, aspectRatio)
+
+      requestData.aspect_ratio = aspectRatio
+      requestData.resolution = resolution || '1k'
+      requestData.enable_sync_mode = params.enable_sync_mode ?? true
+      requestData.enable_base64_output = params.enable_base64_output ?? false
+
       // Add reference image if provided | 添加参考图
       if (params.image) {
-        requestData.image = Array.isArray(params.image) ? params.image[0] : params.image
+        if (Array.isArray(params.image)) {
+          requestData.image = params.image[0]
+          requestData.images = params.image
+        } else {
+          requestData.image = params.image
+        }
       }
 
       // Call API | 调用 API
       const response = await generateImage(requestData, {
         requestType: 'json',
-        endpoint: modelConfig?.endpoint || '/images/generations'
+        endpoint: modelConfig?.endpoint || '/images/generations',
+        timeout: IMAGE_REQUEST_TIMEOUT_MS
       })
 
       // Parse response (OpenAI format) | 解析响应

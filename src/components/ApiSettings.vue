@@ -49,6 +49,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { NButton, NIcon, NInput, NModal } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
 import { CloseOutline } from '../icons/coolicons'
+import { getErrorMessage } from '@/utils'
 
 const props = defineProps({
   show: {
@@ -160,7 +161,9 @@ const handleSave = async () => {
     emit('saved')
     showModal.value = false
   } catch (err) {
-    window.$message?.error(err?.response?.data?.message || err?.message || 'Failed to update profile')
+    if (!err?.__handled) {
+      window.$message?.error(getErrorMessage(err, 'Failed to update profile'))
+    }
   } finally {
     saving.value = false
   }
