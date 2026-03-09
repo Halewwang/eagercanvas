@@ -77,24 +77,32 @@
           </div>
 
           <div class="card-body">
-            <div class="title-row">
-              <h3>{{ item.name }}</h3>
-              <span v-if="activeSection === 'featured'" class="badge">Public</span>
-              <span v-if="activeSection === 'my-templates'" class="badge mine">Mine</span>
-              <n-dropdown
-                v-if="activeSection === 'projects'"
-                trigger="click"
-                placement="bottom-end"
-                :options="projectMenuOptions(item)"
-                @select="(key) => handleProjectMenuSelect(key, item)"
-              >
-                <button class="menu-btn" @click.stop>
-                  <n-icon :size="16"><EllipsisHorizontalOutline /></n-icon>
-                </button>
-              </n-dropdown>
-            </div>
-
-            <p>{{ describeItem(item) }}</p>
+            <template v-if="activeSection === 'projects'">
+              <div class="project-meta-row">
+                <div class="project-meta-main">
+                  <h3>{{ item.name }}</h3>
+                  <p>{{ describeItem(item) }}</p>
+                </div>
+                <n-dropdown
+                  trigger="click"
+                  placement="bottom-end"
+                  :options="projectMenuOptions(item)"
+                  @select="(key) => handleProjectMenuSelect(key, item)"
+                >
+                  <button class="menu-btn" @click.stop>
+                    <n-icon :size="16"><EllipsisHorizontalOutline /></n-icon>
+                  </button>
+                </n-dropdown>
+              </div>
+            </template>
+            <template v-else>
+              <div class="title-row">
+                <h3>{{ item.name }}</h3>
+                <span v-if="activeSection === 'featured'" class="badge">Public</span>
+                <span v-if="activeSection === 'my-templates'" class="badge mine">Mine</span>
+              </div>
+              <p>{{ describeItem(item) }}</p>
+            </template>
 
             <div v-if="activeSection !== 'projects'" class="card-actions" @click.stop>
               <template v-if="activeSection === 'my-templates'">
@@ -523,7 +531,7 @@ onMounted(async () => {
 
 .project-card {
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
+  border-radius: 18px;
   overflow: hidden;
   background: #13141a;
   cursor: pointer;
@@ -545,6 +553,7 @@ onMounted(async () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .create-media {
@@ -563,7 +572,7 @@ onMounted(async () => {
 }
 
 .card-body {
-  padding: 12px 12px 14px;
+  padding: 14px 14px 16px;
 }
 
 .title-row {
@@ -592,9 +601,9 @@ onMounted(async () => {
 }
 
 .menu-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: transparent;
   color: rgba(236, 238, 244, 0.8);
@@ -613,6 +622,34 @@ onMounted(async () => {
   margin: 8px 0 0;
   color: rgba(236, 238, 244, 0.65);
   font-size: 13px;
+}
+
+.project-meta-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.project-meta-main {
+  min-width: 0;
+}
+
+.project-meta-main h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-meta-main p {
+  margin: 8px 0 0;
+  color: rgba(236, 238, 244, 0.65);
+  font-size: 13px;
+  line-height: 1.3;
 }
 
 .card-actions {
