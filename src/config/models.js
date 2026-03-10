@@ -5,10 +5,15 @@
 
 const GEMINI_BASE_SIZES = [
     { ratio: '1:1', width: 1024, height: 1024 },
+    { ratio: '3:2', width: 1152, height: 768 },
+    { ratio: '2:3', width: 768, height: 1152 },
     { ratio: '4:3', width: 1152, height: 864 },
     { ratio: '3:4', width: 864, height: 1152 },
+    { ratio: '4:5', width: 896, height: 1120 },
+    { ratio: '5:4', width: 1120, height: 896 },
     { ratio: '16:9', width: 1280, height: 720 },
-    { ratio: '9:16', width: 720, height: 1280 }
+    { ratio: '9:16', width: 720, height: 1280 },
+    { ratio: '21:9', width: 1680, height: 720 }
 ]
 
 const GEMINI_RESOLUTION_LEVELS = [

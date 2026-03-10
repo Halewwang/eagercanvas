@@ -210,10 +210,15 @@ const imageInputStatusMap = {
 
 const BASE_SIZE_BY_RATIO = {
   '1:1': { w: 1024, h: 1024 },
+  '3:2': { w: 1152, h: 768 },
+  '2:3': { w: 768, h: 1152 },
   '4:3': { w: 1152, h: 864 },
   '3:4': { w: 864, h: 1152 },
+  '4:5': { w: 896, h: 1120 },
+  '5:4': { w: 1120, h: 896 },
   '16:9': { w: 1280, h: 720 },
-  '9:16': { w: 720, h: 1280 }
+  '9:16': { w: 720, h: 1280 },
+  '21:9': { w: 1680, h: 720 }
 }
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 const MAX_IMAGE_DIMENSION = 4096
@@ -223,10 +228,15 @@ const ratioFromSizeKey = (sizeKey) => {
   if (!w || !h) return '1:1'
   const ratio = w / h
   if (Math.abs(ratio - 1) < 0.02) return '1:1'
+  if (Math.abs(ratio - 3 / 2) < 0.03) return '3:2'
+  if (Math.abs(ratio - 2 / 3) < 0.03) return '2:3'
   if (Math.abs(ratio - 16 / 9) < 0.03) return '16:9'
   if (Math.abs(ratio - 9 / 16) < 0.03) return '9:16'
   if (Math.abs(ratio - 4 / 3) < 0.03) return '4:3'
   if (Math.abs(ratio - 3 / 4) < 0.03) return '3:4'
+  if (Math.abs(ratio - 4 / 5) < 0.03) return '4:5'
+  if (Math.abs(ratio - 5 / 4) < 0.03) return '5:4'
+  if (Math.abs(ratio - 21 / 9) < 0.03) return '21:9'
   return '1:1'
 }
 
@@ -335,10 +345,15 @@ const stageStyle = computed(() => {
   const ratio = ratioFromSize.value
   const map = {
     '1:1': { width: 320, height: 320 },
+    '3:2': { width: 360, height: 240 },
+    '2:3': { width: 240, height: 360 },
     '16:9': { width: 420, height: 236 },
     '9:16': { width: 260, height: 462 },
     '4:3': { width: 360, height: 270 },
-    '3:4': { width: 280, height: 373 }
+    '3:4': { width: 280, height: 373 },
+    '4:5': { width: 280, height: 350 },
+    '5:4': { width: 350, height: 280 },
+    '21:9': { width: 420, height: 180 }
   }
   
   if (map[ratio]) return { width: `${map[ratio].width}px`, height: `${map[ratio].height}px` }
@@ -695,8 +710,13 @@ const handleFileUpload = async (event) => {
       if (Math.abs(r - 1) < 0.05) ratio = '1:1'
       else if (Math.abs(r - 16 / 9) < 0.05) ratio = '16:9'
       else if (Math.abs(r - 9 / 16) < 0.05) ratio = '9:16'
+      else if (Math.abs(r - 3 / 2) < 0.05) ratio = '3:2'
+      else if (Math.abs(r - 2 / 3) < 0.05) ratio = '2:3'
       else if (Math.abs(r - 4 / 3) < 0.05) ratio = '4:3'
       else if (Math.abs(r - 3 / 4) < 0.05) ratio = '3:4'
+      else if (Math.abs(r - 4 / 5) < 0.05) ratio = '4:5'
+      else if (Math.abs(r - 5 / 4) < 0.05) ratio = '5:4'
+      else if (Math.abs(r - 21 / 9) < 0.05) ratio = '21:9'
       else ratio = `${w}:${h}` // Custom ratio for non-standard sizes
     }
 
