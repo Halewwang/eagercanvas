@@ -10,7 +10,9 @@
         <div class="capsule-group">
           <n-dropdown :options="modelOptions" @select="setModel"><button class="capsule-select">{{ displayModel }}</button></n-dropdown>
           <n-dropdown :options="ratioOptions" @select="setRatio"><button class="capsule-select">{{ localRatio }}</button></n-dropdown>
-          <n-dropdown v-if="sizeOptions.length > 0 && localModel !== 'veo-3.1'" :options="sizeOptions" @select="setSize"><button class="capsule-select">{{ displaySize }}</button></n-dropdown>
+          <n-dropdown v-if="sizeOptions.length > 0" :options="sizeOptions" @select="setSize"><button class="capsule-select">{{ displaySize }}</button></n-dropdown>
+          <n-dropdown v-if="resolutionOptions.length > 0" :options="resolutionOptions" @select="setResolution"><button class="capsule-select">{{ displayResolution }}</button></n-dropdown>
+          <n-dropdown v-if="supportsAudioToggle" :options="audioOptions" @select="setGenerateAudio"><button class="capsule-select">{{ displayAudio }}</button></n-dropdown>
           <n-dropdown v-if="durationOptions.length > 0" :options="durationOptions" @select="setDuration"><button class="capsule-select">{{ localDuration }}s</button></n-dropdown>
         </div>
 
@@ -95,7 +97,7 @@
         <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeErrorModal">Close</button>
       </template>
     </n-modal>
-    <n-modal v-model:show="showValidationModal" preset="dialog" title="Upload Limit" :show-icon="false">
+    <n-modal v-model:show="showValidationModal" preset="dialog" :title="validationTitle" :show-icon="false">
       <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ validationMessage }}</div>
       <template #action>
         <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeValidationModal">OK</button>
@@ -119,6 +121,7 @@
           {{ item.label }}
         </div>
       </div>
+      <div v-if="soraInputWarning" class="binding-warning-text">{{ soraInputWarning }}</div>
     </div>
   </div>
 </template>
@@ -130,8 +133,8 @@ import { NDropdown, NIcon, NModal } from 'naive-ui'
 import { AddOutline, CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, SparklesOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
 import { addEdge, addNode, duplicateNode, edges, flushSave, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
-import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoSizeOptions, videoModelOptions } from '../../stores/models'
-import { uploadImageFile } from '@/utils/media'
+import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, videoModelOptions } from '../../stores/models'
+import { getImageDimensionsFromSource, isSora2AllowedReferenceSize, uploadImageFile } from '@/utils/media'
 
 const props = defineProps({ id: String, data: Object, selected: Boolean })
 
@@ -146,7 +149,9 @@ const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
 const showErrorModal = ref(false)
 const showValidationModal = ref(false)
+const validationTitle = ref('Upload Limit')
 const validationMessage = ref('')
+const soraInputWarning = ref('')
 const videoActionLoading = ref('')
 const isUploading = ref(false)
 const showUploadProgress = ref(false)
@@ -161,6 +166,8 @@ const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
 const localRatio = ref(props.data?.ratio || DEFAULT_VIDEO_RATIO)
 const localSize = ref(props.data?.size || '')
+const localResolution = ref(props.data?.resolution || getModelConfig(props.data?.model || DEFAULT_VIDEO_MODEL)?.defaultParams?.resolution || '')
+const localGenerateAudio = ref(Boolean(props.data?.generate_audio ?? getModelConfig(props.data?.model || DEFAULT_VIDEO_MODEL)?.defaultParams?.generate_audio ?? false))
 const getDurationFromData = (data) => {
   const raw = data?.duration ?? data?.dur
   const parsed = Number(raw)
@@ -179,19 +186,29 @@ const imageRoleStatusMap = {
   last_frame_image: 'Second Frame',
   input_reference: 'Reference Picture'
 }
+const isSora2Model = (model) => String(model || '').trim().toLowerCase().startsWith('sora-2')
+const isVeo31Model = (model) => String(model || '').trim().toLowerCase().startsWith('veo-3.1')
+const audioOptions = [
+  { key: 'off', label: 'Audio Off' },
+  { key: 'on', label: 'Audio On' }
+]
 
 const modelOptions = computed(() => videoModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const ratioOptions = computed(() => getModelRatioOptions(localModel.value))
 const sizeOptions = computed(() => {
   // Sora-2 size must strictly follow documented enum and should not be filtered by ratio.
-  if (localModel.value === 'sora-2') {
+  if (isSora2Model(localModel.value)) {
     return getModelVideoSizeOptions(localModel.value)
   }
   return getModelVideoSizeOptions(localModel.value, localRatio.value)
 })
+const resolutionOptions = computed(() => getModelVideoResolutionOptions(localModel.value))
 const durationOptions = computed(() => getModelDurationOptions(localModel.value))
+const supportsAudioToggle = computed(() => isVeo31Model(localModel.value))
 const displayModel = computed(() => videoModelOptions.value.find(m => m.key === localModel.value)?.label || localModel.value)
-const displaySize = computed(() => String(localSize.value || '').trim())
+const displaySize = computed(() => String(localSize.value || '').trim() || 'Size')
+const displayResolution = computed(() => String(localResolution.value || '').trim() || 'Resolution')
+const displayAudio = computed(() => (localGenerateAudio.value ? 'Audio On' : 'Audio Off'))
 const ratioFromSize = (size) => {
   const [w, h] = String(size || '').split('x').map(Number)
   if (!w || !h) return '16:9'
@@ -354,6 +371,8 @@ const setModel = (key) => {
   if (config?.defaultParams?.ratio) localRatio.value = config.defaultParams.ratio
   if (config?.defaultParams?.size) localSize.value = config.defaultParams.size
   else localSize.value = ''
+  localResolution.value = config?.defaultParams?.resolution || ''
+  localGenerateAudio.value = Boolean(config?.defaultParams?.generate_audio ?? false)
   const modelDurationOptions = getModelDurationOptions(localModel.value)
   const defaultDuration = Number(config?.defaultParams?.duration)
   const optionKeys = modelDurationOptions.map((item) => Number(item.key)).filter((v) => Number.isFinite(v))
@@ -366,6 +385,8 @@ const setModel = (key) => {
     model: localModel.value,
     ratio: localRatio.value,
     size: localSize.value,
+    resolution: localResolution.value,
+    generate_audio: localGenerateAudio.value,
     duration: localDuration.value,
     dur: localDuration.value
   })
@@ -384,6 +405,14 @@ const setSize = (key) => {
   localSize.value = String(key || '')
   localRatio.value = ratioFromSize(localSize.value)
   updateNode(props.id, { size: localSize.value, ratio: localRatio.value })
+}
+const setResolution = (key) => {
+  localResolution.value = String(key || '')
+  updateNode(props.id, { resolution: localResolution.value })
+}
+const setGenerateAudio = (key) => {
+  localGenerateAudio.value = key === 'on'
+  updateNode(props.id, { generate_audio: localGenerateAudio.value })
 }
 const setDuration = (key) => {
   const parsed = Number(key)
@@ -415,6 +444,65 @@ const getConnectedInputs = () => {
   return { prompt, first_frame_image, last_frame_image, images }
 }
 
+const getConnectedImageInputs = () => {
+  const incoming = edges.value.filter((edge) => edge.target === props.id)
+  const connected = []
+
+  for (const edge of incoming) {
+    const source = nodes.value.find((node) => node.id === edge.source)
+    if (source?.type !== 'image') continue
+    const imageData = source.data?.base64 || source.data?.url
+    if (!imageData) continue
+    connected.push({
+      role: edge.data?.imageRole || 'first_frame_image',
+      image: imageData
+    })
+  }
+
+  return connected
+}
+
+const refreshSoraInputWarning = async () => {
+  if (!isSora2Model(localModel.value)) {
+    soraInputWarning.value = ''
+    return
+  }
+
+  const connectedImages = getConnectedImageInputs()
+  if (!connectedImages.length) {
+    soraInputWarning.value = ''
+    return
+  }
+
+  for (const item of connectedImages) {
+    const { width, height } = await getImageDimensionsFromSource(item.image)
+    if (isSora2AllowedReferenceSize(width, height)) continue
+    soraInputWarning.value = `Sora 2 参考图尺寸不支持：当前为 ${width || 0}x${height || 0}`
+    return
+  }
+
+  soraInputWarning.value = ''
+}
+
+const validateSora2Inputs = async () => {
+  if (!isSora2Model(localModel.value)) return true
+
+  const connectedImages = getConnectedImageInputs()
+  if (!connectedImages.length) return true
+
+  for (const item of connectedImages) {
+    const { width, height } = await getImageDimensionsFromSource(item.image)
+    if (isSora2AllowedReferenceSize(width, height)) continue
+
+    validationTitle.value = 'Sora 2 Input Size'
+    validationMessage.value = `Sora 2 图生视频仅支持以下参考图尺寸：1280x720、720x1280、1024x1792、1792x1024。\n当前上游参考图尺寸为 ${width || 0}x${height || 0}，请先调整图片比例后再生成。`
+    showValidationModal.value = true
+    return false
+  }
+
+  return true
+}
+
 const runVideoGeneration = async (mode = 'create') => {
   if (!isConfigured.value) {
     window.$message?.warning('Please sign in first')
@@ -428,6 +516,10 @@ const runVideoGeneration = async (mode = 'create') => {
     return
   }
 
+  if (!(await validateSora2Inputs())) {
+    return
+  }
+
   videoActionLoading.value = mode
   updateNode(props.id, { loading: true, error: '' })
   try {
@@ -438,6 +530,8 @@ const runVideoGeneration = async (mode = 'create') => {
       last_frame_image,
       images,
       size: localSize.value || undefined,
+      resolution: localResolution.value || undefined,
+      generate_audio: supportsAudioToggle.value ? localGenerateAudio.value : undefined,
       ratio: localRatio.value,
       duration: localDuration.value
     })
@@ -447,6 +541,8 @@ const runVideoGeneration = async (mode = 'create') => {
       model: localModel.value,
       ratio: localRatio.value,
       size: localSize.value,
+      resolution: localResolution.value,
+      generate_audio: localGenerateAudio.value,
       duration: localDuration.value,
       dur: localDuration.value,
       updatedAt: Date.now()
@@ -499,6 +595,7 @@ const handleFileUpload = async (event) => {
 
   try {
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      validationTitle.value = 'Upload Limit'
       validationMessage.value = 'Video is too large. Maximum file size is 10MB.'
       showValidationModal.value = true
       return
@@ -580,6 +677,7 @@ const closeErrorModal = () => {
 }
 const closeValidationModal = () => {
   showValidationModal.value = false
+  validationTitle.value = 'Upload Limit'
   validationMessage.value = ''
 }
 
@@ -620,13 +718,26 @@ watch(
     if (!val) return
     if (val.model && val.model !== localModel.value) localModel.value = val.model
     if (val.ratio && val.ratio !== localRatio.value) localRatio.value = val.ratio
-    if (val.size && val.size !== localSize.value) localSize.value = val.size
+    if ((val.size || '') !== localSize.value) localSize.value = val.size || ''
+    if ((val.resolution || '') !== localResolution.value) localResolution.value = val.resolution || ''
+    if (typeof val.generate_audio === 'boolean' && val.generate_audio !== localGenerateAudio.value) localGenerateAudio.value = val.generate_audio
     const incomingDuration = Number(val.duration ?? val.dur)
     if (Number.isFinite(incomingDuration) && incomingDuration > 0 && incomingDuration !== localDuration.value) {
       localDuration.value = incomingDuration
     }
   },
   { deep: true }
+)
+
+watch(
+  () => [
+    localModel.value,
+    ...getConnectedImageInputs().map((item) => `${item.role}:${item.image}`)
+  ],
+  () => {
+    refreshSoraInputWarning()
+  },
+  { immediate: true }
 )
 
 </script>
@@ -747,6 +858,12 @@ watch(
   border-color: rgba(255, 255, 255, 0.62);
   color: #f2f3f5;
   background: #2a2a2a;
+}
+.binding-warning-text {
+  color: #f59e0b;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
 }
 .upload-progress-wrap {
   width: 100%;

@@ -1,6 +1,7 @@
 import request from './request'
 
 export const isDataImageUrl = (value = '') => /^data:image\//i.test(String(value || ''))
+export const SORA2_ALLOWED_REFERENCE_SIZES = ['1280x720', '720x1280', '1024x1792', '1792x1024']
 
 export const dataUrlToFile = (dataUrl, fileName = 'image.png') => {
   const value = String(dataUrl || '')
@@ -45,3 +46,27 @@ export const persistImageUrl = async (url, fileName = 'image.png') => {
   if (!file) return ''
   return uploadImageFile(file)
 }
+
+export const getImageDimensionsFromSource = (source) =>
+  new Promise((resolve) => {
+    const raw = String(source || '').trim()
+    if (!raw) {
+      resolve({ width: 0, height: 0 })
+      return
+    }
+
+    const img = new Image()
+    img.onload = () => {
+      resolve({ width: img.naturalWidth || img.width || 0, height: img.naturalHeight || img.height || 0 })
+    }
+    img.onerror = () => {
+      resolve({ width: 0, height: 0 })
+    }
+    if (!isDataImageUrl(raw)) {
+      img.crossOrigin = 'anonymous'
+    }
+    img.src = raw
+  })
+
+export const isSora2AllowedReferenceSize = (width, height) =>
+  SORA2_ALLOWED_REFERENCE_SIZES.includes(`${Number(width) || 0}x${Number(height) || 0}`)

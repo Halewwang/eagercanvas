@@ -42,6 +42,42 @@
           </n-dropdown>
         </div>
 
+        <div v-if="sizeOptions.length > 0" class="flex items-center justify-between">
+          <span class="text-xs text-[#8f939e]">Size</span>
+          <n-dropdown :options="sizeOptions" @select="handleSizeSelect">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
+              {{ displaySize }}
+              <n-icon :size="12">
+                <ChevronForwardOutline />
+              </n-icon>
+            </button>
+          </n-dropdown>
+        </div>
+
+        <div v-if="resolutionOptions.length > 0" class="flex items-center justify-between">
+          <span class="text-xs text-[#8f939e]">Resolution</span>
+          <n-dropdown :options="resolutionOptions" @select="handleResolutionSelect">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
+              {{ displayResolution }}
+              <n-icon :size="12">
+                <ChevronForwardOutline />
+              </n-icon>
+            </button>
+          </n-dropdown>
+        </div>
+
+        <div v-if="supportsAudioToggle" class="flex items-center justify-between">
+          <span class="text-xs text-[#8f939e]">Audio</span>
+          <n-dropdown :options="audioOptions" @select="handleAudioSelect">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
+              {{ displayAudio }}
+              <n-icon :size="12">
+                <ChevronForwardOutline />
+              </n-icon>
+            </button>
+          </n-dropdown>
+        </div>
+
         <!-- Duration selector | Duration选择 -->
         <div class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Duration</span>
@@ -74,6 +110,9 @@
             :class="imagesByRole.referenceImages.length > 0 ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
             Reference {{ imagesByRole.referenceImages.length > 0 ? `✓ ${imagesByRole.referenceImages.length}` : '○' }}
           </span>
+        </div>
+        <div v-if="soraInputWarning" class="text-[11px] leading-[1.35] text-[#f59e0b]">
+          {{ soraInputWarning }}
         </div>
 
         <!-- Progress bar | 进度条 -->
@@ -116,6 +155,13 @@
       <Handle type="source" :position="Position.Right" id="right" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
     </div>
 
+    <n-modal v-model:show="showValidationModal" preset="dialog" title="Sora 2 Input Size" :show-icon="false">
+      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ validationMessage }}</div>
+      <template #action>
+        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeValidationModal">OK</button>
+      </template>
+    </n-modal>
+
     <!-- Hover action buttons | 悬浮操作按钮 -->
     <!-- Top right - Copy button | 右上角 - Copy按钮 -->
     <div v-show="showActions" class="absolute -top-5 right-0 z-[1000]">
@@ -138,11 +184,12 @@
  */
 import { ref, computed, watch, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NIcon, NDropdown, NSpin } from 'naive-ui'
+import { NIcon, NDropdown, NModal, NSpin } from 'naive-ui'
 import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject } from '../../stores/canvas'
-import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION } from '../../stores/models'
+import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoResolutionOptions, getModelVideoSizeOptions, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION } from '../../stores/models'
+import { getImageDimensionsFromSource, isSora2AllowedReferenceSize } from '@/utils/media'
 
 const props = defineProps({
   id: String,
@@ -160,10 +207,16 @@ const { loading, error, status, video: generatedVideo, progress, generate } = us
 
 // Hover state | 悬浮状态
 const showActions = ref(false)
+const showValidationModal = ref(false)
+const validationMessage = ref('')
+const soraInputWarning = ref('')
 
 // Local state | 本地状态
 const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
 const localRatio = ref(props.data?.ratio || '16:9')
+const localSize = ref(props.data?.size || '')
+const localResolution = ref(props.data?.resolution || getModelConfig(props.data?.model || DEFAULT_VIDEO_MODEL)?.defaultParams?.resolution || '')
+const localGenerateAudio = ref(Boolean(props.data?.generate_audio ?? getModelConfig(props.data?.model || DEFAULT_VIDEO_MODEL)?.defaultParams?.generate_audio ?? false))
 const getDurationFromData = (data) => {
   const raw = data?.duration ?? data?.dur
   const parsed = Number(raw)
@@ -207,6 +260,19 @@ const imagesByRole = computed(() => {
 
 // Get current model config | 获取当前Model配置
 const currentModelConfig = computed(() => getModelConfig(localModel.value))
+const isSora2Model = (model) => String(model || '').trim().toLowerCase().startsWith('sora-2')
+const isVeo31Model = (model) => String(model || '').trim().toLowerCase().startsWith('veo-3.1')
+const ratioFromSize = (size) => {
+  const [w, h] = String(size || '').split('x').map(Number)
+  if (!w || !h) return '16:9'
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a)
+  const d = gcd(w, h)
+  return `${Math.round(w / d)}:${Math.round(h / d)}`
+}
+const audioOptions = [
+  { key: 'off', label: 'Audio Off' },
+  { key: 'on', label: 'Audio On' }
+]
 
 // Model options from store | 从 store 获取Model选项
 const modelOptions = videoModelOptions
@@ -221,6 +287,17 @@ const displayModelName = computed(() => {
 const ratioOptions = computed(() => {
   return getModelRatioOptions(localModel.value)
 })
+const sizeOptions = computed(() => {
+  if (isSora2Model(localModel.value)) {
+    return getModelVideoSizeOptions(localModel.value)
+  }
+  return getModelVideoSizeOptions(localModel.value, localRatio.value)
+})
+const resolutionOptions = computed(() => getModelVideoResolutionOptions(localModel.value))
+const supportsAudioToggle = computed(() => isVeo31Model(localModel.value))
+const displaySize = computed(() => String(localSize.value || '').trim() || 'Select size')
+const displayResolution = computed(() => String(localResolution.value || '').trim() || 'Select resolution')
+const displayAudio = computed(() => (localGenerateAudio.value ? 'Audio On' : 'Audio Off'))
 
 // Duration options based on model | 基于Model的Duration选项
 const durationOptions = computed(() => {
@@ -237,6 +314,12 @@ const handleModelSelect = (key) => {
     localRatio.value = config.defaultParams.ratio
     updates.ratio = config.defaultParams.ratio
   }
+  localSize.value = config?.defaultParams?.size || ''
+  localResolution.value = config?.defaultParams?.resolution || ''
+  localGenerateAudio.value = Boolean(config?.defaultParams?.generate_audio ?? false)
+  updates.size = localSize.value
+  updates.resolution = localResolution.value
+  updates.generate_audio = localGenerateAudio.value
   if (config?.defaultParams?.duration) {
     const modelDurationOptions = getModelDurationOptions(key)
     const defaultDuration = Number(config.defaultParams.duration)
@@ -262,7 +345,29 @@ const handleDuplicate = () => {
 // Handle ratio selection | 处理Ratio选择
 const handleRatioSelect = (key) => {
   localRatio.value = key
-  updateNode(props.id, { ratio: key })
+  const option = sizeOptions.value.find((item) => item.ratio === key)
+  if (option?.key) {
+    localSize.value = option.key
+  } else if (!isSora2Model(localModel.value)) {
+    localSize.value = ''
+  }
+  updateNode(props.id, { ratio: key, size: localSize.value })
+}
+
+const handleSizeSelect = (key) => {
+  localSize.value = String(key || '')
+  localRatio.value = ratioFromSize(localSize.value)
+  updateNode(props.id, { size: localSize.value, ratio: localRatio.value })
+}
+
+const handleResolutionSelect = (key) => {
+  localResolution.value = String(key || '')
+  updateNode(props.id, { resolution: localResolution.value })
+}
+
+const handleAudioSelect = (key) => {
+  localGenerateAudio.value = key === 'on'
+  updateNode(props.id, { generate_audio: localGenerateAudio.value })
 }
 
 // Handle duration selection | 处理Duration选择
@@ -305,6 +410,64 @@ const getConnectedInputs = () => {
   return { prompt, first_frame_image, last_frame_image, images }
 }
 
+const getConnectedImageInputs = () => {
+  const connectedEdges = edges.value.filter(e => e.target === props.id)
+  const inputs = []
+
+  for (const edge of connectedEdges) {
+    const sourceNode = nodes.value.find(n => n.id === edge.source)
+    if (sourceNode?.type !== 'image') continue
+    const imageData = sourceNode.data?.base64 || sourceNode.data?.url
+    if (!imageData) continue
+    inputs.push({
+      role: edge.data?.imageRole || 'first_frame_image',
+      image: imageData
+    })
+  }
+
+  return inputs
+}
+
+const refreshSoraInputWarning = async () => {
+  if (!isSora2Model(localModel.value)) {
+    soraInputWarning.value = ''
+    return
+  }
+
+  const connectedImages = getConnectedImageInputs()
+  if (!connectedImages.length) {
+    soraInputWarning.value = ''
+    return
+  }
+
+  for (const item of connectedImages) {
+    const { width, height } = await getImageDimensionsFromSource(item.image)
+    if (isSora2AllowedReferenceSize(width, height)) continue
+    soraInputWarning.value = `Sora 2 参考图尺寸不支持：当前为 ${width || 0}x${height || 0}`
+    return
+  }
+
+  soraInputWarning.value = ''
+}
+
+const validateSora2Inputs = async () => {
+  if (!isSora2Model(localModel.value)) return true
+
+  const connectedImages = getConnectedImageInputs()
+  if (!connectedImages.length) return true
+
+  for (const item of connectedImages) {
+    const { width, height } = await getImageDimensionsFromSource(item.image)
+    if (isSora2AllowedReferenceSize(width, height)) continue
+
+    validationMessage.value = `Sora 2 图生视频仅支持以下参考图尺寸：1280x720、720x1280、1024x1792、1792x1024。\n当前上游参考图尺寸为 ${width || 0}x${height || 0}，请先调整图片比例后再生成。`
+    showValidationModal.value = true
+    return false
+  }
+
+  return true
+}
+
 // Computed connected prompt | 计算连接的Prompt
 const connectedPrompt = computed(() => {
   return getConnectedInputs().prompt
@@ -325,6 +488,10 @@ const handleGenerate = async () => {
 
   if (!isConfigured.value) {
     window.$message?.warning('Please sign in first')
+    return
+  }
+
+  if (!(await validateSora2Inputs())) {
     return
   }
 
@@ -393,6 +560,18 @@ const handleGenerate = async () => {
       params.ratio = localRatio.value
     }
 
+    if (localSize.value) {
+      params.size = localSize.value
+    }
+
+    if (localResolution.value) {
+      params.resolution = localResolution.value
+    }
+
+    if (supportsAudioToggle.value) {
+      params.generate_audio = localGenerateAudio.value
+    }
+
     // Add duration | 添加Duration
     if (localDuration.value) {
       params.duration = localDuration.value
@@ -408,6 +587,9 @@ const handleGenerate = async () => {
         label: 'Video Gen',
         model: localModel.value,
         ratio: localRatio.value,
+        size: localSize.value,
+        resolution: localResolution.value,
+        generate_audio: localGenerateAudio.value,
         duration: localDuration.value,
         dur: localDuration.value,
         updatedAt: Date.now()
@@ -454,11 +636,27 @@ watch(() => props.data?.model, (newModel) => {
 watch(() => props.data, (val) => {
   if (!val) return
   if (val.ratio && val.ratio !== localRatio.value) localRatio.value = val.ratio
+  if ((val.size || '') !== localSize.value) localSize.value = val.size || ''
+  if ((val.resolution || '') !== localResolution.value) localResolution.value = val.resolution || ''
+  if (typeof val.generate_audio === 'boolean' && val.generate_audio !== localGenerateAudio.value) {
+    localGenerateAudio.value = val.generate_audio
+  }
   const nextDuration = Number(val.duration ?? val.dur)
   if (Number.isFinite(nextDuration) && nextDuration > 0 && nextDuration !== localDuration.value) {
     localDuration.value = nextDuration
   }
 }, { deep: true })
+
+watch(
+  () => [
+    localModel.value,
+    ...getConnectedImageInputs().map((item) => `${item.role}:${item.image}`)
+  ],
+  () => {
+    refreshSoraInputWarning()
+  },
+  { immediate: true }
+)
 
 // Watch for auto-execute flag | 监听自动执行标志
 watch(
@@ -475,6 +673,11 @@ watch(
   },
   { immediate: true }
 )
+
+const closeValidationModal = () => {
+  showValidationModal.value = false
+  validationMessage.value = ''
+}
 </script>
 
 <style scoped>

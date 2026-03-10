@@ -129,6 +129,8 @@ const callProviderWithFallback = async (paths, method = 'GET', body = null) => {
 const RATIO_TO_SIZE = {
   '16:9': '1280x720',
   '9:16': '720x1280',
+  '7:4': '1792x1024',
+  '4:7': '1024x1792',
   '4:3': '1152x864',
   '3:4': '864x1152',
   '1:1': '1024x1024'
@@ -330,7 +332,9 @@ const extractVideoUrl = (data = {}) => {
     data?.data?.works?.[0]?.resource?.resource ||
     data?.works?.[0]?.resource?.resource ||
     data?.raw_response?.file?.download_url ||
+    data?.outputs?.[0]?.url ||
     data?.outputs?.[0] ||
+    data?.data?.outputs?.[0]?.url ||
     data?.data?.outputs?.[0] ||
     ''
   )
@@ -338,7 +342,7 @@ const extractVideoUrl = (data = {}) => {
 
 const normalizeSoraStatus = (value) => {
   const status = String(value || '').toLowerCase()
-  if (['in_processing', 'processing', 'pending', 'submitted', 'running', 'queued'].includes(status)) return 'processing'
+  if (['created', 'in_processing', 'in_progress', 'processing', 'pending', 'submitted', 'running', 'queued'].includes(status)) return 'processing'
   if (['completed', 'succeeded', 'success', 'done', 'finished'].includes(status)) return 'completed'
   if (['failed', 'error', 'canceled', 'cancelled', 'failure'].includes(status)) return 'failed'
   return status || 'processing'
@@ -355,9 +359,25 @@ const normalizeErrorMessage = (message = '') => {
 
 const mapVideoModelName = (model = '') => {
   const lowerModel = String(model || '').trim().toLowerCase()
+  if (lowerModel === 'sora2') return 'sora-2'
   if (lowerModel === 'veo-3.1') return 'veo3.1'
   if (lowerModel === 'veo-3.1-pro') return 'veo3.1-pro'
   return String(model || '').trim()
+}
+
+const clampToAllowedValue = (value, allowed, fallback) => {
+  const numeric = Number(value)
+  if (allowed.includes(numeric)) return numeric
+  return fallback
+}
+
+const normalizeSoraTaskId = (taskId = '') => {
+  const safeTaskId = String(taskId || '').trim()
+  if (!safeTaskId) return ''
+  if (safeTaskId.includes(':')) {
+    return safeTaskId.split(':').pop() || ''
+  }
+  return safeTaskId
 }
 
 const buildKlingO1Request = ({ prompt, aspectRatio, duration, firstFrameImage, lastFrameImage, referenceImages }) => {
@@ -379,8 +399,11 @@ const buildKlingO1Request = ({ prompt, aspectRatio, duration, firstFrameImage, l
     o1Type = 'firstTail'
   }
 
-  const allowedRatios = new Set(['16:9', '9:16', '1:1'])
-  const safeAspectRatio = allowedRatios.has(String(aspectRatio || '')) ? String(aspectRatio) : '16:9'
+  const allowedReferImageRatios = new Set(['16:9', '9:16', '1:1'])
+  const safeAspectRatio =
+    o1Type === 'firstTail'
+      ? 'auto'
+      : (allowedReferImageRatios.has(String(aspectRatio || '')) ? String(aspectRatio) : '16:9')
 
   return {
     images,
@@ -421,14 +444,19 @@ const extractKlingStatus = (data = {}) =>
     data?.data?.status
   )
 
-const extractSoraStatus = (data = {}) =>
-  normalizeSoraStatus(
+const extractSoraStatus = (data = {}) => {
+  if (typeof data === 'string' || typeof data === 'number') {
+    return normalizeSoraStatus(data)
+  }
+
+  return normalizeSoraStatus(
     data?.status ??
     data?.state ??
     data?.task?.status ??
     data?.data?.status ??
     data?.data?.state
   )
+}
 
 export const providerChatCompletions = (payload) =>
   callProvider('/v1/chat/completions', payload)
@@ -541,6 +569,33 @@ export const providerCreateVideo = async (payload = {}) => {
   const inputImage = pickFirstImageInput(payload)
   const mappedModel = mapVideoModelName(model)
 
+  if (lowerModel.startsWith('sora-2')) {
+    const soraSize = normalizeVideoSize(payload.size) || normalizeVideoSize(aspectRatio) || '1280x720'
+    const soraSeconds = clampToAllowedValue(payload.seconds || payload.duration, [4, 8, 12], 4)
+    const inputReference = firstFrameImage || inputImage || referenceImages[0] || lastFrameImage
+    const soraRequest = {
+      prompt: effectivePrompt,
+      model: mappedModel || 'sora-2',
+      seconds: soraSeconds,
+      size: soraSize
+    }
+
+    if (inputReference) {
+      soraRequest.input_reference = inputReference
+    }
+    if (typeof payload.callback === 'string' && payload.callback.trim()) {
+      soraRequest.callback = payload.callback.trim()
+    }
+
+    const raw = await callProvider('/openai/v1/videos', soraRequest)
+
+    return {
+      task_id: extractTaskId(raw),
+      status: extractSoraStatus(raw),
+      raw
+    }
+  }
+
   if (lowerModel.startsWith('kling-o1')) {
     const klingRequest = buildKlingO1Request({
       prompt: effectivePrompt,
@@ -573,42 +628,70 @@ export const providerCreateVideo = async (payload = {}) => {
   }
 
   if (lowerModel.startsWith('veo-3.1')) {
-    const images = [firstFrameImage, lastFrameImage, ...referenceImages].filter(Boolean).slice(0, 4)
+    const inputReference = firstFrameImage || inputImage || referenceImages[0] || lastFrameImage
     const requestBody = {
       prompt: effectivePrompt,
-      model: mappedModel || 'veo3.1',
-      enhance_prompt: payload.enhance_prompt ?? true,
       aspect_ratio: aspectRatio || '16:9',
-      duration: duration || 8
+      duration: clampToAllowedValue(duration, [4, 6, 8], 8),
+      resolution: String(payload.resolution || '1080p').toLowerCase() === '720p' ? '720p' : '1080p',
+      generate_audio: payload.generate_audio ?? false,
+      model: mappedModel || 'veo3.1',
+      seed: Number.isInteger(payload.seed) ? payload.seed : -1,
+      negative_prompt: typeof payload.negative_prompt === 'string' && payload.negative_prompt.trim()
+        ? payload.negative_prompt.trim()
+        : undefined,
+      callback: typeof payload.callback === 'string' && payload.callback.trim()
+        ? payload.callback.trim()
+        : undefined
     }
 
-    if (images.length > 0) {
-      requestBody.images = images
+    if (inputReference) {
+      requestBody.image = inputReference
     }
 
     let raw
     try {
-      raw = await callProviderWithFallback(
-        [
-          // 302 doc: Veo3.1 submit/fetch
-          '/302/submit/veo3-v2',
-          // Universal V2 create fallback
-          '/302/v2/video/create'
-        ],
-        'POST',
-        requestBody
-      )
+      const endpoint = inputReference
+        ? '/ws/api/v3/google/veo3.1/image-to-video'
+        : '/ws/api/v3/google/veo3.1/text-to-video'
+      raw = await callProvider(endpoint, requestBody)
     } catch (error) {
-      const normalized = normalizeErrorMessage(error?.message)
-      if (normalized && normalized !== error?.message) {
-        throw new HttpError(503, normalized, 'MODEL_TEMPORARILY_UNAVAILABLE')
+      if (isEndpointNotFoundError(error)) {
+        try {
+          raw = await callProviderWithFallback(
+            [
+              '/302/submit/veo3-v2',
+              '/302/v2/video/create'
+            ],
+            'POST',
+            {
+              prompt: effectivePrompt,
+              model: mappedModel || 'veo3.1',
+              enhance_prompt: payload.enhance_prompt ?? true,
+              aspect_ratio: aspectRatio || '16:9',
+              duration: clampToAllowedValue(duration, [4, 6, 8], 8),
+              images: inputReference ? [inputReference] : undefined
+            }
+          )
+        } catch (fallbackError) {
+          const normalized = normalizeErrorMessage(fallbackError?.message)
+          if (normalized && normalized !== fallbackError?.message) {
+            throw new HttpError(503, normalized, 'MODEL_TEMPORARILY_UNAVAILABLE')
+          }
+          throw fallbackError
+        }
+      } else {
+        const normalized = normalizeErrorMessage(error?.message)
+        if (normalized && normalized !== error?.message) {
+          throw new HttpError(503, normalized, 'MODEL_TEMPORARILY_UNAVAILABLE')
+        }
+        throw error
       }
-      throw error
     }
 
     return {
       task_id: extractTaskId(raw),
-      status: extractSoraStatus(raw?.status || raw?.data?.status || raw?.task_status),
+      status: extractSoraStatus(raw),
       raw
     }
   }
@@ -643,7 +726,10 @@ export const providerCreateVideo = async (payload = {}) => {
 
 export const providerVideoStatus = async (taskId) => {
   const safeTaskId = String(taskId || '')
+  const normalizedSoraTaskId = normalizeSoraTaskId(taskId)
   const mayBeKling = safeTaskId.startsWith('kling_') || safeTaskId.startsWith('task_')
+  const mayBeSora = normalizedSoraTaskId.startsWith('video_')
+  const mayBeWaveSpeed = /^[0-9a-f]{32}$/i.test(safeTaskId)
   
   // 302.AI Kling status endpoints
   const klingStatusPaths = [
@@ -655,11 +741,41 @@ export const providerVideoStatus = async (taskId) => {
   
   // Veo uses UUIDs usually, so if not kling, try Veo paths
   const veoStatusPaths = [
+    `/ws/api/v3/predictions/${taskId}/result`,
     `/302/submit/veo3-v2/${taskId}`,
     `/302/v2/video/fetch/${taskId}`,
     `/v2/video/generations?generation_id=${taskId}`,
     `/video/generations?generation_id=${taskId}`
   ]
+
+  if (mayBeSora) {
+    try {
+      const raw = await callProvider(`/openai/v1/videos/${normalizedSoraTaskId}`, null, 'GET')
+      let status = extractSoraStatus(raw)
+      let videoUrl = extractVideoUrl(raw)
+
+      if (status === 'completed' && !videoUrl) {
+        try {
+          const content = await callProvider(`/openai/v1/videos/${normalizedSoraTaskId}/content?variant=video`, null, 'GET')
+          videoUrl = extractVideoUrl(content)
+          if (content && typeof raw === 'object' && raw !== null) {
+            raw.content = content
+          }
+        } catch {
+          // Content may not be ready immediately after status flips to completed.
+        }
+      }
+
+      return {
+        task_id: taskId,
+        status: videoUrl ? 'completed' : (status === 'completed' ? 'processing' : status),
+        video_url: videoUrl || undefined,
+        raw
+      }
+    } catch {
+      // Fall through
+    }
+  }
 
   if (mayBeKling) {
     try {
@@ -673,6 +789,23 @@ export const providerVideoStatus = async (taskId) => {
       return {
         task_id: taskId,
         status,
+        video_url: videoUrl || undefined,
+        raw
+      }
+    } catch {
+      // Fall through
+    }
+  }
+
+  if (mayBeWaveSpeed) {
+    try {
+      const raw = await callProviderWithFallback(veoStatusPaths, 'GET')
+      const status = extractSoraStatus(raw)
+      const videoUrl = extractVideoUrl(raw)
+
+      return {
+        task_id: taskId,
+        status: videoUrl ? 'completed' : status,
         video_url: videoUrl || undefined,
         raw
       }

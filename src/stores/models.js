@@ -126,6 +126,15 @@ export const getModelVideoSizeOptions = (modelKey, ratio = '') => {
   }))
 }
 
+export const getModelVideoResolutionOptions = (modelKey) => {
+  const model = VIDEO_MODELS.find(m => m.key === modelKey)
+  const resolutions = Array.isArray(model?.resolutions) ? model.resolutions : []
+  return resolutions.map((item) => ({
+    label: item.label || item.key,
+    key: item.key
+  }))
+}
+
 // Dropdown options (built-in + custom) | 下拉选项（内置 + 自定义）
 export const imageModelOptions = computed(() => {
   const modelConfig = getModelConfigHook()

@@ -68,9 +68,11 @@ export const IMAGE_MODELS = [
 // Video ratio options | 视频比例选项
 export const VIDEO_RATIO_LIST = [
     { label: '16:9 (横版)', key: '16:9' },
+    { label: '7:4 (横版)', key: '7:4' },
     { label: '4:3', key: '4:3' },
     { label: '1:1 (方形)', key: '1:1' },
     { label: '3:4', key: '3:4' },
+    { label: '4:7 (竖版)', key: '4:7' },
     { label: '9:16 (竖版)', key: '9:16' }
 ]
 
@@ -87,8 +89,20 @@ export const VIDEO_MODELS = [
         label: 'Google Veo 3.1',
         key: 'veo-3.1',
         ratios: ['16:9', '9:16'],
+        resolutions: [
+            { label: '720p', key: '720p' },
+            { label: '1080p', key: '1080p' }
+        ],
         durs: [{ label: '4 秒', key: 4 }, { label: '6 秒', key: 6 }, { label: '8 秒', key: 8 }],
-        defaultParams: { ratio: '16:9', duration: 8 }
+        defaultParams: { ratio: '16:9', duration: 8, resolution: '1080p', generate_audio: false }
+    },
+    {
+        label: 'OpenAI Sora 2',
+        key: 'sora-2',
+        ratios: ['16:9', '9:16', '7:4', '4:7'],
+        sizes: SORA2_SIZE_OPTIONS,
+        durs: [{ label: '4 秒', key: 4 }, { label: '8 秒', key: 8 }, { label: '12 秒', key: 12 }],
+        defaultParams: { ratio: '16:9', size: '1280x720', duration: 4 }
     }
 ]
 
