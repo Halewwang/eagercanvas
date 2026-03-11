@@ -165,6 +165,7 @@ import { useImageGeneration, useApiConfig } from '../../hooks'
 import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject } from '../../stores/canvas'
 import { imageModelOptions, getModelSizeOptions, getModelQualityOptions, getModelConfig, DEFAULT_IMAGE_MODEL } from '../../stores/models'
 import { persistImageUrl } from '@/utils/media'
+import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 
 const props = defineProps({
   id: String,
@@ -185,7 +186,7 @@ const showActions = ref(false)
 
 // Local state | 本地状态
 const localModel = ref(props.data?.model || DEFAULT_IMAGE_MODEL)
-const localSize = ref(props.data?.size || '2048x2048')
+const localSize = ref(props.data?.size || '1024x1024')
 const localQuality = ref(props.data?.quality || 'standard')
 const localRatio = ref(props.data?.ratio || '1:1')
 const localResolution = ref(props.data?.resolution || '1k')
@@ -327,41 +328,21 @@ watch(
 
 // Get connected nodes | 获取连接的节点
 const getConnectedInputs = () => {
-  const connectedEdges = edges.value.filter(e => e.target === props.id)
-  const prompts = [] // Array of { order, content } | Prompt数组
-  const refImages = [] // Array of { order, imageData, nodeId } | Reference数组
-
-  for (const edge of connectedEdges) {
-    const sourceNode = nodes.value.find(n => n.id === edge.source)
-    if (!sourceNode) continue
-
-    if (sourceNode.type === 'text') {
-      const content = sourceNode.data?.content || ''
-      if (content) {
-        // Get order from edge data, default to 1 | 从边数据获取顺序，默认为1
-        const order = edge.data?.promptOrder || 1
-        prompts.push({ order, content, nodeId: sourceNode.id })
-      }
-    } else if (sourceNode.type === 'image') {
-      // Prefer base64, fallback to url | 优先使用 base64，回退到 url
-      const imageData = sourceNode.data?.base64 || sourceNode.data?.url
-      if (imageData) {
-        // Get order from edge data, default to 1 | 从边数据获取顺序，默认为1
-        const order = edge.data?.imageOrder || 1
-        refImages.push({ order, imageData, nodeId: sourceNode.id })
-      }
-    }
+  const resolved = resolveNodeInputs(props.id)
+  return {
+    prompt: resolved.prompt,
+    prompts: resolved.prompts.map((item) => ({
+      order: item.order,
+      content: item.content,
+      nodeId: item.nodeId
+    })),
+    refImages: resolved.refImages,
+    refImagesWithOrder: resolved.references.map((item) => ({
+      order: item.order,
+      imageData: item.imageData,
+      nodeId: item.nodeId
+    }))
   }
-
-  // Sort prompts by order and concatenate | 按顺序排序并拼接
-  prompts.sort((a, b) => a.order - b.order)
-  const combinedPrompt = prompts.map(p => p.content).join('\n\n')
-
-  // Sort refImages by order | 按顺序排序Reference
-  refImages.sort((a, b) => a.order - b.order)
-  const sortedRefImages = refImages.map(r => r.imageData)
-
-  return { prompt: combinedPrompt, prompts, refImages: sortedRefImages, refImagesWithOrder: refImages }
 }
 
 // Computed connected prompts (sorted by order) | 计算连接的Prompt（按顺序排列）
@@ -543,12 +524,12 @@ const handleGenerate = async (mode = 'auto') => {
     })
 
     // Auto-connect imageConfig → image | 自动连接 生图配置 → 图片
-    addEdge({
+    addEdge(edgeStrategy.resolve({
       source: props.id,
       target: imageNodeId,
       sourceHandle: 'right',
       targetHandle: 'left'
-    })
+    }))
   }
   
   createdImageNodeId.value = imageNodeId

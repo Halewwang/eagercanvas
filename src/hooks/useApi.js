@@ -13,7 +13,7 @@ import {
 import { DEFAULT_CHAT_MODEL, getModelByName } from '@/config/models'
 import { useApiConfig } from './useApiConfig'
 
-const IMAGE_REQUEST_TIMEOUT_MS = 120000
+const IMAGE_REQUEST_TIMEOUT_MS = 180000
 
 /**
  * Base API state hook | 基础 API 状态 Hook

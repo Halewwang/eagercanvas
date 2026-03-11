@@ -37,7 +37,7 @@ export const env = {
   providerApiBaseUrl: process.env.PROVIDER_API_BASE_URL || 'https://api.302ai.cn',
   providerApiBaseUrls: process.env.PROVIDER_API_BASE_URLS || '',
   providerApiKey: process.env.PROVIDER_API_KEY || '',
-  providerTimeoutMs: Number(process.env.PROVIDER_TIMEOUT_MS || 90000),
+  providerTimeoutMs: Number(process.env.PROVIDER_TIMEOUT_MS || 180000),
 
   dashboard302ApiBaseUrl: process.env.DASHBOARD_302_API_BASE_URL || process.env.PROVIDER_API_BASE_URL || 'https://api.302.ai',
   dashboard302ApiKey: process.env.DASHBOARD_302_API_KEY || '',

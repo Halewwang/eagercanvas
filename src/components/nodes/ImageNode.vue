@@ -163,6 +163,7 @@ import {
 } from '../../stores/models'
 import { useApiConfig, useImageGeneration } from '../../hooks'
 import { persistImageUrl, uploadImageFile } from '@/utils/media'
+import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 
 const props = defineProps({
   id: String,
@@ -520,29 +521,10 @@ const setResolution = (resolutionKey) => {
 }
 
 const getConnectedInputs = () => {
-  const incoming = edges.value.filter(e => e.target === props.id)
-  const promptParts = []
-  const imageRefs = []
-
-  for (const edge of incoming) {
-    const source = nodes.value.find(n => n.id === edge.source)
-    if (!source || source.id === props.id) continue
-
-    if (source.type === 'text' && source.data?.content) {
-      promptParts.push({ order: edge.data?.promptOrder || 1, content: source.data.content })
-    }
-
-    if (source.type === 'image' && source.data?.url) {
-      imageRefs.push({ order: edge.data?.imageOrder || 1, image: source.data.base64 || source.data.url })
-    }
-  }
-
-  promptParts.sort((a, b) => a.order - b.order)
-  imageRefs.sort((a, b) => a.order - b.order)
-
+  const resolved = resolveNodeInputs(props.id)
   return {
-    prompt: promptParts.map(p => p.content).join('\n\n').trim(),
-    refImages: imageRefs.map(i => i.image)
+    prompt: resolved.prompt,
+    refImages: resolved.refImages
   }
 }
 const activeImageInputSet = computed(() => {
@@ -844,19 +826,19 @@ const createLinkedNode = (type) => {
   if (!newNodeId) return
 
   if (side === 'right') {
-    addEdge({
+    addEdge(edgeStrategy.resolve({
       source: props.id,
       target: newNodeId,
       sourceHandle: 'right',
       targetHandle: 'left'
-    })
+    }))
   } else {
-    addEdge({
+    addEdge(edgeStrategy.resolve({
       source: newNodeId,
       target: props.id,
       sourceHandle: 'right',
       targetHandle: 'left'
-    })
+    }))
   }
 
   nodes.value = nodes.value.map((node) => ({

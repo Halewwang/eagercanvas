@@ -81,7 +81,8 @@ export const getModelSizeOptions = (modelKey, quality = 'standard') => {
  */
 export const getModelQualityOptions = (modelKey) => {
   const model = IMAGE_MODELS.find(m => m.key === modelKey)
-  return model?.qualities || IMAGE_QUALITY_OPTIONS
+  if (model) return model.qualities || []
+  return IMAGE_QUALITY_OPTIONS
 }
 
 /**

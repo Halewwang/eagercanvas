@@ -143,16 +143,13 @@ const normalizeVideoSize = (value) => {
   return undefined
 }
 
-const appendSizeHintToPrompt = (prompt = '', size = '') => {
-  if (!size) return prompt
-  const [width, height] = String(size).split('x')
-  if (!width || !height) return prompt
-
-  const ratioHint = `${width}:${height}`
+const appendAspectRatioHintToPrompt = (prompt = '', aspectRatio = '') => {
   const safePrompt = String(prompt || '').trim()
-  if (!safePrompt) return `Generate an image with aspect ratio ${ratioHint}.`
+  const safeAspectRatio = String(aspectRatio || '').trim()
+  if (!safeAspectRatio) return safePrompt
+  if (!safePrompt) return `Generate an image with aspect ratio ${safeAspectRatio}.`
 
-  return `${safePrompt}\n\nAspect ratio: ${ratioHint}.`
+  return `${safePrompt}\n\nAspect ratio: ${safeAspectRatio}.`
 }
 
 const IMAGE_BASE_SIZE_BY_RATIO = {
@@ -236,6 +233,46 @@ const fetchImageAsBase64 = async (url) => {
   }
 }
 
+const buildGeminiImageInputParts = async (images = []) => {
+  const parts = []
+
+  for (const image of images) {
+    const value = String(image || '').trim()
+    if (!value) continue
+
+    const inline = parseDataUrl(value)
+    if (inline?.data) {
+      parts.push({
+        inline_data: {
+          mime_type: inline.mimeType,
+          data: inline.data
+        }
+      })
+      continue
+    }
+
+    if (/^https?:\/\//i.test(value)) {
+      const fetched = await fetchImageAsBase64(value)
+      if (fetched?.data) {
+        parts.push({
+          inline_data: {
+            mime_type: fetched.mimeType,
+            data: fetched.data
+          }
+        })
+        continue
+      }
+
+      parts.push({
+        image_url: value
+      })
+      continue
+    }
+  }
+
+  return parts
+}
+
 const pickFirstImageInput = (payload = {}) => {
   if (typeof payload.image === 'string') return payload.image
   if (Array.isArray(payload.image) && payload.image.length > 0) return payload.image[0]
@@ -266,6 +303,9 @@ const normalizeImageResponse = (response = {}) => {
   for (const candidate of candidates) {
     const parts = candidate?.content?.parts || []
     for (const part of parts) {
+      if (part?.url || part?.image_url || part?.imageUrl) {
+        pushUrl(part?.url || part?.image_url || part?.imageUrl)
+      }
       const inlineData = part?.inline_data || part?.inlineData
       if (inlineData?.data) {
         const mime = inlineData.mime_type || inlineData.mimeType || 'image/png'
@@ -281,10 +321,14 @@ const normalizeImageResponse = (response = {}) => {
   // OpenAI-compatible and other common result shapes.
   const listCandidates = [
     ...(Array.isArray(response?.data) ? response.data : []),
+    ...(Array.isArray(response?.data?.outputs) ? response.data.outputs : []),
+    ...(Array.isArray(response?.data?.images) ? response.data.images : []),
+    ...(Array.isArray(response?.data?.data) ? response.data.data : []),
     ...(Array.isArray(response?.images) ? response.images : []),
     ...(Array.isArray(response?.output) ? response.output : []),
     ...(Array.isArray(response?.result?.images) ? response.result.images : []),
-    ...(Array.isArray(response?.task_result?.images) ? response.task_result.images : [])
+    ...(Array.isArray(response?.task_result?.images) ? response.task_result.images : []),
+    ...(Array.isArray(response?.outputs) ? response.outputs : [])
   ]
 
   for (const item of listCandidates) {
@@ -297,12 +341,60 @@ const normalizeImageResponse = (response = {}) => {
   }
 
   pushUrl(response?.url || response?.image_url || response?.imageUrl)
+  pushUrl(response?.data?.url || response?.data?.image_url || response?.data?.imageUrl)
   pushUrl(response?.b64_json || response?.base64 || response?.image_base64)
+  pushUrl(response?.data?.b64_json || response?.data?.base64 || response?.data?.image_base64)
 
   return {
     data: [...new Set(urls)].map((url) => ({ url })),
     raw: response
   }
+}
+
+const extractPredictionMeta = (response = {}) => {
+  const data = response?.data && typeof response.data === 'object' ? response.data : response
+  return {
+    id: String(data?.id || response?.id || '').trim(),
+    status: String(data?.status || response?.status || '').trim().toLowerCase(),
+    error: String(data?.error || response?.error || '').trim(),
+    resultUrl: String(
+      data?.urls?.get ||
+      response?.urls?.get ||
+      ''
+    ).trim()
+  }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const pollPredictionResult = async (requestId, attempts = 20, intervalMs = 3000) => {
+  const safeRequestId = String(requestId || '').trim()
+  if (!safeRequestId) return null
+
+  let lastResponse = null
+  for (let index = 0; index < attempts; index += 1) {
+    const current = await callProvider(`/ws/api/v3/predictions/${safeRequestId}/result`, null, 'GET')
+    lastResponse = current
+    const normalized = normalizeImageResponse(current)
+    if (Array.isArray(normalized.data) && normalized.data.length > 0) {
+      return current
+    }
+
+    const meta = extractPredictionMeta(current)
+    if (meta.status === 'failed' || meta.error) {
+      throw new HttpError(502, meta.error || 'Image generation failed', 'IMAGE_GENERATION_FAILED')
+    }
+
+    if (!['created', 'queued', 'pending', 'processing', 'running', 'in_progress'].includes(meta.status)) {
+      return current
+    }
+
+    if (index < attempts - 1) {
+      await sleep(intervalMs)
+    }
+  }
+
+  return lastResponse
 }
 
 const normalizeKlingStatus = (value) => {
@@ -474,7 +566,13 @@ export const providerChatCompletions = (payload) =>
 export const providerGenerateImage = async (payload = {}) => {
   const model = String(payload.model_name || payload.model || '').trim()
   const size = String(payload.size || '')
-  let prompt = appendSizeHintToPrompt(payload.prompt || '', size)
+  const aspectRatio = String(
+    payload.aspect_ratio ||
+    payload.ratio ||
+    normalizeAspectRatioFromSize(size) ||
+    '1:1'
+  ).trim()
+  let prompt = String(payload.prompt || '').trim()
   
   // Append style to prompt if provided | 如果提供了风格，追加到提示词
   if (payload.style && payload.style !== 'natural') { // 'natural' is default/none
@@ -488,83 +586,59 @@ export const providerGenerateImage = async (payload = {}) => {
     prompt = `${prompt}\n\nStyle: ${stylePrompt}`
   }
 
-  const inputImage = pickFirstImageInput(payload)
-  let imageInline = parseDataUrl(inputImage)
-  const aspectRatio = String(
-    payload.aspect_ratio ||
-    payload.ratio ||
-    normalizeAspectRatioFromSize(size) ||
-    '1:1'
-  ).trim()
+  const lowerModel = model.toLowerCase()
+  const inputImages = Array.isArray(payload.images)
+    ? payload.images.filter(Boolean)
+    : []
+  const firstImage = pickFirstImageInput(payload)
+  if (!inputImages.length && firstImage) {
+    inputImages.push(firstImage)
+  }
   const resolution =
     normalizeImageResolution(payload.resolution) ||
     normalizeImageResolution(payload.quality) ||
     normalizeResolutionFromSize(size, aspectRatio) ||
     '1k'
-
-  if (!imageInline && inputImage && /^https?:\/\//i.test(inputImage)) {
-    imageInline = await fetchImageAsBase64(inputImage)
-  }
-
-  const lowerModel = model.toLowerCase()
-  const inputImages = Array.isArray(payload.images)
-    ? payload.images.filter(Boolean)
-    : (inputImage ? [inputImage] : [])
-  const isNanoBananaModel =
+  const isGeminiImagePreviewModel =
     lowerModel.includes('gemini-3.1-flash-image-preview') ||
     lowerModel.includes('gemini-3-pro-image-preview')
 
-  if (isNanoBananaModel) {
+  if (isGeminiImagePreviewModel) {
     const endpointBase = lowerModel.includes('gemini-3-pro-image-preview')
       ? '/ws/api/v3/google/nano-banana-pro'
       : '/ws/api/v3/google/nano-banana-2'
-    const requestBody = {
+    const body = {
       prompt,
       aspect_ratio: aspectRatio,
       resolution,
-      enable_sync_mode: payload.enable_sync_mode ?? true,
+      enable_sync_mode: true,
       enable_base64_output: payload.enable_base64_output ?? false
     }
     if (typeof payload.callback === 'string' && payload.callback.trim()) {
-      requestBody.callback = payload.callback.trim()
+      body.callback = payload.callback.trim()
     }
     if (inputImages.length > 0) {
-      requestBody.images = inputImages
+      body.images = inputImages
     }
-
-    try {
-      const endpoint = inputImages.length > 0
-        ? `${endpointBase}/edit`
-        : `${endpointBase}/text-to-image`
-      const raw = await callProvider(endpoint, requestBody)
-      const normalized = normalizeImageResponse(raw)
-      if (Array.isArray(normalized.data) && normalized.data.length > 0) {
-        return normalized
+    const endpoint = inputImages.length > 0
+      ? `${endpointBase}/edit`
+      : `${endpointBase}/text-to-image`
+    let raw = await callProvider(endpoint, body)
+    let normalized = normalizeImageResponse(raw)
+    if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
+      const prediction = extractPredictionMeta(raw)
+      if (prediction.id && ['created', 'queued', 'pending', 'processing', 'running', 'in_progress'].includes(prediction.status)) {
+        raw = await pollPredictionResult(prediction.id)
+        normalized = normalizeImageResponse(raw)
       }
-    } catch (error) {
-      if (!isEndpointNotFoundError(error)) {
-        throw error
-      }
-      // Fallback to legacy Gemini endpoint.
     }
+    if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
+      throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
+    }
+    return normalized
   }
 
-  const parts = [{ text: prompt }]
-  if (imageInline) {
-    parts.push({
-      inline_data: {
-        mime_type: imageInline.mimeType,
-        data: imageInline.data
-      }
-    })
-  }
-
-  const body = {
-    contents: [{ role: 'user', parts }],
-    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
-  }
-
-  const raw = await callProvider(`/v1beta/models/${model}:generateContent`, body)
+  const raw = await callProvider('/v1/images/generations', payload)
   const normalized = normalizeImageResponse(raw)
   if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
     throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')

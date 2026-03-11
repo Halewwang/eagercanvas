@@ -4,7 +4,7 @@
 
 import { request } from '@/utils'
 
-const IMAGE_REQUEST_TIMEOUT_MS = 120000
+const IMAGE_REQUEST_TIMEOUT_MS = 180000
 
 // 生成图片
 export const generateImage = (data, options = {}) => {

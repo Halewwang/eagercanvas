@@ -54,7 +54,8 @@ export const IMAGE_MODELS = [
             quality: 'standard',
             style: 'vivid'
         },
-        supportImageReference: true // Supports image reference
+        supportImageReference: true,
+        tips: '使用 302 ws 同步图片路由，支持 1K/2K/4K 分辨率枚举参数。'
     },
     {
         label: 'Gemini 3 Pro Image Preview',
@@ -66,7 +67,8 @@ export const IMAGE_MODELS = [
             quality: 'standard',
             style: 'vivid'
         },
-        supportImageReference: true // Supports image reference
+        supportImageReference: true,
+        tips: '使用 302 ws 同步图片路由，支持 1K/2K/4K 分辨率枚举参数。'
     }
 ]
 
