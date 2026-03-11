@@ -190,6 +190,7 @@ import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject } from '../../stores/canvas'
 import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoResolutionOptions, getModelVideoSizeOptions, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION } from '../../stores/models'
 import { getImageDimensionsFromSource, isSora2AllowedReferenceSize } from '@/utils/media'
+import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 
 const props = defineProps({
   id: String,
@@ -380,51 +381,27 @@ const handleDurationSelect = (key) => {
 
 // Get connected inputs by role | 根据角色获取连接的输入
 const getConnectedInputs = () => {
-  const connectedEdges = edges.value.filter(e => e.target === props.id)
-
-  let prompt = ''
-  let first_frame_image = ''
-  let last_frame_image = ''
-  const images = [] // input_reference images | Reference
-
-  for (const edge of connectedEdges) {
-    const sourceNode = nodes.value.find(n => n.id === edge.source)
-    if (!sourceNode) continue
-
-    if (sourceNode.type === 'text') {
-      prompt = sourceNode.data?.content || ''
-    } else if (sourceNode.type === 'image' && sourceNode.data?.url) {
-      const imageData = sourceNode.data.base64 || sourceNode.data.url
-      const role = edge.data?.imageRole || 'first_frame_image'
-
-      if (role === 'first_frame_image') {
-        first_frame_image = imageData
-      } else if (role === 'last_frame_image') {
-        last_frame_image = imageData
-      } else if (role === 'input_reference') {
-        images.push(imageData)
-      }
-    }
+  const resolved = resolveNodeInputs(props.id)
+  return {
+    prompt: resolved.prompt,
+    first_frame_image: resolved.first_frame_image,
+    last_frame_image: resolved.last_frame_image,
+    images: resolved.images
   }
-
-  return { prompt, first_frame_image, last_frame_image, images }
 }
 
 const getConnectedImageInputs = () => {
-  const connectedEdges = edges.value.filter(e => e.target === props.id)
+  const resolved = resolveNodeInputs(props.id)
   const inputs = []
-
-  for (const edge of connectedEdges) {
-    const sourceNode = nodes.value.find(n => n.id === edge.source)
-    if (sourceNode?.type !== 'image') continue
-    const imageData = sourceNode.data?.base64 || sourceNode.data?.url
-    if (!imageData) continue
-    inputs.push({
-      role: edge.data?.imageRole || 'first_frame_image',
-      image: imageData
-    })
+  if (resolved.firstFrame) {
+    inputs.push({ role: resolved.firstFrame.role, image: resolved.firstFrame.value })
   }
-
+  if (resolved.lastFrame) {
+    inputs.push({ role: resolved.lastFrame.role, image: resolved.lastFrame.value })
+  }
+  resolved.referenceImages.forEach((item) => {
+    inputs.push({ role: item.role, image: item.value })
+  })
   return inputs
 }
 
@@ -516,12 +493,12 @@ const handleGenerate = async () => {
   createdVideoNodeId.value = videoNodeId
 
   // Auto-connect videoConfig → video | 自动连接 视频配置 → 视频
-  addEdge({
+  addEdge(edgeStrategy.resolve({
     source: props.id,
     target: videoNodeId,
     sourceHandle: 'right',
     targetHandle: 'left'
-  })
+  }))
 
   // Force Vue Flow to recalculate node dimensions | 强制 Vue Flow 重新计算节点Size
   setTimeout(() => {

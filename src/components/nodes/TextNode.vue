@@ -103,6 +103,7 @@ import { AddOutline, CloseCircleOutline, CopyOutline, RefreshOutline, SparklesOu
 import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useChat } from '../../hooks'
 import { chatModelOptions, DEFAULT_CHAT_MODEL } from '../../stores/models'
+import { edgeStrategy } from '../../services/edgeStrategy'
 
 const props = defineProps({
   id: String,
@@ -313,8 +314,8 @@ const createLinkedNode = (type) => {
   const newNodeId = addNode(type, nextPosition)
   if (!newNodeId) return
 
-  if (side === 'right') addEdge({ source: props.id, target: newNodeId, sourceHandle: 'right', targetHandle: 'left' })
-  else addEdge({ source: newNodeId, target: props.id, sourceHandle: 'right', targetHandle: 'left' })
+  if (side === 'right') addEdge(edgeStrategy.resolve({ source: props.id, target: newNodeId, sourceHandle: 'right', targetHandle: 'left' }))
+  else addEdge(edgeStrategy.resolve({ source: newNodeId, target: props.id, sourceHandle: 'right', targetHandle: 'left' }))
 
   nodes.value = nodes.value.map((node) => ({
     ...node,

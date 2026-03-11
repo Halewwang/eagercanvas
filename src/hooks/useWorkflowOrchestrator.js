@@ -16,6 +16,7 @@ import {
   addEdge, 
   updateNode 
 } from '@/stores/canvas'
+import { edgeStrategy } from '@/services/edgeStrategy'
 
 // Workflow types | 工作流类型
 const WORKFLOW_TYPES = {
@@ -341,12 +342,12 @@ export const useWorkflowOrchestrator = () => {
         autoExecute: true
       })
       addLog('info', `创建图片配置节点: ${ctx.nodes.imageConfigId}`)
-      addEdge({
+      addEdge(edgeStrategy.resolve({
         source: ctx.nodes.textNodeId,
         target: ctx.nodes.imageConfigId,
         sourceHandle: 'right',
         targetHandle: 'left'
-      })
+      }))
       return ctx.nodes.imageConfigId
     })
 
@@ -397,12 +398,12 @@ export const useWorkflowOrchestrator = () => {
         autoExecute: true
       })
       addLog('info', `创建图片配置节点: ${ctx.nodes.imageConfigId}`)
-      addEdge({
+      addEdge(edgeStrategy.resolve({
         source: ctx.nodes.imageTextNodeId,
         target: ctx.nodes.imageConfigId,
         sourceHandle: 'right',
         targetHandle: 'left'
-      })
+      }))
       return ctx.nodes.imageConfigId
     })
 
@@ -421,18 +422,18 @@ export const useWorkflowOrchestrator = () => {
         autoExecute: true
       })
       addLog('info', `创建视频配置节点: ${ctx.nodes.videoConfigId}`)
-      addEdge({
+      addEdge(edgeStrategy.resolve({
         source: ctx.nodes.videoTextNodeId,
         target: ctx.nodes.videoConfigId,
         sourceHandle: 'right',
         targetHandle: 'left'
-      })
-      addEdge({
+      }))
+      addEdge(edgeStrategy.resolve({
         source: ctx.nodes.imageNodeId,
         target: ctx.nodes.videoConfigId,
         sourceHandle: 'right',
         targetHandle: 'left'
-      })
+      }))
       return ctx.nodes.videoConfigId
     })
 
@@ -530,18 +531,18 @@ export const useWorkflowOrchestrator = () => {
           })
           addLog('info', `创建分镜${i + 1}配置节点: ${shotConfigId}`)
 
-          addEdge({
-            source: shotTextId,
-            target: shotConfigId,
-            sourceHandle: 'right',
-            targetHandle: 'left'
-          })
-          addEdge({
-            source: ctx.nodes.characterImageId,
-            target: shotConfigId,
-            sourceHandle: 'right',
-            targetHandle: 'left'
-          })
+        addEdge(edgeStrategy.resolve({
+          source: shotTextId,
+          target: shotConfigId,
+          sourceHandle: 'right',
+          targetHandle: 'left'
+        }))
+        addEdge(edgeStrategy.resolve({
+          source: ctx.nodes.characterImageId,
+          target: shotConfigId,
+          sourceHandle: 'right',
+          targetHandle: 'left'
+        }))
 
           ctx.nodes.shots[i] = {
             textId: shotTextId,
@@ -648,20 +649,20 @@ export const useWorkflowOrchestrator = () => {
         addLog('info', `创建${angleConfig.label}配置节点: ${configNodeId}`)
         
         // Connect text → imageConfig
-        addEdge({
+        addEdge(edgeStrategy.resolve({
           source: textNodeId,
           target: configNodeId,
           sourceHandle: 'right',
           targetHandle: 'left'
-        })
+        }))
         
         // Connect character image → imageConfig (as reference)
-        addEdge({
+        addEdge(edgeStrategy.resolve({
           source: characterImageId,
           target: configNodeId,
           sourceHandle: 'right',
           targetHandle: 'left'
-        })
+        }))
         
         createdNodes.angles.push({
           key: angleKey,

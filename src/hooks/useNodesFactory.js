@@ -6,6 +6,7 @@ import { nextTick } from 'vue'
 import { addNode, addEdge, nodes, updateNode } from '../stores/canvas'
 import { translateLabel, WORKFLOW_NAME_MAP } from '../config/labels'
 import { notifier } from '../utils/notifier'
+import { edgeStrategy } from '../services/edgeStrategy'
 
 export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
   
@@ -54,14 +55,14 @@ export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
     
     setTimeout(() => {
       newEdges.forEach(edge => {
-        addEdge({
+        addEdge(edgeStrategy.resolve({
           source: edge.source,
           target: edge.target,
           sourceHandle: edge.sourceHandle || 'right',
           targetHandle: edge.targetHandle || 'left',
           type: edge.type,  // Preserve edge type
           data: edge.data   // Preserve edge data
-        })
+        }))
       })
       
       // Update node internals | 更新节点内部
@@ -94,12 +95,12 @@ export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
       label: 'Image Result'
     })
     
-    addEdge({
+    addEdge(edgeStrategy.resolve({
       source: textNodeId,
       target: imageNodeId,
       sourceHandle: 'right',
       targetHandle: 'left'
-    })
+    }))
     
     return { textNodeId, imageNodeId }
   }

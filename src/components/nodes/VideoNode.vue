@@ -135,6 +135,7 @@ import { addEdge, addNode, duplicateNode, edges, flushSave, nodes, removeNode, u
 import { useApiConfig, useVideoGeneration } from '../../hooks'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, videoModelOptions } from '../../stores/models'
 import { getImageDimensionsFromSource, isSora2AllowedReferenceSize, uploadImageFile } from '@/utils/media'
+import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 
 const props = defineProps({ id: String, data: Object, selected: Boolean })
 
@@ -422,43 +423,27 @@ const setDuration = (key) => {
 }
 
 const getConnectedInputs = () => {
-  const incoming = edges.value.filter(e => e.target === props.id)
-  let prompt = ''
-  let first_frame_image = ''
-  let last_frame_image = ''
-  const images = []
-
-  for (const edge of incoming) {
-    const source = nodes.value.find(n => n.id === edge.source)
-    if (!source) continue
-    if (source.type === 'text' && source.data?.content) prompt = source.data.content
-    if (source.type === 'image' && source.data?.url) {
-      const role = edge.data?.imageRole || 'first_frame_image'
-      const imageData = source.data.base64 || source.data.url
-      if (role === 'first_frame_image') first_frame_image = imageData
-      else if (role === 'last_frame_image') last_frame_image = imageData
-      else images.push(imageData)
-    }
+  const resolved = resolveNodeInputs(props.id)
+  return {
+    prompt: resolved.prompt,
+    first_frame_image: resolved.first_frame_image,
+    last_frame_image: resolved.last_frame_image,
+    images: resolved.images
   }
-
-  return { prompt, first_frame_image, last_frame_image, images }
 }
 
 const getConnectedImageInputs = () => {
-  const incoming = edges.value.filter((edge) => edge.target === props.id)
+  const resolved = resolveNodeInputs(props.id)
   const connected = []
-
-  for (const edge of incoming) {
-    const source = nodes.value.find((node) => node.id === edge.source)
-    if (source?.type !== 'image') continue
-    const imageData = source.data?.base64 || source.data?.url
-    if (!imageData) continue
-    connected.push({
-      role: edge.data?.imageRole || 'first_frame_image',
-      image: imageData
-    })
+  if (resolved.firstFrame) {
+    connected.push({ role: resolved.firstFrame.role, image: resolved.firstFrame.value })
   }
-
+  if (resolved.lastFrame) {
+    connected.push({ role: resolved.lastFrame.role, image: resolved.lastFrame.value })
+  }
+  resolved.referenceImages.forEach((item) => {
+    connected.push({ role: item.role, image: item.value })
+  })
   return connected
 }
 
@@ -697,8 +682,8 @@ const createLinkedNode = (type) => {
   const newNodeId = addNode(type, nextPosition)
   if (!newNodeId) return
 
-  if (side === 'right') addEdge({ source: props.id, target: newNodeId, sourceHandle: 'right', targetHandle: 'left' })
-  else addEdge({ source: newNodeId, target: props.id, sourceHandle: 'right', targetHandle: 'left' })
+  if (side === 'right') addEdge(edgeStrategy.resolve({ source: props.id, target: newNodeId, sourceHandle: 'right', targetHandle: 'left' }))
+  else addEdge(edgeStrategy.resolve({ source: newNodeId, target: props.id, sourceHandle: 'right', targetHandle: 'left' }))
 
   nodes.value = nodes.value.map((node) => ({
     ...node,

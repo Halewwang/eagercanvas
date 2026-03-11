@@ -304,7 +304,7 @@ import {
 import { nodes, edges, addEdge, loadProject, saveProject, flushSave, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
 import { loadAllModels } from '../stores/models'
 import { useNodesFactory } from '../hooks'
-import { edgeStrategy } from '../services/edgeStrategy'
+import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { getErrorMessage } from '@/utils'
 import { getWorkflowById } from '@/config/workflows'
@@ -483,6 +483,10 @@ const saveSharedTemplate = async () => {
 const onConnect = (params) => {
   if (pendingConnect.value) {
     connectSucceeded.value = true
+  }
+  if (!isConnectionValid(params)) {
+    notifier.warning('This connection is not supported for the selected modules')
+    return
   }
   const edge = edgeStrategy.resolve(params)
   addEdge(edge)
