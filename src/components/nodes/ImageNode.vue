@@ -916,6 +916,10 @@ const createLinkedNode = (type) => {
   filter: blur(16px);
 }
 
+.node-glow-active::after {
+  opacity: 1;
+}
+
 .upload-btn {
   margin-top: 4px;
   border: 1px solid rgba(255, 255, 255, 0.16);

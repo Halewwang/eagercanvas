@@ -373,4 +373,8 @@ const createLinkedNode = (type) => {
     radial-gradient(92% 92% at 50% 50%, rgba(115, 138, 255, 0.24), transparent 74%);
   filter: blur(16px);
 }
+
+.node-glow-active::after {
+  opacity: 1;
+}
 </style>

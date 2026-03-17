@@ -814,6 +814,10 @@ watch(
   filter: blur(16px);
 }
 
+.node-glow-active::after {
+  opacity: 1;
+}
+
 .zoom-modal-card {
   max-width: calc(100vw - 80px);
   max-height: calc(100vh - 80px);
