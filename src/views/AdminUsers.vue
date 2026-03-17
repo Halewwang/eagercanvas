@@ -35,8 +35,8 @@
             <button
               v-for="item in navItems"
               :key="`mobile-${item.key}`"
-              class="tiny-btn"
-              :class="{ 'tiny-btn-primary': activeSection === item.key }"
+              class="ui-micro-btn"
+              :class="{ 'ui-micro-btn-primary': activeSection === item.key }"
               @click="scrollToSection(item.key)"
             >
               {{ item.label }}
@@ -53,17 +53,17 @@
               </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <button class="action-btn" :disabled="isRefreshing" @click="loadAll">
+              <button class="ui-action-btn" :disabled="isRefreshing" @click="loadAll">
                 {{ isRefreshing ? 'Refreshing...' : 'Refresh All' }}
               </button>
-              <button class="action-btn" @click="goHome">Back</button>
+              <button class="ui-action-btn" @click="goHome">Back</button>
             </div>
           </header>
 
           <section ref="dashboardRef" class="mb-8 scroll-mt-6">
             <h2 class="section-title">Overview</h2>
             <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
-              <article v-for="card in cards" :key="card.label" class="stat-card rounded-2xl p-4">
+              <article v-for="card in cards" :key="card.label" class="ui-glass-card rounded-2xl p-4">
                 <p class="text-[11px] uppercase tracking-[0.16em] text-white/40">{{ card.label }}</p>
                 <p class="mt-3 text-3xl font-semibold text-white">{{ card.value }}</p>
                 <p class="mt-2 text-xs text-white/55">{{ card.note }}</p>
@@ -71,7 +71,7 @@
             </div>
 
             <div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[1.6fr_1fr]">
-              <div class="panel-card rounded-2xl p-4 md:p-5">
+              <div class="ui-glass-card rounded-2xl p-4 md:p-5">
                 <div class="mb-4 flex items-center justify-between">
                   <h3 class="text-lg font-medium text-white">Usage Trend (Daily)</h3>
                   <span class="text-xs text-white/45">Updated {{ new Date().toLocaleDateString() }}</span>
@@ -90,19 +90,19 @@
                 </div>
               </div>
 
-              <div class="panel-card rounded-2xl p-4 md:p-5">
+              <div class="ui-glass-card rounded-2xl p-4 md:p-5">
                 <h3 class="text-lg font-medium text-white">Admin Session</h3>
                 <div class="mt-4 space-y-3 text-sm">
-                  <div class="info-line"><span>Account</span><strong>{{ auth.user.value?.email || '-' }}</strong></div>
-                  <div class="info-line"><span>Roles</span><strong>{{ auth.roles.value.join(', ') || '-' }}</strong></div>
-                  <div class="info-line"><span>Permissions</span><strong>{{ auth.permissions.value.length }}</strong></div>
-                  <div class="info-line"><span>Status</span><strong class="text-white">Active</strong></div>
+                  <div class="ui-info-line"><span>Account</span><strong>{{ auth.user.value?.email || '-' }}</strong></div>
+                  <div class="ui-info-line"><span>Roles</span><strong>{{ auth.roles.value.join(', ') || '-' }}</strong></div>
+                  <div class="ui-info-line"><span>Permissions</span><strong>{{ auth.permissions.value.length }}</strong></div>
+                  <div class="ui-info-line"><span>Status</span><strong class="text-white">Active</strong></div>
                 </div>
               </div>
             </div>
           </section>
 
-          <section ref="usersRef" class="panel-card mb-8 scroll-mt-6 rounded-2xl p-5 md:p-6">
+          <section ref="usersRef" class="ui-glass-card mb-8 scroll-mt-6 rounded-2xl p-5 md:p-6">
             <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
               <h2 class="section-title">Users & Roles</h2>
               <span class="text-xs text-white/45">Role assignment · account lifecycle</span>
@@ -113,7 +113,7 @@
                 <p class="mb-2 text-xs uppercase tracking-[0.12em] text-white/45">Search User</p>
                 <input
                   v-model.trim="userSearchQuery"
-                  class="query-text"
+                  class="ui-text-input"
                   placeholder="Search by user id or email"
                 />
               </div>
@@ -145,11 +145,11 @@
                       <p class="mt-1 text-[11px] text-white/35">ID: {{ item.id }}</p>
                     </td>
                     <td class="px-3 py-4">
-                      <span class="status-pill" :class="statusClass(item.status)">{{ item.status || 'active' }}</span>
+                      <span class="ui-status-pill" :class="statusClass(item.status)">{{ item.status || 'active' }}</span>
                     </td>
                     <td class="px-3 py-4">
                       <div class="flex flex-wrap gap-1.5">
-                        <span v-for="role in item.roles || []" :key="`${item.id}-${role}`" class="tag-pill">{{ role }}</span>
+                        <span v-for="role in item.roles || []" :key="`${item.id}-${role}`" class="ui-tag-pill">{{ role }}</span>
                       </div>
                     </td>
                     <td class="px-3 py-4">
@@ -172,12 +172,12 @@
                     <td class="px-3 py-4 text-white/85">{{ item.usage?.totalCalls || 0 }}</td>
                     <td class="px-3 py-4">
                       <div class="flex flex-wrap gap-2">
-                        <button class="tiny-btn tiny-btn-primary" :disabled="saving[item.id] || item.status === 'deleted'" @click="saveRoles(item)">
+                        <button class="ui-micro-btn ui-micro-btn-primary" :disabled="saving[item.id] || item.status === 'deleted'" @click="saveRoles(item)">
                           {{ saving[item.id] ? 'Saving...' : 'Save Roles' }}
                         </button>
-                        <button v-if="item.status === 'active'" class="tiny-btn" :disabled="statusLoading[item.id]" @click="suspendUser(item)">Suspend</button>
-                        <button v-if="item.status === 'suspended'" class="tiny-btn" :disabled="statusLoading[item.id]" @click="activateUser(item)">Activate</button>
-                        <button class="tiny-btn tiny-btn-danger" :disabled="deleting[item.id] || item.status === 'deleted'" @click="deleteUser(item)">
+                        <button v-if="item.status === 'active'" class="ui-micro-btn" :disabled="statusLoading[item.id]" @click="suspendUser(item)">Suspend</button>
+                        <button v-if="item.status === 'suspended'" class="ui-micro-btn" :disabled="statusLoading[item.id]" @click="activateUser(item)">Activate</button>
+                        <button class="ui-micro-btn ui-micro-btn-danger" :disabled="deleting[item.id] || item.status === 'deleted'" @click="deleteUser(item)">
                           {{ deleting[item.id] ? 'Deleting...' : 'Delete' }}
                         </button>
                       </div>
@@ -188,36 +188,36 @@
             </div>
 
             <div v-if="totalUserPages > 1" class="mt-5 flex flex-wrap items-center justify-end gap-2">
-              <button class="tiny-btn" :disabled="userPage <= 1" @click="setUserPage(userPage - 1)">Prev</button>
+              <button class="ui-micro-btn" :disabled="userPage <= 1" @click="setUserPage(userPage - 1)">Prev</button>
               <button
                 v-for="page in visibleUserPages"
                 :key="`user-page-${page}`"
-                class="tiny-btn"
-                :class="{ 'tiny-btn-primary': page === userPage }"
+                class="ui-micro-btn"
+                :class="{ 'ui-micro-btn-primary': page === userPage }"
                 @click="setUserPage(page)"
               >
                 {{ page }}
               </button>
-              <button class="tiny-btn" :disabled="userPage >= totalUserPages" @click="setUserPage(userPage + 1)">Next</button>
+              <button class="ui-micro-btn" :disabled="userPage >= totalUserPages" @click="setUserPage(userPage + 1)">Next</button>
             </div>
           </section>
 
-          <section ref="ai302Ref" class="panel-card mb-8 scroll-mt-6 rounded-2xl p-5 md:p-6 space-y-6">
+          <section ref="ai302Ref" class="ui-glass-card mb-8 scroll-mt-6 rounded-2xl p-5 md:p-6 space-y-6">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h2 class="section-title">Eager Service Management</h2>
-              <button class="tiny-btn" :disabled="loading302" @click="load302All">Refresh Service Data</button>
+              <button class="ui-micro-btn" :disabled="loading302" @click="load302All">Refresh Service Data</button>
             </div>
 
             <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div class="stat-card rounded-xl p-4">
+              <div class="ui-glass-card rounded-xl p-4">
                 <p class="text-xs uppercase tracking-[0.12em] text-white/40">Account Balance</p>
                 <p class="mt-2 text-2xl font-semibold text-white">{{ balanceDisplay }}</p>
               </div>
-              <div class="stat-card rounded-xl p-4 md:col-span-3">
+              <div class="ui-glass-card rounded-xl p-4 md:col-span-3">
                 <p class="text-xs uppercase tracking-[0.12em] text-white/40">Deduction Detail (request-id)</p>
                 <div class="mt-2 flex flex-wrap gap-2">
-                  <input v-model="recordRequestId" class="query-text" placeholder="Paste request-id" />
-                  <button class="tiny-btn" :disabled="loadingRecord" @click="queryRecord">{{ loadingRecord ? 'Querying...' : 'Query' }}</button>
+                  <input v-model="recordRequestId" class="ui-text-input" placeholder="Paste request-id" />
+                  <button class="ui-micro-btn" :disabled="loadingRecord" @click="queryRecord">{{ loadingRecord ? 'Querying...' : 'Query' }}</button>
                 </div>
                 <div v-if="recordData" class="mt-3 grid grid-cols-2 gap-2 text-xs text-white/75 md:grid-cols-5">
                   <div>Model: {{ recordData.model || '-' }}</div>
@@ -233,11 +233,11 @@
               <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <h3 class="text-sm font-medium text-white">API Log Query</h3>
                 <div class="flex flex-wrap items-center gap-2">
-                  <input v-model="log302Query.start" type="datetime-local" class="query-text !w-[190px]" />
-                  <input v-model="log302Query.end" type="datetime-local" class="query-text !w-[190px]" />
-                  <input v-model.number="log302Query.page" type="number" min="1" class="query-input" />
-                  <input v-model.number="log302Query.limit" type="number" min="1" max="50" class="query-input" />
-                  <button class="tiny-btn" :disabled="loadingApiLogs" @click="loadApiLogs">Search</button>
+                  <input v-model="log302Query.start" type="datetime-local" class="ui-text-input !w-[190px]" />
+                  <input v-model="log302Query.end" type="datetime-local" class="ui-text-input !w-[190px]" />
+                  <input v-model.number="log302Query.page" type="number" min="1" class="ui-number-input" />
+                  <input v-model.number="log302Query.limit" type="number" min="1" max="50" class="ui-number-input" />
+                  <button class="ui-micro-btn" :disabled="loadingApiLogs" @click="loadApiLogs">Search</button>
                 </div>
               </div>
               <div v-if="apiLogs.length === 0" class="rounded-xl border border-dashed border-white/15 p-4 text-sm text-white/50">No API logs</div>
@@ -268,17 +268,17 @@
             <div>
               <h3 class="text-sm font-medium text-white">Create API Key</h3>
               <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-4">
-                <input v-model="createKeyForm.api_name" class="query-text" placeholder="api_name" />
-                <input v-model.number="createKeyForm.limit_cost" type="number" min="0" class="query-text" placeholder="limit_cost" />
-                <input v-model.number="createKeyForm.limit_daily_cost" type="number" min="0" class="query-text" placeholder="limit_daily_cost" />
-                <input v-model.number="createKeyForm.expired_on" type="number" min="0" class="query-text" placeholder="expired_on(unix)" />
+                <input v-model="createKeyForm.api_name" class="ui-text-input" placeholder="api_name" />
+                <input v-model.number="createKeyForm.limit_cost" type="number" min="0" class="ui-text-input" placeholder="limit_cost" />
+                <input v-model.number="createKeyForm.limit_daily_cost" type="number" min="0" class="ui-text-input" placeholder="limit_daily_cost" />
+                <input v-model.number="createKeyForm.expired_on" type="number" min="0" class="ui-text-input" placeholder="expired_on(unix)" />
               </div>
               <div class="mt-2 flex flex-wrap gap-3 text-xs text-white/65">
                 <label><input v-model="createKeyForm.allow_save_logs" type="checkbox" /> allow_save_logs</label>
                 <label><input v-model="createKeyForm.allow_custom_model" type="checkbox" /> allow_custom_model</label>
                 <label><input v-model="createKeyForm.allow_manage_key" type="checkbox" /> allow_manage_key</label>
               </div>
-              <button class="tiny-btn tiny-btn-primary mt-2" :disabled="creatingApiKey" @click="createApiKey">
+              <button class="ui-micro-btn ui-micro-btn-primary mt-2" :disabled="creatingApiKey" @click="createApiKey">
                 {{ creatingApiKey ? 'Creating...' : 'Create Key' }}
               </button>
             </div>
@@ -305,9 +305,9 @@
                       <td class="px-2 py-2 text-white/85">{{ item.api_name }}</td>
                       <td class="px-2 py-2 text-white/70">{{ maskApiKey(item.api_key) }}</td>
                       <td class="px-2 py-2 text-white/75">{{ item.current_cost ?? 0 }}</td>
-                      <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].limit_cost" type="number" min="0" class="query-text !w-[110px]" /></td>
-                      <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].limit_daily_cost" type="number" min="0" class="query-text !w-[110px]" /></td>
-                      <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].expired_on" type="number" min="0" class="query-text !w-[120px]" /></td>
+                      <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].limit_cost" type="number" min="0" class="ui-text-input !w-[110px]" /></td>
+                      <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].limit_daily_cost" type="number" min="0" class="ui-text-input !w-[110px]" /></td>
+                      <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].expired_on" type="number" min="0" class="ui-text-input !w-[120px]" /></td>
                       <td class="px-2 py-2 text-xs text-white/65">
                         <label class="block"><input v-model="keyDrafts[item.api_name].allow_save_logs" type="checkbox" /> logs</label>
                         <label class="block"><input v-model="keyDrafts[item.api_name].allow_custom_model" type="checkbox" /> custom model</label>
@@ -315,10 +315,10 @@
                       </td>
                       <td class="px-2 py-2">
                         <div class="flex flex-wrap gap-2">
-                          <button class="tiny-btn" :disabled="updatingKeys[item.api_name]" @click="updateApiKey(item)">
+                          <button class="ui-micro-btn" :disabled="updatingKeys[item.api_name]" @click="updateApiKey(item)">
                             {{ updatingKeys[item.api_name] ? 'Saving...' : 'Update' }}
                           </button>
-                          <button class="tiny-btn tiny-btn-danger" :disabled="deletingKeys[item.api_name]" @click="removeApiKey(item)">
+                          <button class="ui-micro-btn ui-micro-btn-danger" :disabled="deletingKeys[item.api_name]" @click="removeApiKey(item)">
                             {{ deletingKeys[item.api_name] ? 'Deleting...' : 'Delete' }}
                           </button>
                         </div>
@@ -330,13 +330,13 @@
             </div>
           </section>
 
-          <section ref="auditRef" class="panel-card scroll-mt-6 rounded-2xl p-5 md:p-6">
+          <section ref="auditRef" class="ui-glass-card scroll-mt-6 rounded-2xl p-5 md:p-6">
             <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
               <h2 class="section-title">Admin Audit Logs</h2>
               <div class="flex items-center gap-2 text-xs">
-                <input v-model.number="logQuery.page" type="number" min="1" class="query-input" />
-                <input v-model.number="logQuery.limit" type="number" min="1" max="100" class="query-input" />
-                <button class="tiny-btn" :disabled="loadingLogs" @click="loadLogs">Search</button>
+                <input v-model.number="logQuery.page" type="number" min="1" class="ui-number-input" />
+                <input v-model.number="logQuery.limit" type="number" min="1" max="100" class="ui-number-input" />
+                <button class="ui-micro-btn" :disabled="loadingLogs" @click="loadLogs">Search</button>
               </div>
             </div>
 
@@ -569,9 +569,9 @@ watch(filteredUsers, () => {
 
 const statusClass = (status) => {
   const val = String(status || 'active')
-  if (val === 'suspended') return 'status-pill-suspended'
-  if (val === 'deleted') return 'status-pill-deleted'
-  return 'status-pill-active'
+  if (val === 'suspended') return 'ui-status-pill-suspended'
+  if (val === 'deleted') return 'ui-status-pill-deleted'
+  return 'ui-status-pill-active'
 }
 
 const formatDateTime = (value) => {
@@ -918,114 +918,4 @@ onBeforeUnmount(() => {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-.action-btn {
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 9px 14px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.action-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.panel-card,
-.stat-card {
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.info-line {
-  display: flex;
-  justify-content: space-between;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
-  padding-bottom: 8px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.info-line strong {
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.tag-pill {
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  padding: 3px 9px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.status-pill {
-  border-radius: 999px;
-  border: 1px solid transparent;
-  padding: 4px 10px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.status-pill-active {
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.status-pill-suspended {
-  border-color: rgba(180, 180, 180, 0.4);
-  background: rgba(180, 180, 180, 0.16);
-  color: rgba(232, 232, 232, 0.95);
-}
-
-.status-pill-deleted {
-  border-color: rgba(110, 110, 110, 0.48);
-  background: rgba(110, 110, 110, 0.18);
-  color: rgba(210, 210, 210, 0.92);
-}
-
-.tiny-btn {
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 5px 10px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.tiny-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.tiny-btn-primary {
-  border-color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.tiny-btn-danger {
-  border-color: rgba(120, 120, 120, 0.45);
-  background: rgba(90, 90, 90, 0.2);
-}
-
-.query-input {
-  width: 72px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 6px 8px;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.query-text {
-  width: 100%;
-  min-width: 120px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 6px 10px;
-  color: rgba(255, 255, 255, 0.9);
-}
 </style>

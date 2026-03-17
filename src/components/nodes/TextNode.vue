@@ -1,5 +1,5 @@
 <template>
-  <div class="text-node-wrapper" @mouseenter="showCapsule = true" @mouseleave="showCapsule = false">
+  <div class="text-node-wrapper node-shell-wrapper" @mouseenter="showCapsule = true" @mouseleave="showCapsule = false">
     <div class="node-meta-row" @mousedown="handleMetaMouseDown">
       <n-icon :size="16" class="meta-icon"><TextOutline /></n-icon>
       <span class="meta-title">Text</span>
@@ -330,12 +330,8 @@ const createLinkedNode = (type) => {
 }
 </script>
 
+<style scoped src="./node-base.css"></style>
 <style scoped>
-.text-node-wrapper {
-  position: relative;
-  padding-top: 88px;
-}
-
 .text-node {
   cursor: default;
   position: relative;
@@ -346,26 +342,6 @@ const createLinkedNode = (type) => {
   border-radius: var(--module-radius);
 }
 
-.node-meta-row {
-  position: absolute;
-  top: 58px;
-  left: 0;
-  z-index: 10;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #9ca3af;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0;
-  border-radius: 10px;
-  cursor: grab;
-}
-
-.meta-icon { color: #c9ccd2; }
-.meta-title { color: #d7dbe3; font-size: 14px; letter-spacing: 0.01em; }
-
-.module-stage { margin: 0 auto; overflow: hidden; border-radius: var(--module-radius); }
 .text-area-wrap {
   width: 100%;
   height: 100%;
@@ -380,148 +356,6 @@ const createLinkedNode = (type) => {
 .text-area-wrap textarea {
   flex: 1;
   min-height: 92px;
-}
-.module-progress-shell {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  overflow: hidden;
-  background: #101010;
-}
-.module-progress-track {
-  position: absolute;
-  inset: 0;
-  background: transparent;
-}
-.module-progress-bar {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 0%;
-  background: #2d2d2d;
-  transition: width 0.12s linear;
-}
-.module-progress-label {
-  position: absolute;
-  left: 12px;
-  bottom: 10px;
-  color: rgba(247, 249, 252, 0.9);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.capsule-menu { 
-  pointer-events: auto; 
-  top: 6px; 
-  display: inline-flex; 
-  align-items: center; 
-  gap: 8px;
-  white-space: nowrap;
-  flex-wrap: nowrap;
-}
-.capsule-inner {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 12px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: #0f0f0f;
-  backdrop-filter: blur(10px);
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.capsule-inner:hover {
-  border-color: rgba(143, 143, 143, 0.25);
-  background: #232323;
-}
-
-.capsule-inner-selected {
-  border-color: transparent;
-}
-
-.capsule-generate { padding: 7px; }
-.capsule-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.capsule-divider { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.12); }
-
-.capsule-select {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.02);
-  color: #e7e8eb;
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1;
-  padding: 7px 9px;
-  max-width: 148px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: all 0.2s ease;
-}
-
-.capsule-select:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.capsule-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #b8bcc5;
-  background: rgba(255, 255, 255, 0.02);
-  transition: all 0.2s;
-}
-
-.capsule-icon:hover:not(:disabled) {
-  color: #f0f2f5;
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.capsule-icon-solid {
-  background: #0f0f0f;
-  color: #f6f8fc;
-  border-color: rgba(143, 143, 143, 0.65);
-}
-
-.capsule-icon-solid:hover:not(:disabled) {
-  background: #2a2a2a;
-  border-color: rgba(255, 255, 255, 0.8);
-}
-.capsule-create {
-  width: auto;
-  min-width: 86px;
-  padding: 0 14px;
-  gap: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  height: 28px;
-}
-
-.capsule-create-label {
-  font-size: 12px;
-  line-height: 1;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.node-default { border-width: 0; border-color: transparent; box-shadow: none; }
-.node-selected {
-  border-width: 1px;
-  border-color: #7278a7;
-  box-shadow: 0 0 0 1px rgba(132, 142, 220, 0.42);
 }
 
 .text-node::after {
@@ -538,79 +372,5 @@ const createLinkedNode = (type) => {
     radial-gradient(58% 52% at 78% 18%, rgba(255, 123, 95, 0.38), transparent 72%),
     radial-gradient(92% 92% at 50% 50%, rgba(115, 138, 255, 0.24), transparent 74%);
   filter: blur(16px);
-}
-
-.node-glow-active::after {
-  opacity: 1;
-}
-
-:deep(.node-handle-plus) {
-  width: 28px !important;
-  height: 28px !important;
-  display: grid !important;
-  place-items: center !important;
-  border-radius: 999px !important;
-  border: 1px solid rgba(214, 216, 222, 0.82) !important;
-  background: rgba(11, 13, 17, 0.96) !important;
-  color: #d6d8de !important;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.72);
-  z-index: 60 !important;
-  transition: none !important;
-  opacity: 0;
-  pointer-events: none;
-}
-
-:deep(.node-handle-plus::before) {
-  content: "+";
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1;
-  display: block;
-  margin: -1px 0 0 0;
-}
-
-:deep(.node-handle-plus-left) { left: -25px !important; }
-:deep(.node-handle-plus-right) { right: -25px !important; }
-
-:deep(.node-handle-plus-visible) {
-  opacity: 1 !important;
-  pointer-events: auto !important;
-}
-
-.binding-status-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-}
-.binding-status-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-.binding-status-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 11px;
-  border-radius: 999px;
-  border: 1px solid rgba(143, 143, 143, 0.45);
-  background: #1d1d1d;
-  color: #8f939e;
-  font-size: 12px;
-  line-height: 1;
-  white-space: nowrap;
-}
-.binding-status-pill-idle {
-  border-color: rgba(143, 143, 143, 0.36);
-  color: #818793;
-  background: #1a1a1a;
-}
-.binding-status-pill-active {
-  border-color: rgba(255, 255, 255, 0.62);
-  color: #f2f3f5;
-  background: #2a2a2a;
 }
 </style>

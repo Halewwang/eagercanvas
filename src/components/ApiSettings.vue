@@ -172,45 +172,7 @@ const handleSave = async () => {
 
 <style scoped>
 .profile-modal {
-  width: min(760px, calc(100vw - 48px));
   min-height: 400px;
-  padding: 18px 18px;
-  border-radius: 14px;
-  border: 1px solid rgba(143, 143, 143, 0.24);
-  background: radial-gradient(120% 120% at 80% 45%, rgba(114, 40, 40, 0.16), transparent 60%), #090a0d;
-  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.5);
-}
-
-.profile-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.profile-title {
-  margin: 0;
-  color: #f3f4f7;
-  font-size: 18px;
-  line-height: 1;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.close-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #8f939e;
-  border: 1px solid transparent;
-}
-
-.close-btn:hover {
-  border-color: rgba(143, 143, 143, 0.3);
-  color: #d7dbe3;
 }
 
 .profile-body {
@@ -325,30 +287,11 @@ const handleSave = async () => {
   background: transparent;
 }
 
-.save-btn {
-  min-width: 112px;
-  height: 34px;
-  border-radius: 8px;
-  font-size: 12px;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(143, 143, 143, 0.36);
-}
-
-.save-btn:hover {
-  border-color: rgba(226, 229, 235, 0.72);
-  background: rgba(255, 255, 255, 0.14);
-}
-
 @media (max-width: 1200px) {
   .profile-modal {
     width: min(620px, calc(100vw - 24px));
     min-height: auto;
     padding: 14px;
-  }
-
-  .profile-title {
-    font-size: 16px;
   }
 
   .profile-body {
@@ -374,12 +317,6 @@ const handleSave = async () => {
 
   :deep(.n-input .n-input__input-el) {
     font-size: 12px;
-  }
-
-  .save-btn {
-    min-width: 102px;
-    height: 32px;
-    font-size: 11px;
   }
 }
 </style>
