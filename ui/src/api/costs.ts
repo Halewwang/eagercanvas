@@ -5,11 +5,13 @@ import type {
   CostByBiller,
   CostByAgentModel,
   CostByProject,
+  CostByUser,
   CostWindowSpendRow,
   FinanceSummary,
   FinanceByBiller,
   FinanceByKind,
   FinanceEvent,
+  ProviderRequestLog,
   ProviderQuotaResult,
 } from "@paperclipai/shared";
 import { api } from "./client";
@@ -31,6 +33,8 @@ export const costsApi = {
     api.get<CostByAgentModel[]>(`/companies/${companyId}/costs/by-agent-model${dateParams(from, to)}`),
   byProject: (companyId: string, from?: string, to?: string) =>
     api.get<CostByProject[]>(`/companies/${companyId}/costs/by-project${dateParams(from, to)}`),
+  byUser: (companyId: string, from?: string, to?: string) =>
+    api.get<CostByUser[]>(`/companies/${companyId}/costs/by-user${dateParams(from, to)}`),
   byProvider: (companyId: string, from?: string, to?: string) =>
     api.get<CostByProviderModel[]>(`/companies/${companyId}/costs/by-provider${dateParams(from, to)}`),
   byBiller: (companyId: string, from?: string, to?: string) =>
@@ -43,6 +47,19 @@ export const costsApi = {
     api.get<FinanceByKind[]>(`/companies/${companyId}/costs/finance-by-kind${dateParams(from, to)}`),
   financeEvents: (companyId: string, from?: string, to?: string, limit: number = 100) =>
     api.get<FinanceEvent[]>(`/companies/${companyId}/costs/finance-events${dateParamsWithLimit(from, to, limit)}`),
+  providerRequestLogs: (
+    companyId: string,
+    options: { from?: string; to?: string; userId?: string; providerKeyId?: string; limit?: number } = {},
+  ) =>
+    api.get<ProviderRequestLog[]>(
+      `/companies/${companyId}/provider-request-logs${requestLogParams(
+        options.from,
+        options.to,
+        options.userId,
+        options.providerKeyId,
+        options.limit,
+      )}`,
+    ),
   windowSpend: (companyId: string) =>
     api.get<CostWindowSpendRow[]>(`/companies/${companyId}/costs/window-spend`),
   quotaWindows: (companyId: string) =>
@@ -53,6 +70,23 @@ function dateParamsWithLimit(from?: string, to?: string, limit?: number): string
   const params = new URLSearchParams();
   if (from) params.set("from", from);
   if (to) params.set("to", to);
+  if (limit) params.set("limit", String(limit));
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+function requestLogParams(
+  from?: string,
+  to?: string,
+  userId?: string,
+  providerKeyId?: string,
+  limit?: number,
+): string {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  if (userId) params.set("userId", userId);
+  if (providerKeyId) params.set("providerKeyId", providerKeyId);
   if (limit) params.set("limit", String(limit));
   const qs = params.toString();
   return qs ? `?${qs}` : "";

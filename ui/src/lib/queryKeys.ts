@@ -57,6 +57,9 @@ export const queryKeys = {
     joinRequests: (companyId: string, status: string = "pending_approval") =>
       ["access", "join-requests", companyId, status] as const,
     invite: (token: string) => ["access", "invite", token] as const,
+    members: (companyId: string) => ["access", "members", companyId] as const,
+    providerKeys: (companyId: string) => ["access", "provider-keys", companyId] as const,
+    userKeyAssignments: (companyId: string) => ["access", "user-key-assignments", companyId] as const,
   },
   auth: {
     session: ["auth", "session"] as const,
@@ -86,6 +89,21 @@ export const queryKeys = {
     ["finance-by-kind", companyId, from, to] as const,
   financeEvents: (companyId: string, from?: string, to?: string, limit: number = 100) =>
     ["finance-events", companyId, from, to, limit] as const,
+  costsByUser: (companyId: string, from?: string, to?: string) =>
+    ["costs-by-user", companyId, from, to] as const,
+  providerRequestLogs: (
+    companyId: string,
+    options?: { from?: string; to?: string; userId?: string; providerKeyId?: string; limit?: number },
+  ) =>
+    [
+      "provider-request-logs",
+      companyId,
+      options?.from,
+      options?.to,
+      options?.userId,
+      options?.providerKeyId,
+      options?.limit ?? 100,
+    ] as const,
   usageWindowSpend: (companyId: string) =>
     ["usage-window-spend", companyId] as const,
   usageQuotaWindows: (companyId: string) =>

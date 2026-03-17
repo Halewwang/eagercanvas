@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@/lib/router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
 import { activityApi } from "../api/activity";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
 import { heartbeatsApi } from "../api/heartbeats";
+import { costsApi } from "../api/costs";
+import { accessApi } from "../api/access";
+import { providerProxyApi } from "../api/providerProxy";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
@@ -23,6 +26,7 @@ import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle }
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { UserProviderKeysPanel } from "../components/UserProviderKeysPanel";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
 
@@ -35,10 +39,17 @@ export function Dashboard() {
   const { selectedCompanyId, companies } = useCompany();
   const { openOnboarding } = useDialog();
   const { setBreadcrumbs } = useBreadcrumbs();
+  const queryClient = useQueryClient();
   const [animatedActivityIds, setAnimatedActivityIds] = useState<Set<string>>(new Set());
   const seenActivityIdsRef = useRef<Set<string>>(new Set());
   const hydratedActivityRef = useRef(false);
   const activityAnimationTimersRef = useRef<number[]>([]);
+  const [proxyTargetUserId, setProxyTargetUserId] = useState("");
+  const [proxyModel, setProxyModel] = useState("gpt-4.1-mini");
+  const [proxyPrompt, setProxyPrompt] = useState("Return a one-line confirmation that this 302 proxy path is working.");
+  const [proxyResult, setProxyResult] = useState<string | null>(null);
+  const [syncProviderKeyId, setSyncProviderKeyId] = useState("");
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -80,8 +91,111 @@ export function Dashboard() {
     enabled: !!selectedCompanyId,
   });
 
+  const { data: userCosts } = useQuery({
+    queryKey: queryKeys.costsByUser(selectedCompanyId!),
+    queryFn: () => costsApi.byUser(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: providerRequestLogs } = useQuery({
+    queryKey: queryKeys.providerRequestLogs(selectedCompanyId!, { limit: 12 }),
+    queryFn: () => costsApi.providerRequestLogs(selectedCompanyId!, { limit: 12 }),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: assignments } = useQuery({
+    queryKey: selectedCompanyId ? queryKeys.access.userKeyAssignments(selectedCompanyId) : ["access", "user-key-assignments", "none"],
+    queryFn: () => accessApi.listUserKeyAssignments(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: providerKeys } = useQuery({
+    queryKey: selectedCompanyId ? queryKeys.access.providerKeys(selectedCompanyId) : ["access", "provider-keys", "none"],
+    queryFn: () => accessApi.listProviderKeys(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
   const recentIssues = issues ? getRecentIssues(issues) : [];
   const recentActivity = useMemo(() => (activity ?? []).slice(0, 10), [activity]);
+  const userCostRows = userCosts ?? [];
+  const providerLogRows = providerRequestLogs ?? [];
+  const trackedUserSpend = userCostRows.reduce((sum, row) => sum + row.costCents, 0);
+  const activeAssignedUsers = useMemo(
+    () => (assignments ?? []).filter((assignment) => !assignment.revokedAt && assignment.provider === "302ai"),
+    [assignments],
+  );
+  const active302Keys = useMemo(
+    () => (providerKeys ?? []).filter((key) => key.provider === "302ai" && key.status !== "revoked"),
+    [providerKeys],
+  );
+
+  useEffect(() => {
+    if (!activeAssignedUsers.length) {
+      setProxyTargetUserId("");
+      return;
+    }
+    setProxyTargetUserId((current) =>
+      activeAssignedUsers.some((assignment) => assignment.userId === current)
+        ? current
+        : activeAssignedUsers[0]!.userId,
+    );
+  }, [activeAssignedUsers]);
+
+  useEffect(() => {
+    if (!active302Keys.length) {
+      setSyncProviderKeyId("");
+      return;
+    }
+    setSyncProviderKeyId((current) =>
+      active302Keys.some((key) => key.id === current)
+        ? current
+        : active302Keys[0]!.id,
+    );
+  }, [active302Keys]);
+
+  const proxyMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedCompanyId) throw new Error("No company selected");
+      if (!proxyTargetUserId) throw new Error("Select a user assignment first");
+      return providerProxyApi.chatCompletion(selectedCompanyId, {
+        targetUserId: proxyTargetUserId,
+        payload: {
+          model: proxyModel.trim(),
+          messages: [{ role: "user", content: proxyPrompt.trim() }],
+          temperature: 0,
+        },
+      });
+    },
+    onSuccess: async (result) => {
+      setProxyResult(JSON.stringify(result, null, 2));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.costsByUser(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.providerRequestLogs(selectedCompanyId!, { limit: 12 }) }),
+      ]);
+    },
+    onError: (error) => {
+      setProxyResult(error instanceof Error ? error.message : "302 proxy request failed");
+    },
+  });
+
+  const syncLogsMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedCompanyId) throw new Error("No company selected");
+      if (!syncProviderKeyId) throw new Error("Select a 302 provider key first");
+      return providerProxyApi.syncLogs(selectedCompanyId, syncProviderKeyId, {});
+    },
+    onSuccess: async (result) => {
+      setSyncResult(JSON.stringify(result, null, 2));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.costsByUser(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.providerRequestLogs(selectedCompanyId!, { limit: 12 }) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.access.providerKeys(selectedCompanyId!) }),
+      ]);
+    },
+    onError: (error) => {
+      setSyncResult(error instanceof Error ? error.message : "302 log sync failed");
+    },
+  });
 
   useEffect(() => {
     for (const timer of activityAnimationTimersRef.current) {
@@ -304,6 +418,232 @@ export function Dashboard() {
             className="grid gap-4 md:grid-cols-2"
             itemClassName="rounded-lg border bg-card p-4 shadow-sm"
           />
+
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Admin Users
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Register 302 provider keys and assign them to active company members from the main
+                control panel.
+              </p>
+            </div>
+            <UserProviderKeysPanel />
+            <div className="space-y-3 rounded-md border border-border px-4 py-4">
+              <div>
+                <h4 className="text-sm font-medium">302 Chat Probe</h4>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Send a non-stream chat completion through the assigned 302 key for a selected user.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Assigned user</label>
+                  <select
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                    value={proxyTargetUserId}
+                    onChange={(event) => setProxyTargetUserId(event.target.value)}
+                  >
+                    <option value="">Select assigned user</option>
+                    {activeAssignedUsers.map((assignment) => (
+                      <option key={assignment.assignmentId} value={assignment.userId}>
+                        {(assignment.userName ?? assignment.userEmail ?? assignment.userId)} · {assignment.providerKeyName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Model</label>
+                  <input
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                    type="text"
+                    value={proxyModel}
+                    onChange={(event) => setProxyModel(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Prompt</label>
+                <textarea
+                  className="min-h-24 w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                  value={proxyPrompt}
+                  onChange={(event) => setProxyPrompt(event.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={
+                    proxyMutation.isPending ||
+                    !proxyTargetUserId ||
+                    !proxyModel.trim() ||
+                    !proxyPrompt.trim()
+                  }
+                  onClick={() => proxyMutation.mutate()}
+                >
+                  {proxyMutation.isPending ? "Sending..." : "Run 302 Chat Probe"}
+                </button>
+                <span className="text-xs text-muted-foreground">
+                  {activeAssignedUsers.length} users with active 302 assignments
+                </span>
+              </div>
+              {proxyResult && (
+                <pre className="overflow-x-auto rounded-md border border-border bg-muted/30 p-3 text-xs">
+                  {proxyResult}
+                </pre>
+              )}
+            </div>
+            <div className="space-y-3 rounded-md border border-border px-4 py-4">
+              <div>
+                <h4 className="text-sm font-medium">302 Log Sync</h4>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pull the latest 24 hours of API Log Query rows from 302 and reconcile them into the local user ledger.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">302 provider key</label>
+                  <select
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                    value={syncProviderKeyId}
+                    onChange={(event) => setSyncProviderKeyId(event.target.value)}
+                  >
+                    <option value="">Select 302 key</option>
+                    {active302Keys.map((key) => (
+                      <option key={key.id} value={key.id}>
+                        {key.name}
+                        {key.lastSyncedAt ? ` · last sync ${timeAgo(key.lastSyncedAt)}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={syncLogsMutation.isPending || !syncProviderKeyId}
+                  onClick={() => syncLogsMutation.mutate()}
+                >
+                  {syncLogsMutation.isPending ? "Syncing..." : "Sync Last 24h"}
+                </button>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {active302Keys.length} registered 302 keys available for reconciliation
+              </div>
+              {syncResult && (
+                <pre className="overflow-x-auto rounded-md border border-border bg-muted/30 p-3 text-xs">
+                  {syncResult}
+                </pre>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)]">
+            <div className="space-y-3 rounded-md border border-border px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    User Spend
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Consumption tracked against explicit `userId` in the local provider request ledger.
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-semibold">{formatCents(trackedUserSpend)}</div>
+                  <div className="text-xs text-muted-foreground">{userCostRows.length} tracked rows</div>
+                </div>
+              </div>
+              {userCostRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No user-attributed spend recorded yet. Once 302 requests are proxied with `userId`,
+                  this table will populate.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {userCostRows.slice(0, 8).map((row) => (
+                    <div
+                      key={`${row.userId}:${row.providerKeyId ?? "none"}`}
+                      className="flex items-start justify-between gap-3 rounded-md border border-border px-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-medium">
+                          {row.userName ?? row.userEmail ?? row.userId}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {row.userEmail ?? row.userId}
+                          {row.providerKeyName ? ` · ${row.providerKeyName}` : ""}
+                          {row.provider ? ` · ${row.provider}` : ""}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {row.requestCount} requests · in {row.inputTokens} · out {row.outputTokens}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="font-medium">{formatCents(row.costCents)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {row.lastOccurredAt ? timeAgo(row.lastOccurredAt) : "No recent usage"}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 rounded-md border border-border px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Recent Provider Logs
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Latest mapped provider requests, ready for 302 reconciliation by `externalRequestId`.
+                  </p>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {providerLogRows.length} shown
+                </div>
+              </div>
+              {providerLogRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No provider request logs captured yet.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {providerLogRows.map((row) => (
+                    <div key={row.id} className="rounded-md border border-border px-3 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium">
+                            {row.userName ?? row.userEmail ?? row.userId ?? "Unmapped user"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {row.provider} · {row.model}
+                            {row.providerKeyName ? ` · ${row.providerKeyName}` : ""}
+                          </div>
+                          <div className="mt-1 font-mono text-xs text-muted-foreground">
+                            {row.externalRequestId}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right text-xs text-muted-foreground">
+                          <div>{row.status}{row.httpStatus ? ` · ${row.httpStatus}` : ""}</div>
+                          <div>{timeAgo(row.requestStartedAt)}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>{row.requestMethod ?? "POST"} {row.requestPath ?? "/"}</span>
+                        <span>cost {row.costCents != null ? formatCents(row.costCents) : "pending"}</span>
+                        <span>in {row.inputTokens}</span>
+                        <span>out {row.outputTokens}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
 
           <div className="grid md:grid-cols-2 gap-4">
             {/* Recent Activity */}

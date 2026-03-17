@@ -75,6 +75,54 @@ type CompanyInviteCreated = {
   inviteMessage?: string | null;
 };
 
+export type CompanyMemberSummary = {
+  id: string;
+  companyId: string;
+  principalType: "user" | "agent";
+  principalId: string;
+  status: "pending" | "active" | "suspended";
+  membershipRole: string | null;
+  createdAt: string;
+  updatedAt: string;
+  userName?: string | null;
+  userEmail?: string | null;
+};
+
+export type CompanyProviderKey = {
+  id: string;
+  companyId: string;
+  provider: string;
+  name: string;
+  externalKeyId: string | null;
+  secretId: string;
+  secretVersion: number | null;
+  status: "active" | "disabled" | "revoked";
+  allowSaveLogs: boolean;
+  allowManageKey: boolean;
+  limitCostCents: number | null;
+  limitDailyCostCents: number | null;
+  expiresAt: string | null;
+  lastSyncedAt: string | null;
+  metadataJson: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UserProviderKeyAssignmentSummary = {
+  assignmentId: string;
+  companyId: string;
+  userId: string;
+  userName: string | null;
+  userEmail: string | null;
+  providerKeyId: string;
+  provider: string;
+  providerKeyName: string;
+  assignmentMode: "exclusive" | "shared";
+  assignedByUserId: string | null;
+  assignedAt: string;
+  revokedAt: string | null;
+};
+
 export const accessApi = {
   createCompanyInvite: (
     companyId: string,
@@ -115,6 +163,70 @@ export const accessApi = {
 
   rejectJoinRequest: (companyId: string, requestId: string) =>
     api.post<JoinRequest>(`/companies/${companyId}/join-requests/${requestId}/reject`, {}),
+
+  listMembers: (companyId: string) =>
+    api.get<CompanyMemberSummary[]>(`/companies/${companyId}/members`),
+
+  listProviderKeys: (companyId: string) =>
+    api.get<CompanyProviderKey[]>(`/companies/${companyId}/provider-keys`),
+
+  createProviderKey: (
+    companyId: string,
+    input: {
+      provider: string;
+      name: string;
+      secretId: string;
+      secretVersion?: number | null;
+      externalKeyId?: string | null;
+      allowSaveLogs?: boolean;
+      allowManageKey?: boolean;
+      limitCostCents?: number | null;
+      limitDailyCostCents?: number | null;
+      expiresAt?: string | null;
+      metadataJson?: Record<string, unknown> | null;
+    },
+  ) => api.post<CompanyProviderKey>(`/companies/${companyId}/provider-keys`, input),
+
+  updateProviderKey: (
+    companyId: string,
+    keyId: string,
+    input: Partial<{
+      provider: string;
+      name: string;
+      secretId: string;
+      secretVersion: number | null;
+      externalKeyId: string | null;
+      status: "active" | "disabled" | "revoked";
+      allowSaveLogs: boolean;
+      allowManageKey: boolean;
+      limitCostCents: number | null;
+      limitDailyCostCents: number | null;
+      expiresAt: string | null;
+      metadataJson: Record<string, unknown> | null;
+    }>,
+  ) => api.patch<CompanyProviderKey>(`/companies/${companyId}/provider-keys/${encodeURIComponent(keyId)}`, input),
+
+  revokeProviderKey: (companyId: string, keyId: string) =>
+    api.post<CompanyProviderKey>(`/companies/${companyId}/provider-keys/${encodeURIComponent(keyId)}/revoke`, {}),
+
+  listUserKeyAssignments: (companyId: string) =>
+    api.get<UserProviderKeyAssignmentSummary[]>(`/companies/${companyId}/user-key-assignments`),
+
+  assignUserProviderKey: (
+    companyId: string,
+    userId: string,
+    input: {
+      providerKeyId: string;
+      assignmentMode?: "exclusive" | "shared";
+    },
+  ) =>
+    api.put<UserProviderKeyAssignmentSummary>(
+      `/companies/${companyId}/users/${encodeURIComponent(userId)}/provider-key-assignment`,
+      input,
+    ),
+
+  revokeUserProviderKeyAssignment: (companyId: string, userId: string) =>
+    api.delete<{ ok: true }>(`/companies/${companyId}/users/${encodeURIComponent(userId)}/provider-key-assignment`),
 
   claimJoinRequestApiKey: (requestId: string, claimSecret: string) =>
     api.post<{ keyId: string; token: string; agentId: string; createdAt: string }>(

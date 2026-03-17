@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
+  authUsers,
   companyMemberships,
   instanceUserRoles,
   principalPermissionGrants,
@@ -77,8 +78,26 @@ export function accessService(db: Db) {
 
   async function listMembers(companyId: string) {
     return db
-      .select()
+      .select({
+        id: companyMemberships.id,
+        companyId: companyMemberships.companyId,
+        principalType: companyMemberships.principalType,
+        principalId: companyMemberships.principalId,
+        status: companyMemberships.status,
+        membershipRole: companyMemberships.membershipRole,
+        createdAt: companyMemberships.createdAt,
+        updatedAt: companyMemberships.updatedAt,
+        userName: authUsers.name,
+        userEmail: authUsers.email,
+      })
       .from(companyMemberships)
+      .leftJoin(
+        authUsers,
+        and(
+          eq(companyMemberships.principalType, "user"),
+          eq(authUsers.id, companyMemberships.principalId),
+        ),
+      )
       .where(eq(companyMemberships.companyId, companyId))
       .orderBy(sql`${companyMemberships.createdAt} desc`);
   }

@@ -24,10 +24,20 @@ const mockAgentService = vi.hoisted(() => ({
 }));
 
 const mockLogActivity = vi.hoisted(() => vi.fn());
+const mockProviderKeyService = vi.hoisted(() => ({
+  listProviderKeys: vi.fn(),
+  createProviderKey: vi.fn(),
+  updateProviderKey: vi.fn(),
+  revokeProviderKey: vi.fn(),
+  listAssignments: vi.fn(),
+  assignUserProviderKey: vi.fn(),
+  revokeUserAssignment: vi.fn(),
+}));
 
 vi.mock("../services/index.js", () => ({
   accessService: () => mockAccessService,
   agentService: () => mockAgentService,
+  providerKeyService: () => mockProviderKeyService,
   deduplicateAgentName: vi.fn(),
   logActivity: mockLogActivity,
   notifyHireApproved: vi.fn(),

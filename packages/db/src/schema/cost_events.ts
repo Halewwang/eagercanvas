@@ -5,6 +5,8 @@ import { issues } from "./issues.js";
 import { projects } from "./projects.js";
 import { goals } from "./goals.js";
 import { heartbeatRuns } from "./heartbeat_runs.js";
+import { authUsers } from "./auth.js";
+import { companyProviderKeys } from "./company_provider_keys.js";
 
 export const costEvents = pgTable(
   "cost_events",
@@ -12,6 +14,9 @@ export const costEvents = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     companyId: uuid("company_id").notNull().references(() => companies.id),
     agentId: uuid("agent_id").notNull().references(() => agents.id),
+    userId: text("user_id").references(() => authUsers.id, { onDelete: "set null" }),
+    providerKeyId: uuid("provider_key_id").references(() => companyProviderKeys.id, { onDelete: "set null" }),
+    externalRequestId: text("external_request_id"),
     issueId: uuid("issue_id").references(() => issues.id),
     projectId: uuid("project_id").references(() => projects.id),
     goalId: uuid("goal_id").references(() => goals.id),
@@ -39,6 +44,20 @@ export const costEvents = pgTable(
       table.companyId,
       table.provider,
       table.occurredAt,
+    ),
+    companyUserOccurredIdx: index("cost_events_company_user_occurred_idx").on(
+      table.companyId,
+      table.userId,
+      table.occurredAt,
+    ),
+    companyProviderKeyOccurredIdx: index("cost_events_company_provider_key_occurred_idx").on(
+      table.companyId,
+      table.providerKeyId,
+      table.occurredAt,
+    ),
+    companyExternalRequestIdx: index("cost_events_company_external_request_idx").on(
+      table.companyId,
+      table.externalRequestId,
     ),
     companyBillerOccurredIdx: index("cost_events_company_biller_occurred_idx").on(
       table.companyId,

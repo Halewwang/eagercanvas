@@ -123,8 +123,10 @@ export {
 
 export {
   createCostEventSchema,
+  createProviderRequestLogSchema,
   updateBudgetSchema,
   type CreateCostEvent,
+  type CreateProviderRequestLog,
   type UpdateBudget,
 } from "./cost.js";
 
@@ -132,6 +134,17 @@ export {
   createFinanceEventSchema,
   type CreateFinanceEvent,
 } from "./finance.js";
+
+export {
+  createCompanyProviderKeySchema,
+  updateCompanyProviderKeySchema,
+  assignUserProviderKeySchema,
+  syncProviderKeyLogsSchema,
+  type CreateCompanyProviderKey,
+  type UpdateCompanyProviderKey,
+  type AssignUserProviderKey,
+  type SyncProviderKeyLogs,
+} from "./provider-key.js";
 
 export {
   createAssetImageMetadataSchema,

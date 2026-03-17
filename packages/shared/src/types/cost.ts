@@ -4,6 +4,9 @@ export interface CostEvent {
   id: string;
   companyId: string;
   agentId: string;
+  userId: string | null;
+  providerKeyId: string | null;
+  externalRequestId: string | null;
   issueId: string | null;
   projectId: string | null;
   goalId: string | null;
@@ -110,4 +113,47 @@ export interface CostByProject {
   inputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
+}
+
+export interface CostByUser {
+  userId: string;
+  userName: string | null;
+  userEmail: string | null;
+  providerKeyId: string | null;
+  providerKeyName: string | null;
+  provider: string | null;
+  costCents: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  requestCount: number;
+  lastOccurredAt: Date | null;
+}
+
+export interface ProviderRequestLog {
+  id: string;
+  companyId: string;
+  userId: string | null;
+  userName: string | null;
+  userEmail: string | null;
+  providerKeyId: string | null;
+  providerKeyName: string | null;
+  agentId: string | null;
+  costEventId: string | null;
+  externalRequestId: string;
+  provider: string;
+  model: string;
+  requestMethod: string | null;
+  requestPath: string | null;
+  status: string;
+  httpStatus: number | null;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  costCents: number | null;
+  requestStartedAt: Date;
+  requestCompletedAt: Date | null;
+  metadataJson: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
 }

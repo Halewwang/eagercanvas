@@ -246,6 +246,20 @@
       "when": 1773697572188,
       "tag": "0034_fat_dormammu",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1773754833699,
+      "tag": "0035_calm_rocket_racer",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1773756495157,
+      "tag": "0036_yummy_galactus",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Db } from "@paperclipai/db";
 import {
   createCostEventSchema,
+  createProviderRequestLogSchema,
   createFinanceEventSchema,
   resolveBudgetIncidentSchema,
   updateBudgetSchema,
@@ -61,6 +62,39 @@ export function costRoutes(db: Db) {
 
     res.status(201).json(event);
   });
+
+  router.post(
+    "/companies/:companyId/provider-request-logs",
+    validate(createProviderRequestLogSchema),
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const log = await costs.createProviderRequestLog(companyId, {
+        ...req.body,
+        requestStartedAt: new Date(req.body.requestStartedAt),
+        requestCompletedAt: req.body.requestCompletedAt ? new Date(req.body.requestCompletedAt) : null,
+      });
+
+      const actor = getActorInfo(req);
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        action: "provider_request_log.recorded",
+        entityType: "provider_request_log",
+        entityId: log.id,
+        details: {
+          provider: log.provider,
+          model: log.model,
+          externalRequestId: log.externalRequestId,
+        },
+      });
+
+      res.status(201).json(log);
+    },
+  );
 
   router.post("/companies/:companyId/finance-events", validate(createFinanceEventSchema), async (req, res) => {
     const companyId = req.params.companyId as string;
@@ -244,6 +278,33 @@ export function costRoutes(db: Db) {
     assertCompanyAccess(req, companyId);
     const range = parseDateRange(req.query);
     const rows = await costs.byProject(companyId, range);
+    res.json(rows);
+  });
+
+  router.get("/companies/:companyId/costs/by-user", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const range = parseDateRange(req.query);
+    const rows = await costs.byUser(companyId, range);
+    res.json(rows);
+  });
+
+  router.get("/companies/:companyId/provider-request-logs", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const range = parseDateRange(req.query);
+    const userId = typeof req.query.userId === "string" && req.query.userId.length > 0 ? req.query.userId : undefined;
+    const providerKeyId =
+      typeof req.query.providerKeyId === "string" && req.query.providerKeyId.length > 0
+        ? req.query.providerKeyId
+        : undefined;
+    const limit = parseLimit(req.query);
+    const rows = await costs.listProviderRequestLogs(companyId, {
+      ...range,
+      userId,
+      providerKeyId,
+      limit,
+    });
     res.json(rows);
   });
 

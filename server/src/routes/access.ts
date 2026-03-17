@@ -21,9 +21,12 @@ import {
   acceptInviteSchema,
   claimJoinRequestApiKeySchema,
   createCompanyInviteSchema,
+  createCompanyProviderKeySchema,
   createOpenClawInvitePromptSchema,
   listJoinRequestsQuerySchema,
+  assignUserProviderKeySchema,
   updateMemberPermissionsSchema,
+  updateCompanyProviderKeySchema,
   updateUserCompanyAccessSchema,
   PERMISSION_KEYS
 } from "@paperclipai/shared";
@@ -42,7 +45,8 @@ import {
   agentService,
   deduplicateAgentName,
   logActivity,
-  notifyHireApproved
+  notifyHireApproved,
+  providerKeyService
 } from "../services/index.js";
 import { assertCompanyAccess } from "./authz.js";
 import {
@@ -1452,6 +1456,7 @@ export function accessRoutes(
 ) {
   const router = Router();
   const access = accessService(db);
+  const providerKeys = providerKeyService(db);
   const agents = agentService(db);
 
   async function assertInstanceAdmin(req: Request) {
@@ -2565,6 +2570,157 @@ export function accessRoutes(
       res.json(updated);
     }
   );
+
+  router.get("/companies/:companyId/provider-keys", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    await assertCompanyPermission(req, companyId, "users:manage_permissions");
+    const rows = await providerKeys.listProviderKeys(companyId);
+    res.json(rows);
+  });
+
+  router.post(
+    "/companies/:companyId/provider-keys",
+    validate(createCompanyProviderKeySchema),
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      await assertCompanyPermission(req, companyId, "users:manage_permissions");
+      const created = await providerKeys.createProviderKey(companyId, {
+        provider: req.body.provider,
+        name: req.body.name,
+        externalKeyId: req.body.externalKeyId ?? null,
+        secretId: req.body.secretId,
+        secretVersion: req.body.secretVersion ?? null,
+        status: "active",
+        allowSaveLogs: req.body.allowSaveLogs ?? false,
+        allowManageKey: req.body.allowManageKey ?? false,
+        limitCostCents: req.body.limitCostCents ?? null,
+        limitDailyCostCents: req.body.limitDailyCostCents ?? null,
+        expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
+        lastSyncedAt: null,
+        metadataJson: req.body.metadataJson ?? null,
+      });
+      await logActivity(db, {
+        companyId,
+        actorType: "user",
+        actorId: req.actor.userId ?? "board",
+        action: "provider_key.created",
+        entityType: "provider_key",
+        entityId: created.id,
+        details: { provider: created.provider, name: created.name },
+      });
+      res.status(201).json(created);
+    }
+  );
+
+  router.patch(
+    "/companies/:companyId/provider-keys/:keyId",
+    validate(updateCompanyProviderKeySchema),
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      const keyId = req.params.keyId as string;
+      await assertCompanyPermission(req, companyId, "users:manage_permissions");
+      const updated = await providerKeys.updateProviderKey(companyId, keyId, {
+        provider: req.body.provider,
+        name: req.body.name,
+        externalKeyId: req.body.externalKeyId,
+        secretId: req.body.secretId,
+        secretVersion: req.body.secretVersion,
+        status: req.body.status,
+        allowSaveLogs: req.body.allowSaveLogs,
+        allowManageKey: req.body.allowManageKey,
+        limitCostCents: req.body.limitCostCents,
+        limitDailyCostCents: req.body.limitDailyCostCents,
+        expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : undefined,
+        metadataJson: req.body.metadataJson,
+      });
+      if (!updated) throw notFound("Provider key not found");
+      await logActivity(db, {
+        companyId,
+        actorType: "user",
+        actorId: req.actor.userId ?? "board",
+        action: "provider_key.updated",
+        entityType: "provider_key",
+        entityId: updated.id,
+        details: { provider: updated.provider, name: updated.name, status: updated.status },
+      });
+      res.json(updated);
+    }
+  );
+
+  router.post("/companies/:companyId/provider-keys/:keyId/revoke", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const keyId = req.params.keyId as string;
+    await assertCompanyPermission(req, companyId, "users:manage_permissions");
+    const revoked = await providerKeys.revokeProviderKey(companyId, keyId);
+    if (!revoked) throw notFound("Provider key not found");
+    await logActivity(db, {
+      companyId,
+      actorType: "user",
+      actorId: req.actor.userId ?? "board",
+      action: "provider_key.revoked",
+      entityType: "provider_key",
+      entityId: revoked.id,
+      details: { provider: revoked.provider, name: revoked.name },
+    });
+    res.json(revoked);
+  });
+
+  router.get("/companies/:companyId/user-key-assignments", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    await assertCompanyPermission(req, companyId, "users:manage_permissions");
+    const rows = await providerKeys.listAssignments(companyId);
+    res.json(rows);
+  });
+
+  router.put(
+    "/companies/:companyId/users/:userId/provider-key-assignment",
+    validate(assignUserProviderKeySchema),
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      const userId = req.params.userId as string;
+      await assertCompanyPermission(req, companyId, "users:manage_permissions");
+      const assignment = await providerKeys.assignUserProviderKey(companyId, userId, {
+        providerKeyId: req.body.providerKeyId,
+        assignmentMode: req.body.assignmentMode,
+        assignedByUserId: req.actor.userId ?? null,
+      });
+      if (!assignment) throw notFound("Assignment not found");
+      await logActivity(db, {
+        companyId,
+        actorType: "user",
+        actorId: req.actor.userId ?? "board",
+        action: "provider_key.assignment_upserted",
+        entityType: "user_provider_key_assignment",
+        entityId: assignment.assignmentId,
+        details: {
+          userId: assignment.userId,
+          providerKeyId: assignment.providerKeyId,
+          provider: assignment.provider,
+          providerKeyName: assignment.providerKeyName,
+          assignmentMode: assignment.assignmentMode,
+        },
+      });
+      res.json(assignment);
+    }
+  );
+
+  router.delete("/companies/:companyId/users/:userId/provider-key-assignment", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const userId = req.params.userId as string;
+    await assertCompanyPermission(req, companyId, "users:manage_permissions");
+    const revoked = await providerKeys.revokeUserAssignment(companyId, userId);
+    if (!revoked) throw notFound("Active assignment not found");
+    await logActivity(db, {
+      companyId,
+      actorType: "user",
+      actorId: req.actor.userId ?? "board",
+      action: "provider_key.assignment_revoked",
+      entityType: "user_provider_key_assignment",
+      entityId: revoked.id,
+      details: { userId, providerKeyId: revoked.providerKeyId },
+    });
+    res.json({ ok: true });
+  });
 
   router.post(
     "/admin/users/:userId/promote-instance-admin",

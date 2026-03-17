@@ -9,6 +9,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Settings, Check } from "lucide-react";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
+import { NavLink } from "@/lib/router";
 import {
   Field,
   ToggleField,
@@ -51,7 +52,6 @@ export function CompanySettings() {
   const [inviteSnippet, setInviteSnippet] = useState<string | null>(null);
   const [snippetCopied, setSnippetCopied] = useState(false);
   const [snippetCopyDelightId, setSnippetCopyDelightId] = useState(0);
-
   const generalDirty =
     !!selectedCompany &&
     (companyName !== selectedCompany.name ||
@@ -174,6 +174,7 @@ export function CompanySettings() {
     setSnippetCopied(false);
     setSnippetCopyDelightId(0);
   }, [selectedCompanyId]);
+
   const archiveMutation = useMutation({
     mutationFn: ({
       companyId,
@@ -458,6 +459,27 @@ export function CompanySettings() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Admin */}
+      <div className="space-y-4">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Admin
+        </div>
+        <div className="space-y-4 rounded-md border border-border px-4 py-4">
+          <div>
+            <div className="text-sm font-medium">User administration</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Provider key registration and per-user assignment now live on the main dashboard so
+              the control plane stays centralized.
+            </p>
+          </div>
+          <div>
+            <Button asChild size="sm" variant="outline">
+              <NavLink to="/dashboard">Open Dashboard</NavLink>
+            </Button>
+          </div>
         </div>
       </div>
 
