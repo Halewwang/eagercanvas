@@ -1,8 +1,8 @@
 <template>
-  <div ref="adminShellRef" class="admin-shell min-h-screen px-3 py-4 md:px-6 md:py-6">
+  <div ref="adminShellRef" class="admin-shell min-h-screen overflow-x-hidden px-3 py-4 md:px-6 md:py-6">
     <div class="admin-frame w-full rounded-[20px] border border-white/10">
-      <div class="admin-layout grid grid-cols-1 lg:grid-cols-[260px_1fr]">
-        <aside class="admin-sidebar hidden self-start border-r border-white/10 lg:fixed lg:bottom-6 lg:left-6 lg:top-6 lg:flex lg:w-[260px] lg:flex-col lg:overflow-hidden lg:rounded-[20px]">
+      <div class="admin-layout relative">
+        <aside class="admin-sidebar hidden lg:fixed lg:bottom-6 lg:left-6 lg:top-6 lg:flex lg:w-[232px] lg:flex-col lg:overflow-hidden lg:rounded-[20px]">
           <div class="px-5 pt-5">
             <div class="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
               <p class="text-xs uppercase tracking-[0.18em] text-white/45">EagerCanvas</p>
@@ -42,7 +42,7 @@
           </div>
         </aside>
 
-        <main class="admin-main p-5 md:p-7 lg:ml-[260px]">
+        <main class="admin-main w-full min-w-0 p-5 md:p-7 lg:pl-[260px]">
           <div class="mb-4 flex flex-wrap gap-2 lg:hidden">
             <button
               v-for="item in navItems"
@@ -68,12 +68,12 @@
                 </div>
               </div>
               <div class="flex flex-wrap items-center gap-2">
-                <button class="ui-action-btn" :disabled="isRefreshing" @click="loadAll">
+                <button class="ui-action-btn whitespace-nowrap" :disabled="isRefreshing" @click="loadAll">
                   {{ isRefreshing ? '刷新中...' : '刷新当前可见数据' }}
                 </button>
-                <button v-if="canReadUsers" class="ui-action-btn" @click="scrollToSection('users')">用户管理</button>
-                <button v-if="showServiceSection" class="ui-action-btn" @click="scrollToSection('service')">服务运维</button>
-                <button class="ui-action-btn" @click="goHome">返回</button>
+                <button v-if="canReadUsers" class="ui-action-btn whitespace-nowrap" @click="scrollToSection('users')">用户管理</button>
+                <button v-if="showServiceSection" class="ui-action-btn whitespace-nowrap" @click="scrollToSection('service')">服务运维</button>
+                <button class="ui-action-btn whitespace-nowrap" @click="goHome">返回</button>
               </div>
             </div>
           </header>
@@ -353,6 +353,10 @@
               </button>
             </div>
 
+            <div v-if="serviceLoadNotice" class="service-alert">
+              {{ serviceLoadNotice }}
+            </div>
+
             <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
               <div class="ui-glass-card rounded-xl p-4">
                 <p class="text-xs uppercase tracking-[0.12em] text-white/40">账户余额</p>
@@ -620,6 +624,7 @@ const loadingRecord = ref(false)
 const log302Query = reactive({ page: 1, limit: 20, start: '', end: '' })
 const apiLogs = ref([])
 const loadingApiLogs = ref(false)
+const serviceLoadNotice = ref('')
 const apiKeys = ref([])
 const keyDrafts = ref({})
 const loadingKeys = ref(false)
@@ -874,6 +879,19 @@ const toUnixSeconds = (value) => {
   return Number.isFinite(ts) ? Math.floor(ts / 1000) : undefined
 }
 
+const is502ServiceError = (error) => {
+  const status = Number(error?.response?.status || error?.status || 0)
+  return [500, 502, 503, 504].includes(status)
+}
+
+const toServiceNotice = (fallback, error) => {
+  const message = getErrorMessage(error, fallback)
+  if (is502ServiceError(error)) {
+    return '302 服务暂时不可用，已跳过该区块的数据加载。其他后台功能仍可正常使用。'
+  }
+  return message
+}
+
 const buildDraft = (item) => ({
   api_name: item.api_name,
   allow_save_logs: !!item.allow_save_logs,
@@ -1014,14 +1032,18 @@ const unassignApiKey = async (user, apiName) => {
   }
 }
 
-const load302Balance = async () => {
+const load302Balance = async ({ silent = false } = {}) => {
   if (!canReadUsage.value) return
   loadingBalance.value = true
   try {
     const rsp = await getAdmin302Balance()
     balance.value = String(rsp?.data?.balance ?? '')
+    return { ok: true }
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载 Eager 服务余额失败'))
+    balance.value = ''
+    const message = toServiceNotice('加载 Eager 服务余额失败', error)
+    if (!silent && !error?.__handled) window.$message?.error(message)
+    return { ok: false, message, error }
   } finally {
     loadingBalance.value = false
   }
@@ -1042,7 +1064,7 @@ const queryRecord = async () => {
   }
 }
 
-const loadApiLogs = async () => {
+const loadApiLogs = async ({ silent = false } = {}) => {
   if (!canReadUsage.value) return
   loadingApiLogs.value = true
   try {
@@ -1053,8 +1075,12 @@ const loadApiLogs = async () => {
       end_time: toUnixSeconds(log302Query.end)
     })
     apiLogs.value = Array.isArray(rsp?.data?.items) ? rsp.data.items : []
+    return { ok: true }
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载 API 日志失败'))
+    apiLogs.value = []
+    const message = toServiceNotice('加载 API 日志失败', error)
+    if (!silent && !error?.__handled) window.$message?.error(message)
+    return { ok: false, message, error }
   } finally {
     loadingApiLogs.value = false
   }
@@ -1070,8 +1096,13 @@ const loadApiKeys = async ({ silent = false } = {}) => {
     const drafts = {}
     for (const item of list) drafts[item.api_name] = buildDraft(item)
     keyDrafts.value = drafts
+    return { ok: true }
   } catch (error) {
-    if (!silent && !error?.__handled) window.$message?.error(getErrorMessage(error, '加载 API 密钥失败'))
+    apiKeys.value = []
+    keyDrafts.value = {}
+    const message = toServiceNotice('加载 API 密钥失败', error)
+    if (!silent && !error?.__handled) window.$message?.error(message)
+    return { ok: false, message, error }
   } finally {
     loadingKeys.value = false
   }
@@ -1134,14 +1165,19 @@ const removeApiKey = async (item) => {
 }
 
 const load302All = async () => {
+  serviceLoadNotice.value = ''
   const tasks = []
   if (canReadUsage.value) {
-    tasks.push(load302Balance(), loadApiLogs())
+    tasks.push(load302Balance({ silent: true }), loadApiLogs({ silent: true }))
   }
   if (canManageApiKeys.value || canAssignApiKeys.value) {
-    tasks.push(loadApiKeys({ silent: !canManageApiKeys.value }))
+    tasks.push(loadApiKeys({ silent: true }))
   }
-  await Promise.all(tasks)
+  const results = await Promise.all(tasks)
+  const failures = results.filter((item) => item && item.ok === false)
+  if (failures.length > 0) {
+    serviceLoadNotice.value = failures[0].message || '服务数据加载失败'
+  }
 }
 
 const loadLogs = async () => {
@@ -1223,14 +1259,17 @@ onBeforeUnmount(() => {
 .admin-frame {
   background: linear-gradient(180deg, #141416 0%, #101012 100%);
   box-shadow: 0 22px 80px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
 }
 
 .admin-sidebar {
   background: linear-gradient(180deg, rgba(8, 8, 9, 0.72) 0%, rgba(12, 12, 14, 0.8) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .admin-main {
   background: linear-gradient(180deg, rgba(18, 18, 20, 0.72) 0%, rgba(11, 11, 13, 0.84) 100%);
+  min-width: 0;
 }
 
 .section-title {
@@ -1332,5 +1371,15 @@ onBeforeUnmount(() => {
   padding: 18px;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.service-alert {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 196, 0, 0.22);
+  background: rgba(255, 196, 0, 0.08);
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255, 233, 169, 0.92);
 }
 </style>
