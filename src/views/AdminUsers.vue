@@ -1,13 +1,13 @@
 <template>
-  <div ref="adminShellRef" class="admin-shell min-h-screen overflow-y-auto px-3 py-4 md:px-6 md:py-6">
+  <div ref="adminShellRef" class="admin-shell min-h-screen px-3 py-4 md:px-6 md:py-6">
     <div class="admin-frame w-full rounded-[20px] border border-white/10">
-      <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr]">
-        <aside class="admin-sidebar hidden self-start border-r border-white/10 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
+      <div class="admin-layout grid grid-cols-1 lg:grid-cols-[260px_1fr]">
+        <aside class="admin-sidebar hidden self-start border-r border-white/10 lg:fixed lg:bottom-6 lg:left-6 lg:top-6 lg:flex lg:w-[260px] lg:flex-col lg:overflow-hidden lg:rounded-[20px]">
           <div class="px-5 pt-5">
             <div class="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
               <p class="text-xs uppercase tracking-[0.18em] text-white/45">EagerCanvas</p>
-              <p class="mt-1 text-sm font-medium text-white/90">Admin Console</p>
-              <p class="mt-3 text-xs leading-5 text-white/55">Permission-aware control center for members, usage and service operations.</p>
+              <p class="mt-1 text-sm font-medium text-white/90">管理控制台</p>
+              <p class="mt-3 text-xs leading-5 text-white/55">面向成员、用量与服务操作的权限感知管理中枢。</p>
             </div>
           </div>
 
@@ -26,7 +26,7 @@
 
           <div class="mt-6 px-4">
             <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <p class="text-xs uppercase tracking-[0.16em] text-white/45">Access Scope</p>
+              <p class="text-xs uppercase tracking-[0.16em] text-white/45">访问范围</p>
               <div class="mt-3 flex flex-wrap gap-2">
                 <span v-for="item in accessScope" :key="item" class="permission-chip">{{ item }}</span>
               </div>
@@ -35,14 +35,14 @@
 
           <div class="mt-auto p-4">
             <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <p class="text-sm font-medium text-white/90">Operator Session</p>
+              <p class="text-sm font-medium text-white/90">当前操作会话</p>
               <p class="mt-2 text-xs text-white/55">{{ adminAccountLabel }}</p>
-              <p class="mt-1 text-xs text-white/45">{{ auth.roles.value.join(', ') || 'No role loaded' }}</p>
+              <p class="mt-1 text-xs text-white/45">{{ auth.roles.value.join(', ') || '未加载角色' }}</p>
             </div>
           </div>
         </aside>
 
-        <main class="admin-main p-5 md:p-7">
+        <main class="admin-main p-5 md:p-7 lg:ml-[260px]">
           <div class="mb-4 flex flex-wrap gap-2 lg:hidden">
             <button
               v-for="item in navItems"
@@ -58,8 +58,8 @@
           <header class="mb-8 border-b border-white/10 pb-6">
             <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div class="max-w-3xl">
-                <p class="text-xs uppercase tracking-[0.2em] text-white/45">Admin Dashboard</p>
-                <h1 class="mt-2 text-2xl font-semibold text-white md:text-3xl">Welcome Back, {{ displayName }}</h1>
+                <p class="text-xs uppercase tracking-[0.2em] text-white/45">管理后台</p>
+                <h1 class="mt-2 text-2xl font-semibold text-white md:text-3xl">欢迎回来，{{ displayName }}</h1>
                 <p class="mt-3 text-sm leading-6 text-white/55">
                   当前页面会按权限显示可管理区块，并且只请求当前角色可访问的数据，避免进入后台即触发无效接口。
                 </p>
@@ -69,11 +69,11 @@
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <button class="ui-action-btn" :disabled="isRefreshing" @click="loadAll">
-                  {{ isRefreshing ? 'Refreshing...' : 'Refresh Visible Data' }}
+                  {{ isRefreshing ? '刷新中...' : '刷新当前可见数据' }}
                 </button>
-                <button v-if="canReadUsers" class="ui-action-btn" @click="scrollToSection('users')">Manage Users</button>
-                <button v-if="showServiceSection" class="ui-action-btn" @click="scrollToSection('service')">Service Ops</button>
-                <button class="ui-action-btn" @click="goHome">Back</button>
+                <button v-if="canReadUsers" class="ui-action-btn" @click="scrollToSection('users')">用户管理</button>
+                <button v-if="showServiceSection" class="ui-action-btn" @click="scrollToSection('service')">服务运维</button>
+                <button class="ui-action-btn" @click="goHome">返回</button>
               </div>
             </div>
           </header>
@@ -81,11 +81,11 @@
           <section ref="overviewRef" class="mb-8 scroll-mt-6">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 class="section-title">Overview</h2>
+                <h2 class="section-title">概览</h2>
                 <p class="section-caption">核心指标、权限摘要和常用操作入口。</p>
               </div>
               <button class="ui-micro-btn" :disabled="loadingOverview" @click="refreshOverview">
-                {{ loadingOverview ? 'Refreshing...' : 'Refresh Overview' }}
+                {{ loadingOverview ? '刷新中...' : '刷新概览' }}
               </button>
             </div>
 
@@ -101,17 +101,17 @@
               <div class="ui-glass-card rounded-2xl p-4 md:p-5">
                 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 class="text-lg font-medium text-white">Usage Trend</h3>
+                    <h3 class="text-lg font-medium text-white">用量趋势</h3>
                     <p class="mt-1 text-xs text-white/45">最近日级请求量视图</p>
                   </div>
-                  <span class="text-xs text-white/45">Updated {{ nowLabel }}</span>
+                  <span class="text-xs text-white/45">更新于 {{ nowLabel }}</span>
                 </div>
 
                 <div v-if="!canReadUsage" class="empty-notice">
                   当前角色没有全局用量读取权限，已跳过相关接口请求。
                 </div>
                 <div v-else-if="usageSeries.length === 0" class="empty-notice">
-                  No usage data
+                  暂无用量数据
                 </div>
                 <div v-else class="space-y-3">
                   <div v-for="row in usageSeries" :key="row.date" class="grid grid-cols-[90px_1fr_80px] items-center gap-3">
@@ -126,21 +126,21 @@
 
               <div class="space-y-5">
                 <div class="ui-glass-card rounded-2xl p-4 md:p-5">
-                  <h3 class="text-lg font-medium text-white">Admin Session</h3>
+                  <h3 class="text-lg font-medium text-white">管理员会话</h3>
                   <div class="mt-4 space-y-3 text-sm">
-                    <div class="ui-info-line"><span>Account</span><strong>{{ adminAccountLabel }}</strong></div>
-                    <div class="ui-info-line"><span>Roles</span><strong>{{ auth.roles.value.join(', ') || '-' }}</strong></div>
-                    <div class="ui-info-line"><span>Permissions</span><strong>{{ auth.permissions.value.length }}</strong></div>
-                    <div class="ui-info-line"><span>Status</span><strong class="text-white">Active</strong></div>
+                    <div class="ui-info-line"><span>账号</span><strong>{{ adminAccountLabel }}</strong></div>
+                    <div class="ui-info-line"><span>角色</span><strong>{{ auth.roles.value.join(', ') || '-' }}</strong></div>
+                    <div class="ui-info-line"><span>权限数</span><strong>{{ auth.permissions.value.length }}</strong></div>
+                    <div class="ui-info-line"><span>状态</span><strong class="text-white">正常</strong></div>
                   </div>
                 </div>
 
                 <div class="ui-glass-card rounded-2xl p-4 md:p-5">
-                  <h3 class="text-lg font-medium text-white">Quick Actions</h3>
+                  <h3 class="text-lg font-medium text-white">快捷操作</h3>
                   <div class="mt-4 grid grid-cols-1 gap-2">
-                    <button v-if="canReadUsers" class="ui-micro-btn text-left" @click="scrollToSection('users')">Open user governance</button>
-                    <button v-if="showServiceSection" class="ui-micro-btn text-left" @click="scrollToSection('service')">Open service operations</button>
-                    <button v-if="canReadAudit" class="ui-micro-btn text-left" @click="scrollToSection('audit')">Open audit trail</button>
+                    <button v-if="canReadUsers" class="ui-micro-btn text-left" @click="scrollToSection('users')">打开用户治理</button>
+                    <button v-if="showServiceSection" class="ui-micro-btn text-left" @click="scrollToSection('service')">打开服务运维</button>
+                    <button v-if="canReadAudit" class="ui-micro-btn text-left" @click="scrollToSection('audit')">打开审计日志</button>
                   </div>
                 </div>
               </div>
@@ -150,58 +150,58 @@
           <section v-if="canReadUsers" ref="usersRef" class="ui-glass-card mb-8 scroll-mt-6 rounded-2xl p-5 md:p-6">
             <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 class="section-title">Users & Roles</h2>
+                <h2 class="section-title">用户与角色</h2>
                 <p class="section-caption">搜索、筛选、角色调整和账号状态操作。</p>
               </div>
               <button class="ui-micro-btn" :disabled="loadingUsers" @click="loadUsers">
-                {{ loadingUsers ? 'Refreshing...' : 'Refresh Users' }}
+                {{ loadingUsers ? '刷新中...' : '刷新用户列表' }}
               </button>
             </div>
 
             <div class="mb-4 flex flex-wrap gap-2">
-              <span class="summary-pill">Active {{ userStats.active }}</span>
-              <span class="summary-pill">Suspended {{ userStats.suspended }}</span>
-              <span class="summary-pill">Deleted {{ userStats.deleted }}</span>
-              <span class="summary-pill">Visible {{ filteredUsers.length }}</span>
+              <span class="summary-pill">正常 {{ userStats.active }}</span>
+              <span class="summary-pill">已暂停 {{ userStats.suspended }}</span>
+              <span class="summary-pill">已删除 {{ userStats.deleted }}</span>
+              <span class="summary-pill">当前显示 {{ filteredUsers.length }}</span>
             </div>
 
             <div class="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-[1fr_170px_auto] xl:items-end">
               <div>
-                <p class="mb-2 text-xs uppercase tracking-[0.12em] text-white/45">Search User</p>
+                <p class="mb-2 text-xs uppercase tracking-[0.12em] text-white/45">搜索用户</p>
                 <input
                   v-model.trim="userSearchQuery"
                   class="ui-text-input"
-                  placeholder="Search by user id, email or display name"
+                  placeholder="按用户 ID、邮箱或昵称搜索"
                 />
               </div>
               <div>
-                <p class="mb-2 text-xs uppercase tracking-[0.12em] text-white/45">Status</p>
+                <p class="mb-2 text-xs uppercase tracking-[0.12em] text-white/45">状态筛选</p>
                 <select v-model="userStatusFilter" class="ui-text-input">
-                  <option value="all">All</option>
-                  <option value="active">Active</option>
-                  <option value="suspended">Suspended</option>
-                  <option value="deleted">Deleted</option>
+                  <option value="all">全部</option>
+                  <option value="active">正常</option>
+                  <option value="suspended">已暂停</option>
+                  <option value="deleted">已删除</option>
                 </select>
               </div>
               <p class="text-xs text-white/55">
-                Showing {{ userPageStart }}-{{ userPageEnd }} of {{ filteredUsers.length }} users
+                显示第 {{ userPageStart }}-{{ userPageEnd }} 条，共 {{ filteredUsers.length }} 位用户
               </p>
             </div>
 
             <div v-if="filteredUsers.length === 0" class="empty-notice">
-              {{ users.length === 0 ? 'No user data' : 'No matched users' }}
+              {{ users.length === 0 ? '暂无用户数据' : '没有匹配的用户' }}
             </div>
             <div v-else class="overflow-x-auto">
               <table class="w-full min-w-[1380px] text-sm">
                 <thead>
                   <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.12em] text-white/40">
-                    <th class="px-3 py-4">User</th>
-                    <th class="px-3 py-4">Status</th>
-                    <th class="px-3 py-4">Roles</th>
-                    <th class="px-3 py-4">Calls</th>
-                    <th v-if="showAssignmentsColumn" class="px-3 py-4">Assigned Keys</th>
-                    <th v-if="canManageRoles" class="px-3 py-4">Role Editor</th>
-                    <th v-if="showUserActions" class="px-3 py-4">Actions</th>
+                    <th class="px-3 py-4">用户</th>
+                    <th class="px-3 py-4">状态</th>
+                    <th class="px-3 py-4">角色</th>
+                    <th class="px-3 py-4">调用量</th>
+                    <th v-if="showAssignmentsColumn" class="px-3 py-4">已分配密钥</th>
+                    <th v-if="canManageRoles" class="px-3 py-4">角色编辑</th>
+                    <th v-if="showUserActions" class="px-3 py-4">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -212,7 +212,7 @@
                       <p class="mt-1 text-[11px] text-white/35">ID: {{ item.id }}</p>
                     </td>
                     <td class="px-3 py-4">
-                      <span class="ui-status-pill" :class="statusClass(item.status)">{{ item.status || 'active' }}</span>
+                      <span class="ui-status-pill" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span>
                       <p v-if="item.suspendedReason" class="mt-2 max-w-[180px] text-[11px] leading-5 text-white/45">
                         {{ item.suspendedReason }}
                       </p>
@@ -243,7 +243,7 @@
                             x
                           </button>
                         </span>
-                        <span v-if="!(item.assignedApiKeys || []).length" class="text-xs text-white/45">No key assigned</span>
+                        <span v-if="!(item.assignedApiKeys || []).length" class="text-xs text-white/45">未分配密钥</span>
                       </div>
                     </td>
                     <td v-if="canManageRoles" class="px-3 py-4">
@@ -268,7 +268,7 @@
                           :disabled="saving[item.id] || item.status === 'deleted' || isSelf(item)"
                           @click="saveRoles(item)"
                         >
-                          {{ saving[item.id] ? 'Saving...' : (isSelf(item) ? 'Self Locked' : 'Save Roles') }}
+                          {{ saving[item.id] ? '保存中...' : (isSelf(item) ? '禁止修改自己' : '保存角色') }}
                         </button>
                       </div>
                     </td>
@@ -280,7 +280,7 @@
                             class="ui-text-input !w-[180px]"
                             :disabled="item.status === 'deleted' || !apiKeyOptions.length"
                           >
-                            <option value="">Select API key</option>
+                            <option value="">选择 API 密钥</option>
                             <option v-for="name in apiKeyOptions" :key="`${item.id}-${name}`" :value="name">{{ name }}</option>
                           </select>
                           <button
@@ -288,11 +288,11 @@
                             :disabled="assignmentLoading[item.id] || item.status === 'deleted' || !assignSelections[item.id]"
                             @click="assignApiKey(item)"
                           >
-                            {{ assignmentLoading[item.id] ? 'Assigning...' : 'Assign Key' }}
+                            {{ assignmentLoading[item.id] ? '分配中...' : '分配密钥' }}
                           </button>
                         </div>
                         <p v-if="canAssignApiKeys && !apiKeyOptions.length" class="text-[11px] text-white/45">
-                          No API key inventory loaded for assignment.
+                          当前没有可用于分配的 API 密钥库存。
                         </p>
                         <div class="flex flex-wrap gap-2">
                           <button
@@ -301,7 +301,7 @@
                             :disabled="statusLoading[item.id] || isSelf(item)"
                             @click="suspendUser(item)"
                           >
-                            {{ isSelf(item) ? 'Self Locked' : 'Suspend' }}
+                            {{ isSelf(item) ? '禁止操作自己' : '暂停' }}
                           </button>
                           <button
                             v-if="canManageUserStatus && item.status === 'suspended'"
@@ -309,7 +309,7 @@
                             :disabled="statusLoading[item.id] || isSelf(item)"
                             @click="activateUser(item)"
                           >
-                            {{ statusLoading[item.id] ? 'Updating...' : (isSelf(item) ? 'Self Locked' : 'Activate') }}
+                            {{ statusLoading[item.id] ? '更新中...' : (isSelf(item) ? '禁止操作自己' : '恢复') }}
                           </button>
                           <button
                             v-if="canManageUserStatus"
@@ -317,7 +317,7 @@
                             :disabled="deleting[item.id] || item.status === 'deleted' || isSelf(item)"
                             @click="deleteUser(item)"
                           >
-                            {{ deleting[item.id] ? 'Deleting...' : (isSelf(item) ? 'Self Locked' : 'Delete') }}
+                            {{ deleting[item.id] ? '删除中...' : (isSelf(item) ? '禁止操作自己' : '删除') }}
                           </button>
                         </div>
                       </div>
@@ -328,7 +328,7 @@
             </div>
 
             <div v-if="totalUserPages > 1" class="mt-5 flex flex-wrap items-center justify-end gap-2">
-              <button class="ui-micro-btn" :disabled="userPage <= 1" @click="setUserPage(userPage - 1)">Prev</button>
+              <button class="ui-micro-btn" :disabled="userPage <= 1" @click="setUserPage(userPage - 1)">上一页</button>
               <button
                 v-for="page in visibleUserPages"
                 :key="`user-page-${page}`"
@@ -338,78 +338,78 @@
               >
                 {{ page }}
               </button>
-              <button class="ui-micro-btn" :disabled="userPage >= totalUserPages" @click="setUserPage(userPage + 1)">Next</button>
+              <button class="ui-micro-btn" :disabled="userPage >= totalUserPages" @click="setUserPage(userPage + 1)">下一页</button>
             </div>
           </section>
 
           <section v-if="showServiceSection" ref="serviceRef" class="ui-glass-card mb-8 scroll-mt-6 rounded-2xl p-5 md:p-6 space-y-6">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 class="section-title">Eager Service Management</h2>
+                <h2 class="section-title">Eager 服务管理</h2>
                 <p class="section-caption">余额、请求日志和 API key 生命周期管理。</p>
               </div>
               <button class="ui-micro-btn" :disabled="loading302" @click="load302All">
-                {{ loading302 ? 'Refreshing...' : 'Refresh Service Data' }}
+                {{ loading302 ? '刷新中...' : '刷新服务数据' }}
               </button>
             </div>
 
             <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
               <div class="ui-glass-card rounded-xl p-4">
-                <p class="text-xs uppercase tracking-[0.12em] text-white/40">Account Balance</p>
+                <p class="text-xs uppercase tracking-[0.12em] text-white/40">账户余额</p>
                 <p class="mt-2 text-2xl font-semibold text-white">{{ canReadUsage ? balanceDisplay : '--' }}</p>
-                <p class="mt-2 text-xs text-white/45">{{ canReadUsage ? 'Provider dashboard balance' : 'Permission required: admin.usage.read_all' }}</p>
+                <p class="mt-2 text-xs text-white/45">{{ canReadUsage ? '上游服务商仪表盘余额' : '需要权限：admin.usage.read_all' }}</p>
               </div>
               <div class="ui-glass-card rounded-xl p-4">
-                <p class="text-xs uppercase tracking-[0.12em] text-white/40">API Keys</p>
+                <p class="text-xs uppercase tracking-[0.12em] text-white/40">API 密钥</p>
                 <p class="mt-2 text-2xl font-semibold text-white">{{ canManageApiKeys ? apiKeys.length : '--' }}</p>
-                <p class="mt-2 text-xs text-white/45">{{ canManageApiKeys ? 'Manageable upstream keys' : 'Permission required: admin.api_key.manage' }}</p>
+                <p class="mt-2 text-xs text-white/45">{{ canManageApiKeys ? '当前可管理的上游密钥数' : '需要权限：admin.api_key.manage' }}</p>
               </div>
               <div class="ui-glass-card rounded-xl p-4">
-                <p class="text-xs uppercase tracking-[0.12em] text-white/40">API Log Results</p>
+                <p class="text-xs uppercase tracking-[0.12em] text-white/40">日志结果数</p>
                 <p class="mt-2 text-2xl font-semibold text-white">{{ canReadUsage ? apiLogs.length : '--' }}</p>
-                <p class="mt-2 text-xs text-white/45">{{ canReadUsage ? 'Current query result rows' : 'Permission required: admin.usage.read_all' }}</p>
+                <p class="mt-2 text-xs text-white/45">{{ canReadUsage ? '当前日志查询返回行数' : '需要权限：admin.usage.read_all' }}</p>
               </div>
             </div>
 
             <div v-if="canReadUsage" class="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_1.8fr]">
               <div class="ui-glass-card rounded-2xl p-4">
-                <h3 class="text-sm font-medium text-white">Deduction Detail (request-id)</h3>
+                <h3 class="text-sm font-medium text-white">扣费详情（request-id）</h3>
                 <div class="mt-3 flex flex-wrap gap-2">
-                  <input v-model="recordRequestId" class="ui-text-input" placeholder="Paste request-id" />
+                  <input v-model="recordRequestId" class="ui-text-input" placeholder="粘贴 request-id" />
                   <button class="ui-micro-btn" :disabled="loadingRecord" @click="queryRecord">
-                    {{ loadingRecord ? 'Querying...' : 'Query' }}
+                    {{ loadingRecord ? '查询中...' : '查询' }}
                   </button>
                 </div>
                 <div v-if="recordData" class="mt-4 grid grid-cols-2 gap-2 text-xs text-white/75 md:grid-cols-5">
-                  <div>Model: {{ recordData.model || '-' }}</div>
-                  <div>Cost: {{ recordData.cost ?? '-' }}</div>
-                  <div>Input: {{ recordData.input_token ?? '-' }}</div>
-                  <div>Output: {{ recordData.output_token ?? '-' }}</div>
-                  <div>Latency: {{ recordData.process_time ?? '-' }}</div>
+                  <div>模型：{{ recordData.model || '-' }}</div>
+                  <div>成本：{{ recordData.cost ?? '-' }}</div>
+                  <div>输入：{{ recordData.input_token ?? '-' }}</div>
+                  <div>输出：{{ recordData.output_token ?? '-' }}</div>
+                  <div>耗时：{{ recordData.process_time ?? '-' }}</div>
                 </div>
               </div>
 
               <div class="ui-glass-card rounded-2xl p-4">
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <h3 class="text-sm font-medium text-white">API Log Query</h3>
+                  <h3 class="text-sm font-medium text-white">API 日志查询</h3>
                   <div class="flex flex-wrap items-center gap-2">
                     <input v-model="log302Query.start" type="datetime-local" class="ui-text-input !w-[190px]" />
                     <input v-model="log302Query.end" type="datetime-local" class="ui-text-input !w-[190px]" />
                     <input v-model.number="log302Query.page" type="number" min="1" class="ui-number-input" />
                     <input v-model.number="log302Query.limit" type="number" min="1" max="50" class="ui-number-input" />
-                    <button class="ui-micro-btn" :disabled="loadingApiLogs" @click="loadApiLogs">Search</button>
+                    <button class="ui-micro-btn" :disabled="loadingApiLogs" @click="loadApiLogs">查询</button>
                   </div>
                 </div>
-                <div v-if="apiLogs.length === 0" class="empty-notice">No API logs</div>
+                <div v-if="apiLogs.length === 0" class="empty-notice">暂无 API 日志</div>
                 <div v-else class="overflow-x-auto">
                   <table class="w-full min-w-[860px] text-sm">
                     <thead>
                       <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.12em] text-white/40">
-                        <th class="px-2 py-2">Request ID</th>
-                        <th class="px-2 py-2">Model</th>
-                        <th class="px-2 py-2">Cost</th>
-                        <th class="px-2 py-2">Status</th>
-                        <th class="px-2 py-2">Time</th>
+                        <th class="px-2 py-2">请求 ID</th>
+                        <th class="px-2 py-2">模型</th>
+                        <th class="px-2 py-2">成本</th>
+                        <th class="px-2 py-2">状态</th>
+                        <th class="px-2 py-2">时间</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -428,7 +428,7 @@
 
             <div v-if="canManageApiKeys" class="space-y-6">
               <div class="ui-glass-card rounded-2xl p-4">
-                <h3 class="text-sm font-medium text-white">Create API Key</h3>
+                <h3 class="text-sm font-medium text-white">创建 API 密钥</h3>
                 <div class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-4">
                   <input v-model="createKeyForm.api_name" class="ui-text-input" placeholder="api_name" />
                   <input v-model.number="createKeyForm.limit_cost" type="number" min="0" class="ui-text-input" placeholder="limit_cost" />
@@ -441,28 +441,28 @@
                   <label><input v-model="createKeyForm.allow_manage_key" type="checkbox" /> allow_manage_key</label>
                 </div>
                 <button class="ui-micro-btn ui-micro-btn-primary mt-3" :disabled="creatingApiKey" @click="createApiKey">
-                  {{ creatingApiKey ? 'Creating...' : 'Create Key' }}
+                  {{ creatingApiKey ? '创建中...' : '创建密钥' }}
                 </button>
               </div>
 
               <div>
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <h3 class="text-sm font-medium text-white">API Keys</h3>
-                  <p class="text-xs text-white/45">Create, update and delete upstream keys</p>
+                  <h3 class="text-sm font-medium text-white">API 密钥列表</h3>
+                  <p class="text-xs text-white/45">创建、更新和删除上游密钥</p>
                 </div>
-                <div v-if="apiKeys.length === 0" class="empty-notice">No API keys</div>
+                <div v-if="apiKeys.length === 0" class="empty-notice">暂无 API 密钥</div>
                 <div v-else class="overflow-x-auto">
                   <table class="w-full min-w-[1100px] text-sm">
                     <thead>
                       <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.12em] text-white/40">
-                        <th class="px-2 py-2">Name</th>
-                        <th class="px-2 py-2">API Key</th>
-                        <th class="px-2 py-2">Current Cost</th>
-                        <th class="px-2 py-2">Limit Cost</th>
-                        <th class="px-2 py-2">Daily Limit</th>
-                        <th class="px-2 py-2">Expire</th>
-                        <th class="px-2 py-2">Flags</th>
-                        <th class="px-2 py-2">Actions</th>
+                        <th class="px-2 py-2">名称</th>
+                        <th class="px-2 py-2">API 密钥</th>
+                        <th class="px-2 py-2">当前成本</th>
+                        <th class="px-2 py-2">总限额</th>
+                        <th class="px-2 py-2">日限额</th>
+                        <th class="px-2 py-2">过期时间</th>
+                        <th class="px-2 py-2">开关</th>
+                        <th class="px-2 py-2">操作</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -481,10 +481,10 @@
                         <td class="px-2 py-2">
                           <div class="flex flex-wrap gap-2">
                             <button class="ui-micro-btn" :disabled="updatingKeys[item.api_name]" @click="updateApiKey(item)">
-                              {{ updatingKeys[item.api_name] ? 'Saving...' : 'Update' }}
+                              {{ updatingKeys[item.api_name] ? '保存中...' : '更新' }}
                             </button>
                             <button class="ui-micro-btn ui-micro-btn-danger" :disabled="deletingKeys[item.api_name]" @click="removeApiKey(item)">
-                              {{ deletingKeys[item.api_name] ? 'Deleting...' : 'Delete' }}
+                              {{ deletingKeys[item.api_name] ? '删除中...' : '删除' }}
                             </button>
                           </div>
                         </td>
@@ -496,33 +496,33 @@
             </div>
 
             <div v-if="!canReadUsage && !canManageApiKeys" class="empty-notice">
-              当前角色没有可用的 Service 管理权限。
+              当前角色没有可用的服务管理权限。
             </div>
           </section>
 
           <section v-if="canReadAudit" ref="auditRef" class="ui-glass-card scroll-mt-6 rounded-2xl p-5 md:p-6">
             <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 class="section-title">Admin Audit Logs</h2>
+                <h2 class="section-title">后台审计日志</h2>
                 <p class="section-caption">后台关键操作审计轨迹。</p>
               </div>
               <div class="flex items-center gap-2 text-xs">
                 <input v-model.number="logQuery.page" type="number" min="1" class="ui-number-input" />
                 <input v-model.number="logQuery.limit" type="number" min="1" max="100" class="ui-number-input" />
-                <button class="ui-micro-btn" :disabled="loadingLogs" @click="loadLogs">Search</button>
+                <button class="ui-micro-btn" :disabled="loadingLogs" @click="loadLogs">查询</button>
               </div>
             </div>
 
-            <div v-if="auditLogs.length === 0" class="empty-notice">No audit logs</div>
+            <div v-if="auditLogs.length === 0" class="empty-notice">暂无审计日志</div>
             <div v-else class="overflow-x-auto">
               <table class="w-full min-w-[980px] text-sm">
                 <thead>
                   <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.12em] text-white/40">
-                    <th class="px-3 py-3">Time</th>
-                    <th class="px-3 py-3">Action</th>
-                    <th class="px-3 py-3">Operator</th>
-                    <th class="px-3 py-3">Target</th>
-                    <th class="px-3 py-3">Metadata</th>
+                    <th class="px-3 py-3">时间</th>
+                    <th class="px-3 py-3">动作</th>
+                    <th class="px-3 py-3">操作者</th>
+                    <th class="px-3 py-3">目标对象</th>
+                    <th class="px-3 py-3">元数据</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -537,7 +537,7 @@
               </table>
             </div>
 
-            <p class="mt-3 text-xs text-white/45">Page {{ pagination.page }} · Limit {{ pagination.limit }} · Total {{ pagination.total }}</p>
+            <p class="mt-3 text-xs text-white/45">第 {{ pagination.page }} 页 · 每页 {{ pagination.limit }} 条 · 共 {{ pagination.total }} 条</p>
           </section>
         </main>
       </div>
@@ -649,11 +649,11 @@ const showAssignmentsColumn = computed(() => canAssignApiKeys.value || users.val
 
 const navItems = computed(() => {
   const items = [
-    { key: 'overview', label: 'Overview', note: 'Summary' }
+    { key: 'overview', label: '概览', note: '总览' }
   ]
-  if (canReadUsers.value) items.push({ key: 'users', label: 'Users & Roles', note: 'Accounts' })
-  if (showServiceSection.value) items.push({ key: 'service', label: 'Service Ops', note: '302' })
-  if (canReadAudit.value) items.push({ key: 'audit', label: 'Audit Logs', note: 'Trace' })
+  if (canReadUsers.value) items.push({ key: 'users', label: '用户与角色', note: '账号' })
+  if (showServiceSection.value) items.push({ key: 'service', label: '服务运维', note: '302' })
+  if (canReadAudit.value) items.push({ key: 'audit', label: '审计日志', note: '追踪' })
   return items
 })
 
@@ -685,18 +685,18 @@ const nowLabel = computed(() => new Date().toLocaleDateString())
 
 const displayName = computed(() => {
   const name = String(auth.user.value?.displayName || '').trim()
-  return name || auth.adminUser.value?.email || auth.user.value?.email || 'Admin'
+  return name || auth.adminUser.value?.email || auth.user.value?.email || '管理员'
 })
 
 const adminAccountLabel = computed(() => auth.adminUser.value?.email || auth.user.value?.email || '-')
 
 const accessScope = computed(() => {
-  const items = ['Dashboard']
-  if (canReadUsers.value) items.push('Users')
-  if (canReadUsage.value) items.push('Usage')
-  if (canManageApiKeys.value) items.push('API Keys')
-  else if (canAssignApiKeys.value) items.push('Assignments')
-  if (canReadAudit.value) items.push('Audit')
+  const items = ['概览']
+  if (canReadUsers.value) items.push('用户')
+  if (canReadUsage.value) items.push('用量')
+  if (canManageApiKeys.value) items.push('API 密钥')
+  else if (canAssignApiKeys.value) items.push('分配')
+  if (canReadAudit.value) items.push('审计')
   return items
 })
 
@@ -710,12 +710,12 @@ const userStats = computed(() => users.value.reduce((acc, item) => {
 }, { total: 0, active: 0, suspended: 0, deleted: 0 }))
 
 const cards = computed(() => [
-  { label: 'Managed Users', value: canReadUsers.value ? userStats.value.total : '--', note: canReadUsers.value ? 'Users in admin scope' : 'Permission required' },
-  { label: 'Suspended', value: canReadUsers.value ? userStats.value.suspended : '--', note: canReadUsers.value ? 'Accounts currently blocked' : 'Permission required' },
-  { label: 'Total Calls', value: canReadUsage.value ? usageSummary.value.totalCalls || 0 : '--', note: canReadUsage.value ? 'Global request volume' : 'Usage not available' },
-  { label: 'Cost (USD)', value: canReadUsage.value ? Number(usageSummary.value.totalCostUsd || 0).toFixed(2) : '--', note: canReadUsage.value ? 'Aggregated spend' : 'Usage not available' },
-  { label: 'Audit Rows', value: canReadAudit.value ? pagination.value.total : '--', note: canReadAudit.value ? 'Current audit trail size' : 'Audit not available' },
-  { label: 'API Keys', value: canManageApiKeys.value ? apiKeys.value.length : '--', note: canManageApiKeys.value ? 'Manageable upstream keys' : 'Key management not available' }
+  { label: '管理用户数', value: canReadUsers.value ? userStats.value.total : '--', note: canReadUsers.value ? '当前后台可见用户总数' : '缺少权限' },
+  { label: '已暂停', value: canReadUsers.value ? userStats.value.suspended : '--', note: canReadUsers.value ? '当前被暂停的账号数' : '缺少权限' },
+  { label: '总调用量', value: canReadUsage.value ? usageSummary.value.totalCalls || 0 : '--', note: canReadUsage.value ? '全局请求总次数' : '无用量权限' },
+  { label: '成本 (USD)', value: canReadUsage.value ? Number(usageSummary.value.totalCostUsd || 0).toFixed(2) : '--', note: canReadUsage.value ? '累计消耗成本' : '无用量权限' },
+  { label: '审计条目', value: canReadAudit.value ? pagination.value.total : '--', note: canReadAudit.value ? '当前审计日志总条数' : '无审计权限' },
+  { label: 'API 密钥', value: canManageApiKeys.value ? apiKeys.value.length : '--', note: canManageApiKeys.value ? '当前可管理的上游密钥数' : '无密钥管理权限' }
 ])
 
 const filteredUsers = computed(() => {
@@ -821,6 +821,13 @@ const statusClass = (status) => {
   return 'ui-status-pill-active'
 }
 
+const statusLabel = (status) => {
+  const val = String(status || 'active')
+  if (val === 'suspended') return '已暂停'
+  if (val === 'deleted') return '已删除'
+  return '正常'
+}
+
 const formatDateTime = (value) => {
   if (!value) return '-'
   const date = new Date(value)
@@ -887,7 +894,7 @@ const loadUsage = async () => {
     usageSummary.value = summaryRsp?.data || usageSummary.value
     usageSeries.value = Array.isArray(seriesRsp?.data) ? seriesRsp.data : []
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to load usage dashboard'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载用量概览失败'))
   } finally {
     loadingUsage.value = false
   }
@@ -909,7 +916,7 @@ const loadUsers = async () => {
     selectedRoles.value = nextSelection
     assignSelections.value = nextAssignments
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to load users'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载用户列表失败'))
   } finally {
     loadingUsers.value = false
   }
@@ -918,14 +925,14 @@ const loadUsers = async () => {
 const saveRoles = async (user) => {
   if (!canManageRoles.value || isSelf(user)) return
   const roles = [...new Set((selectedRoles.value[user.id] || []).filter(Boolean))]
-  if (!roles.length) return window.$message?.warning('At least one role is required')
+  if (!roles.length) return window.$message?.warning('至少保留一个角色')
   saving.value = { ...saving.value, [user.id]: true }
   try {
     await updateAdminUserRoles(user.id, roles)
-    window.$message?.success('Roles updated')
+    window.$message?.success('角色更新成功')
     await Promise.all([loadUsers(), loadLogs()])
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to update roles'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '更新角色失败'))
   } finally {
     saving.value = { ...saving.value, [user.id]: false }
   }
@@ -933,14 +940,14 @@ const saveRoles = async (user) => {
 
 const suspendUser = async (user) => {
   if (!canManageUserStatus.value || isSelf(user)) return
-  const reason = window.prompt('Suspend reason (optional):', '') || ''
+  const reason = window.prompt('请输入暂停原因（可选）：', '') || ''
   statusLoading.value = { ...statusLoading.value, [user.id]: true }
   try {
     await updateAdminUserStatus(user.id, 'suspended', reason)
-    window.$message?.success('User suspended')
+    window.$message?.success('用户已暂停')
     await Promise.all([loadUsers(), loadLogs()])
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to suspend user'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '暂停用户失败'))
   } finally {
     statusLoading.value = { ...statusLoading.value, [user.id]: false }
   }
@@ -951,10 +958,10 @@ const activateUser = async (user) => {
   statusLoading.value = { ...statusLoading.value, [user.id]: true }
   try {
     await updateAdminUserStatus(user.id, 'active')
-    window.$message?.success('User activated')
+    window.$message?.success('用户已恢复')
     await Promise.all([loadUsers(), loadLogs()])
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to activate user'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '恢复用户失败'))
   } finally {
     statusLoading.value = { ...statusLoading.value, [user.id]: false }
   }
@@ -962,15 +969,15 @@ const activateUser = async (user) => {
 
 const deleteUser = async (user) => {
   if (!canManageUserStatus.value || isSelf(user)) return
-  const ok = window.confirm(`Delete user ${user.email}? This will disable account access.`)
+  const ok = window.confirm(`确认删除用户 ${user.email} 吗？删除后将禁用该账号访问。`)
   if (!ok) return
   deleting.value = { ...deleting.value, [user.id]: true }
   try {
     await deleteAdminUser(user.id)
-    window.$message?.success('User deleted')
+    window.$message?.success('用户已删除')
     await Promise.all([loadUsers(), loadLogs()])
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to delete user'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '删除用户失败'))
   } finally {
     deleting.value = { ...deleting.value, [user.id]: false }
   }
@@ -979,15 +986,15 @@ const deleteUser = async (user) => {
 const assignApiKey = async (user) => {
   if (!canAssignApiKeys.value) return
   const apiName = String(assignSelections.value[user.id] || '').trim()
-  if (!apiName) return window.$message?.warning('Select an API key first')
+  if (!apiName) return window.$message?.warning('请先选择一个 API 密钥')
   assignmentLoading.value = { ...assignmentLoading.value, [user.id]: true }
   try {
     await assignAdminApiKeyToUser(user.id, apiName)
-    window.$message?.success('API key assigned')
+    window.$message?.success('API 密钥分配成功')
     assignSelections.value = { ...assignSelections.value, [user.id]: '' }
     await Promise.all([loadUsers(), loadLogs()])
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to assign API key'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '分配 API 密钥失败'))
   } finally {
     assignmentLoading.value = { ...assignmentLoading.value, [user.id]: false }
   }
@@ -998,10 +1005,10 @@ const unassignApiKey = async (user, apiName) => {
   assignmentLoading.value = { ...assignmentLoading.value, [user.id]: true }
   try {
     await unassignAdminApiKeyFromUser(user.id, apiName)
-    window.$message?.success('API key unassigned')
+    window.$message?.success('API 密钥解绑成功')
     await Promise.all([loadUsers(), loadLogs()])
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to unassign API key'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '解绑 API 密钥失败'))
   } finally {
     assignmentLoading.value = { ...assignmentLoading.value, [user.id]: false }
   }
@@ -1014,7 +1021,7 @@ const load302Balance = async () => {
     const rsp = await getAdmin302Balance()
     balance.value = String(rsp?.data?.balance ?? '')
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to load Eager Service balance'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载 Eager 服务余额失败'))
   } finally {
     loadingBalance.value = false
   }
@@ -1023,13 +1030,13 @@ const load302Balance = async () => {
 const queryRecord = async () => {
   if (!canReadUsage.value) return
   const id = String(recordRequestId.value || '').trim()
-  if (!id) return window.$message?.warning('Please input request-id')
+  if (!id) return window.$message?.warning('请输入 request-id')
   loadingRecord.value = true
   try {
     const rsp = await getAdmin302Record(id)
     recordData.value = rsp?.data || null
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to query record'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '查询扣费记录失败'))
   } finally {
     loadingRecord.value = false
   }
@@ -1047,7 +1054,7 @@ const loadApiLogs = async () => {
     })
     apiLogs.value = Array.isArray(rsp?.data?.items) ? rsp.data.items : []
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to load API logs'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载 API 日志失败'))
   } finally {
     loadingApiLogs.value = false
   }
@@ -1064,7 +1071,7 @@ const loadApiKeys = async ({ silent = false } = {}) => {
     for (const item of list) drafts[item.api_name] = buildDraft(item)
     keyDrafts.value = drafts
   } catch (error) {
-    if (!silent && !error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to load API keys'))
+    if (!silent && !error?.__handled) window.$message?.error(getErrorMessage(error, '加载 API 密钥失败'))
   } finally {
     loadingKeys.value = false
   }
@@ -1072,11 +1079,11 @@ const loadApiKeys = async ({ silent = false } = {}) => {
 
 const createApiKey = async () => {
   if (!canManageApiKeys.value) return
-  if (!String(createKeyForm.api_name || '').trim()) return window.$message?.warning('api_name is required')
+  if (!String(createKeyForm.api_name || '').trim()) return window.$message?.warning('必须填写 api_name')
   creatingApiKey.value = true
   try {
     await createAdmin302ApiKey({ ...createKeyForm, api_name: createKeyForm.api_name.trim() })
-    window.$message?.success('API key created')
+    window.$message?.success('API 密钥创建成功')
     createKeyForm.api_name = ''
     createKeyForm.allow_save_logs = false
     createKeyForm.allow_custom_model = false
@@ -1086,7 +1093,7 @@ const createApiKey = async () => {
     createKeyForm.expired_on = 0
     await loadApiKeys()
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to create API key'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '创建 API 密钥失败'))
   } finally {
     creatingApiKey.value = false
   }
@@ -1100,10 +1107,10 @@ const updateApiKey = async (item) => {
   updatingKeys.value = { ...updatingKeys.value, [name]: true }
   try {
     await updateAdmin302ApiKey(name, { ...draft, api_name: name })
-    window.$message?.success('API key updated')
+    window.$message?.success('API 密钥更新成功')
     await loadApiKeys()
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to update API key'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '更新 API 密钥失败'))
   } finally {
     updatingKeys.value = { ...updatingKeys.value, [name]: false }
   }
@@ -1112,15 +1119,15 @@ const updateApiKey = async (item) => {
 const removeApiKey = async (item) => {
   if (!canManageApiKeys.value) return
   const name = item.api_name
-  const ok = window.confirm(`Delete API key ${name}?`)
+  const ok = window.confirm(`确认删除 API 密钥 ${name} 吗？`)
   if (!ok) return
   deletingKeys.value = { ...deletingKeys.value, [name]: true }
   try {
     await deleteAdmin302ApiKey(name)
-    window.$message?.success('API key deleted')
+    window.$message?.success('API 密钥删除成功')
     await Promise.all([loadApiKeys(), loadUsers(), loadLogs()])
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to delete API key'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '删除 API 密钥失败'))
   } finally {
     deletingKeys.value = { ...deletingKeys.value, [name]: false }
   }
@@ -1149,7 +1156,7 @@ const loadLogs = async () => {
       total: Number(rsp?.pagination?.total || 0)
     }
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to load audit logs'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载审计日志失败'))
   } finally {
     loadingLogs.value = false
   }
@@ -1186,8 +1193,7 @@ onMounted(async () => {
       router.replace({ name: 'AdminDashboard' })
     }
   }
-  const scrollTarget = adminShellRef.value || window
-  scrollTarget.addEventListener('scroll', onMainScroll, { passive: true })
+  window.addEventListener('scroll', onMainScroll, { passive: true })
 })
 
 watch(() => route.name, async (name) => {
@@ -1201,8 +1207,7 @@ watch(() => route.name, async (name) => {
 })
 
 onBeforeUnmount(() => {
-  const scrollTarget = adminShellRef.value || window
-  scrollTarget.removeEventListener('scroll', onMainScroll)
+  window.removeEventListener('scroll', onMainScroll)
 })
 </script>
 
