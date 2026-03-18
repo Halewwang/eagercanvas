@@ -306,6 +306,7 @@ import {
   renameProject 
 } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
+import { useAvatarUpload } from '@/hooks/useAvatarUpload'
 import ApiSettings from '../components/ApiSettings.vue'
 import AuthDialog from '../components/AuthDialog.vue'
 import { getErrorMessage } from '@/utils'
@@ -323,36 +324,14 @@ const handleLogout = async () => {
   router.push('/')
 }
 
-const avatarInputRef = ref(null)
-const avatarInitial = computed(() => (user.value?.displayName || user.value?.email || 'U').charAt(0).toUpperCase())
-
-const triggerAvatarUpload = () => {
-  avatarInputRef.value?.click()
-}
-
-const handleAvatarChange = async (event) => {
-  const file = event.target?.files?.[0]
-  if (!file) return
-  if (file.size > 2 * 1024 * 1024) {
-    window.$message?.error('Avatar must be <= 2MB')
-    return
+const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange } = useAvatarUpload({
+  user,
+  updateProfile,
+  notify: {
+    success: (message) => window.$message?.success(message),
+    error: (message) => window.$message?.error(message)
   }
-
-  const reader = new FileReader()
-  reader.onload = async () => {
-    try {
-      const dataUrl = String(reader.result || '')
-      await updateProfile({ avatarUrl: dataUrl })
-      window.$message?.success('Avatar updated')
-    } catch (err) {
-      if (!err?.__handled) {
-        window.$message?.error(getErrorMessage(err, 'Failed to update avatar'))
-      }
-    }
-  }
-  reader.readAsDataURL(file)
-  event.target.value = ''
-}
+})
 
 const openLogin = () => {
   authMode.value = 'login'

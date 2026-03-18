@@ -554,22 +554,16 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRoute, useRouter } from 'vue-router'
 import {
   assignAdminApiKeyToUser,
-  createAdmin302ApiKey,
-  deleteAdmin302ApiKey,
   deleteAdminUser,
-  getAdmin302ApiKeys,
-  getAdmin302ApiRecord,
-  getAdmin302Balance,
-  getAdmin302Record,
   getAdminAuditLogs,
   getAdminUsageSummary,
   getAdminUsageTimeseries,
   getAdminUsers,
   unassignAdminApiKeyFromUser,
-  updateAdmin302ApiKey,
   updateAdminUserRoles,
   updateAdminUserStatus
 } from '@/api/admin'
+import { useAdminServiceOps } from '@/hooks/useAdminServiceOps'
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils'
 
@@ -616,31 +610,6 @@ const loadingLogs = ref(false)
 const pagination = ref({ page: 1, limit: 20, total: 0 })
 const logQuery = ref({ page: 1, limit: 20 })
 
-const balance = ref('')
-const loadingBalance = ref(false)
-const recordRequestId = ref('')
-const recordData = ref(null)
-const loadingRecord = ref(false)
-const log302Query = reactive({ page: 1, limit: 20, start: '', end: '' })
-const apiLogs = ref([])
-const loadingApiLogs = ref(false)
-const serviceLoadNotice = ref('')
-const apiKeys = ref([])
-const keyDrafts = ref({})
-const loadingKeys = ref(false)
-const creatingApiKey = ref(false)
-const updatingKeys = ref({})
-const deletingKeys = ref({})
-const createKeyForm = reactive({
-  api_name: '',
-  allow_save_logs: false,
-  allow_custom_model: false,
-  allow_manage_key: false,
-  limit_cost: 0,
-  limit_daily_cost: 0,
-  expired_on: 0
-})
-
 const canReadUsers = computed(() => auth.hasPermission('admin.user.read'))
 const canManageRoles = computed(() => auth.hasPermission('admin.user.role.update'))
 const canManageUserStatus = computed(() => auth.hasPermission('admin.user.status.update'))
@@ -650,6 +619,38 @@ const canAssignApiKeys = computed(() => auth.hasPermission('admin.api_key.assign
 const canManageApiKeys = computed(() => auth.hasPermission('admin.api_key.manage'))
 const showServiceSection = computed(() => canReadUsage.value || canManageApiKeys.value || canAssignApiKeys.value)
 const showUserActions = computed(() => canAssignApiKeys.value || canManageUserStatus.value)
+const {
+  apiKeyOptions,
+  apiKeys,
+  apiLogs,
+  balanceDisplay,
+  createApiKey,
+  createKeyForm,
+  creatingApiKey,
+  deletingKeys,
+  keyDrafts,
+  load302All,
+  loadApiLogs,
+  loading302,
+  loadingApiLogs,
+  loadingKeys,
+  loadingRecord,
+  log302Query,
+  maskApiKey,
+  queryRecord,
+  recordData,
+  recordRequestId,
+  removeApiKey,
+  serviceLoadNotice,
+  updateApiKey,
+  updatingKeys
+} = useAdminServiceOps({
+  canReadUsage,
+  canManageApiKeys,
+  canAssignApiKeys,
+  loadUsers: () => loadUsers(),
+  loadLogs: () => loadLogs()
+})
 const showAssignmentsColumn = computed(() => canAssignApiKeys.value || users.value.some((item) => (item.assignedApiKeys || []).length > 0))
 
 const navItems = computed(() => {
@@ -684,8 +685,6 @@ watch(navItems, (items) => {
 
 const isRefreshing = computed(() => loadingOverview.value || loadingUsers.value || loadingLogs.value || loading302.value)
 const loadingOverview = computed(() => loadingUsage.value)
-const loading302 = computed(() => loadingBalance.value || loadingRecord.value || loadingApiLogs.value || loadingKeys.value)
-const balanceDisplay = computed(() => (balance.value ? `$${balance.value}` : '--'))
 const nowLabel = computed(() => new Date().toLocaleDateString())
 
 const displayName = computed(() => {
@@ -763,8 +762,6 @@ const visibleUserPages = computed(() => {
   if (current >= total - 2) return [total - 4, total - 3, total - 2, total - 1, total]
   return [current - 2, current - 1, current, current + 1, current + 2]
 })
-
-const apiKeyOptions = computed(() => apiKeys.value.map((item) => item.api_name).filter(Boolean))
 
 const goHome = () => router.push('/')
 
@@ -866,41 +863,6 @@ const toggleRole = (userId, role, event) => {
   else set.delete(role)
   selectedRoles.value[userId] = [...set]
 }
-
-const maskApiKey = (value) => {
-  const key = String(value || '')
-  if (key.length <= 10) return key || '-'
-  return `${key.slice(0, 6)}...${key.slice(-4)}`
-}
-
-const toUnixSeconds = (value) => {
-  if (!value) return undefined
-  const ts = Date.parse(value)
-  return Number.isFinite(ts) ? Math.floor(ts / 1000) : undefined
-}
-
-const is502ServiceError = (error) => {
-  const status = Number(error?.response?.status || error?.status || 0)
-  return [500, 502, 503, 504].includes(status)
-}
-
-const toServiceNotice = (fallback, error) => {
-  const message = getErrorMessage(error, fallback)
-  if (is502ServiceError(error)) {
-    return '302 服务暂时不可用，已跳过该区块的数据加载。其他后台功能仍可正常使用。'
-  }
-  return message
-}
-
-const buildDraft = (item) => ({
-  api_name: item.api_name,
-  allow_save_logs: !!item.allow_save_logs,
-  allow_custom_model: !!item.allow_custom_model,
-  allow_manage_key: !!item.allow_manage_key,
-  limit_cost: Number(item.limit_cost || 0),
-  limit_daily_cost: Number(item.limit_daily_cost || 0),
-  expired_on: Number(item.expired_on || 0)
-})
 
 const isSelf = (user) => String(user?.id || '') === String(auth.adminUser.value?.id || auth.user.value?.id || '')
 
@@ -1029,154 +991,6 @@ const unassignApiKey = async (user, apiName) => {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '解绑 API 密钥失败'))
   } finally {
     assignmentLoading.value = { ...assignmentLoading.value, [user.id]: false }
-  }
-}
-
-const load302Balance = async ({ silent = false } = {}) => {
-  if (!canReadUsage.value) return
-  loadingBalance.value = true
-  try {
-    const rsp = await getAdmin302Balance()
-    balance.value = String(rsp?.data?.balance ?? '')
-    return { ok: true }
-  } catch (error) {
-    balance.value = ''
-    const message = toServiceNotice('加载 Eager 服务余额失败', error)
-    if (!silent && !error?.__handled) window.$message?.error(message)
-    return { ok: false, message, error }
-  } finally {
-    loadingBalance.value = false
-  }
-}
-
-const queryRecord = async () => {
-  if (!canReadUsage.value) return
-  const id = String(recordRequestId.value || '').trim()
-  if (!id) return window.$message?.warning('请输入 request-id')
-  loadingRecord.value = true
-  try {
-    const rsp = await getAdmin302Record(id)
-    recordData.value = rsp?.data || null
-  } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '查询扣费记录失败'))
-  } finally {
-    loadingRecord.value = false
-  }
-}
-
-const loadApiLogs = async ({ silent = false } = {}) => {
-  if (!canReadUsage.value) return
-  loadingApiLogs.value = true
-  try {
-    const rsp = await getAdmin302ApiRecord({
-      page: log302Query.page,
-      limit: log302Query.limit,
-      start_time: toUnixSeconds(log302Query.start),
-      end_time: toUnixSeconds(log302Query.end)
-    })
-    apiLogs.value = Array.isArray(rsp?.data?.items) ? rsp.data.items : []
-    return { ok: true }
-  } catch (error) {
-    apiLogs.value = []
-    const message = toServiceNotice('加载 API 日志失败', error)
-    if (!silent && !error?.__handled) window.$message?.error(message)
-    return { ok: false, message, error }
-  } finally {
-    loadingApiLogs.value = false
-  }
-}
-
-const loadApiKeys = async ({ silent = false } = {}) => {
-  if (!canManageApiKeys.value && !canAssignApiKeys.value) return
-  loadingKeys.value = true
-  try {
-    const rsp = await getAdmin302ApiKeys()
-    const list = Array.isArray(rsp?.data) ? rsp.data : []
-    apiKeys.value = list
-    const drafts = {}
-    for (const item of list) drafts[item.api_name] = buildDraft(item)
-    keyDrafts.value = drafts
-    return { ok: true }
-  } catch (error) {
-    apiKeys.value = []
-    keyDrafts.value = {}
-    const message = toServiceNotice('加载 API 密钥失败', error)
-    if (!silent && !error?.__handled) window.$message?.error(message)
-    return { ok: false, message, error }
-  } finally {
-    loadingKeys.value = false
-  }
-}
-
-const createApiKey = async () => {
-  if (!canManageApiKeys.value) return
-  if (!String(createKeyForm.api_name || '').trim()) return window.$message?.warning('必须填写 api_name')
-  creatingApiKey.value = true
-  try {
-    await createAdmin302ApiKey({ ...createKeyForm, api_name: createKeyForm.api_name.trim() })
-    window.$message?.success('API 密钥创建成功')
-    createKeyForm.api_name = ''
-    createKeyForm.allow_save_logs = false
-    createKeyForm.allow_custom_model = false
-    createKeyForm.allow_manage_key = false
-    createKeyForm.limit_cost = 0
-    createKeyForm.limit_daily_cost = 0
-    createKeyForm.expired_on = 0
-    await loadApiKeys()
-  } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '创建 API 密钥失败'))
-  } finally {
-    creatingApiKey.value = false
-  }
-}
-
-const updateApiKey = async (item) => {
-  if (!canManageApiKeys.value) return
-  const name = item.api_name
-  const draft = keyDrafts.value[name]
-  if (!draft) return
-  updatingKeys.value = { ...updatingKeys.value, [name]: true }
-  try {
-    await updateAdmin302ApiKey(name, { ...draft, api_name: name })
-    window.$message?.success('API 密钥更新成功')
-    await loadApiKeys()
-  } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '更新 API 密钥失败'))
-  } finally {
-    updatingKeys.value = { ...updatingKeys.value, [name]: false }
-  }
-}
-
-const removeApiKey = async (item) => {
-  if (!canManageApiKeys.value) return
-  const name = item.api_name
-  const ok = window.confirm(`确认删除 API 密钥 ${name} 吗？`)
-  if (!ok) return
-  deletingKeys.value = { ...deletingKeys.value, [name]: true }
-  try {
-    await deleteAdmin302ApiKey(name)
-    window.$message?.success('API 密钥删除成功')
-    await Promise.all([loadApiKeys(), loadUsers(), loadLogs()])
-  } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '删除 API 密钥失败'))
-  } finally {
-    deletingKeys.value = { ...deletingKeys.value, [name]: false }
-  }
-}
-
-const load302All = async () => {
-  serviceLoadNotice.value = ''
-  const tasks = []
-  if (canReadUsage.value) {
-    tasks.push(load302Balance({ silent: true }), loadApiLogs({ silent: true }))
-  }
-  if (canManageApiKeys.value || canAssignApiKeys.value) {
-    tasks.push(loadApiKeys({ silent: true }))
-  }
-  const results = await Promise.all(tasks)
-  const failures = results.filter((item) => item && item.ok === false)
-  if (failures.length > 0) {
-    serviceLoadNotice.value = failures[0].message || '服务数据加载失败'
   }
 }
 

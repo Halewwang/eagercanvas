@@ -304,6 +304,7 @@ import {
 import { nodes, edges, addEdge, loadProject, saveProject, flushSave, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
 import { loadAllModels } from '../stores/models'
 import { useNodesFactory } from '../hooks'
+import { useAvatarUpload } from '@/hooks/useAvatarUpload'
 import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { getErrorMessage } from '@/utils'
@@ -343,34 +344,11 @@ const router = useRouter()
 const route = useRoute()
 const { user, updateProfile } = useAuthStore()
 const { loadWorkflowTemplates, shareProjectAsMyTemplate } = useWorkflowsStore()
-const avatarInputRef = ref(null)
-const avatarInitial = computed(() => (user.value?.displayName || user.value?.email || 'U').charAt(0).toUpperCase())
-
-const triggerAvatarUpload = () => {
-  avatarInputRef.value?.click()
-}
-
-const handleAvatarChange = async (event) => {
-  const file = event.target?.files?.[0]
-  if (!file) return
-  if (file.size > 2 * 1024 * 1024) {
-    notifier.error('Avatar must be <= 2MB')
-    return
-  }
-  const reader = new FileReader()
-  reader.onload = async () => {
-    try {
-      await updateProfile({ avatarUrl: String(reader.result || '') })
-      notifier.success('Avatar updated')
-    } catch (err) {
-      if (!err?.__handled) {
-        notifier.error(getErrorMessage(err, 'Failed to update avatar'))
-      }
-    }
-  }
-  reader.readAsDataURL(file)
-  event.target.value = ''
-}
+const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange } = useAvatarUpload({
+  user,
+  updateProfile,
+  notify: notifier
+})
 
 // Register custom node types | 注册自定义节点类型
 const nodeTypes = {
