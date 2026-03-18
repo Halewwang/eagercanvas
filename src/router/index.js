@@ -42,7 +42,12 @@ const routes = [
   },
   {
     path: '/admin',
-    redirect: '/admin/users'
+    redirect: '/admin/dashboard'
+  },
+  {
+    path: '/admin/dashboard',
+    name: 'AdminDashboard',
+    component: () => import('../views/AdminUsers.vue')
   },
   {
     path: '/admin/users',
@@ -50,12 +55,14 @@ const routes = [
     component: () => import('../views/AdminUsers.vue')
   },
   {
-    path: '/admin/dashboard',
-    redirect: '/admin/users'
+    path: '/admin/service',
+    name: 'AdminService',
+    component: () => import('../views/AdminUsers.vue')
   },
   {
     path: '/admin/audit',
-    redirect: '/admin/users'
+    name: 'AdminAudit',
+    component: () => import('../views/AdminUsers.vue')
   }
 ]
 

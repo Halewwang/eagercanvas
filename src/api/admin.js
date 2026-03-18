@@ -33,6 +33,20 @@ export const deleteAdminUser = (userId) =>
     method: 'delete'
   })
 
+export const assignAdminApiKeyToUser = (userId, apiName) =>
+  request({
+    url: '/admin/api-keys/assign',
+    method: 'post',
+    data: { userId, apiName }
+  })
+
+export const unassignAdminApiKeyFromUser = (userId, apiName) =>
+  request({
+    url: '/admin/api-keys/assign',
+    method: 'delete',
+    data: { userId, apiName }
+  })
+
 export const getAdminAuditLogs = (params) =>
   request({
     url: '/admin/audit-logs',
