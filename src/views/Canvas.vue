@@ -305,11 +305,11 @@ import { nodes, edges, addEdge, loadProject, saveProject, flushSave, clearCanvas
 import { loadAllModels } from '../stores/models'
 import { useNodesFactory } from '../hooks'
 import { useAvatarUpload } from '@/hooks/useAvatarUpload'
+import { useCanvasProjectActions } from '@/hooks/useCanvasProjectActions'
 import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
-import { getErrorMessage } from '@/utils'
 import { getWorkflowById } from '@/config/workflows'
-import { projects, initProjectsStore, renameProject, duplicateProject, deleteProject } from '../stores/projects'
+import { initProjectsStore } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkflowsStore } from '@/stores/workflows'
 
@@ -376,33 +376,33 @@ const showApiSettings = ref(false)
 
 // Flow key for forcing re-render on project switch | 项目切换时强制重新渲染的 key
 const flowKey = ref(Date.now())
-
-// Modal state | 弹窗状态
-const showRenameModal = ref(false)
-const showDeleteModal = ref(false)
 const showWorkflowPanel = ref(false)
-const showShareModal = ref(false)
-const renameValue = ref('')
-const shareLinkEnabled = ref(true)
-const allowRemixing = ref(false)
-const shareTemplateName = ref('')
-const shareTemplateDescription = ref('')
-
-
-// Project info | 项目信息
-const projectName = computed(() => {
-  const project = projects.value.find(p => p.id === route.params.id)
-  return project?.name || 'Untitled'
+const {
+  allowRemixing,
+  confirmDelete,
+  confirmRename,
+  copyShareLink,
+  currentProject,
+  handleProjectAction,
+  openShareDialog,
+  projectName,
+  projectOptions,
+  renameValue,
+  saveSharedTemplate,
+  shareLinkEnabled,
+  shareLinkUrl,
+  shareTemplateDescription,
+  shareTemplateName,
+  showDeleteModal,
+  showRenameModal,
+  showShareModal
+} = useCanvasProjectActions({
+  route,
+  router,
+  notifier,
+  loadWorkflowTemplates,
+  shareProjectAsMyTemplate
 })
-const currentProject = computed(() => projects.value.find(p => p.id === route.params.id) || null)
-const shareLinkUrl = computed(() => `${window.location.origin}/canvas/${route.params.id}`)
-
-// Project dropdown options | 项目下拉选项
-const projectOptions = [
-  { label: 'Rename', key: 'rename' },
-  { label: 'Duplicate', key: 'duplicate' },
-  { label: 'Delete', key: 'delete' }
-]
 
 // Node type options for menu | 节点类型菜单选项
 const nodeTypeOptions = [
@@ -420,41 +420,6 @@ const addNewNode = async (type) => {
 // Handle add workflow from panel | 处理从面板添加工作流
 const handleAddWorkflow = async ({ workflow, options }) => {
   await nodesFactory.createFromWorkflow(workflow, options)
-}
-
-const copyShareLink = async () => {
-  try {
-    await navigator.clipboard.writeText(shareLinkUrl.value)
-    notifier.success('Share link copied')
-  } catch {
-    notifier.warning('Copy failed')
-  }
-}
-
-const openShareDialog = async () => {
-  await loadWorkflowTemplates()
-  shareTemplateName.value = projectName.value
-  shareTemplateDescription.value = ''
-  showShareModal.value = true
-}
-
-const saveSharedTemplate = async () => {
-  const project = currentProject.value
-  if (!project?.id || !project?.canvasData) {
-    notifier.error('Project data unavailable')
-    return
-  }
-  const visibility = allowRemixing.value ? 'public' : (shareLinkEnabled.value ? 'unlisted' : 'private')
-  await shareProjectAsMyTemplate({
-    projectId: project.id,
-    name: shareTemplateName.value || project.name || 'Untitled',
-    description: shareTemplateDescription.value || '',
-    cover: project.thumbnail || '',
-    canvasData: project.canvasData,
-    visibility
-  })
-  notifier.success('Shared to My Templates')
-  showShareModal.value = false
 }
 
 // Handle connection | 处理连接
@@ -603,56 +568,6 @@ const handleGlobalKeydown = (event) => {
   if (isTypingElement(event.target)) return
   if (event.key !== 'Delete' && event.key !== 'Backspace') return
   removeSelectedElements()
-}
-
-// Handle project action | 处理项目操作
-const handleProjectAction = async (key) => {
-  const projectId = route.params.id
-  switch (key) {
-    case 'rename':
-      renameValue.value = projectName.value
-      showRenameModal.value = true
-      break
-    case 'duplicate':
-      if (!projectId) return
-      const newId = await duplicateProject(projectId)
-      if (newId) {
-        notifier.success('Project duplicated')
-        router.push(`/canvas/${newId}`)
-      } else {
-        notifier.error('Duplicate failed')
-      }
-      break
-    case 'delete':
-      showDeleteModal.value = true
-      break
-  }
-}
-
-// Confirm rename | 确认重命名
-const confirmRename = async () => {
-  const projectId = route.params.id
-  if (renameValue.value.trim()) {
-    await renameProject(projectId, renameValue.value.trim())
-    notifier.success('Project renamed')
-  }
-  showRenameModal.value = false
-}
-
-// Confirm delete | 确认删除
-const confirmDelete = async () => {
-  const projectId = route.params.id
-  if (!projectId) return
-  showDeleteModal.value = false
-  try {
-    await deleteProject(projectId)
-    notifier.success('Project deleted')
-    router.push('/')
-  } catch (err) {
-    if (!err?.__handled) {
-      notifier.error(getErrorMessage(err, 'Delete failed'))
-    }
-  }
 }
 
 // Go back to home | 返回首页
