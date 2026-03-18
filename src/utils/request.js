@@ -4,14 +4,11 @@
  */
 
 import axios from 'axios'
-import { STORAGE_KEYS } from './constants'
-
-// Base URL from environment or default
-const BASE_URL = import.meta.env.VITE_APP_API_BASE_URL || '/api/v1'
+import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from './constants'
 
 // Create axios instance | 创建 axios 实例
 const instance = axios.create({
-  baseURL: BASE_URL,
+  baseURL: DEFAULT_API_BASE_URL,
   timeout: 180000,
   withCredentials: true
 })

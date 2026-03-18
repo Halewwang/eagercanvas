@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { getAdminSession } from '@/api/admin'
+import { STORAGE_KEYS } from '@/utils/constants'
 import {
   getMe,
   logoutSession,
@@ -11,8 +12,6 @@ import {
   verifyRegisterCode
 } from '@/api/auth'
 
-const ACCESS_TOKEN_KEY = 'ec_access_token'
-
 const user = ref(null)
 const accessToken = ref('')
 const bootstrapped = ref(false)
@@ -23,7 +22,7 @@ const adminBootstrapped = ref(false)
 
 const readToken = () => {
   try {
-    return localStorage.getItem(ACCESS_TOKEN_KEY) || ''
+    return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
   } catch {
     return ''
   }
@@ -40,8 +39,8 @@ const persistToken = (token) => {
     adminBootstrapped.value = false
   }
   try {
-    if (token) localStorage.setItem(ACCESS_TOKEN_KEY, token)
-    else localStorage.removeItem(ACCESS_TOKEN_KEY)
+    if (token) localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, token)
+    else localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
   } catch {
     // ignore
   }
