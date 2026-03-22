@@ -285,6 +285,25 @@ const handleSave = async () => {
 
 :deep(.n-input) {
   background: transparent;
+  --n-color: transparent !important;
+  --n-color-disabled: transparent !important;
+  --n-color-focus: transparent !important;
+  --n-border: transparent !important;
+  --n-border-hover: transparent !important;
+  --n-border-focus: transparent !important;
+  --n-box-shadow-focus: none !important;
+}
+
+:deep(.n-input-wrapper),
+:deep(.n-input__input-el),
+:deep(.n-input__textarea-el) {
+  background: transparent !important;
+}
+
+:deep(.n-input.n-input--focus .n-input-wrapper),
+:deep(.n-input.n-input--focus .n-input__input-el),
+:deep(.n-input.n-input--focus .n-input__textarea-el) {
+  background: transparent !important;
 }
 
 @media (max-width: 1200px) {

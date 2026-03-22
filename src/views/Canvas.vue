@@ -956,6 +956,13 @@ onUnmounted(() => {
 .canvas-modal :deep(.n-input) {
   background: #0f0f0f;
   border-radius: 10px;
+  --n-border: rgba(143, 143, 143, 0.24) !important;
+  --n-border-hover: rgba(186, 190, 196, 0.34) !important;
+  --n-border-focus: rgba(212, 198, 182, 0.68) !important;
+  --n-box-shadow-focus: 0 0 0 1px rgba(165, 129, 99, 0.22) !important;
+  --n-color-focus: #111214 !important;
+  --n-color-focus-warning: #111214 !important;
+  --n-color-focus-error: #111214 !important;
 }
 
 .canvas-modal :deep(.n-input .n-input__border),
@@ -963,11 +970,18 @@ onUnmounted(() => {
   border-color: rgba(143, 143, 143, 0.24);
 }
 
+.canvas-share-modal :deep(.n-input-wrapper),
+.canvas-share-modal :deep(.n-input__textarea),
+.canvas-share-modal :deep(.n-input__textarea-el),
+.canvas-share-modal :deep(.n-input__input-el) {
+  background: #111214 !important;
+}
+
 .canvas-share-modal :deep(.n-input.n-input--focus),
 .canvas-share-modal :deep(.n-input.n-input--focus .n-input__state-border),
 .canvas-share-modal :deep(.n-input.n-input--focus .n-input__border) {
-  border-color: rgba(255, 255, 255, 0.55);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+  border-color: rgba(212, 198, 182, 0.68) !important;
+  box-shadow: 0 0 0 1px rgba(165, 129, 99, 0.22) !important;
 }
 
 .canvas-share-modal :deep(.n-input__input-el::placeholder),
