@@ -65,7 +65,7 @@
           class="project-card"
           @click="handlePrimaryClick(item)"
         >
-          <div class="card-media">
+          <div class="card-media" :class="{ 'project-media': activeSection === 'projects' }">
             <template v-if="item.thumbnail || item.cover">
               <img :src="item.thumbnail || item.cover" :alt="item.name" />
             </template>
@@ -89,7 +89,7 @@
                   :options="projectMenuOptions(item)"
                   @select="(key) => handleProjectMenuSelect(key, item)"
                 >
-                  <button class="menu-btn" @click.stop>
+                  <button class="menu-btn project-menu-btn" @click.stop>
                     <n-icon :size="16"><EllipsisHorizontalOutline /></n-icon>
                   </button>
                 </n-dropdown>
@@ -530,15 +530,14 @@ onMounted(async () => {
 }
 
 .project-card {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
-  overflow: hidden;
-  background: #13141a;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .create-card {
-  border-style: dashed;
+  gap: 14px;
 }
 
 .card-media {
@@ -547,6 +546,9 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .card-media img {
@@ -558,6 +560,11 @@ onMounted(async () => {
 
 .create-media {
   color: rgba(236, 238, 244, 0.45);
+  border-style: dashed;
+}
+
+.project-media {
+  background: #111214;
 }
 
 .fallback-icon {
@@ -572,7 +579,7 @@ onMounted(async () => {
 }
 
 .card-body {
-  padding: 14px 14px 16px;
+  padding: 0;
 }
 
 .title-row {
@@ -601,10 +608,10 @@ onMounted(async () => {
 }
 
 .menu-btn {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
   background: transparent;
   color: rgba(236, 238, 244, 0.8);
   display: flex;
@@ -614,7 +621,7 @@ onMounted(async () => {
 }
 
 .menu-btn:hover {
-  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
 
@@ -626,7 +633,7 @@ onMounted(async () => {
 
 .project-meta-row {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
@@ -637,7 +644,7 @@ onMounted(async () => {
 
 .project-meta-main h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.2;
   overflow: hidden;
@@ -646,10 +653,15 @@ onMounted(async () => {
 }
 
 .project-meta-main p {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   color: rgba(236, 238, 244, 0.65);
   font-size: 13px;
   line-height: 1.3;
+}
+
+.project-menu-btn {
+  margin-top: -2px;
+  flex-shrink: 0;
 }
 
 .card-actions {

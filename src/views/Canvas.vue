@@ -129,8 +129,8 @@
         <div class="node-menu-header">
           <div>
             <div class="node-menu-eyebrow">ADD MODULE</div>
-            <h3 class="node-menu-title">选择要添加的基础模块</h3>
-            <p class="node-menu-copy">选择模块类型后，可一次性添加 1 到 5 个同类模块。</p>
+            <h3 class="node-menu-title">Choose A Base Module</h3>
+            <p class="node-menu-copy">Pick a module type, then add between 1 and 5 modules at once.</p>
           </div>
         </div>
         <div class="node-menu-list">
@@ -151,8 +151,8 @@
         </div>
         <div class="node-menu-quantity">
           <div>
-            <div class="node-menu-quantity-label">数量</div>
-            <div class="node-menu-quantity-note">默认 1，最多 5 个</div>
+            <div class="node-menu-quantity-label">Quantity</div>
+            <div class="node-menu-quantity-note">Default 1, up to 5 modules</div>
           </div>
           <div class="node-menu-stepper">
             <button class="node-menu-stepper-btn" @click="decreaseNodeCount" :disabled="nodeCreateCount <= 1">-</button>
@@ -427,9 +427,9 @@ const {
 
 // Node type options for menu | 节点类型菜单选项
 const nodeTypeOptions = [
-  { type: 'text', name: 'Text', icon: TextOutline, description: '用于写提示词、脚本、说明文案。' },
-  { type: 'image', name: 'Image', icon: ImageOutline, description: '用于生成、预览和上传静态图像。' },
-  { type: 'video', name: 'Video', icon: VideocamOutline, description: '用于生成视频并串联图像参考输入。' }
+  { type: 'text', name: 'Text', icon: TextOutline, description: 'Write prompts, scripts, and supporting copy.' },
+  { type: 'image', name: 'Image', icon: ImageOutline, description: 'Generate, preview, and upload still images.' },
+  { type: 'video', name: 'Video', icon: VideocamOutline, description: 'Generate videos with connected visual inputs.' }
 ]
 
 // Add new node | 添加新节点
