@@ -5,6 +5,7 @@ import { createChatCompletion, createImageGeneration, createVideoGeneration, get
 import { providerRemoveBackground } from '../services/provider.service.js'
 import { adminRouter } from './admin.routes.js'
 import { authRouter } from './auth.routes.js'
+import { mediaRouter } from './media.routes.js'
 import { projectsRouter } from './projects.routes.js'
 import { runsRouter } from './runs.routes.js'
 import { usageRouter } from './usage.routes.js'
@@ -20,6 +21,7 @@ apiRouter.get('/health', (_req, res) => {
 
 apiRouter.use('/auth', authRouter)
 apiRouter.use('/projects', projectsRouter)
+apiRouter.use('/media', mediaRouter)
 apiRouter.use('/runs', runsRouter)
 apiRouter.use('/usage', usageRouter)
 apiRouter.use('/admin', adminRouter)

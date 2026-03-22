@@ -36,6 +36,7 @@
           <p>{{ sectionDescription }}</p>
         </div>
         <div class="header-actions">
+          <button class="ghost-btn" @click="openCutter">Open Cutter</button>
           <button class="ghost-btn" @click="createBlankProject">Blank Project</button>
           <button class="primary-btn" @click="createBlankProject">
             <n-icon :size="16"><AddOutline /></n-icon>
@@ -166,12 +167,43 @@ import {
   deleteProject,
   updateProject
 } from '@/stores/projects'
+import { apiListGeneratedVideos } from '@/api/media'
 import { getErrorMessage } from '@/utils'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const { user, bootstrapAuth } = useAuthStore()
+const openCutUrl = String(import.meta.env.VITE_OPENCUT_URL || '').trim()
+
+const postAssetsToOpenCut = ({ targetWindow, targetOrigin, assets }) => {
+  const payload = {
+    type: 'OPEN_CUT_IMPORT_ASSETS',
+    payload: {
+      assets,
+      source: 'ai-canvas',
+      sentAt: new Date().toISOString()
+    }
+  }
+
+  let attempts = 0
+  const maxAttempts = 20
+  const timer = window.setInterval(() => {
+    if (!targetWindow || targetWindow.closed) {
+      window.clearInterval(timer)
+      return
+    }
+
+    attempts += 1
+    targetWindow.postMessage(payload, targetOrigin)
+
+    if (attempts >= maxAttempts) {
+      window.clearInterval(timer)
+    }
+  }, 750)
+
+  return timer
+}
 
 const activeSection = ref('projects')
 const keyword = ref('')
@@ -295,6 +327,41 @@ const createBlankProject = async () => {
     await router.push(`/canvas/${id}`)
   } catch (error) {
     window.$message?.error(getErrorMessage(error, 'Failed to create project'))
+  }
+}
+
+const openCutter = async () => {
+  if (!openCutUrl) {
+    window.$message?.warning('OpenCut URL is not configured')
+    return
+  }
+
+  const nextWindow = window.open('', '_blank')
+  if (!nextWindow) {
+    window.$message?.warning('Popup blocked. Please allow popups and retry.')
+    return
+  }
+
+  nextWindow.document.write('<title>OpenCut</title><p style="font-family: sans-serif; padding: 24px;">Loading OpenCut assets...</p>')
+
+  try {
+    const response = await apiListGeneratedVideos()
+    const assets = Array.isArray(response?.data) ? response.data : []
+
+    if (!assets.length) {
+      nextWindow.close()
+      window.$message?.warning('No generated videos found')
+      return
+    }
+
+    const targetOrigin = new URL(openCutUrl, window.location.origin).origin
+    nextWindow.location.replace(openCutUrl)
+    postAssetsToOpenCut({ targetWindow: nextWindow, targetOrigin, assets })
+
+    window.$message?.success(`Prepared ${assets.length} video asset${assets.length > 1 ? 's' : ''} for OpenCut`)
+  } catch (error) {
+    nextWindow.close()
+    window.$message?.error(getErrorMessage(error, 'Failed to load videos'))
   }
 }
 
