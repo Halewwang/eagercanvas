@@ -73,11 +73,30 @@
         </div>
 
         <div v-else-if="data.url" class="module-image-shell">
-          <img
-            :src="data.url"
-            :alt="data.label || 'Image'"
-            class="module-image"
-          />
+          <div class="module-image-frame">
+            <img
+              :src="data.url"
+              :alt="data.label || 'Image'"
+              class="module-image"
+              @load="handlePreviewImageLoad"
+            />
+            <div v-if="activeTool === 'crop'" class="crop-overlay crop-overlay-inline">
+              <div class="crop-mask crop-mask-top" :style="cropMaskTopStyle"></div>
+              <div class="crop-mask crop-mask-left" :style="cropMaskLeftStyle"></div>
+              <div class="crop-mask crop-mask-right" :style="cropMaskRightStyle"></div>
+              <div class="crop-mask crop-mask-bottom" :style="cropMaskBottomStyle"></div>
+              <div class="crop-box" :style="cropBoxStyle" @mousedown.stop.prevent="startCropDrag">
+                <span
+                  v-for="handle in cropHandles"
+                  :key="handle"
+                  class="crop-handle"
+                  :class="`crop-handle-${handle}`"
+                  @mousedown.stop.prevent="startCropResize(handle, $event)"
+                />
+              </div>
+              <div class="crop-inline-tip">Enter apply · Esc cancel</div>
+            </div>
+          </div>
         </div>
 
         <div
@@ -104,17 +123,11 @@
     <n-modal v-model:show="showPreviewModal" :mask-closable="true">
       <div class="zoom-modal-card" @click.stop>
         <div class="zoom-modal-toolbar">
-          <div class="zoom-modal-chip">{{ activeTool === 'crop' ? 'Crop' : `${Math.round(previewZoom * 100)}%` }}</div>
+          <div class="zoom-modal-chip">{{ Math.round(previewZoom * 100) }}%</div>
           <div class="zoom-modal-actions">
-            <template v-if="activeTool === 'crop'">
-              <button class="zoom-tool-btn" @click="cancelCropMode">Cancel</button>
-              <button class="zoom-tool-btn zoom-tool-btn-primary" @click="applyCrop" :disabled="toolActionLoading === 'crop'">Apply Crop</button>
-            </template>
-            <template v-else>
-              <button class="zoom-tool-btn" @click="zoomOutPreview" :disabled="previewZoom <= PREVIEW_MIN_ZOOM">-</button>
-              <button class="zoom-tool-btn" @click="resetPreviewZoom">Fit</button>
-              <button class="zoom-tool-btn" @click="zoomInPreview" :disabled="previewZoom >= PREVIEW_MAX_ZOOM">+</button>
-            </template>
+            <button class="zoom-tool-btn" @click="zoomOutPreview" :disabled="previewZoom <= PREVIEW_MIN_ZOOM">-</button>
+            <button class="zoom-tool-btn" @click="resetPreviewZoom">Fit</button>
+            <button class="zoom-tool-btn" @click="zoomInPreview" :disabled="previewZoom >= PREVIEW_MAX_ZOOM">+</button>
           </div>
         </div>
         <div class="zoom-modal-stage">
@@ -125,21 +138,6 @@
               class="zoom-image-original"
               @load="handlePreviewImageLoad"
             />
-            <div v-if="activeTool === 'crop'" class="crop-overlay">
-              <div class="crop-mask crop-mask-top" :style="cropMaskTopStyle"></div>
-              <div class="crop-mask crop-mask-left" :style="cropMaskLeftStyle"></div>
-              <div class="crop-mask crop-mask-right" :style="cropMaskRightStyle"></div>
-              <div class="crop-mask crop-mask-bottom" :style="cropMaskBottomStyle"></div>
-              <div class="crop-box" :style="cropBoxStyle" @mousedown.stop.prevent="startCropDrag">
-                <span
-                  v-for="handle in cropHandles"
-                  :key="handle"
-                  class="crop-handle"
-                  :class="`crop-handle-${handle}`"
-                  @mousedown.stop.prevent="startCropResize(handle, $event)"
-                />
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -453,8 +451,27 @@ const previewImageStyle = computed(() => {
     height: `${height}px`
   }
 })
-const previewDisplayWidth = computed(() => Number.parseFloat(previewImageStyle.value.width) || 0)
-const previewDisplayHeight = computed(() => Number.parseFloat(previewImageStyle.value.height) || 0)
+const cropStageMetrics = computed(() => {
+  const frameWidth = Math.max(1, (Number.parseFloat(stageStyle.value.width) || 0) - 24)
+  const frameHeight = Math.max(1, (Number.parseFloat(stageStyle.value.height) || 0) - 24)
+  const naturalWidth = previewNaturalSize.value.width || frameWidth
+  const naturalHeight = previewNaturalSize.value.height || frameHeight
+  const scale = Math.max(frameWidth / naturalWidth, frameHeight / naturalHeight)
+  const displayWidth = naturalWidth * scale
+  const displayHeight = naturalHeight * scale
+  const offsetX = (frameWidth - displayWidth) / 2
+  const offsetY = (frameHeight - displayHeight) / 2
+
+  return {
+    frameWidth,
+    frameHeight,
+    naturalWidth,
+    naturalHeight,
+    scale,
+    offsetX,
+    offsetY
+  }
+})
 const cropBoxStyle = computed(() => ({
   left: `${cropRect.value.x}px`,
   top: `${cropRect.value.y}px`,
@@ -464,7 +481,7 @@ const cropBoxStyle = computed(() => ({
 const cropMaskTopStyle = computed(() => ({
   left: '0px',
   top: '0px',
-  width: `${previewDisplayWidth.value}px`,
+  width: `${cropStageMetrics.value.frameWidth}px`,
   height: `${cropRect.value.y}px`
 }))
 const cropMaskLeftStyle = computed(() => ({
@@ -476,14 +493,14 @@ const cropMaskLeftStyle = computed(() => ({
 const cropMaskRightStyle = computed(() => ({
   left: `${cropRect.value.x + cropRect.value.width}px`,
   top: `${cropRect.value.y}px`,
-  width: `${Math.max(0, previewDisplayWidth.value - cropRect.value.x - cropRect.value.width)}px`,
+  width: `${Math.max(0, cropStageMetrics.value.frameWidth - cropRect.value.x - cropRect.value.width)}px`,
   height: `${cropRect.value.height}px`
 }))
 const cropMaskBottomStyle = computed(() => ({
   left: '0px',
   top: `${cropRect.value.y + cropRect.value.height}px`,
-  width: `${previewDisplayWidth.value}px`,
-  height: `${Math.max(0, previewDisplayHeight.value - cropRect.value.y - cropRect.value.height)}px`
+  width: `${cropStageMetrics.value.frameWidth}px`,
+  height: `${Math.max(0, cropStageMetrics.value.frameHeight - cropRect.value.y - cropRect.value.height)}px`
 }))
 const capsuleStyle = computed(() => {
   const zoom = viewport.value?.zoom || 1
@@ -568,10 +585,16 @@ watch(showPreviewModal, (visible) => {
     previewZoom.value = 1
     return
   }
-  activeTool.value = ''
-  cropInteraction.value = null
   window.removeEventListener('mousemove', onCropPointerMove)
   window.removeEventListener('mouseup', stopCropInteraction)
+})
+
+watch(activeTool, (tool) => {
+  if (tool === 'crop') {
+    window.addEventListener('keydown', handleCropKeydown)
+    return
+  }
+  window.removeEventListener('keydown', handleCropKeydown)
 })
 
 onUnmounted(() => clearProgressTimers())
@@ -594,6 +617,7 @@ onUnmounted(() => {
   window.removeEventListener('beforeunload', beforeUnloadGuard)
   window.removeEventListener('mousemove', onCropPointerMove)
   window.removeEventListener('mouseup', stopCropInteraction)
+  window.removeEventListener('keydown', handleCropKeydown)
 })
 
 const pickNearestSizeKey = (ratioKey, resolutionKey) => {
@@ -777,8 +801,8 @@ const triggerUpload = () => {
 }
 
 const initializeCropRect = () => {
-  const width = previewDisplayWidth.value
-  const height = previewDisplayHeight.value
+  const width = cropStageMetrics.value.frameWidth
+  const height = cropStageMetrics.value.frameHeight
   if (!width || !height) return
   const nextWidth = Math.round(width * 0.72)
   const nextHeight = Math.round(height * 0.72)
@@ -791,8 +815,8 @@ const initializeCropRect = () => {
 }
 
 const normalizeCropRect = (nextRect) => {
-  const maxWidth = previewDisplayWidth.value
-  const maxHeight = previewDisplayHeight.value
+  const maxWidth = cropStageMetrics.value.frameWidth
+  const maxHeight = cropStageMetrics.value.frameHeight
   const width = Math.max(MIN_CROP_SIZE, Math.min(nextRect.width, maxWidth))
   const height = Math.max(MIN_CROP_SIZE, Math.min(nextRect.height, maxHeight))
   const x = Math.max(0, Math.min(nextRect.x, Math.max(0, maxWidth - width)))
@@ -802,9 +826,8 @@ const normalizeCropRect = (nextRect) => {
 
 const startCropMode = async () => {
   if (!props.data?.url) return
+  showPreviewModal.value = false
   activeTool.value = 'crop'
-  showPreviewModal.value = true
-  previewZoom.value = 1
   await nextTick()
   initializeCropRect()
 }
@@ -812,6 +835,21 @@ const startCropMode = async () => {
 const cancelCropMode = () => {
   activeTool.value = ''
   cropInteraction.value = null
+  window.removeEventListener('mousemove', onCropPointerMove)
+  window.removeEventListener('mouseup', stopCropInteraction)
+}
+
+function handleCropKeydown(event) {
+  if (activeTool.value !== 'crop') return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    cancelCropMode()
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    applyCrop()
+  }
 }
 
 const startCropDrag = (event) => {
@@ -1220,12 +1258,15 @@ const applyCrop = async () => {
 
   try {
     loadedImage = await loadImageElement(source)
-    const scaleX = (loadedImage.img.naturalWidth || previewNaturalSize.value.width || 1) / Math.max(previewDisplayWidth.value, 1)
-    const scaleY = (loadedImage.img.naturalHeight || previewNaturalSize.value.height || 1) / Math.max(previewDisplayHeight.value, 1)
-    const cropX = Math.max(0, Math.round(cropRect.value.x * scaleX))
-    const cropY = Math.max(0, Math.round(cropRect.value.y * scaleY))
-    const cropWidth = Math.max(1, Math.round(cropRect.value.width * scaleX))
-    const cropHeight = Math.max(1, Math.round(cropRect.value.height * scaleY))
+    const naturalWidth = loadedImage.img.naturalWidth || cropStageMetrics.value.naturalWidth || 1
+    const naturalHeight = loadedImage.img.naturalHeight || cropStageMetrics.value.naturalHeight || 1
+    const scale = cropStageMetrics.value.scale || 1
+    const sourceX = Math.max(0, Math.round((cropRect.value.x - cropStageMetrics.value.offsetX) / scale))
+    const sourceY = Math.max(0, Math.round((cropRect.value.y - cropStageMetrics.value.offsetY) / scale))
+    const cropX = Math.min(naturalWidth - 1, sourceX)
+    const cropY = Math.min(naturalHeight - 1, sourceY)
+    const cropWidth = Math.max(1, Math.min(naturalWidth - cropX, Math.round(cropRect.value.width / scale)))
+    const cropHeight = Math.max(1, Math.min(naturalHeight - cropY, Math.round(cropRect.value.height / scale)))
 
     const canvas = document.createElement('canvas')
     canvas.width = cropWidth
@@ -1256,7 +1297,6 @@ const applyCrop = async () => {
       fileName: `crop-${Date.now()}.png`
     })
     cancelCropMode()
-    showPreviewModal.value = false
     window.$message?.success('Crop applied')
   } catch (err) {
     window.$message?.error(err?.message || 'Crop failed')
@@ -1315,6 +1355,14 @@ const closeValidationModal = () => {
   height: 100%;
   padding: var(--module-inset);
   background: #050505;
+}
+
+.module-image-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: calc(var(--module-radius) - var(--module-inset));
 }
 
 .module-image {
@@ -1480,6 +1528,11 @@ const closeValidationModal = () => {
   inset: 0;
 }
 
+.crop-overlay-inline {
+  border-radius: inherit;
+  overflow: hidden;
+}
+
 .crop-mask {
   position: absolute;
   background: rgba(0, 0, 0, 0.48);
@@ -1547,6 +1600,20 @@ const closeValidationModal = () => {
   right: -7px;
   bottom: -7px;
   cursor: nwse-resize;
+}
+
+.crop-inline-tip {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f3f4f6;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
 }
 
 .capsule-tool-trigger {
