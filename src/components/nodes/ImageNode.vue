@@ -199,7 +199,7 @@ import {
   imageModelOptions
 } from '../../stores/models'
 import { useApiConfig, useImageGeneration } from '../../hooks'
-import { persistImageUrl, uploadImageFile } from '@/utils/media'
+import { dataUrlToFile, persistImageUrl, uploadImageFile } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 import { useImageTools } from '../../hooks/useApi'
@@ -937,6 +937,55 @@ const createLinkedImageNode = (payload = {}) => {
   return newNodeId
 }
 
+const replaceCurrentImageNode = async (payload = {}) => {
+  const nextUrl = String(payload.url || '').trim()
+  const nextBase64 = String(payload.base64 || '').trim()
+  const nextSize = String(payload.size || localImageSize.value || '').trim()
+  const nextRatio = String(payload.ratio || localImageRatio.value || '').trim()
+  const nextResolution = String(payload.resolution || localResolution.value || '').trim()
+
+  localImageSize.value = nextSize || localImageSize.value
+  localImageRatio.value = nextRatio || localImageRatio.value
+  localResolution.value = nextResolution || localResolution.value
+
+  updateNode(props.id, {
+    url: nextUrl || nextBase64,
+    base64: nextBase64,
+    size: localImageSize.value,
+    ratio: localImageRatio.value,
+    resolution: localResolution.value,
+    fileType: payload.fileType || 'image/png',
+    updatedAt: Date.now(),
+    error: ''
+  })
+
+  setTimeout(() => updateNodeInternals(props.id), 30)
+
+  const persistFileName = payload.fileName || `crop-${Date.now()}.png`
+  const uploadTarget = nextBase64 || nextUrl
+  const file = dataUrlToFile(uploadTarget, persistFileName)
+  if (!file) {
+    await flushSave()
+    return
+  }
+
+  try {
+    const uploadedUrl = await uploadImageFile(file)
+    if (uploadedUrl) {
+      updateNode(props.id, {
+        url: uploadedUrl,
+        base64: '',
+        updatedAt: Date.now(),
+        error: ''
+      })
+    }
+    await flushSave()
+  } catch (err) {
+    console.warn('Crop persistence failed:', err)
+    await flushSave()
+  }
+}
+
 const resetUploadProgress = (delayMs = 1500) => {
   setTimeout(() => {
     if (uploadStage.value === 'success' || uploadStage.value === 'error') {
@@ -1196,21 +1245,19 @@ const applyCrop = async () => {
       reader.readAsDataURL(blob)
     })
 
-    const stableUrl = await persistImageUrl(String(dataUrl || ''), `crop-${Date.now()}.png`)
-    const finalUrl = stableUrl || String(dataUrl || '')
-    createLinkedImageNode({
-      url: finalUrl,
-      base64: stableUrl ? '' : finalUrl,
+    const inlineResult = String(dataUrl || '')
+    await replaceCurrentImageNode({
+      url: inlineResult,
+      base64: inlineResult,
       size: `${cropWidth}x${cropHeight}`,
       ratio: computeRatioLabel(cropWidth, cropHeight),
       resolution: resolutionFromSizeKey(`${cropWidth}x${cropHeight}`),
-      fileType: 'image/png'
+      fileType: 'image/png',
+      fileName: `crop-${Date.now()}.png`
     })
-
-    await flushSave()
     cancelCropMode()
     showPreviewModal.value = false
-    window.$message?.success('Cropped image created and linked')
+    window.$message?.success('Crop applied')
   } catch (err) {
     window.$message?.error(err?.message || 'Crop failed')
   } finally {
