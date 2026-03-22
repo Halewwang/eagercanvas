@@ -18,3 +18,14 @@ export const generateImage = (data, options = {}) => {
     headers: requestType === 'formdata' ? { 'Content-Type': 'multipart/form-data' } : {}
   })
 }
+
+export const removeBackground = (data, options = {}) => {
+  const { timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
+
+  return request({
+    url: '/images/remove-background',
+    method: 'post',
+    data,
+    timeout
+  })
+}

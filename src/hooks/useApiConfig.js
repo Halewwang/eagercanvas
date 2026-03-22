@@ -6,6 +6,8 @@ import { ref, computed, watch } from 'vue'
 import { setBaseUrl as setRequestBaseUrl } from '@/utils'
 import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from '@/utils'
 
+const BYPASS_AUTH_IN_DEV = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
+
 /**
  * Get stored value from localStorage | 从 localStorage 获取存储值
  */
@@ -39,6 +41,7 @@ export const useApiConfig = () => {
   const baseUrl = ref(DEFAULT_API_BASE_URL)
   
   const isConfigured = computed(() => {
+    if (BYPASS_AUTH_IN_DEV) return true
     return !!getStored(STORAGE_KEYS.ACCESS_TOKEN, '')
   })
 

@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 
 const STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-cache'
+const BYPASS_AUTH_IN_DEV = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
 
 export const projects = ref([])
 export const currentProjectId = ref(null)
@@ -24,6 +25,18 @@ const defaultCanvasData = {
   nodes: [],
   edges: [],
   viewport: { x: 100, y: 50, zoom: 0.8 }
+}
+
+const createLocalProjectRecord = (name = 'Untitled') => {
+  const now = new Date().toISOString()
+  return {
+    id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    thumbnail: '',
+    createdAt: now,
+    updatedAt: now,
+    canvasData: { ...defaultCanvasData }
+  }
 }
 
 const mapProjectFromApi = (row) => ({
@@ -148,6 +161,10 @@ export const loadProjects = async () => {
     return projects.value
   }
   const localDrafts = loadLocalCache()
+  if (BYPASS_AUTH_IN_DEV) {
+    projects.value = localDrafts
+    return projects.value
+  }
   try {
     const response = await apiListProjects()
     const remote = (response?.data || []).map(mapProjectFromApi)
@@ -161,6 +178,13 @@ export const loadProjects = async () => {
 }
 
 export const createProject = async (name = 'Untitled') => {
+  if (BYPASS_AUTH_IN_DEV) {
+    const project = createLocalProjectRecord(name)
+    projects.value = [project, ...projects.value]
+    saveLocalCache()
+    return project.id
+  }
+
   const payload = {
     name,
     canvasData: { ...defaultCanvasData },
@@ -188,6 +212,10 @@ export const updateProject = async (id, data) => {
   const [updated] = projects.value.splice(index, 1)
   projects.value = [updated, ...projects.value]
   saveLocalCache()
+
+  if (BYPASS_AUTH_IN_DEV) {
+    return true
+  }
 
   try {
     const response = await apiPatchProject(id, mapProjectToApi(nextProject))
@@ -222,6 +250,15 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
     // updatedAt: new Date().toISOString() 
   }
 
+  if (BYPASS_AUTH_IN_DEV) {
+    const idx = projects.value.findIndex((p) => p.id === id)
+    if (idx !== -1) {
+      projects.value[idx] = next
+      saveLocalCache()
+    }
+    return next
+  }
+
   try {
     const payload = mapProjectToApi(next)
     // Pass currentVersion to API if provided
@@ -253,6 +290,11 @@ export const getProjectCanvas = (id) => {
 }
 
 export const deleteProject = async (id) => {
+  if (BYPASS_AUTH_IN_DEV) {
+    projects.value = projects.value.filter((p) => p.id !== id)
+    saveLocalCache()
+    return
+  }
   await apiDeleteProject(id)
   projects.value = projects.value.filter((p) => p.id !== id)
   saveLocalCache()

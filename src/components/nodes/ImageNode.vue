@@ -24,9 +24,10 @@
         <div class="capsule-divider" />
 
         <div class="capsule-group">
-          <n-dropdown :options="createLinkOptions" @select="createLinkedNode">
-            <button class="capsule-icon" title="Create linked module">
-              <n-icon :size="14"><AddOutline /></n-icon>
+          <n-dropdown :options="toolDropdownOptions" @select="handleToolAction">
+            <button class="capsule-select capsule-tool-trigger" :disabled="!data.url || isToolBusy">
+              <img :src="toolsIcon" alt="" class="capsule-tool-icon" />
+              <span>Tools</span>
             </button>
           </n-dropdown>
           <button class="capsule-icon" :disabled="!data.url" @click="openPreviewModal" title="Preview">
@@ -156,11 +157,10 @@
 </template>
 
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, h, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon, NModal } from 'naive-ui'
 import {
-  AddOutline,
   CloseCircleOutline,
   CopyOutline,
   ExpandOutline,
@@ -168,7 +168,7 @@ import {
   RefreshOutline,
   TrashOutline
 } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode } from '../../stores/canvas'
+import { duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode } from '../../stores/canvas'
 import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_IMAGE_SIZE,
@@ -178,8 +178,12 @@ import {
 } from '../../stores/models'
 import { useApiConfig, useImageGeneration } from '../../hooks'
 import { persistImageUrl, uploadImageFile } from '@/utils/media'
-import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
+import { resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
+import { useImageTools } from '../../hooks/useApi'
+import toolsIcon from '@/assets/tools-icon.svg'
+import removeBgIcon from '@/assets/remove-bg-icon.svg'
+import cropIcon from '@/assets/crop-icon.svg'
 
 const props = defineProps({
   id: String,
@@ -187,9 +191,10 @@ const props = defineProps({
   selected: Boolean
 })
 
-const { updateNodeInternals, viewport } = useVueFlow()
+const { viewport } = useVueFlow()
 const { isConfigured } = useApiConfig()
 const imageGen = useImageGeneration()
+const imageTools = useImageTools()
 
 const showCapsule = ref(false)
 const urlLoading = ref(false)
@@ -209,6 +214,7 @@ const showErrorModal = ref(false)
 const showValidationModal = ref(false)
 const validationMessage = ref('')
 const imageActionLoading = ref('')
+const toolActionLoading = ref('')
 const isUploading = ref(false)
 const showUploadProgress = ref(false)
 const uploadProgress = ref(0)
@@ -217,11 +223,20 @@ const progressValue = ref(0)
 const showProgress = ref(false)
 const progressTimer = ref(null)
 const progressFinishTimer = ref(null)
-const createLinkOptions = [
-  { label: 'Link Text Module', key: 'text' },
-  { label: 'Link Image Module', key: 'image' },
-  { label: 'Link Video Module', key: 'video' }
-]
+const toolDropdownOptions = computed(() => ([
+  {
+    label: 'Remove Background',
+    key: 'remove-background',
+    disabled: !props.data?.url || isToolBusy.value,
+    renderIcon: () => h('img', { src: removeBgIcon, alt: '', class: 'tool-option-icon' })
+  },
+  {
+    label: 'Crop',
+    key: 'crop',
+    disabled: true,
+    renderIcon: () => h('img', { src: cropIcon, alt: '', class: 'tool-option-icon' })
+  }
+]))
 const imageInputStatusMap = {
   prompt: 'Prompt',
   reference: 'Reference Picture'
@@ -457,6 +472,7 @@ const finishProgress = () => {
   }, 16)
 }
 const isImageBusy = computed(() => !!props.data?.loading || imageGen.loading.value || !!imageActionLoading.value)
+const isToolBusy = computed(() => imageTools.loading.value || !!toolActionLoading.value)
 const uploadProgressStyle = computed(() => {
   const percent = Math.max(0, Math.min(100, uploadProgress.value))
   const color =
@@ -839,6 +855,45 @@ const openPreviewModal = () => {
   previewZoom.value = 1
   showPreviewModal.value = true
 }
+const handleToolAction = async (key) => {
+  if (key === 'remove-background') {
+    await handleRemoveBackground()
+  }
+}
+const handleRemoveBackground = async () => {
+  const source = String(props.data?.base64 || props.data?.url || '').trim()
+  if (!source) return
+
+  toolActionLoading.value = 'remove-background'
+  try {
+    const result = await imageTools.removeBg({
+      image: source,
+      size: 'full',
+      format: 'png',
+      channels: 'rgba',
+      crop: false,
+      despill: false
+    })
+    const rawUrl = String(result?.url || '')
+    const stableUrl = await persistImageUrl(rawUrl, `remove-bg-${Date.now()}.png`)
+    const finalUrl = stableUrl || rawUrl
+    if (!finalUrl) throw new Error('No image output')
+
+    updateNode(props.id, {
+      url: finalUrl,
+      base64: '',
+      fileType: 'image/png',
+      updatedAt: Date.now(),
+      error: ''
+    })
+    await saveProject()
+    window.$message?.success('Background removed')
+  } catch (err) {
+    window.$message?.error(err?.message || 'Background removal failed')
+  } finally {
+    toolActionLoading.value = ''
+  }
+}
 const handlePreviewImageLoad = (event) => {
   const target = event?.target
   if (!target) return
@@ -866,52 +921,6 @@ const closeValidationModal = () => {
   validationMessage.value = ''
 }
 
-const createLinkedNode = (type) => {
-  const side = 'right'
-  const currentNode = nodes.value.find((n) => n.id === props.id)
-  if (!currentNode) return
-
-  const stageWidth = Number.parseFloat(stageStyle.value.width) || 320
-  const moduleWidth = stageWidth + 2
-  const gapX = 172
-  const nextPosition = {
-    x: side === 'right' ? currentNode.position.x + moduleWidth + gapX : currentNode.position.x - gapX - moduleWidth,
-    y: currentNode.position.y
-  }
-
-  const newNodeId = addNode(type, nextPosition)
-  if (!newNodeId) return
-
-  if (side === 'right') {
-    addEdge(edgeStrategy.resolve({
-      source: props.id,
-      target: newNodeId,
-      sourceHandle: 'right',
-      targetHandle: 'left'
-    }))
-  } else {
-    addEdge(edgeStrategy.resolve({
-      source: newNodeId,
-      target: props.id,
-      sourceHandle: 'right',
-      targetHandle: 'left'
-    }))
-  }
-
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    selected: node.id === newNodeId,
-    data: {
-      ...(node.data || {}),
-      selected: node.id === newNodeId
-    }
-  }))
-
-  setTimeout(() => {
-    updateNodeInternals(props.id)
-    updateNodeInternals(newNodeId)
-  }, 60)
-}
 
 </script>
 
@@ -1074,5 +1083,25 @@ const createLinkedNode = (type) => {
   object-fit: contain;
   border-radius: 12px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+}
+
+.capsule-tool-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.capsule-tool-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  filter: brightness(0) saturate(100%) invert(81%) sepia(6%) saturate(243%) hue-rotate(182deg) brightness(93%) contrast(88%);
+}
+
+:deep(.tool-option-icon) {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  filter: brightness(0) saturate(100%) invert(81%) sepia(6%) saturate(243%) hue-rotate(182deg) brightness(93%) contrast(88%);
 }
 </style>

@@ -16,11 +16,6 @@
         <div class="capsule-divider" />
 
         <div class="capsule-group">
-          <n-dropdown :options="createLinkOptions" @select="createLinkedNode">
-            <button class="capsule-icon" title="Create linked module">
-              <n-icon :size="14"><AddOutline /></n-icon>
-            </button>
-          </n-dropdown>
           <button class="capsule-icon" @click="handleDuplicate" title="Duplicate">
             <n-icon :size="14"><CopyOutline /></n-icon>
           </button>
@@ -99,11 +94,10 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon, NModal } from 'naive-ui'
-import { AddOutline, CloseCircleOutline, CopyOutline, RefreshOutline, TextOutline, TrashOutline } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
+import { CloseCircleOutline, CopyOutline, RefreshOutline, TextOutline, TrashOutline } from '../../icons/coolicons'
+import { duplicateNode, edges, removeNode, updateNode } from '../../stores/canvas'
 import { useChat } from '../../hooks'
 import { chatModelOptions, DEFAULT_CHAT_MODEL } from '../../stores/models'
-import { edgeStrategy } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 
 const props = defineProps({
@@ -125,12 +119,6 @@ const progressTimer = ref(null)
 const progressFinishTimer = ref(null)
 const isSelected = computed(() => !!props.selected || !!props.data?.selected)
 const showHandles = computed(() => showCapsule.value || isSelected.value)
-const createLinkOptions = [
-  { label: 'Link Text Module', key: 'text' },
-  { label: 'Link Image Module', key: 'image' },
-  { label: 'Link Video Module', key: 'video' }
-]
-
 const connectedTargets = computed(() => {
   return edges.value.filter(edge => edge.source === props.id).map(edge => edge.target)
 })
@@ -300,35 +288,6 @@ const handleMetaMouseDown = (event) => {
   if (event?.button !== 0) return
 }
 
-const createLinkedNode = (type) => {
-  const side = 'right'
-  const currentNode = nodes.value.find((n) => n.id === props.id)
-  if (!currentNode) return
-
-  const moduleWidth = 362
-  const gapX = 172
-  const nextPosition = {
-    x: side === 'right' ? currentNode.position.x + moduleWidth + gapX : currentNode.position.x - gapX - moduleWidth,
-    y: currentNode.position.y
-  }
-
-  const newNodeId = addNode(type, nextPosition)
-  if (!newNodeId) return
-
-  if (side === 'right') addEdge(edgeStrategy.resolve({ source: props.id, target: newNodeId, sourceHandle: 'right', targetHandle: 'left' }))
-  else addEdge(edgeStrategy.resolve({ source: newNodeId, target: props.id, sourceHandle: 'right', targetHandle: 'left' }))
-
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    selected: node.id === newNodeId,
-    data: { ...(node.data || {}), selected: node.id === newNodeId }
-  }))
-
-  setTimeout(() => {
-    updateNodeInternals(props.id)
-    updateNodeInternals(newNodeId)
-  }, 60)
-}
 </script>
 
 <style scoped src="./node-base.css"></style>

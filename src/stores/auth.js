@@ -12,6 +12,13 @@ import {
   verifyRegisterCode
 } from '@/api/auth'
 
+const BYPASS_AUTH_IN_DEV = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
+const BYPASS_USER = {
+  id: 'dev-bypass-user',
+  email: 'preview@local.dev',
+  displayName: 'Local Preview'
+}
+
 const user = ref(null)
 const accessToken = ref('')
 const bootstrapped = ref(false)
@@ -73,6 +80,13 @@ export const useAuthStore = () => {
 
   const bootstrapAuth = async () => {
     if (bootstrapped.value) return
+
+    if (BYPASS_AUTH_IN_DEV) {
+      accessToken.value = 'dev-bypass-token'
+      user.value = { ...BYPASS_USER }
+      bootstrapped.value = true
+      return
+    }
 
     const token = readToken()
     if (token) {

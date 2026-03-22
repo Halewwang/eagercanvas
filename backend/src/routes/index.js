@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authRequired } from '../middleware/auth.js'
 import { asyncHandler } from '../utils/http.js'
 import { createChatCompletion, createImageGeneration, createVideoGeneration, getVideoTask } from '../services/runs.service.js'
+import { providerRemoveBackground } from '../services/provider.service.js'
 import { adminRouter } from './admin.routes.js'
 import { authRouter } from './auth.routes.js'
 import { projectsRouter } from './projects.routes.js'
@@ -34,6 +35,11 @@ apiRouter.post('/chat/completions', authRequired, asyncHandler(async (req, res) 
 apiRouter.post('/images/generations', authRequired, asyncHandler(async (req, res) => {
   const run = await createImageGeneration(req.user.id, req.body)
   res.json(run.result)
+}))
+
+apiRouter.post('/images/remove-background', authRequired, asyncHandler(async (req, res) => {
+  const result = await providerRemoveBackground(req.body || {})
+  res.json(result)
 }))
 
 apiRouter.post('/videos', authRequired, asyncHandler(async (req, res) => {

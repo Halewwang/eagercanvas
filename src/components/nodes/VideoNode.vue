@@ -19,9 +19,6 @@
         <div class="capsule-divider" />
 
         <div class="capsule-group">
-          <n-dropdown :options="createLinkOptions" @select="createLinkedNode">
-            <button class="capsule-icon" title="Create linked module"><n-icon :size="14"><AddOutline /></n-icon></button>
-          </n-dropdown>
           <button class="capsule-icon" :disabled="!data.url" @click="openPreviewModal" title="Preview"><n-icon :size="14"><ExpandOutline /></n-icon></button>
           <button class="capsule-icon" @click="handleDuplicate" title="Duplicate"><n-icon :size="14"><CopyOutline /></n-icon></button>
           <button class="capsule-icon" @click="handleDelete" title="Delete"><n-icon :size="14"><TrashOutline /></n-icon></button>
@@ -130,12 +127,12 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon, NModal } from 'naive-ui'
-import { AddOutline, CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, flushSave, nodes, removeNode, updateNode } from '../../stores/canvas'
+import { CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
+import { duplicateNode, edges, flushSave, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, videoModelOptions } from '../../stores/models'
 import { getImageDimensionsFromSource, isSora2AllowedReferenceSize, uploadImageFile } from '@/utils/media'
-import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
+import { resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 
 const props = defineProps({ id: String, data: Object, selected: Boolean })
@@ -168,7 +165,7 @@ const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
 const localRatio = ref(props.data?.ratio || DEFAULT_VIDEO_RATIO)
 const localSize = ref(props.data?.size || '')
-const localResolution = ref(props.data?.resolution || getModelConfig(props.data?.model || DEFAULT_VIDEO_MODEL)?.defaultParams?.resolution || '')
+const localResolution = ref('')
 const localGenerateAudio = ref(Boolean(props.data?.generate_audio ?? getModelConfig(props.data?.model || DEFAULT_VIDEO_MODEL)?.defaultParams?.generate_audio ?? false))
 const getDurationFromData = (data) => {
   const raw = data?.duration ?? data?.dur
@@ -177,11 +174,6 @@ const getDurationFromData = (data) => {
 }
 const localDuration = ref(getDurationFromData(props.data))
 
-const createLinkOptions = [
-  { label: 'Link Text Module', key: 'text' },
-  { label: 'Link Image Module', key: 'image' },
-  { label: 'Link Video Module', key: 'video' }
-]
 const imageRoleStatusMap = {
   prompt: 'Prompt',
   first_frame_image: 'First Frame',
@@ -209,7 +201,13 @@ const durationOptions = computed(() => getModelDurationOptions(localModel.value)
 const supportsAudioToggle = computed(() => isVeo31Model(localModel.value))
 const displayModel = computed(() => videoModelOptions.value.find(m => m.key === localModel.value)?.label || localModel.value)
 const displaySize = computed(() => String(localSize.value || '').trim() || 'Size')
-const displayResolution = computed(() => String(localResolution.value || '').trim() || 'Resolution')
+const resolvedResolution = computed(() => {
+  const optionKeys = resolutionOptions.value.map((item) => String(item.key || '').trim()).filter(Boolean)
+  const current = String(localResolution.value || '').trim()
+  if (current && optionKeys.includes(current)) return current
+  return optionKeys[0] || current || 'Resolution'
+})
+const displayResolution = computed(() => resolvedResolution.value)
 const displayAudio = computed(() => (localGenerateAudio.value ? 'Audio On' : 'Audio Off'))
 const ratioFromSize = (size) => {
   const [w, h] = String(size || '').split('x').map(Number)
@@ -239,6 +237,17 @@ const activeImageRoleSet = computed(() => {
 
   return { keys: new Set(activeRoleKeys), previews: rolePreviews }
 })
+
+const syncResolutionToModelOptions = () => {
+  const optionKeys = resolutionOptions.value.map((item) => String(item.key || '').trim()).filter(Boolean)
+  if (!optionKeys.length) {
+    localResolution.value = ''
+    return
+  }
+  const current = String(localResolution.value || '').trim()
+  if (current && optionKeys.includes(current)) return
+  localResolution.value = optionKeys[0]
+}
 const imageRoleStatusList = computed(() => {
   const { keys, previews } = activeImageRoleSet.value
   return [
@@ -373,7 +382,8 @@ const setModel = (key) => {
   if (config?.defaultParams?.ratio) localRatio.value = config.defaultParams.ratio
   if (config?.defaultParams?.size) localSize.value = config.defaultParams.size
   else localSize.value = ''
-  localResolution.value = config?.defaultParams?.resolution || ''
+  localResolution.value = ''
+  syncResolutionToModelOptions()
   localGenerateAudio.value = Boolean(config?.defaultParams?.generate_audio ?? false)
   const modelDurationOptions = getModelDurationOptions(localModel.value)
   const defaultDuration = Number(config?.defaultParams?.duration)
@@ -387,7 +397,7 @@ const setModel = (key) => {
     model: localModel.value,
     ratio: localRatio.value,
     size: localSize.value,
-    resolution: localResolution.value,
+    resolution: resolvedResolution.value === 'Resolution' ? '' : resolvedResolution.value,
     generate_audio: localGenerateAudio.value,
     duration: localDuration.value,
     dur: localDuration.value
@@ -667,37 +677,6 @@ const closeValidationModal = () => {
   validationMessage.value = ''
 }
 
-const createLinkedNode = (type) => {
-  const side = 'right'
-  const currentNode = nodes.value.find((n) => n.id === props.id)
-  if (!currentNode) return
-
-  const stageWidth = Number.parseFloat(stageStyle.value.width) || 420
-  const moduleWidth = stageWidth + 2
-  const gapX = 172
-  const nextPosition = {
-    x: side === 'right' ? currentNode.position.x + moduleWidth + gapX : currentNode.position.x - gapX - moduleWidth,
-    y: currentNode.position.y
-  }
-
-  const newNodeId = addNode(type, nextPosition)
-  if (!newNodeId) return
-
-  if (side === 'right') addEdge(edgeStrategy.resolve({ source: props.id, target: newNodeId, sourceHandle: 'right', targetHandle: 'left' }))
-  else addEdge(edgeStrategy.resolve({ source: newNodeId, target: props.id, sourceHandle: 'right', targetHandle: 'left' }))
-
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    selected: node.id === newNodeId,
-    data: { ...(node.data || {}), selected: node.id === newNodeId }
-  }))
-
-  setTimeout(() => {
-    updateNodeInternals(props.id)
-    updateNodeInternals(newNodeId)
-  }, 60)
-}
-
 watch(
   () => props.data,
   (val) => {
@@ -713,6 +692,14 @@ watch(
     }
   },
   { deep: true }
+)
+
+watch(
+  resolutionOptions,
+  () => {
+    syncResolutionToModelOptions()
+  },
+  { immediate: true }
 )
 
 watch(

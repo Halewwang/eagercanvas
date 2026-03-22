@@ -76,7 +76,7 @@
       <!-- Left toolbar | 左侧工具栏 -->
       <aside class="flora-panel absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 p-2 rounded-[36px] z-20 w-[64px]">
         <button 
-          @click="showNodeMenu = !showNodeMenu"
+          @click="toggleToolbarNodeMenu"
           class="w-12 h-12 flex items-center justify-center rounded-full bg-[#f1f1f1] text-[#111111] hover:brightness-95 transition-all"
           title="Add Node"
         >
@@ -125,12 +125,12 @@
       </aside>
 
       <!-- Node menu popup | 节点菜单弹窗 -->
-      <div v-if="showNodeMenu" class="flora-panel absolute left-[90px] top-1/2 -translate-y-1/2 rounded-[20px] p-3 z-30 w-[310px] border border-[rgba(143,143,143,0.24)] bg-[rgba(18,18,18,0.96)] backdrop-blur-xl">
-        <div class="node-menu-header">
+      <div v-if="showNodeMenu" class="flora-panel absolute rounded-[20px] p-3 z-30 w-[310px] border border-[rgba(143,143,143,0.24)] bg-[rgba(18,18,18,0.96)] backdrop-blur-xl" :style="nodeMenuStyle">
+        <div v-if="nodeMenuMode !== 'connect'" class="node-menu-header">
           <div>
             <div class="node-menu-eyebrow">ADD MODULE</div>
-            <h3 class="node-menu-title">Choose A Base Module</h3>
-            <p class="node-menu-copy">Pick a module type, then add between 1 and 5 modules at once.</p>
+            <h3 class="node-menu-title">{{ nodeMenuTitle }}</h3>
+            <p class="node-menu-copy">{{ nodeMenuCopy }}</p>
           </div>
         </div>
         <div class="node-menu-list">
@@ -321,7 +321,7 @@ import {
   RemoveOutline,
   FolderOutline
 } from '../icons/coolicons'
-import { nodes, edges, addEdge, loadProject, saveProject, flushSave, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
+import { nodes, edges, addEdge, addNode, loadProject, saveProject, flushSave, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
 import { loadAllModels } from '../stores/models'
 import { useNodesFactory } from '../hooks'
 import { useAvatarUpload } from '@/hooks/useAvatarUpload'
@@ -394,6 +394,10 @@ const isMobile = ref(false)
 const showGrid = ref(true)
 const showApiSettings = ref(false)
 const nodeCreateCount = ref(1)
+const nodeMenuMode = ref('toolbar')
+const nodeMenuScreenPosition = ref(null)
+const pendingConnectMenuContext = ref(null)
+const suppressPaneClickUntil = ref(0)
 
 // Flow key for forcing re-render on project switch | 项目切换时强制重新渲染的 key
 const flowKey = ref(Date.now())
@@ -431,9 +435,112 @@ const nodeTypeOptions = [
   { type: 'image', name: 'Image', icon: ImageOutline, description: 'Generate, preview, and upload still images.' },
   { type: 'video', name: 'Video', icon: VideocamOutline, description: 'Generate videos with connected visual inputs.' }
 ]
+const nodeMenuTitle = computed(() =>
+  nodeMenuMode.value === 'connect'
+    ? 'Create And Link A Module'
+    : 'Choose A Base Module'
+)
+const nodeMenuCopy = computed(() =>
+  nodeMenuMode.value === 'connect'
+    ? 'Release a loose connection anywhere on the canvas, then pick a module to create and link it from that spot.'
+    : 'Pick a module type, then add between 1 and 5 modules at once.'
+)
+const nodeMenuStyle = computed(() => {
+  if (nodeMenuScreenPosition.value) {
+    const x = Math.max(92, Math.min(window.innerWidth - 334, nodeMenuScreenPosition.value.x))
+    const y = Math.max(18, Math.min(window.innerHeight - 340, nodeMenuScreenPosition.value.y))
+    return {
+      left: `${x}px`,
+      top: `${y}px`
+    }
+  }
+  return {
+    left: '90px',
+    top: '50%',
+    transform: 'translateY(-50%)'
+  }
+})
+
+const clearNodeMenuContext = () => {
+  nodeMenuMode.value = 'toolbar'
+  nodeMenuScreenPosition.value = null
+  pendingConnectMenuContext.value = null
+}
+
+const toggleToolbarNodeMenu = () => {
+  if (showNodeMenu.value && nodeMenuMode.value === 'toolbar') {
+    showNodeMenu.value = false
+    clearNodeMenuContext()
+    return
+  }
+  nodeMenuMode.value = 'toolbar'
+  nodeMenuScreenPosition.value = null
+  pendingConnectMenuContext.value = null
+  showNodeMenu.value = true
+}
+
+const screenPointToFlowPoint = (point) => {
+  const zoom = viewport.value?.zoom || 1
+  const x = -((viewport.value?.x || 0) / zoom) + point.x / zoom
+  const y = -((viewport.value?.y || 0) / zoom) + point.y / zoom
+  return { x, y }
+}
+
+const openConnectNodeMenu = (point, context) => {
+  nodeMenuMode.value = 'connect'
+  nodeMenuScreenPosition.value = {
+    x: point.x + 12,
+    y: point.y - 12
+  }
+  suppressPaneClickUntil.value = Date.now() + 160
+  pendingConnectMenuContext.value = {
+    ...context,
+    flowPosition: screenPointToFlowPoint(point)
+  }
+  showNodeMenu.value = true
+}
 
 // Add new node | 添加新节点
 const addNewNode = async (type) => {
+  if (pendingConnectMenuContext.value) {
+    const context = pendingConnectMenuContext.value
+    const createdNodeIds = []
+
+    for (let index = 0; index < nodeCreateCount.value; index += 1) {
+      const col = index % 2
+      const row = Math.floor(index / 2)
+      const newNodeId = addNode(type, {
+        x: context.flowPosition.x + col * 120,
+        y: context.flowPosition.y + row * 132
+      })
+      createdNodeIds.push(newNodeId)
+
+      const params = context.handleType === 'source'
+        ? {
+            source: context.nodeId,
+            target: newNodeId,
+            sourceHandle: context.handleId || 'right',
+            targetHandle: 'left'
+          }
+        : {
+            source: newNodeId,
+            target: context.nodeId,
+            sourceHandle: 'right',
+            targetHandle: context.handleId || 'left'
+          }
+      addEdge(edgeStrategy.resolve(params))
+    }
+
+    setTimeout(() => {
+      createdNodeIds.forEach((nodeId) => updateNodeInternals(nodeId))
+      updateNodeInternals(context.nodeId)
+    }, 60)
+
+    showNodeMenu.value = false
+    clearNodeMenuContext()
+    return
+  }
+
   for (let index = 0; index < nodeCreateCount.value; index += 1) {
     const col = index % 2
     const row = Math.floor(index / 2)
@@ -443,6 +550,7 @@ const addNewNode = async (type) => {
     })
   }
   showNodeMenu.value = false
+  clearNodeMenuContext()
 }
 
 const increaseNodeCount = () => {
@@ -476,14 +584,15 @@ const connectSucceeded = ref(false)
 
 const readPointer = (eventLike) => {
   if (!eventLike) return null
-  if (eventLike.touches?.length) {
-    return { x: eventLike.touches[0].clientX, y: eventLike.touches[0].clientY }
+  const rawEvent = eventLike?.event || eventLike
+  if (rawEvent.touches?.length) {
+    return { x: rawEvent.touches[0].clientX, y: rawEvent.touches[0].clientY }
   }
-  if (eventLike.changedTouches?.length) {
-    return { x: eventLike.changedTouches[0].clientX, y: eventLike.changedTouches[0].clientY }
+  if (rawEvent.changedTouches?.length) {
+    return { x: rawEvent.changedTouches[0].clientX, y: rawEvent.changedTouches[0].clientY }
   }
-  const x = eventLike.clientX ?? eventLike.x ?? eventLike.pageX
-  const y = eventLike.clientY ?? eventLike.y ?? eventLike.pageY
+  const x = rawEvent.clientX ?? rawEvent.x ?? rawEvent.pageX
+  const y = rawEvent.clientY ?? rawEvent.y ?? rawEvent.pageY
   if (typeof x === 'number' && typeof y === 'number') return { x, y }
   return null
 }
@@ -509,8 +618,15 @@ const onConnectEnd = (event) => {
   const current = pendingConnect.value
   if (!current) return
 
+  const releasePoint = readPointer(event)
+  const shouldOpenMenu = !connectSucceeded.value && releasePoint
+
   pendingConnect.value = null
   connectSucceeded.value = false
+
+  if (shouldOpenMenu) {
+    openConnectNodeMenu(releasePoint, current)
+  }
 }
 
 // Keep runtime selected flag in node.data synchronized with VueFlow selected state.
@@ -535,6 +651,7 @@ const syncNodeSelectedState = () => {
 // Handle node click | 处理节点点击
 const onNodeClick = () => {
   showNodeMenu.value = false
+  clearNodeMenuContext()
 }
 
 // Handle node changes | 处理节点变化（包含多选/框选）
@@ -564,7 +681,11 @@ const onEdgesChange = (changes) => {
 
 // Handle pane click | 处理画布点击
 const onPaneClick = () => {
+  if (Date.now() < suppressPaneClickUntil.value) {
+    return
+  }
   showNodeMenu.value = false
+  clearNodeMenuContext()
   nodes.value = nodes.value.map((node) => ({
     ...node,
     selected: false,

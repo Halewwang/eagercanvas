@@ -47,6 +47,17 @@ const buildHeaders = (extra = {}) => {
   }
 }
 
+const buildAuthHeaders = (extra = {}) => {
+  if (!env.providerApiKey) {
+    throw new HttpError(500, 'PROVIDER_API_KEY is not configured', 'PROVIDER_NOT_CONFIGURED')
+  }
+
+  return {
+    Authorization: `Bearer ${env.providerApiKey}`,
+    ...extra
+  }
+}
+
 const parseProviderResponse = async (response) => {
   const text = await response.text()
   if (!text) return null
@@ -82,6 +93,30 @@ const callProviderWithBase = async (base, path, body, method = 'POST') => {
   }
 }
 
+const callProviderMultipartWithBase = async (base, path, formData, method = 'POST') => {
+  const controller = new AbortController()
+  const timeoutMs = Number(env.providerTimeoutMs || 90000)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(buildProviderUrl(base, path), {
+      method,
+      headers: buildAuthHeaders(),
+      body: method === 'GET' ? undefined : formData,
+      signal: controller.signal
+    })
+    const data = await parseProviderResponse(response)
+
+    if (!response.ok) {
+      const message = data?.error?.message || data?.message || `Provider request failed: ${response.status}`
+      throw new HttpError(response.status, message, 'PROVIDER_ERROR')
+    }
+
+    return data || {}
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const callProvider = async (path, body, method = 'POST') => {
   if (!providerBases.length) {
     throw new HttpError(500, 'PROVIDER_API_BASE_URL is not configured', 'PROVIDER_NOT_CONFIGURED')
@@ -91,6 +126,29 @@ const callProvider = async (path, body, method = 'POST') => {
   for (const base of providerBases) {
     try {
       return await callProviderWithBase(base, path, body, method)
+    } catch (error) {
+      lastError = error
+      const status = Number(error?.status || 0)
+      const retryableHttp = status === 429 || status >= 500
+      const retryableNetwork = error?.name === 'AbortError' || !status
+      if (!retryableHttp && !retryableNetwork) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError || new HttpError(502, 'Provider request failed', 'PROVIDER_ERROR')
+}
+
+const callProviderMultipart = async (path, formData, method = 'POST') => {
+  if (!providerBases.length) {
+    throw new HttpError(500, 'PROVIDER_API_BASE_URL is not configured', 'PROVIDER_NOT_CONFIGURED')
+  }
+
+  let lastError
+  for (const base of providerBases) {
+    try {
+      return await callProviderMultipartWithBase(base, path, formData, method)
     } catch (error) {
       lastError = error
       const status = Number(error?.status || 0)
@@ -231,6 +289,45 @@ const fetchImageAsBase64 = async (url) => {
     console.error('Fetch image failed', e)
     return null
   }
+}
+
+const fetchBinaryFromSource = async (source = '') => {
+  const value = String(source || '').trim()
+  if (!value) {
+    throw new HttpError(400, 'Image source is required', 'IMAGE_SOURCE_REQUIRED')
+  }
+
+  const dataUrl = parseDataUrl(value)
+  if (dataUrl) {
+    return {
+      mimeType: dataUrl.mimeType || 'image/png',
+      buffer: Buffer.from(dataUrl.data, 'base64')
+    }
+  }
+
+  try {
+    const response = await fetch(value)
+    if (!response.ok) {
+      throw new HttpError(response.status, `Failed to fetch source image: ${response.status}`, 'IMAGE_FETCH_FAILED')
+    }
+    const mimeType = response.headers.get('content-type') || 'image/png'
+    const arrayBuffer = await response.arrayBuffer()
+    return {
+      mimeType,
+      buffer: Buffer.from(arrayBuffer)
+    }
+  } catch (error) {
+    if (error instanceof HttpError) throw error
+    throw new HttpError(400, 'Failed to load source image', 'IMAGE_FETCH_FAILED')
+  }
+}
+
+const extensionFromMimeType = (mimeType = '') => {
+  const safe = String(mimeType || '').toLowerCase()
+  if (safe.includes('png')) return 'png'
+  if (safe.includes('webp')) return 'webp'
+  if (safe.includes('gif')) return 'gif'
+  return 'jpg'
 }
 
 const buildGeminiImageInputParts = async (images = []) => {
@@ -644,6 +741,46 @@ export const providerGenerateImage = async (payload = {}) => {
     throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
   }
   return normalized
+}
+
+export const providerRemoveBackground = async (payload = {}) => {
+  const source =
+    String(payload.image || '').trim() ||
+    String(payload.image_url || '').trim() ||
+    String(payload.url || '').trim()
+
+  if (!source) {
+    throw new HttpError(400, 'Image source is required', 'IMAGE_SOURCE_REQUIRED')
+  }
+
+  const { mimeType, buffer } = await fetchBinaryFromSource(source)
+  const fileName = `remove-bg.${extensionFromMimeType(mimeType)}`
+  const formData = new FormData()
+  const blob = new Blob([buffer], { type: mimeType || 'image/png' })
+
+  formData.append('image_file', blob, fileName)
+  formData.append('format', String(payload.format || 'png'))
+  formData.append('channels', String(payload.channels || 'rgba'))
+  formData.append('size', String(payload.size || 'full'))
+  formData.append('crop', payload.crop ? 'true' : 'false')
+  formData.append('despill', payload.despill ? 'true' : 'false')
+
+  if (typeof payload.bg_color === 'string' && payload.bg_color.trim()) {
+    formData.append('bg_color', payload.bg_color.trim())
+  }
+
+  const raw = await callProviderMultipart('/photoroom/v1/segment?response_format=url', formData)
+  const url = String(raw?.url || raw?.data?.url || '').trim()
+
+  if (!url) {
+    throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
+  }
+
+  return {
+    url,
+    data: [{ url }],
+    raw
+  }
 }
 
 export const providerCreateVideo = async (payload = {}) => {

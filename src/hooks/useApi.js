@@ -6,6 +6,7 @@
 import { ref, reactive, onUnmounted } from 'vue'
 import {
   generateImage,
+  removeBackground,
   createVideoTask,
   getVideoTaskStatus,
   streamChatCompletions
@@ -240,6 +241,45 @@ export const useImageGeneration = () => {
   }
 
   return { loading, error, status, images, currentImage, generate, reset }
+}
+
+export const useImageTools = () => {
+  const { loading, error, status, reset, setLoading, setError, setSuccess } = useApiState()
+
+  const removeBg = async (params = {}) => {
+    setLoading(true)
+
+    try {
+      const response = await removeBackground({
+        image: params.image,
+        size: params.size || 'full',
+        format: params.format || 'png',
+        channels: params.channels || 'rgba',
+        crop: params.crop ?? false,
+        despill: params.despill ?? false,
+        bg_color: params.bgColor || ''
+      })
+
+      const data = response?.data || response
+      const url =
+        data?.url ||
+        data?.data?.[0]?.url ||
+        data?.data?.url ||
+        ''
+
+      if (!url) {
+        throw new Error('No image output')
+      }
+
+      setSuccess()
+      return { url, raw: data }
+    } catch (err) {
+      setError(err)
+      throw err
+    }
+  }
+
+  return { loading, error, status, removeBg, reset }
 }
 
 /**
@@ -485,7 +525,8 @@ export const useApi = () => {
   const config = useApiConfig()
   const chat = useChat()
   const image = useImageGeneration()
+  const imageTools = useImageTools()
   const videoGen = useVideoGeneration()
 
-  return { config, chat, image, video: videoGen }
+  return { config, chat, image, imageTools, video: videoGen }
 }
