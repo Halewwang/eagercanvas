@@ -189,6 +189,13 @@
   white-space: nowrap;
 }
 
+.capsule-create-graphic {
+  width: 14px;
+  height: 14px;
+  display: block;
+  flex-shrink: 0;
+}
+
 .node-default {
   border-width: 0;
   border-color: transparent;

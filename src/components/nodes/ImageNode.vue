@@ -43,7 +43,7 @@
       </div>
       <div class="capsule-inner capsule-generate" :class="{ 'capsule-inner-selected': isSelected }">
         <button v-if="!isImageBusy" class="capsule-icon capsule-icon-solid capsule-create" @click="handleGenerateImage" title="Create">
-          <n-icon :size="14"><SparklesOutline /></n-icon>
+          <img :src="createIcon" alt="" class="capsule-create-graphic" />
           <span class="capsule-create-label">Create</span>
         </button>
         <button v-if="!isImageBusy" class="capsule-icon" @click="handleRegenerateImage" title="Regenerate">
@@ -102,7 +102,23 @@
 
     <n-modal v-model:show="showPreviewModal" :mask-closable="true">
       <div class="zoom-modal-card" @click.stop>
-        <img :src="data.url" alt="Preview" class="zoom-image-original" />
+        <div class="zoom-modal-toolbar">
+          <div class="zoom-modal-chip">{{ Math.round(previewZoom * 100) }}%</div>
+          <div class="zoom-modal-actions">
+            <button class="zoom-tool-btn" @click="zoomOutPreview" :disabled="previewZoom <= PREVIEW_MIN_ZOOM">-</button>
+            <button class="zoom-tool-btn" @click="resetPreviewZoom">Fit</button>
+            <button class="zoom-tool-btn" @click="zoomInPreview" :disabled="previewZoom >= PREVIEW_MAX_ZOOM">+</button>
+          </div>
+        </div>
+        <div class="zoom-modal-stage">
+          <img
+            :src="data.url"
+            alt="Preview"
+            class="zoom-image-original"
+            :style="previewImageStyle"
+            @load="handlePreviewImageLoad"
+          />
+        </div>
       </div>
     </n-modal>
     <n-modal v-model:show="showErrorModal" preset="dialog" title="Image Module Error" :show-icon="false">
@@ -150,7 +166,6 @@ import {
   ExpandOutline,
   ImageOutline,
   RefreshOutline,
-  SparklesOutline,
   TrashOutline
 } from '../../icons/coolicons'
 import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode } from '../../stores/canvas'
@@ -164,6 +179,7 @@ import {
 import { useApiConfig, useImageGeneration } from '../../hooks'
 import { persistImageUrl, uploadImageFile } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
+import createIcon from '@/assets/create-icon.svg'
 
 const props = defineProps({
   id: String,
@@ -187,6 +203,8 @@ const localImageRatio = ref('1:1')
 const localResolution = ref('1k')
 const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
+const previewZoom = ref(1)
+const previewNaturalSize = ref({ width: 0, height: 0 })
 const showErrorModal = ref(false)
 const showValidationModal = ref(false)
 const validationMessage = ref('')
@@ -223,6 +241,9 @@ const BASE_SIZE_BY_RATIO = {
 }
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 const MAX_IMAGE_DIMENSION = 4096
+const PREVIEW_MIN_ZOOM = 0.75
+const PREVIEW_MAX_ZOOM = 4
+const PREVIEW_ZOOM_STEP = 0.25
 
 const ratioFromSizeKey = (sizeKey) => {
   const [w, h] = String(sizeKey || '').split('x').map(Number)
@@ -377,6 +398,19 @@ const stageStyle = computed(() => {
 const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
 const progressPercent = computed(() => Math.round(progressValue.value))
 const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
+const previewImageStyle = computed(() => {
+  const naturalWidth = previewNaturalSize.value.width || 1
+  const naturalHeight = previewNaturalSize.value.height || 1
+  const maxWidth = Math.max(320, window.innerWidth - 180)
+  const maxHeight = Math.max(240, window.innerHeight - 220)
+  const fitScale = Math.min(maxWidth / naturalWidth, maxHeight / naturalHeight, 1)
+  const width = Math.max(180, Math.round(naturalWidth * fitScale * previewZoom.value))
+  const height = Math.max(180, Math.round(naturalHeight * fitScale * previewZoom.value))
+  return {
+    width: `${width}px`,
+    height: `${height}px`
+  }
+})
 const capsuleStyle = computed(() => {
   const zoom = viewport.value?.zoom || 1
   const inverse = 1 / zoom
@@ -453,6 +487,11 @@ watch(
   },
   { immediate: true }
 )
+
+watch(showPreviewModal, (visible) => {
+  if (!visible) return
+  previewZoom.value = 1
+})
 
 onUnmounted(() => clearProgressTimers())
 
@@ -797,7 +836,25 @@ const handleMetaMouseDown = (event) => {
 
 const openPreviewModal = () => {
   if (!props.data?.url) return
+  previewZoom.value = 1
   showPreviewModal.value = true
+}
+const handlePreviewImageLoad = (event) => {
+  const target = event?.target
+  if (!target) return
+  previewNaturalSize.value = {
+    width: Number(target.naturalWidth) || 0,
+    height: Number(target.naturalHeight) || 0
+  }
+}
+const zoomInPreview = () => {
+  previewZoom.value = Math.min(PREVIEW_MAX_ZOOM, Number((previewZoom.value + PREVIEW_ZOOM_STEP).toFixed(2)))
+}
+const zoomOutPreview = () => {
+  previewZoom.value = Math.max(PREVIEW_MIN_ZOOM, Number((previewZoom.value - PREVIEW_ZOOM_STEP).toFixed(2)))
+}
+const resetPreviewZoom = () => {
+  previewZoom.value = 1
 }
 const closeErrorModal = () => {
   showErrorModal.value = false
@@ -934,16 +991,88 @@ const createLinkedNode = (type) => {
 .zoom-modal-card {
   max-width: calc(100vw - 80px);
   max-height: calc(100vh - 80px);
-  overflow: auto;
+  overflow: hidden;
   background: #121212;
   border: 1px solid rgba(143, 143, 143, 0.38);
   border-radius: 14px;
   padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.zoom-modal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.zoom-modal-chip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 58px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f3f4f6;
+  font-size: 12px;
+}
+
+.zoom-modal-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zoom-tool-btn {
+  min-width: 38px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f3f4f6;
+  font-size: 12px;
+  transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+.zoom-tool-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.zoom-tool-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.zoom-modal-stage {
+  flex: 1;
+  min-height: min(72vh, 720px);
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+  border-radius: 12px;
+  background:
+    linear-gradient(0deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)),
+    linear-gradient(45deg, #171717 25%, transparent 25%, transparent 75%, #171717 75%, #171717),
+    linear-gradient(45deg, #171717 25%, #0f0f0f 25%, #0f0f0f 75%, #171717 75%, #171717);
+  background-size: auto, 24px 24px, 24px 24px;
+  background-position: 0 0, 0 0, 12px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
 }
 
 .zoom-image-original {
   display: block;
   max-width: none;
   max-height: none;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
 }
 </style>

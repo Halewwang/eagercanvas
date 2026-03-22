@@ -125,20 +125,40 @@
       </aside>
 
       <!-- Node menu popup | 节点菜单弹窗 -->
-      <div v-if="showNodeMenu" class="flora-panel absolute left-[90px] top-1/2 -translate-y-1/2 rounded-xl p-2 z-30 w-[198px] border border-[rgba(143,143,143,0.24)] bg-[rgba(25,25,25,0.96)] backdrop-blur-xl">
-        <div class="text-[13px] leading-none font-semibold text-[#8f939e] mb-1.5 tracking-[0.02em]">TURN INTO</div>
-        <div class="space-y-2">
+      <div v-if="showNodeMenu" class="flora-panel absolute left-[90px] top-1/2 -translate-y-1/2 rounded-[20px] p-3 z-30 w-[310px] border border-[rgba(143,143,143,0.24)] bg-[rgba(18,18,18,0.96)] backdrop-blur-xl">
+        <div class="node-menu-header">
+          <div>
+            <div class="node-menu-eyebrow">ADD MODULE</div>
+            <h3 class="node-menu-title">选择要添加的基础模块</h3>
+            <p class="node-menu-copy">选择模块类型后，可一次性添加 1 到 5 个同类模块。</p>
+          </div>
+        </div>
+        <div class="node-menu-list">
           <button
             v-for="nodeType in nodeTypeOptions"
             :key="nodeType.type"
             @click="addNewNode(nodeType.type)"
-            class="w-full h-9 flex items-center gap-2.5 rounded-lg px-2 hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+            class="node-menu-item"
           >
-            <div class="w-7 h-7 rounded-lg bg-[#3b3e45] flex items-center justify-center shrink-0">
-              <n-icon :size="15" class="text-[#d6d8de]"><component :is="nodeType.icon" /></n-icon>
+            <div class="node-menu-item-icon">
+              <n-icon :size="16" class="text-[#f3f4f6]"><component :is="nodeType.icon" /></n-icon>
             </div>
-            <span class="text-[12px] font-medium text-[#f2f3f5]">{{ nodeType.name }}</span>
+            <div class="node-menu-item-copy">
+              <span class="node-menu-item-title">{{ nodeType.name }}</span>
+              <span class="node-menu-item-description">{{ nodeType.description }}</span>
+            </div>
           </button>
+        </div>
+        <div class="node-menu-quantity">
+          <div>
+            <div class="node-menu-quantity-label">数量</div>
+            <div class="node-menu-quantity-note">默认 1，最多 5 个</div>
+          </div>
+          <div class="node-menu-stepper">
+            <button class="node-menu-stepper-btn" @click="decreaseNodeCount" :disabled="nodeCreateCount <= 1">-</button>
+            <span class="node-menu-stepper-value">{{ nodeCreateCount }}</span>
+            <button class="node-menu-stepper-btn" @click="increaseNodeCount" :disabled="nodeCreateCount >= 5">+</button>
+          </div>
         </div>
       </div>
 
@@ -373,6 +393,7 @@ const showNodeMenu = ref(false)
 const isMobile = ref(false)
 const showGrid = ref(true)
 const showApiSettings = ref(false)
+const nodeCreateCount = ref(1)
 
 // Flow key for forcing re-render on project switch | 项目切换时强制重新渲染的 key
 const flowKey = ref(Date.now())
@@ -406,15 +427,30 @@ const {
 
 // Node type options for menu | 节点类型菜单选项
 const nodeTypeOptions = [
-  { type: 'text', name: 'Text', icon: TextOutline },
-  { type: 'image', name: 'Image', icon: ImageOutline },
-  { type: 'video', name: 'Video', icon: VideocamOutline }
+  { type: 'text', name: 'Text', icon: TextOutline, description: '用于写提示词、脚本、说明文案。' },
+  { type: 'image', name: 'Image', icon: ImageOutline, description: '用于生成、预览和上传静态图像。' },
+  { type: 'video', name: 'Video', icon: VideocamOutline, description: '用于生成视频并串联图像参考输入。' }
 ]
 
 // Add new node | 添加新节点
 const addNewNode = async (type) => {
-  await nodesFactory.addNewNode(type)
+  for (let index = 0; index < nodeCreateCount.value; index += 1) {
+    const col = index % 2
+    const row = Math.floor(index / 2)
+    await nodesFactory.addNewNode(type, {
+      x: col * 88,
+      y: row * 118
+    })
+  }
   showNodeMenu.value = false
+}
+
+const increaseNodeCount = () => {
+  nodeCreateCount.value = Math.min(5, nodeCreateCount.value + 1)
+}
+
+const decreaseNodeCount = () => {
+  nodeCreateCount.value = Math.max(1, nodeCreateCount.value - 1)
 }
 
 // Handle add workflow from panel | 处理从面板添加工作流
@@ -679,7 +715,7 @@ onUnmounted(() => {
 .share-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .canvas-modal {
@@ -697,35 +733,40 @@ onUnmounted(() => {
 
 .share-section {
   border-color: rgba(143, 143, 143, 0.24);
-  background: rgba(9, 11, 15, 0.85);
+  background: rgba(12, 12, 12, 0.96);
 }
 
 .share-section h3 {
   margin: 0;
   font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .share-section p {
-  margin: 8px 0 0;
-  color: #8d949e;
+  margin: 10px 0 0;
+  color: #9ca3af;
   font-size: 13px;
+  line-height: 1.5;
 }
 
 .share-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
 }
 
 .toggle-btn {
   width: 46px;
   height: 26px;
   border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #1c1c1c;
   padding: 2px;
   position: relative;
   cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
 }
 
 .toggle-btn span {
@@ -738,12 +779,13 @@ onUnmounted(() => {
 }
 
 .toggle-btn.on {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
+  background: #f3f4f6;
+  border-color: #f3f4f6;
 }
 
 .toggle-btn.on span {
   transform: translateX(20px);
+  background: #111111;
 }
 
 .share-link-box {
@@ -753,8 +795,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  background: #101218;
+  padding: 10px 12px;
+  background: #0e0e0e;
 }
 
 .share-link-text {
@@ -772,6 +814,9 @@ onUnmounted(() => {
   height: 34px;
   padding: 0 10px;
   font-size: 12px;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: #181818;
+  color: #f5f5f5;
 }
 
 .modal-copy {
@@ -788,13 +833,199 @@ onUnmounted(() => {
 }
 
 .canvas-modal :deep(.n-input) {
-  background: #101218;
+  background: #0f0f0f;
   border-radius: 10px;
 }
 
 .canvas-modal :deep(.n-input .n-input__border),
 .canvas-modal :deep(.n-input .n-input__state-border) {
   border-color: rgba(143, 143, 143, 0.24);
+}
+
+.canvas-share-modal :deep(.n-input.n-input--focus),
+.canvas-share-modal :deep(.n-input.n-input--focus .n-input__state-border),
+.canvas-share-modal :deep(.n-input.n-input--focus .n-input__border) {
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.canvas-share-modal :deep(.n-input__input-el::placeholder),
+.canvas-share-modal :deep(.n-input__textarea-el::placeholder) {
+  color: #6b7280;
+}
+
+.canvas-share-modal .ec-btn-primary {
+  background: #f5f5f5;
+  border-color: #f5f5f5;
+  color: #111111;
+}
+
+.canvas-share-modal .ec-btn-primary:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+.canvas-share-modal .ec-btn-secondary {
+  background: #181818;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #f3f4f6;
+}
+
+.canvas-share-modal .ec-btn-secondary:hover:not(:disabled) {
+  background: #242424;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.node-menu-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.node-menu-eyebrow {
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+
+.node-menu-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.node-menu-copy {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #9ca3af;
+}
+
+.node-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.node-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.node-menu-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.node-menu-item-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.node-menu-item-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.node-menu-item-title {
+  font-size: 13px;
+  line-height: 1.2;
+  color: #f3f4f6;
+  font-weight: 600;
+}
+
+.node-menu-item-description {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #9ca3af;
+  text-align: left;
+}
+
+.node-menu-quantity {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.node-menu-quantity-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.node-menu-quantity-note {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.node-menu-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 999px;
+  background: #141414;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.node-menu-stepper-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1f1f1f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f3f4f6;
+  font-size: 16px;
+  transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+.node-menu-stepper-btn:hover:not(:disabled) {
+  background: #2b2b2b;
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.node-menu-stepper-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.node-menu-stepper-value {
+  min-width: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: #f3f4f6;
+  font-weight: 600;
 }
 
 .canvas-flow {

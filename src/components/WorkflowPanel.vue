@@ -15,11 +15,6 @@
             :class="{ active: activeTab === 'my' }"
             @click="activeTab = 'my'"
           >My</span>
-          <span
-            class="tab-item"
-            :class="{ active: activeTab === 'system' }"
-            @click="activeTab = 'system'"
-          >System</span>
         </div>
         <button class="expand-btn" @click="visible = false">
           <n-icon :size="16"><CloseOutline /></n-icon>
@@ -28,13 +23,6 @@
 
       <!-- Content | 内容 -->
       <div class="panel-content">
-        <div v-if="activeTab === 'my'" class="panel-toolbar">
-          <select v-model="newTemplateBaseId" class="workflow-select">
-            <option v-for="item in systemWorkflows" :key="item.id" :value="item.id">{{ item.name }}</option>
-          </select>
-          <button class="toolbar-btn" @click="handleCreateMyTemplate">Add to My</button>
-        </div>
-
         <!-- Workflows grid -->
         <div class="workflow-grid">
           <div
@@ -55,9 +43,6 @@
                   {{ workflow.visibility === 'public' ? 'Unpublish' : 'Publish' }}
                 </button>
                 <button class="tiny-btn danger" @click="handleDeleteMyTemplate(workflow.id)">Delete</button>
-              </div>
-              <div v-else-if="activeTab === 'system'" class="card-actions">
-                <button class="tiny-btn" @click="handleCreateMyTemplate(workflow.id)">Save</button>
               </div>
             </div>
           </div>
@@ -110,23 +95,15 @@ const visible = computed({
 })
 
 const {
-  systemWorkflows,
   myWorkflows,
   publicWorkflows,
   loadWorkflowTemplates,
-  createMyWorkflowTemplate,
   deleteMyWorkflowTemplate,
   setWorkflowTemplateVisibility,
   resolveWorkflowTemplate
 } = useWorkflowsStore()
 
 loadWorkflowTemplates()
-
-const newTemplateBaseId = ref('')
-
-if (!newTemplateBaseId.value) {
-  newTemplateBaseId.value = systemWorkflows.value[0]?.id || ''
-}
 
 // Icon mapping | 图标映射
 const iconMap = {
@@ -146,13 +123,13 @@ const getIcon = (iconName) => {
 const currentList = computed(() => {
   if (activeTab.value === 'public') return publicWorkflows.value
   if (activeTab.value === 'my') return myWorkflows.value.filter((item) => item.sourceType !== 'project')
-  return systemWorkflows.value
+  return []
 })
 
 const emptyStateMessage = computed(() => {
   if (activeTab.value === 'public') return 'No public workflows yet'
   if (activeTab.value === 'my') return 'No custom workflows yet'
-  return 'No system templates found'
+  return 'No workflows found'
 })
 
 // Handle add workflow | 处理添加工作流
@@ -161,13 +138,6 @@ const handleAddWorkflow = (workflow) => {
   if (!runtimeWorkflow) return
   emit('add-workflow', { workflow: runtimeWorkflow, options: {} })
   visible.value = false
-}
-
-const handleCreateMyTemplate = async (baseWorkflowId = '') => {
-  const id = baseWorkflowId || newTemplateBaseId.value
-  if (!id) return
-  await createMyWorkflowTemplate({ baseWorkflowId: id })
-  if (activeTab.value !== 'my') activeTab.value = 'my'
 }
 
 const handleDeleteMyTemplate = async (id) => {

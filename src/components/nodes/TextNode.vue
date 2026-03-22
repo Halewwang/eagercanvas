@@ -31,7 +31,7 @@
       </div>
       <div class="capsule-inner capsule-generate" :class="{ 'capsule-inner-selected': isSelected }">
         <button v-if="!isGenerating" class="capsule-icon capsule-icon-solid capsule-create" @click="handleGenerateText" title="Create">
-          <n-icon :size="14"><SparklesOutline /></n-icon>
+          <img :src="createIcon" alt="" class="capsule-create-graphic" />
           <span class="capsule-create-label">Create</span>
         </button>
         <button v-if="!isGenerating" class="capsule-icon" @click="handleRegenerateText" title="Regenerate">
@@ -99,11 +99,12 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon, NModal } from 'naive-ui'
-import { AddOutline, CloseCircleOutline, CopyOutline, RefreshOutline, SparklesOutline, TextOutline, TrashOutline } from '../../icons/coolicons'
+import { AddOutline, CloseCircleOutline, CopyOutline, RefreshOutline, TextOutline, TrashOutline } from '../../icons/coolicons'
 import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useChat } from '../../hooks'
 import { chatModelOptions, DEFAULT_CHAT_MODEL } from '../../stores/models'
 import { edgeStrategy } from '../../services/edgeStrategy'
+import createIcon from '@/assets/create-icon.svg'
 
 const props = defineProps({
   id: String,
