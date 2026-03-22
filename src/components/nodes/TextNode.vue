@@ -76,14 +76,17 @@
     </n-modal>
     <div class="binding-status-wrap">
       <div class="binding-status-row">
-        <div
-          v-if="connectedTargets.length > 0"
-          class="binding-status-pill binding-status-pill-active"
-        >
+        <div v-if="connectedTargets.length > 0" class="binding-status-pill binding-status-pill-active">
           Linked to {{ connectedTargets.length }} module{{ connectedTargets.length > 1 ? 's' : '' }}
         </div>
         <div v-else class="binding-status-pill binding-status-pill-idle">
           Not linked
+        </div>
+        <div
+          class="binding-status-pill"
+          :class="hasIncomingImage ? 'binding-status-pill-active' : 'binding-status-pill-idle'"
+        >
+          Image
         </div>
       </div>
     </div>
@@ -95,7 +98,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon, NModal } from 'naive-ui'
 import { CloseCircleOutline, CopyOutline, RefreshOutline, TextOutline, TrashOutline } from '../../icons/coolicons'
-import { duplicateNode, edges, removeNode, updateNode } from '../../stores/canvas'
+import { duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useChat } from '../../hooks'
 import { chatModelOptions, DEFAULT_CHAT_MODEL } from '../../stores/models'
 import createIcon from '@/assets/create-icon.svg'
@@ -122,6 +125,31 @@ const showHandles = computed(() => showCapsule.value || isSelected.value)
 const connectedTargets = computed(() => {
   return edges.value.filter(edge => edge.source === props.id).map(edge => edge.target)
 })
+const incomingImageNodes = computed(() =>
+  edges.value
+    .filter((edge) => edge.target === props.id)
+    .map((edge) => nodes.value.find((node) => node.id === edge.source))
+    .filter((node) => node?.type === 'image' && String(node?.data?.url || node?.data?.base64 || '').trim())
+)
+const hasIncomingImage = computed(() => incomingImageNodes.value.length > 0)
+const VISION_ANALYSIS_MODEL = 'gemini-2.5-flash'
+const IMAGE_JSON_SCHEMA = {
+  summary: 'short description of the image',
+  scene: 'environment and setting',
+  subjects: [
+    {
+      name: 'subject name',
+      description: 'appearance and role'
+    }
+  ],
+  style: 'visual style and medium',
+  composition: 'layout and framing',
+  lighting: 'lighting description',
+  colors: ['primary colors'],
+  camera: 'camera angle or shot type',
+  text_in_image: ['visible text if any'],
+  notable_objects: ['important objects or props']
+}
 
 const { send: sendChat, clear: clearChat } = useChat({
   systemPrompt: [
@@ -132,6 +160,16 @@ const { send: sendChat, clear: clearChat } = useChat({
     '3) 仅输出优化后的最终文本，不要解释。'
   ].join('\n'),
   model: () => localChatModel.value || DEFAULT_CHAT_MODEL
+})
+const { send: sendVisionChat, clear: clearVisionChat } = useChat({
+  systemPrompt: [
+    'You are an image understanding assistant.',
+    'Analyze the provided image carefully.',
+    'Return only valid JSON.',
+    'Do not wrap JSON in markdown fences.',
+    'Do not add explanation before or after the JSON.'
+  ].join('\n'),
+  model: () => VISION_ANALYSIS_MODEL
 })
 const chatModelDropdownOptions = computed(() => chatModelOptions.value.map((m) => ({ key: m.key, label: m.label })))
 const displayChatModel = computed(() => chatModelOptions.value.find((m) => m.key === localChatModel.value)?.label || localChatModel.value)
@@ -223,6 +261,62 @@ const setChatModel = (key) => {
   updateNode(props.id, { model: key })
 }
 
+const buildImageAnalysisPrompt = () => [
+  'Analyze the provided image and return a structured JSON description.',
+  'Requirements:',
+  '1. Return valid JSON only.',
+  '2. Use concise but specific wording.',
+  '3. If a field is unknown, use an empty string or empty array.',
+  '4. Keep the JSON keys exactly as requested.',
+  `Schema: ${JSON.stringify(IMAGE_JSON_SCHEMA)}`
+].join('\n')
+
+const runImageAnalysis = async () => {
+  const imageNode = incomingImageNodes.value[0]
+  const imageSource = String(imageNode?.data?.url || imageNode?.data?.base64 || '').trim()
+  if (!imageSource) {
+    window.$message?.warning('Connect an image node first')
+    return
+  }
+
+  isGenerating.value = true
+  updateNode(props.id, { loading: true, error: '' })
+
+  try {
+    clearVisionChat()
+    const result = await sendVisionChat([
+      {
+        type: 'text',
+        text: buildImageAnalysisPrompt()
+      },
+      {
+        type: 'image_url',
+        image_url: imageSource
+      }
+    ], true)
+
+    const descriptionJson = String(result || '').trim()
+    if (!descriptionJson) {
+      throw new Error('Model returned empty JSON content')
+    }
+
+    content.value = descriptionJson
+    updateNode(props.id, {
+      content: descriptionJson,
+      model: localChatModel.value,
+      loading: false,
+      error: ''
+    })
+    window.$message?.success('Image description generated')
+  } catch (err) {
+    updateNode(props.id, { loading: false, error: err?.message || 'Image analysis failed' })
+    window.$message?.error(err?.message || 'Image analysis failed')
+  } finally {
+    updateNode(props.id, { loading: false })
+    isGenerating.value = false
+  }
+}
+
 const runTextGeneration = async (isRegenerate = false) => {
   const source = content.value.trim()
   if (!source) {
@@ -267,8 +361,20 @@ const handleStopGeneration = () => {
   window.$message?.info('Generation stopped')
 }
 
-const handleGenerateText = () => runTextGeneration(false)
-const handleRegenerateText = () => runTextGeneration(true)
+const handleGenerateText = () => {
+  if (hasIncomingImage.value) {
+    runImageAnalysis()
+    return
+  }
+  runTextGeneration(false)
+}
+const handleRegenerateText = () => {
+  if (hasIncomingImage.value) {
+    runImageAnalysis()
+    return
+  }
+  runTextGeneration(true)
+}
 const closeErrorModal = () => {
   showErrorModal.value = false
   updateNode(props.id, { error: '' })
