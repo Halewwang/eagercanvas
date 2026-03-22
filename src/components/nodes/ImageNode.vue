@@ -104,21 +104,43 @@
     <n-modal v-model:show="showPreviewModal" :mask-closable="true">
       <div class="zoom-modal-card" @click.stop>
         <div class="zoom-modal-toolbar">
-          <div class="zoom-modal-chip">{{ Math.round(previewZoom * 100) }}%</div>
+          <div class="zoom-modal-chip">{{ activeTool === 'crop' ? 'Crop' : `${Math.round(previewZoom * 100)}%` }}</div>
           <div class="zoom-modal-actions">
-            <button class="zoom-tool-btn" @click="zoomOutPreview" :disabled="previewZoom <= PREVIEW_MIN_ZOOM">-</button>
-            <button class="zoom-tool-btn" @click="resetPreviewZoom">Fit</button>
-            <button class="zoom-tool-btn" @click="zoomInPreview" :disabled="previewZoom >= PREVIEW_MAX_ZOOM">+</button>
+            <template v-if="activeTool === 'crop'">
+              <button class="zoom-tool-btn" @click="cancelCropMode">Cancel</button>
+              <button class="zoom-tool-btn zoom-tool-btn-primary" @click="applyCrop" :disabled="toolActionLoading === 'crop'">Apply Crop</button>
+            </template>
+            <template v-else>
+              <button class="zoom-tool-btn" @click="zoomOutPreview" :disabled="previewZoom <= PREVIEW_MIN_ZOOM">-</button>
+              <button class="zoom-tool-btn" @click="resetPreviewZoom">Fit</button>
+              <button class="zoom-tool-btn" @click="zoomInPreview" :disabled="previewZoom >= PREVIEW_MAX_ZOOM">+</button>
+            </template>
           </div>
         </div>
         <div class="zoom-modal-stage">
-          <img
-            :src="data.url"
-            alt="Preview"
-            class="zoom-image-original"
-            :style="previewImageStyle"
-            @load="handlePreviewImageLoad"
-          />
+          <div class="zoom-image-wrap" :style="previewImageStyle">
+            <img
+              :src="data.url"
+              alt="Preview"
+              class="zoom-image-original"
+              @load="handlePreviewImageLoad"
+            />
+            <div v-if="activeTool === 'crop'" class="crop-overlay">
+              <div class="crop-mask crop-mask-top" :style="cropMaskTopStyle"></div>
+              <div class="crop-mask crop-mask-left" :style="cropMaskLeftStyle"></div>
+              <div class="crop-mask crop-mask-right" :style="cropMaskRightStyle"></div>
+              <div class="crop-mask crop-mask-bottom" :style="cropMaskBottomStyle"></div>
+              <div class="crop-box" :style="cropBoxStyle" @mousedown.stop.prevent="startCropDrag">
+                <span
+                  v-for="handle in cropHandles"
+                  :key="handle"
+                  class="crop-handle"
+                  :class="`crop-handle-${handle}`"
+                  @mousedown.stop.prevent="startCropResize(handle, $event)"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </n-modal>
@@ -157,7 +179,7 @@
 </template>
 
 <script setup>
-import { computed, h, onUnmounted, ref, watch } from 'vue'
+import { computed, h, nextTick, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon, NModal } from 'naive-ui'
 import {
@@ -168,7 +190,7 @@ import {
   RefreshOutline,
   TrashOutline
 } from '../../icons/coolicons'
-import { duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode } from '../../stores/canvas'
+import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode } from '../../stores/canvas'
 import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_IMAGE_SIZE,
@@ -178,7 +200,7 @@ import {
 } from '../../stores/models'
 import { useApiConfig, useImageGeneration } from '../../hooks'
 import { persistImageUrl, uploadImageFile } from '@/utils/media'
-import { resolveNodeInputs } from '../../services/edgeStrategy'
+import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 import { useImageTools } from '../../hooks/useApi'
 import toolsIcon from '@/assets/tools-icon.svg'
@@ -191,7 +213,7 @@ const props = defineProps({
   selected: Boolean
 })
 
-const { viewport } = useVueFlow()
+const { updateNodeInternals, viewport } = useVueFlow()
 const { isConfigured } = useApiConfig()
 const imageGen = useImageGeneration()
 const imageTools = useImageTools()
@@ -210,6 +232,9 @@ const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
 const previewZoom = ref(1)
 const previewNaturalSize = ref({ width: 0, height: 0 })
+const activeTool = ref('')
+const cropRect = ref({ x: 0, y: 0, width: 0, height: 0 })
+const cropInteraction = ref(null)
 const showErrorModal = ref(false)
 const showValidationModal = ref(false)
 const validationMessage = ref('')
@@ -233,7 +258,7 @@ const toolDropdownOptions = computed(() => ([
   {
     label: 'Crop',
     key: 'crop',
-    disabled: true,
+    disabled: !props.data?.url || isToolBusy.value,
     renderIcon: () => h('img', { src: cropIcon, alt: '', class: 'tool-option-icon' })
   }
 ]))
@@ -259,6 +284,8 @@ const MAX_IMAGE_DIMENSION = 4096
 const PREVIEW_MIN_ZOOM = 0.75
 const PREVIEW_MAX_ZOOM = 4
 const PREVIEW_ZOOM_STEP = 0.25
+const MIN_CROP_SIZE = 48
+const cropHandles = ['nw', 'ne', 'sw', 'se']
 
 const ratioFromSizeKey = (sizeKey) => {
   const [w, h] = String(sizeKey || '').split('x').map(Number)
@@ -426,6 +453,38 @@ const previewImageStyle = computed(() => {
     height: `${height}px`
   }
 })
+const previewDisplayWidth = computed(() => Number.parseFloat(previewImageStyle.value.width) || 0)
+const previewDisplayHeight = computed(() => Number.parseFloat(previewImageStyle.value.height) || 0)
+const cropBoxStyle = computed(() => ({
+  left: `${cropRect.value.x}px`,
+  top: `${cropRect.value.y}px`,
+  width: `${cropRect.value.width}px`,
+  height: `${cropRect.value.height}px`
+}))
+const cropMaskTopStyle = computed(() => ({
+  left: '0px',
+  top: '0px',
+  width: `${previewDisplayWidth.value}px`,
+  height: `${cropRect.value.y}px`
+}))
+const cropMaskLeftStyle = computed(() => ({
+  left: '0px',
+  top: `${cropRect.value.y}px`,
+  width: `${cropRect.value.x}px`,
+  height: `${cropRect.value.height}px`
+}))
+const cropMaskRightStyle = computed(() => ({
+  left: `${cropRect.value.x + cropRect.value.width}px`,
+  top: `${cropRect.value.y}px`,
+  width: `${Math.max(0, previewDisplayWidth.value - cropRect.value.x - cropRect.value.width)}px`,
+  height: `${cropRect.value.height}px`
+}))
+const cropMaskBottomStyle = computed(() => ({
+  left: '0px',
+  top: `${cropRect.value.y + cropRect.value.height}px`,
+  width: `${previewDisplayWidth.value}px`,
+  height: `${Math.max(0, previewDisplayHeight.value - cropRect.value.y - cropRect.value.height)}px`
+}))
 const capsuleStyle = computed(() => {
   const zoom = viewport.value?.zoom || 1
   const inverse = 1 / zoom
@@ -505,8 +564,14 @@ watch(
 )
 
 watch(showPreviewModal, (visible) => {
-  if (!visible) return
-  previewZoom.value = 1
+  if (visible) {
+    previewZoom.value = 1
+    return
+  }
+  activeTool.value = ''
+  cropInteraction.value = null
+  window.removeEventListener('mousemove', onCropPointerMove)
+  window.removeEventListener('mouseup', stopCropInteraction)
 })
 
 onUnmounted(() => clearProgressTimers())
@@ -527,6 +592,8 @@ watch(isUploading, (uploading) => {
 
 onUnmounted(() => {
   window.removeEventListener('beforeunload', beforeUnloadGuard)
+  window.removeEventListener('mousemove', onCropPointerMove)
+  window.removeEventListener('mouseup', stopCropInteraction)
 })
 
 const pickNearestSizeKey = (ratioKey, resolutionKey) => {
@@ -709,6 +776,167 @@ const triggerUpload = () => {
   uploadInputRef.value?.click()
 }
 
+const initializeCropRect = () => {
+  const width = previewDisplayWidth.value
+  const height = previewDisplayHeight.value
+  if (!width || !height) return
+  const nextWidth = Math.round(width * 0.72)
+  const nextHeight = Math.round(height * 0.72)
+  cropRect.value = {
+    x: Math.round((width - nextWidth) / 2),
+    y: Math.round((height - nextHeight) / 2),
+    width: nextWidth,
+    height: nextHeight
+  }
+}
+
+const normalizeCropRect = (nextRect) => {
+  const maxWidth = previewDisplayWidth.value
+  const maxHeight = previewDisplayHeight.value
+  const width = Math.max(MIN_CROP_SIZE, Math.min(nextRect.width, maxWidth))
+  const height = Math.max(MIN_CROP_SIZE, Math.min(nextRect.height, maxHeight))
+  const x = Math.max(0, Math.min(nextRect.x, Math.max(0, maxWidth - width)))
+  const y = Math.max(0, Math.min(nextRect.y, Math.max(0, maxHeight - height)))
+  return { x, y, width, height }
+}
+
+const startCropMode = async () => {
+  if (!props.data?.url) return
+  activeTool.value = 'crop'
+  showPreviewModal.value = true
+  previewZoom.value = 1
+  await nextTick()
+  initializeCropRect()
+}
+
+const cancelCropMode = () => {
+  activeTool.value = ''
+  cropInteraction.value = null
+}
+
+const startCropDrag = (event) => {
+  cropInteraction.value = {
+    type: 'drag',
+    startPointerX: event.clientX,
+    startPointerY: event.clientY,
+    startRect: { ...cropRect.value }
+  }
+  window.addEventListener('mousemove', onCropPointerMove)
+  window.addEventListener('mouseup', stopCropInteraction)
+}
+
+const startCropResize = (handle, event) => {
+  cropInteraction.value = {
+    type: 'resize',
+    handle,
+    startPointerX: event.clientX,
+    startPointerY: event.clientY,
+    startRect: { ...cropRect.value }
+  }
+  window.addEventListener('mousemove', onCropPointerMove)
+  window.addEventListener('mouseup', stopCropInteraction)
+}
+
+function onCropPointerMove(event) {
+  const current = cropInteraction.value
+  if (!current) return
+
+  const deltaX = event.clientX - current.startPointerX
+  const deltaY = event.clientY - current.startPointerY
+
+  if (current.type === 'drag') {
+    cropRect.value = normalizeCropRect({
+      x: current.startRect.x + deltaX,
+      y: current.startRect.y + deltaY,
+      width: current.startRect.width,
+      height: current.startRect.height
+    })
+    return
+  }
+
+  if (current.type === 'resize') {
+    const nextRect = { ...current.startRect }
+    if (current.handle.includes('n')) {
+      nextRect.y = current.startRect.y + deltaY
+      nextRect.height = current.startRect.height - deltaY
+    }
+    if (current.handle.includes('s')) {
+      nextRect.height = current.startRect.height + deltaY
+    }
+    if (current.handle.includes('w')) {
+      nextRect.x = current.startRect.x + deltaX
+      nextRect.width = current.startRect.width - deltaX
+    }
+    if (current.handle.includes('e')) {
+      nextRect.width = current.startRect.width + deltaX
+    }
+    cropRect.value = normalizeCropRect(nextRect)
+  }
+}
+
+function stopCropInteraction() {
+  cropInteraction.value = null
+  window.removeEventListener('mousemove', onCropPointerMove)
+  window.removeEventListener('mouseup', stopCropInteraction)
+}
+
+const computeRatioLabel = (width, height) => {
+  if (!width || !height) return '1:1'
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a)
+  const divisor = gcd(width, height)
+  return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`
+}
+
+const createLinkedImageNode = (payload = {}) => {
+  const currentNode = nodes.value.find((node) => node.id === props.id)
+  if (!currentNode) return null
+
+  const stageWidth = Number.parseFloat(stageStyle.value.width) || 320
+  const moduleWidth = stageWidth + 2
+  const gapX = 172
+  const nextPosition = {
+    x: currentNode.position.x + moduleWidth + gapX,
+    y: currentNode.position.y
+  }
+
+  const newNodeId = addNode('image', nextPosition, {
+    model: localImageModel.value,
+    quality: localImageQuality.value,
+    size: payload.size || localImageSize.value,
+    ratio: payload.ratio || localImageRatio.value,
+    resolution: payload.resolution || localResolution.value,
+    url: payload.url || '',
+    base64: payload.base64 || '',
+    fileType: payload.fileType || 'image/png',
+    label: 'Image',
+    error: '',
+    updatedAt: Date.now()
+  })
+
+  addEdge(edgeStrategy.resolve({
+    source: props.id,
+    target: newNodeId,
+    sourceHandle: 'right',
+    targetHandle: 'left'
+  }))
+
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    selected: node.id === newNodeId,
+    data: {
+      ...(node.data || {}),
+      selected: node.id === newNodeId
+    }
+  }))
+
+  setTimeout(() => {
+    updateNodeInternals(props.id)
+    updateNodeInternals(newNodeId)
+  }, 60)
+
+  return newNodeId
+}
+
 const resetUploadProgress = (delayMs = 1500) => {
   setTimeout(() => {
     if (uploadStage.value === 'success' || uploadStage.value === 'error') {
@@ -852,12 +1080,17 @@ const handleMetaMouseDown = (event) => {
 
 const openPreviewModal = () => {
   if (!props.data?.url) return
+  activeTool.value = ''
   previewZoom.value = 1
   showPreviewModal.value = true
 }
 const handleToolAction = async (key) => {
   if (key === 'remove-background') {
     await handleRemoveBackground()
+    return
+  }
+  if (key === 'crop') {
+    await startCropMode()
   }
 }
 const handleRemoveBackground = async () => {
@@ -879,18 +1112,109 @@ const handleRemoveBackground = async () => {
     const finalUrl = stableUrl || rawUrl
     if (!finalUrl) throw new Error('No image output')
 
-    updateNode(props.id, {
+    createLinkedImageNode({
       url: finalUrl,
       base64: '',
+      size: props.data?.size || localImageSize.value,
+      ratio: props.data?.ratio || localImageRatio.value,
+      resolution: props.data?.resolution || localResolution.value,
       fileType: 'image/png',
-      updatedAt: Date.now(),
-      error: ''
     })
-    await saveProject()
-    window.$message?.success('Background removed')
+    await flushSave()
+    window.$message?.success('Background removed and linked')
   } catch (err) {
     window.$message?.error(err?.message || 'Background removal failed')
   } finally {
+    toolActionLoading.value = ''
+  }
+}
+const loadImageElement = async (source) => {
+  const img = new Image()
+  img.decoding = 'async'
+  let objectUrl = ''
+  const resolvedSource = String(source || '').trim()
+  if (!resolvedSource) throw new Error('No image source')
+
+  if (!resolvedSource.startsWith('data:image/')) {
+    try {
+      const response = await fetch(resolvedSource)
+      const blob = await response.blob()
+      objectUrl = URL.createObjectURL(blob)
+      img.src = objectUrl
+    } catch {
+      img.crossOrigin = 'anonymous'
+      img.src = resolvedSource
+    }
+  } else {
+    img.src = resolvedSource
+  }
+
+  await new Promise((resolve, reject) => {
+    img.onload = resolve
+    img.onerror = reject
+  })
+
+  return {
+    img,
+    cleanup: () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }
+}
+
+const applyCrop = async () => {
+  const source = String(props.data?.base64 || props.data?.url || '').trim()
+  if (!source) return
+
+  toolActionLoading.value = 'crop'
+  let loadedImage = null
+
+  try {
+    loadedImage = await loadImageElement(source)
+    const scaleX = (loadedImage.img.naturalWidth || previewNaturalSize.value.width || 1) / Math.max(previewDisplayWidth.value, 1)
+    const scaleY = (loadedImage.img.naturalHeight || previewNaturalSize.value.height || 1) / Math.max(previewDisplayHeight.value, 1)
+    const cropX = Math.max(0, Math.round(cropRect.value.x * scaleX))
+    const cropY = Math.max(0, Math.round(cropRect.value.y * scaleY))
+    const cropWidth = Math.max(1, Math.round(cropRect.value.width * scaleX))
+    const cropHeight = Math.max(1, Math.round(cropRect.value.height * scaleY))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = cropWidth
+    canvas.height = cropHeight
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Crop canvas unavailable')
+
+    context.drawImage(loadedImage.img, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
+    if (!blob) throw new Error('Crop output failed')
+
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+
+    const stableUrl = await persistImageUrl(String(dataUrl || ''), `crop-${Date.now()}.png`)
+    const finalUrl = stableUrl || String(dataUrl || '')
+    createLinkedImageNode({
+      url: finalUrl,
+      base64: stableUrl ? '' : finalUrl,
+      size: `${cropWidth}x${cropHeight}`,
+      ratio: computeRatioLabel(cropWidth, cropHeight),
+      resolution: resolutionFromSizeKey(`${cropWidth}x${cropHeight}`),
+      fileType: 'image/png'
+    })
+
+    await flushSave()
+    cancelCropMode()
+    showPreviewModal.value = false
+    window.$message?.success('Cropped image created and linked')
+  } catch (err) {
+    window.$message?.error(err?.message || 'Crop failed')
+  } finally {
+    loadedImage?.cleanup?.()
     toolActionLoading.value = ''
   }
 }
@@ -900,6 +1224,9 @@ const handlePreviewImageLoad = (event) => {
   previewNaturalSize.value = {
     width: Number(target.naturalWidth) || 0,
     height: Number(target.naturalHeight) || 0
+  }
+  if (activeTool.value === 'crop') {
+    initializeCropRect()
   }
 }
 const zoomInPreview = () => {
@@ -1058,6 +1385,17 @@ const closeValidationModal = () => {
   cursor: not-allowed;
 }
 
+.zoom-tool-btn-primary {
+  background: rgba(255, 255, 255, 0.96);
+  color: #111111;
+  border-color: rgba(255, 255, 255, 0.96);
+}
+
+.zoom-tool-btn-primary:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
 .zoom-modal-stage {
   flex: 1;
   min-height: min(72vh, 720px);
@@ -1076,13 +1414,92 @@ const closeValidationModal = () => {
   padding: 20px;
 }
 
+.zoom-image-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .zoom-image-original {
   display: block;
-  max-width: none;
-  max-height: none;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   border-radius: 12px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+}
+
+.crop-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.crop-mask {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.48);
+  pointer-events: none;
+}
+
+.crop-box {
+  position: absolute;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.14);
+  cursor: move;
+}
+
+.crop-box::before,
+.crop-box::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.crop-box::before {
+  left: 33.333%;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  box-shadow: calc(33.333% + 1px) 0 0 rgba(255, 255, 255, 0.26);
+}
+
+.crop-box::after {
+  top: 33.333%;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  box-shadow: 0 calc(33.333% + 1px) 0 rgba(255, 255, 255, 0.26);
+}
+
+.crop-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  border: 2px solid #111111;
+}
+
+.crop-handle-nw {
+  left: -7px;
+  top: -7px;
+  cursor: nwse-resize;
+}
+
+.crop-handle-ne {
+  right: -7px;
+  top: -7px;
+  cursor: nesw-resize;
+}
+
+.crop-handle-sw {
+  left: -7px;
+  bottom: -7px;
+  cursor: nesw-resize;
+}
+
+.crop-handle-se {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
 }
 
 .capsule-tool-trigger {
