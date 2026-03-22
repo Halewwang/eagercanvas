@@ -111,7 +111,7 @@
             Reference {{ imagesByRole.referenceImages.length > 0 ? `✓ ${imagesByRole.referenceImages.length}` : '○' }}
           </span>
         </div>
-        <div v-if="soraInputWarning" class="text-[11px] leading-[1.35] text-[#f59e0b]">
+        <div v-if="soraInputWarning" class="text-[11px] leading-[1.35] text-[#c8a06a]">
           {{ soraInputWarning }}
         </div>
 

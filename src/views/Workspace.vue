@@ -124,7 +124,7 @@
       </section>
     </main>
 
-    <n-modal v-model:show="showRenameModal" preset="dialog" title="Rename Project" :show-icon="false">
+    <n-modal v-model:show="showRenameModal" preset="dialog" title="Rename Project" :show-icon="false" class="custom-modal">
       <input
         v-model="renameValue"
         class="modal-input"
@@ -137,7 +137,7 @@
       </template>
     </n-modal>
 
-    <n-modal v-model:show="showDeleteModal" preset="dialog" title="Delete Project" type="warning">
+    <n-modal v-model:show="showDeleteModal" preset="dialog" title="Delete Project" type="warning" class="custom-modal">
       <p>Delete "{{ deleteTargetName }}"? This action cannot be undone.</p>
       <template #action>
         <button class="ghost-btn" @click="showDeleteModal = false">Cancel</button>
@@ -415,8 +415,8 @@ onMounted(async () => {
 <style scoped>
 .workspace-shell {
   min-height: 100vh;
-  background: #0f1014;
-  color: #eceef4;
+  background: #0d0e10;
+  color: #f0f1f3;
   display: grid;
   grid-template-columns: 280px 1fr;
 }
@@ -455,7 +455,7 @@ onMounted(async () => {
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 10px;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .search-box input {
@@ -463,7 +463,7 @@ onMounted(async () => {
   background: transparent;
   border: none;
   outline: none;
-  color: #eceef4;
+  color: #f0f1f3;
   font-size: 13px;
 }
 
@@ -563,13 +563,15 @@ onMounted(async () => {
 
 .card-media {
   aspect-ratio: 16 / 9;
-  background: #1c1f27;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.035), transparent 48%),
+    linear-gradient(180deg, #18191c 0%, #141518 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .card-media img {
@@ -582,21 +584,27 @@ onMounted(async () => {
 .create-media {
   color: rgba(236, 238, 244, 0.45);
   border-style: dashed;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.04), transparent 52%),
+    linear-gradient(180deg, #1a1b1e 0%, #151619 100%);
 }
 
 .project-media {
-  background: #111214;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 255, 255, 0.02), transparent 46%),
+    linear-gradient(180deg, #111214 0%, #0d0e10 100%);
 }
 
 .fallback-icon {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   display: flex;
   align-items: center;
   justify-content: center;
   color: rgba(236, 238, 244, 0.7);
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .card-body {
@@ -616,16 +624,18 @@ onMounted(async () => {
 }
 
 .badge {
-  border: 1px solid #60a5fa;
-  color: #60a5fa;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(240, 241, 243, 0.88);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 999px;
   font-size: 11px;
   padding: 2px 8px;
 }
 
 .badge.mine {
-  border-color: #22c55e;
-  color: #22c55e;
+  border-color: rgba(165, 129, 99, 0.42);
+  color: #d5b08d;
+  background: rgba(165, 129, 99, 0.08);
 }
 
 .menu-btn {
@@ -698,7 +708,7 @@ onMounted(async () => {
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: transparent;
-  color: #eceef4;
+  color: #f0f1f3;
   height: 30px;
   padding: 0 10px;
   font-size: 12px;
@@ -706,9 +716,9 @@ onMounted(async () => {
 }
 
 .primary-btn {
-  background: #4f46e5;
-  color: #fff;
-  border-color: #4f46e5;
+  background: linear-gradient(180deg, #f0f2f4 0%, #d6dadd 100%);
+  color: #090b0d;
+  border-color: rgba(255, 255, 255, 0.32);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -721,16 +731,16 @@ onMounted(async () => {
 }
 
 .mini-btn.danger {
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: #c46a5c;
+  color: #c46a5c;
 }
 
 .modal-input {
   width: 100%;
-  background: #1c1f27;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, #17181b 0%, #111214 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  color: #eceef4;
+  color: #f0f1f3;
   padding: 10px;
 }
 

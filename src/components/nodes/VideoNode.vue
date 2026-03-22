@@ -278,10 +278,10 @@ const uploadProgressStyle = computed(() => {
   const percent = Math.max(0, Math.min(100, uploadProgress.value))
   const color =
     uploadStage.value === 'error'
-      ? '#ef4444'
+      ? '#c46a5c'
       : uploadStage.value === 'success'
-        ? '#22c55e'
-        : '#60a5fa'
+        ? '#8b9272'
+        : '#d8dbe0'
   return {
     width: `${percent}%`,
     background: color
@@ -751,7 +751,7 @@ watch(
   background: #000;
 }
 .binding-warning-text {
-  color: #f59e0b;
+  color: #c8a06a;
   font-size: 11px;
   line-height: 1.35;
   text-align: center;

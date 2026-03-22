@@ -170,6 +170,16 @@ body {
 }
 
 /* Custom Modal Styles */
+.custom-modal .n-card,
+.custom-modal .n-dialog {
+  background:
+    radial-gradient(120% 120% at 82% 18%, rgba(255, 255, 255, 0.04), transparent 42%),
+    linear-gradient(180deg, #131416 0%, #0c0d0f 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.56) !important;
+}
+
+.custom-modal .n-dialog__title,
 .custom-modal .n-card-header__main {
   color: var(--text-primary);
 }
@@ -183,6 +193,21 @@ body {
 
 .custom-modal .n-alert-body__content a {
   color: var(--accent-color) !important;
+}
+
+.custom-modal .n-dialog__content,
+.custom-modal .n-dialog__action,
+.custom-modal .n-card__content,
+.custom-modal .n-card__action {
+  color: var(--text-primary) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.custom-modal input,
+.custom-modal textarea {
+  background: linear-gradient(180deg, #17181b 0%, #101113 100%);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
 }
 
 .custom-modal .n-tabs-bar {

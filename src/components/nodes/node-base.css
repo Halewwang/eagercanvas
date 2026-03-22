@@ -204,8 +204,8 @@
 
 .node-selected {
   border-width: 1px;
-  border-color: #7278a7;
-  box-shadow: 0 0 0 1px rgba(132, 142, 220, 0.42);
+  border-color: rgba(165, 129, 99, 0.76);
+  box-shadow: 0 0 0 1px rgba(165, 129, 99, 0.34);
 }
 
 .node-glow-active::after {

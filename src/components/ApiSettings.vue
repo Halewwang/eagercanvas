@@ -194,7 +194,7 @@ const handleSave = async () => {
   border-radius: 999px;
   border: 1px solid rgba(143, 143, 143, 0.28);
   overflow: hidden;
-  background: #101218;
+  background: linear-gradient(180deg, #16171a 0%, #101113 100%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -247,7 +247,7 @@ const handleSave = async () => {
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid rgba(143, 143, 143, 0.24);
-  background: rgba(9, 11, 15, 0.85);
+  background: linear-gradient(180deg, rgba(24, 25, 28, 0.92) 0%, rgba(15, 16, 18, 0.92) 100%);
 }
 
 .field-card-full {

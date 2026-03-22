@@ -367,8 +367,8 @@ const vClickOutside = {
 }
 
 .tiny-btn.danger:hover {
-  color: #ef4444;
-  border-color: #ef4444;
+  color: #c46a5c;
+  border-color: #c46a5c;
 }
 
 /* Empty state | 空状态 */

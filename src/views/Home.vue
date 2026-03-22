@@ -269,7 +269,7 @@
       </template>
     </n-modal>
 
-    <n-modal v-model:show="showDeleteModal" preset="dialog" title="Delete Project" type="warning">
+    <n-modal v-model:show="showDeleteModal" preset="dialog" title="Delete Project" type="warning" class="custom-modal">
       <p>Delete "{{ deleteTargetName }}"? This action cannot be undone.</p>
       <template #action>
         <button @click="showDeleteModal = false" class="px-4 py-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>

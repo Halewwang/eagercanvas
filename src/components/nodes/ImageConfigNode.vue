@@ -107,7 +107,7 @@
           class="flora-button-primary w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
           <n-spin v-if="loading" :size="14" />
           <template v-else>
-            <span class="text-[#090b0d] bg-white/70 rounded-full w-4 h-4 flex items-center justify-center text-xs">◆</span>
+            <span class="text-[#090b0d] bg-[rgba(232,224,214,0.78)] rounded-full w-4 h-4 flex items-center justify-center text-xs">◆</span>
             Generate Now
           </template>
         </button>

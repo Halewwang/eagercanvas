@@ -553,10 +553,10 @@ const uploadProgressStyle = computed(() => {
   const percent = Math.max(0, Math.min(100, uploadProgress.value))
   const color =
     uploadStage.value === 'error'
-      ? '#ef4444'
+      ? '#c46a5c'
       : uploadStage.value === 'success'
-        ? '#22c55e'
-        : '#60a5fa'
+        ? '#8b9272'
+        : '#d8dbe0'
   return {
     width: `${percent}%`,
     background: color
@@ -1481,14 +1481,14 @@ const closeValidationModal = () => {
 }
 
 .zoom-tool-btn-primary {
-  background: rgba(255, 255, 255, 0.96);
+  background: linear-gradient(180deg, #ece7e2 0%, #d5cdc5 100%);
   color: #111111;
-  border-color: rgba(255, 255, 255, 0.96);
+  border-color: rgba(213, 205, 197, 0.92);
 }
 
 .zoom-tool-btn-primary:hover:not(:disabled) {
-  background: #ffffff;
-  border-color: #ffffff;
+  background: linear-gradient(180deg, #f2eeea 0%, #ddd5ce 100%);
+  border-color: rgba(221, 213, 206, 0.96);
 }
 
 .zoom-modal-stage {
