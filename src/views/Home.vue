@@ -78,7 +78,7 @@
           <!-- Glow Effect -->
           <div class="absolute -inset-1 bg-gradient-to-r from-[var(--accent-color)] to-[var(--accent-hover)] rounded-2xl opacity-20 group-hover:opacity-40 blur-lg transition-opacity duration-500" />
           
-          <div class="relative bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-2 transition-all duration-300 focus-within:border-[var(--accent-color)] shadow-2xl">
+          <div class="relative bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-2 transition-all duration-300 focus-within:border-[rgba(212,198,182,0.68)] focus-within:shadow-[0_0_0_1px_rgba(165,129,99,0.22)] shadow-2xl">
             <textarea
               v-model="inputText"
               placeholder="Describe your next creation..."
@@ -257,7 +257,7 @@
         <input 
           v-model="renameValue" 
           placeholder="Enter project name" 
-          class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent-color)] transition-colors"
+          class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[rgba(212,198,182,0.68)] focus:shadow-[0_0_0_1px_rgba(165,129,99,0.22)] transition-colors"
           @keyup.enter="confirmRename"
         />
       </div>

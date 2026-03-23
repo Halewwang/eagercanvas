@@ -23,13 +23,13 @@
         v-model="displayName"
         type="text"
         placeholder="Display name"
-        class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent-color)]"
+        class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[rgba(212,198,182,0.68)] focus:shadow-[0_0_0_1px_rgba(165,129,99,0.22)]"
       />
       <input
         v-model="email"
         type="email"
         placeholder="you@example.com"
-        class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent-color)]"
+        class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[rgba(212,198,182,0.68)] focus:shadow-[0_0_0_1px_rgba(165,129,99,0.22)]"
       />
       <div class="flex gap-2">
         <input
@@ -37,7 +37,7 @@
           type="text"
           maxlength="6"
           placeholder="6-digit code"
-          class="flex-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[var(--accent-color)]"
+          class="flex-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[rgba(212,198,182,0.68)] focus:shadow-[0_0_0_1px_rgba(165,129,99,0.22)]"
         />
         <button class="flora-button-ghost px-4 rounded-xl" :disabled="sending" @click="handleSendCode">
           {{ sending ? 'Sending' : 'Send Code' }}

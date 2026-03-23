@@ -126,12 +126,6 @@
         >
           <div class="capsule-inner capsule-inner-selected">
             <div class="capsule-group">
-              <button class="capsule-select group-title-pill" @mousedown="startGroupDrag(selectedGroup, $event)" @click.stop="selectGroup(selectedGroup.id)">
-                {{ selectedGroup?.name }}
-              </button>
-            </div>
-            <div class="capsule-divider" />
-            <div class="capsule-group">
               <button class="capsule-icon" @click="openRenameGroupModal" title="Rename">
                 <n-icon :size="14"><CreateOutline /></n-icon>
               </button>
@@ -1318,6 +1312,9 @@ onUnmounted(() => {
 .canvas-modal :deep(.n-input) {
   background: #0f0f0f;
   border-radius: 10px;
+  --n-color: #111214 !important;
+  --n-color-disabled: #111214 !important;
+  --n-color-hover: #111214 !important;
   --n-border: rgba(143, 143, 143, 0.24) !important;
   --n-border-hover: rgba(186, 190, 196, 0.34) !important;
   --n-border-focus: rgba(212, 198, 182, 0.68) !important;
@@ -1330,6 +1327,13 @@ onUnmounted(() => {
 .canvas-modal :deep(.n-input .n-input__border),
 .canvas-modal :deep(.n-input .n-input__state-border) {
   border-color: rgba(143, 143, 143, 0.24);
+}
+
+.canvas-modal :deep(.n-input-wrapper),
+.canvas-modal :deep(.n-input__textarea),
+.canvas-modal :deep(.n-input__textarea-el),
+.canvas-modal :deep(.n-input__input-el) {
+  background: #111214 !important;
 }
 
 .canvas-share-modal :deep(.n-input-wrapper),
@@ -1626,18 +1630,6 @@ onUnmounted(() => {
 
 .group-primary-btn {
   min-width: 88px;
-}
-
-.group-title-pill {
-  cursor: grab;
-  max-width: 180px;
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1;
-  padding: 7px 9px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .group-danger-icon {
