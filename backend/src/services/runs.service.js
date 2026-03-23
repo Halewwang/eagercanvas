@@ -8,6 +8,14 @@ import {
   providerGenerateImage,
   providerVideoStatus
 } from './provider.service.js'
+import { get302RecordByRequestId } from './dashboard302.service.js'
+import { resolveUserProviderAccess } from './admin-usage.service.js'
+import {
+  extractProviderRequestId,
+  extractUsageSnapshot,
+  insertUsageEvent,
+  updateUsageEventByRunId
+} from './usage-ledger.service.js'
 
 const runSchema = z.object({
   type: z.enum(['chat', 'image', 'video']),
@@ -15,11 +23,6 @@ const runSchema = z.object({
   model: z.string().optional(),
   payload: z.any()
 })
-
-const eventBase = {
-  provider: 'openai-compatible',
-  event_type: 'generation'
-}
 
 const extractProviderTaskId = (result = {}) => {
   const candidates = [
@@ -137,28 +140,54 @@ const syncRunStatusFromVideoTask = async ({ userId, runId, taskResult }) => {
   }
 }
 
-const insertUsageEvent = async (userId, runId, input = {}) => {
-  const { error } = await supabase.from('usage_events').insert({
-    user_id: userId,
-    run_id: runId,
-    provider: eventBase.provider,
-    model: input.model || null,
-    event_type: input.eventType || eventBase.event_type,
-    input_tokens: input.inputTokens ?? 0,
-    output_tokens: input.outputTokens ?? 0,
-    image_count: input.imageCount ?? 0,
-    video_seconds: input.videoSeconds ?? 0,
-    cost_usd: input.costUsd ?? 0,
-    latency_ms: input.latencyMs ?? 0
-  })
+const normalizeDashboardRecord = (record = {}) => {
+  if (!record || typeof record !== 'object') return null
+  return {
+    model: String(record.model || record.model_name || '').trim(),
+    inputTokens: Number(record.input_token || record.inputTokens || 0),
+    outputTokens: Number(record.output_token || record.outputTokens || 0),
+    costUsd: Number(record.cost || record.cost_usd || 0),
+    rawUsage: record
+  }
+}
 
-  if (error) {
-    console.warn('[usage] insert failed', error.message)
+const enrichUsageWith302Record = async (providerResponse = {}, fallbackUsage = {}) => {
+  const requestId = extractProviderRequestId(providerResponse)
+  if (!requestId) {
+    return {
+      requestId: '',
+      usage: fallbackUsage
+    }
+  }
+
+  try {
+    const recordRsp = await get302RecordByRequestId(requestId)
+    const record = normalizeDashboardRecord(recordRsp?.data ?? recordRsp)
+    if (!record) {
+      return { requestId, usage: fallbackUsage }
+    }
+    return {
+      requestId,
+      usage: {
+        inputTokens: record.inputTokens || fallbackUsage.inputTokens || 0,
+        outputTokens: record.outputTokens || fallbackUsage.outputTokens || 0,
+        costUsd: Number.isFinite(record.costUsd) ? record.costUsd : (fallbackUsage.costUsd || 0),
+        rawUsage: record.rawUsage || fallbackUsage.rawUsage || null
+      }
+    }
+  } catch (error) {
+    console.warn('[usage] enrich from 302 record failed', error.message || error)
+    return {
+      requestId,
+      usage: fallbackUsage
+    }
   }
 }
 
 export const createRun = async (userId, input) => {
   const payload = runSchema.parse(input)
+  const providerAccess = await resolveUserProviderAccess(userId, payload.payload?.api_name || payload.payload?.apiName)
+  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
 
   const startedAt = Date.now()
   const { data: run, error: runInsertError } = await supabase
@@ -178,11 +207,11 @@ export const createRun = async (userId, input) => {
   try {
     let providerResponse
     if (payload.type === 'chat') {
-      providerResponse = await providerChatCompletions(payload.payload)
+      providerResponse = await providerChatCompletions(payload.payload, providerRequestOptions)
     } else if (payload.type === 'image') {
-      providerResponse = await providerGenerateImage(payload.payload)
+      providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
     } else {
-      providerResponse = await providerCreateVideo(payload.payload)
+      providerResponse = await providerCreateVideo(payload.payload, providerRequestOptions)
     }
 
     const latencyMs = Date.now() - startedAt
@@ -204,10 +233,23 @@ export const createRun = async (userId, input) => {
           .update({ status: 'completed', finished_at: new Date().toISOString() })
           .eq('id', run.id)
 
-        await insertUsageEvent(userId, run.id, {
+        const baseUsage = extractUsageSnapshot(providerResponse)
+        const enrichedUsage = await enrichUsageWith302Record(providerResponse, baseUsage)
+        await insertUsageEvent({
+          userId,
+          runId: run.id,
           model: payload.model || payload.payload?.model,
+          apiName: providerAccess.apiName,
+          providerRequestId: enrichedUsage.requestId || providerTaskId,
+          inputTokens: enrichedUsage.usage.inputTokens || 0,
+          outputTokens: enrichedUsage.usage.outputTokens || 0,
           videoSeconds: payload.payload?.seconds || payload.payload?.duration || 0,
           latencyMs,
+          costUsd: enrichedUsage.usage.costUsd || 0,
+          estimatedCostUsd: baseUsage.costUsd || 0,
+          billedCostUsd: enrichedUsage.usage.costUsd || 0,
+          billingStatus: enrichedUsage.requestId ? 'billed' : (providerTaskId ? 'pending' : 'estimated'),
+          rawUsage: enrichedUsage.usage.rawUsage || providerResponse?.raw || null,
           eventType: payload.type
         })
 
@@ -227,10 +269,19 @@ export const createRun = async (userId, input) => {
         .update({ status: 'running', finished_at: null, error_msg: null })
         .eq('id', run.id)
 
-      await insertUsageEvent(userId, run.id, {
+      await insertUsageEvent({
+        userId,
+        runId: run.id,
         model: payload.model || payload.payload?.model,
+        apiName: providerAccess.apiName,
+        providerRequestId: providerTaskId,
         videoSeconds: payload.payload?.seconds || payload.payload?.duration || 0,
         latencyMs,
+        costUsd: 0,
+        estimatedCostUsd: 0,
+        billedCostUsd: 0,
+        billingStatus: providerTaskId ? 'pending' : 'estimated',
+        rawUsage: providerResponse?.raw || null,
         eventType: 'video_task_created'
       })
 
@@ -249,16 +300,26 @@ export const createRun = async (userId, input) => {
       .update({ status: 'completed', finished_at: new Date().toISOString() })
       .eq('id', run.id)
 
-    const usage = providerResponse?.usage || {}
+    const baseUsage = extractUsageSnapshot(providerResponse)
+    const enrichedUsage = await enrichUsageWith302Record(providerResponse, baseUsage)
     const imageCount = Array.isArray(providerResponse?.data) ? providerResponse.data.length : 0
 
-    await insertUsageEvent(userId, run.id, {
+    await insertUsageEvent({
+      userId,
+      runId: run.id,
       model: payload.model || payload.payload?.model,
-      inputTokens: usage.prompt_tokens || usage.input_tokens || 0,
-      outputTokens: usage.completion_tokens || usage.output_tokens || 0,
+      apiName: providerAccess.apiName,
+      providerRequestId: enrichedUsage.requestId,
+      inputTokens: enrichedUsage.usage.inputTokens || 0,
+      outputTokens: enrichedUsage.usage.outputTokens || 0,
       imageCount,
       videoSeconds: payload.type === 'video' ? payload.payload?.seconds || 0 : 0,
       latencyMs,
+      costUsd: enrichedUsage.usage.costUsd || 0,
+      estimatedCostUsd: baseUsage.costUsd || 0,
+      billedCostUsd: enrichedUsage.usage.costUsd || 0,
+      billingStatus: enrichedUsage.requestId ? 'billed' : 'estimated',
+      rawUsage: enrichedUsage.usage.rawUsage || providerResponse?.raw || null,
       eventType: payload.type
     })
 
@@ -301,8 +362,26 @@ export const createVideoGeneration = async (userId, payload) => {
 
 export const getVideoTask = async (_userId, taskId) => {
   await assertVideoTaskOwnership({ userId: _userId, taskId })
-  const result = await providerVideoStatus(taskId)
+  const providerAccess = await resolveUserProviderAccess(_userId)
+  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
+  const result = await providerVideoStatus(taskId, providerRequestOptions)
   const runId = await findVideoRunIdByTask({ userId: _userId, taskId })
   await syncRunStatusFromVideoTask({ userId: _userId, runId, taskResult: result })
+  const status = String(result?.status || '').toLowerCase()
+  if (runId && ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished'].includes(status)) {
+    const baseUsage = extractUsageSnapshot(result)
+    const enrichedUsage = await enrichUsageWith302Record(result, baseUsage)
+    await updateUsageEventByRunId(runId, {
+      input_tokens: enrichedUsage.usage.inputTokens || 0,
+      output_tokens: enrichedUsage.usage.outputTokens || 0,
+      cost_usd: enrichedUsage.usage.costUsd || 0,
+      estimated_cost_usd: baseUsage.costUsd || 0,
+      billed_cost_usd: enrichedUsage.usage.costUsd || 0,
+      billing_status: enrichedUsage.requestId ? 'billed' : 'estimated',
+      provider_request_id: enrichedUsage.requestId || extractProviderTaskId(result) || taskId,
+      api_name: providerAccess.apiName || null,
+      raw_usage: enrichedUsage.usage.rawUsage || result?.raw || null
+    })
+  }
   return result
 }

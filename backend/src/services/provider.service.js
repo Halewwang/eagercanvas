@@ -35,25 +35,33 @@ const buildProviderUrl = (baseUrl, path) => {
   return `${base}${normalizedPath}`
 }
 
-const buildHeaders = (extra = {}) => {
-  if (!env.providerApiKey) {
+const resolveApiKey = (requestOptions = {}) => {
+  const override = String(requestOptions?.apiKey || '').trim()
+  const fallback = String(env.providerApiKey || '').trim()
+  return override || fallback
+}
+
+const buildHeaders = (extra = {}, requestOptions = {}) => {
+  const apiKey = resolveApiKey(requestOptions)
+  if (!apiKey) {
     throw new HttpError(500, 'PROVIDER_API_KEY is not configured', 'PROVIDER_NOT_CONFIGURED')
   }
 
   return {
-    Authorization: `Bearer ${env.providerApiKey}`,
+    Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
     ...extra
   }
 }
 
-const buildAuthHeaders = (extra = {}) => {
-  if (!env.providerApiKey) {
+const buildAuthHeaders = (extra = {}, requestOptions = {}) => {
+  const apiKey = resolveApiKey(requestOptions)
+  if (!apiKey) {
     throw new HttpError(500, 'PROVIDER_API_KEY is not configured', 'PROVIDER_NOT_CONFIGURED')
   }
 
   return {
-    Authorization: `Bearer ${env.providerApiKey}`,
+    Authorization: `Bearer ${apiKey}`,
     ...extra
   }
 }
@@ -69,14 +77,14 @@ const parseProviderResponse = async (response) => {
   }
 }
 
-const callProviderWithBase = async (base, path, body, method = 'POST') => {
+const callProviderWithBase = async (base, path, body, method = 'POST', requestOptions = {}) => {
   const controller = new AbortController()
   const timeoutMs = Number(env.providerTimeoutMs || 90000)
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(buildProviderUrl(base, path), {
       method,
-      headers: buildHeaders(),
+      headers: buildHeaders({}, requestOptions),
       body: method === 'GET' ? undefined : JSON.stringify(body),
       signal: controller.signal
     })
@@ -93,14 +101,14 @@ const callProviderWithBase = async (base, path, body, method = 'POST') => {
   }
 }
 
-const callProviderMultipartWithBase = async (base, path, formData, method = 'POST') => {
+const callProviderMultipartWithBase = async (base, path, formData, method = 'POST', requestOptions = {}) => {
   const controller = new AbortController()
   const timeoutMs = Number(env.providerTimeoutMs || 90000)
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(buildProviderUrl(base, path), {
       method,
-      headers: buildAuthHeaders(),
+      headers: buildAuthHeaders({}, requestOptions),
       body: method === 'GET' ? undefined : formData,
       signal: controller.signal
     })
@@ -117,7 +125,7 @@ const callProviderMultipartWithBase = async (base, path, formData, method = 'POS
   }
 }
 
-const callProvider = async (path, body, method = 'POST') => {
+const callProvider = async (path, body, method = 'POST', requestOptions = {}) => {
   if (!providerBases.length) {
     throw new HttpError(500, 'PROVIDER_API_BASE_URL is not configured', 'PROVIDER_NOT_CONFIGURED')
   }
@@ -125,7 +133,7 @@ const callProvider = async (path, body, method = 'POST') => {
   let lastError
   for (const base of providerBases) {
     try {
-      return await callProviderWithBase(base, path, body, method)
+      return await callProviderWithBase(base, path, body, method, requestOptions)
     } catch (error) {
       lastError = error
       const status = Number(error?.status || 0)
@@ -140,7 +148,7 @@ const callProvider = async (path, body, method = 'POST') => {
   throw lastError || new HttpError(502, 'Provider request failed', 'PROVIDER_ERROR')
 }
 
-const callProviderMultipart = async (path, formData, method = 'POST') => {
+const callProviderMultipart = async (path, formData, method = 'POST', requestOptions = {}) => {
   if (!providerBases.length) {
     throw new HttpError(500, 'PROVIDER_API_BASE_URL is not configured', 'PROVIDER_NOT_CONFIGURED')
   }
@@ -148,7 +156,7 @@ const callProviderMultipart = async (path, formData, method = 'POST') => {
   let lastError
   for (const base of providerBases) {
     try {
-      return await callProviderMultipartWithBase(base, path, formData, method)
+      return await callProviderMultipartWithBase(base, path, formData, method, requestOptions)
     } catch (error) {
       lastError = error
       const status = Number(error?.status || 0)
@@ -163,11 +171,11 @@ const callProviderMultipart = async (path, formData, method = 'POST') => {
   throw lastError || new HttpError(502, 'Provider request failed', 'PROVIDER_ERROR')
 }
 
-const callProviderWithFallback = async (paths, method = 'GET', body = null) => {
+const callProviderWithFallback = async (paths, method = 'GET', body = null, requestOptions = {}) => {
   let lastError
   for (const path of paths) {
     try {
-      return await callProvider(path, body, method)
+      return await callProvider(path, body, method, requestOptions)
     } catch (error) {
       lastError = error
       const status = Number(error?.status || 0)
@@ -464,13 +472,13 @@ const extractPredictionMeta = (response = {}) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-const pollPredictionResult = async (requestId, attempts = 20, intervalMs = 3000) => {
+const pollPredictionResult = async (requestId, attempts = 20, intervalMs = 3000, requestOptions = {}) => {
   const safeRequestId = String(requestId || '').trim()
   if (!safeRequestId) return null
 
   let lastResponse = null
   for (let index = 0; index < attempts; index += 1) {
-    const current = await callProvider(`/ws/api/v3/predictions/${safeRequestId}/result`, null, 'GET')
+    const current = await callProvider(`/ws/api/v3/predictions/${safeRequestId}/result`, null, 'GET', requestOptions)
     lastResponse = current
     const normalized = normalizeImageResponse(current)
     if (Array.isArray(normalized.data) && normalized.data.length > 0) {
@@ -657,10 +665,10 @@ const extractSoraStatus = (data = {}) => {
   )
 }
 
-export const providerChatCompletions = (payload) =>
-  callProvider('/v1/chat/completions', payload)
+export const providerChatCompletions = (payload, requestOptions = {}) =>
+  callProvider('/v1/chat/completions', payload, 'POST', requestOptions)
 
-export const providerGenerateImage = async (payload = {}) => {
+export const providerGenerateImage = async (payload = {}, requestOptions = {}) => {
   const model = String(payload.model_name || payload.model || '').trim()
   const size = String(payload.size || '')
   const aspectRatio = String(
@@ -720,12 +728,12 @@ export const providerGenerateImage = async (payload = {}) => {
     const endpoint = inputImages.length > 0
       ? `${endpointBase}/edit`
       : `${endpointBase}/text-to-image`
-    let raw = await callProvider(endpoint, body)
+    let raw = await callProvider(endpoint, body, 'POST', requestOptions)
     let normalized = normalizeImageResponse(raw)
     if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
       const prediction = extractPredictionMeta(raw)
       if (prediction.id && ['created', 'queued', 'pending', 'processing', 'running', 'in_progress'].includes(prediction.status)) {
-        raw = await pollPredictionResult(prediction.id)
+        raw = await pollPredictionResult(prediction.id, 20, 3000, requestOptions)
         normalized = normalizeImageResponse(raw)
       }
     }
@@ -735,7 +743,7 @@ export const providerGenerateImage = async (payload = {}) => {
     return normalized
   }
 
-  const raw = await callProvider('/v1/images/generations', payload)
+  const raw = await callProvider('/v1/images/generations', payload, 'POST', requestOptions)
   const normalized = normalizeImageResponse(raw)
   if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
     throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
@@ -783,7 +791,7 @@ export const providerRemoveBackground = async (payload = {}) => {
   }
 }
 
-export const providerCreateVideo = async (payload = {}) => {
+export const providerCreateVideo = async (payload = {}, requestOptions = {}) => {
   const model = String(payload.model_name || payload.model || '').trim()
   const lowerModel = model.toLowerCase()
   const prompt = String(payload.prompt || '').trim()
@@ -815,7 +823,7 @@ export const providerCreateVideo = async (payload = {}) => {
       soraRequest.callback = payload.callback.trim()
     }
 
-    const raw = await callProvider('/openai/v1/videos', soraRequest)
+    const raw = await callProvider('/openai/v1/videos', soraRequest, 'POST', requestOptions)
 
     return {
       task_id: extractTaskId(raw),
@@ -845,7 +853,8 @@ export const providerCreateVideo = async (payload = {}) => {
       {
         ...(klingRequest || {}),
         model: mappedModel || 'kling-o1'
-      }
+      },
+      requestOptions
     )
 
     return {
@@ -882,7 +891,7 @@ export const providerCreateVideo = async (payload = {}) => {
       const endpoint = inputReference
         ? '/ws/api/v3/google/veo3.1/image-to-video'
         : '/ws/api/v3/google/veo3.1/text-to-video'
-      raw = await callProvider(endpoint, requestBody)
+      raw = await callProvider(endpoint, requestBody, 'POST', requestOptions)
     } catch (error) {
       if (isEndpointNotFoundError(error)) {
         try {
@@ -899,7 +908,8 @@ export const providerCreateVideo = async (payload = {}) => {
               aspect_ratio: aspectRatio || '16:9',
               duration: clampToAllowedValue(duration, [4, 6, 8], 8),
               images: inputReference ? [inputReference] : undefined
-            }
+            },
+            requestOptions
           )
         } catch (fallbackError) {
           const normalized = normalizeErrorMessage(fallbackError?.message)
@@ -942,7 +952,8 @@ export const providerCreateVideo = async (payload = {}) => {
   const genericRaw = await callProviderWithFallback(
     ['/302/v2/video/create'],
     'POST',
-    genericBody
+    genericBody,
+    requestOptions
   )
 
   return {
@@ -952,7 +963,7 @@ export const providerCreateVideo = async (payload = {}) => {
   }
 }
 
-export const providerVideoStatus = async (taskId) => {
+export const providerVideoStatus = async (taskId, requestOptions = {}) => {
   const safeTaskId = String(taskId || '')
   const normalizedSoraTaskId = normalizeSoraTaskId(taskId)
   const mayBeKling = safeTaskId.startsWith('kling_') || safeTaskId.startsWith('task_')
@@ -978,13 +989,13 @@ export const providerVideoStatus = async (taskId) => {
 
   if (mayBeSora) {
     try {
-      const raw = await callProvider(`/openai/v1/videos/${normalizedSoraTaskId}`, null, 'GET')
+      const raw = await callProvider(`/openai/v1/videos/${normalizedSoraTaskId}`, null, 'GET', requestOptions)
       let status = extractSoraStatus(raw)
       let videoUrl = extractVideoUrl(raw)
 
       if (status === 'completed' && !videoUrl) {
         try {
-          const content = await callProvider(`/openai/v1/videos/${normalizedSoraTaskId}/content?variant=video`, null, 'GET')
+          const content = await callProvider(`/openai/v1/videos/${normalizedSoraTaskId}/content?variant=video`, null, 'GET', requestOptions)
           videoUrl = extractVideoUrl(content)
           if (content && typeof raw === 'object' && raw !== null) {
             raw.content = content
@@ -1007,7 +1018,7 @@ export const providerVideoStatus = async (taskId) => {
 
   if (mayBeKling) {
     try {
-      const raw = await callProviderWithFallback(klingStatusPaths)
+      const raw = await callProviderWithFallback(klingStatusPaths, 'GET', null, requestOptions)
 
       const videoUrl = extractVideoUrl(raw)
       const status = videoUrl
@@ -1027,7 +1038,7 @@ export const providerVideoStatus = async (taskId) => {
 
   if (mayBeWaveSpeed) {
     try {
-      const raw = await callProviderWithFallback(veoStatusPaths, 'GET')
+      const raw = await callProviderWithFallback(veoStatusPaths, 'GET', null, requestOptions)
       const status = extractSoraStatus(raw)
       const videoUrl = extractVideoUrl(raw)
 
@@ -1044,7 +1055,7 @@ export const providerVideoStatus = async (taskId) => {
 
   // Try Veo / Generic Video Generation API
   try {
-    const raw = await callProviderWithFallback(veoStatusPaths, 'GET')
+    const raw = await callProviderWithFallback(veoStatusPaths, 'GET', null, requestOptions)
     const status = extractSoraStatus(raw.status || raw.data?.status || raw.task_status)
     const videoUrl = extractVideoUrl(raw)
 

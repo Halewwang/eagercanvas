@@ -32,6 +32,9 @@ const parseResponse = async (response) => {
   }
 }
 
+const runtimeApiKeyCache = new Map()
+const RUNTIME_API_KEY_TTL_MS = 60 * 1000
+
 const call302Dashboard = async (path, options = {}) => {
   const { method = 'GET', params = null, body } = options
   const controller = new AbortController()
@@ -94,6 +97,27 @@ export const get302ApiKey = (apiName) => {
   const safeName = String(apiName || '').trim()
   if (!safeName) throw new HttpError(400, 'apiName is required', 'INVALID_API_NAME')
   return call302Dashboard(`/dashboard/api_key/${encodeURIComponent(safeName)}`)
+}
+
+export const get302RuntimeApiKeyByName = async (apiName) => {
+  const safeName = String(apiName || '').trim()
+  if (!safeName) return ''
+
+  const cached = runtimeApiKeyCache.get(safeName)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.apiKey
+  }
+
+  const response = await get302ApiKey(safeName)
+  const payload = response?.data && typeof response.data === 'object' ? response.data : response
+  const apiKey = String(payload?.api_key || payload?.key || '').trim()
+  if (!apiKey) return ''
+
+  runtimeApiKeyCache.set(safeName, {
+    apiKey,
+    expiresAt: Date.now() + RUNTIME_API_KEY_TTL_MS
+  })
+  return apiKey
 }
 
 export const create302ApiKey = (payload = {}) =>

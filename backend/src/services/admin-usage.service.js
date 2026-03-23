@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase.js'
 import { invalidateUserAuthzCache } from './rbac.service.js'
+import { get302RuntimeApiKeyByName } from './dashboard302.service.js'
 import { HttpError } from '../utils/http.js'
 
 const ASSIGNMENT_TABLE = 'user_api_key_assignments'
@@ -31,6 +32,49 @@ const loadAssignments = async () => {
   }
 
   return Array.isArray(data) ? data : []
+}
+
+export const getUserAssignedApiKeys = async (userId) => {
+  const safeUserId = String(userId || '').trim()
+  if (!safeUserId) return []
+
+  const { data, error } = await supabase
+    .from(ASSIGNMENT_TABLE)
+    .select('api_name, created_at')
+    .eq('user_id', safeUserId)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    if (isMissingRelation(error)) return []
+    throw new HttpError(500, error.message, 'ASSIGNMENT_QUERY_FAILED')
+  }
+
+  return Array.isArray(data) ? data : []
+}
+
+export const resolveUserProviderAccess = async (userId, requestedApiName = '') => {
+  const preferredApiName = String(requestedApiName || '').trim()
+  const assignments = await getUserAssignedApiKeys(userId)
+  const assignedNames = assignments.map((item) => String(item.api_name || '').trim()).filter(Boolean)
+
+  const apiName = preferredApiName && assignedNames.includes(preferredApiName)
+    ? preferredApiName
+    : assignedNames[0] || ''
+
+  if (!apiName) {
+    return {
+      apiName: '',
+      apiKey: '',
+      assignedApiNames: assignedNames
+    }
+  }
+
+  const apiKey = await get302RuntimeApiKeyByName(apiName)
+  return {
+    apiName,
+    apiKey,
+    assignedApiNames: assignedNames
+  }
 }
 
 const loadRolesMap = async (userIds) => {
@@ -109,16 +153,21 @@ const toIsoDateEnd = (value) => {
 }
 
 export const listUsersForAdmin = async () => {
-  const [usersRes, profilesRes, dailyAggRes, assignments] = await Promise.all([
+  const [usersRes, profilesRes, dailyAggRes, assignments, usageEventsRes] = await Promise.all([
     supabase.from('users').select('*').order('created_at', { ascending: false }),
     supabase.from('user_profiles').select('user_id, display_name, registered_at, last_login_at'),
     supabase.from('usage_daily_agg').select('user_id, total_calls, total_tokens, total_images, total_video_seconds, total_cost_usd'),
-    loadAssignments()
+    loadAssignments(),
+    supabase
+      .from('usage_events')
+      .select('user_id, api_name, cost_usd, billing_status, created_at')
+      .order('created_at', { ascending: false })
   ])
 
   if (usersRes.error) throw new HttpError(500, usersRes.error.message, 'USERS_QUERY_FAILED')
   if (profilesRes.error) throw new HttpError(500, profilesRes.error.message, 'PROFILES_QUERY_FAILED')
   if (dailyAggRes.error) throw new HttpError(500, dailyAggRes.error.message, 'USAGE_AGG_QUERY_FAILED')
+  if (usageEventsRes.error) throw new HttpError(500, usageEventsRes.error.message, 'USAGE_EVENTS_QUERY_FAILED')
   const rolesMap = await loadRolesMap((usersRes.data || []).map((item) => item.id))
 
   const profileMap = new Map((profilesRes.data || []).map((p) => [p.user_id, p]))
@@ -149,8 +198,36 @@ export const listUsersForAdmin = async () => {
     assignmentMap.set(row.user_id, list)
   }
 
+  const usageEventMetaMap = new Map()
+  for (const row of usageEventsRes.data || []) {
+    const key = row.user_id
+    const current = usageEventMetaMap.get(key) || {
+      lastActivityAt: null,
+      pendingBillingCount: 0,
+      byApiKey: new Map()
+    }
+
+    if (!current.lastActivityAt) current.lastActivityAt = row.created_at || null
+    if (String(row.billing_status || '') === 'pending') current.pendingBillingCount += 1
+
+    const apiName = String(row.api_name || '').trim()
+    if (apiName) {
+      const item = current.byApiKey.get(apiName) || {
+        apiName,
+        totalCostUsd: 0,
+        totalCalls: 0
+      }
+      item.totalCostUsd += Number(row.cost_usd || 0)
+      item.totalCalls += 1
+      current.byApiKey.set(apiName, item)
+    }
+
+    usageEventMetaMap.set(key, current)
+  }
+
   return (usersRes.data || []).map((user) => {
     const profile = profileMap.get(user.id)
+    const usageMeta = usageEventMetaMap.get(user.id)
     return {
       id: user.id,
       email: user.email,
@@ -168,6 +245,13 @@ export const listUsersForAdmin = async () => {
         totalImages: 0,
         totalVideoSeconds: 0,
         totalCostUsd: 0
+      },
+      usageMeta: {
+        lastActivityAt: usageMeta?.lastActivityAt || null,
+        pendingBillingCount: Number(usageMeta?.pendingBillingCount || 0),
+        byApiKey: usageMeta
+          ? [...usageMeta.byApiKey.values()].sort((a, b) => Number(b.totalCostUsd || 0) - Number(a.totalCostUsd || 0))
+          : []
       },
       assignedApiKeys: assignmentMap.get(user.id) || []
       ,

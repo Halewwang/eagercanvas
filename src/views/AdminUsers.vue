@@ -143,6 +143,26 @@
                     <button v-if="canReadAudit" class="ui-micro-btn text-left" @click="scrollToSection('audit')">打开审计日志</button>
                   </div>
                 </div>
+
+                <div class="ui-glass-card rounded-2xl p-4 md:p-5">
+                  <h3 class="text-lg font-medium text-white">重点观察</h3>
+                  <div class="mt-4 space-y-3 text-sm">
+                    <div class="ui-info-line"><span>待分配 Key 用户</span><strong>{{ unassignedActiveUsers.length }}</strong></div>
+                    <div class="ui-info-line"><span>待对账用户</span><strong>{{ pendingBillingUsers }}</strong></div>
+                    <div class="ui-info-line"><span>活跃 Key</span><strong>{{ activeAttributedKeys }}</strong></div>
+                  </div>
+                  <div class="mt-4 space-y-2">
+                    <p class="text-xs uppercase tracking-[0.12em] text-white/40">Top 消耗用户</p>
+                    <div v-if="topSpenders.length === 0" class="text-xs text-white/45">暂无归因成本数据</div>
+                    <div v-for="item in topSpenders" :key="`spender-${item.id}`" class="insight-row">
+                      <div>
+                        <p class="text-sm text-white/88">{{ item.displayName || item.email || item.id }}</p>
+                        <p class="text-[11px] text-white/45">{{ primaryApiKey(item) }}</p>
+                      </div>
+                      <strong>{{ formatUsd(item.usage?.totalCostUsd, 2) }}</strong>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
@@ -199,6 +219,7 @@
                     <th class="px-3 py-4">状态</th>
                     <th class="px-3 py-4">角色</th>
                     <th class="px-3 py-4">调用量</th>
+                    <th class="px-3 py-4">归因状态</th>
                     <th v-if="showAssignmentsColumn" class="px-3 py-4">已分配密钥</th>
                     <th v-if="canManageRoles" class="px-3 py-4">角色编辑</th>
                     <th v-if="showUserActions" class="px-3 py-4">操作</th>
@@ -224,7 +245,20 @@
                     </td>
                     <td class="px-3 py-4 text-white/85">
                       <p>{{ item.usage?.totalCalls || 0 }}</p>
-                      <p class="mt-1 text-xs text-white/45">{{ Number(item.usage?.totalCostUsd || 0).toFixed(4) }} USD</p>
+                      <p class="mt-1 text-xs text-white/45">{{ formatUsd(item.usage?.totalCostUsd, 4) }} USD</p>
+                      <p class="mt-1 text-[11px] text-white/35">{{ item.usage?.totalTokens || 0 }} tokens</p>
+                    </td>
+                    <td class="px-3 py-4">
+                      <p class="text-sm text-white/82">{{ primaryApiKey(item) }}</p>
+                      <p class="mt-1 text-xs text-white/45">最近活跃 {{ formatDateTime(item.usageMeta?.lastActivityAt) }}</p>
+                      <p class="mt-1 text-[11px]" :class="item.usageMeta?.pendingBillingCount ? 'text-amber-200/80' : 'text-white/35'">
+                        {{ item.usageMeta?.pendingBillingCount ? `待对账 ${item.usageMeta?.pendingBillingCount} 条` : '已完成对账' }}
+                      </p>
+                      <div v-if="(item.usageMeta?.byApiKey || []).length" class="mt-2 flex flex-wrap gap-1.5">
+                        <span v-for="keyUsage in item.usageMeta.byApiKey.slice(0, 2)" :key="`${item.id}-${keyUsage.apiName}`" class="assignment-pill">
+                          {{ keyUsage.apiName }} · {{ formatUsd(keyUsage.totalCostUsd) }}
+                        </span>
+                      </div>
                     </td>
                     <td v-if="showAssignmentsColumn" class="px-3 py-4">
                       <div class="flex flex-wrap gap-2">
@@ -460,7 +494,9 @@
                     <thead>
                       <tr class="border-b border-white/10 text-left text-xs uppercase tracking-[0.12em] text-white/40">
                         <th class="px-2 py-2">名称</th>
+                        <th class="px-2 py-2">已分配用户</th>
                         <th class="px-2 py-2">API 密钥</th>
+                        <th class="px-2 py-2">本地归因成本</th>
                         <th class="px-2 py-2">当前成本</th>
                         <th class="px-2 py-2">总限额</th>
                         <th class="px-2 py-2">日限额</th>
@@ -472,7 +508,12 @@
                     <tbody>
                       <tr v-for="item in apiKeys" :key="item.id || item.api_name" class="border-b border-white/5 align-top">
                         <td class="px-2 py-2 text-white/85">{{ item.api_name }}</td>
+                        <td class="px-2 py-2 text-white/70">
+                          <p>{{ keyInsightMap[item.api_name]?.assignedUsers || 0 }}</p>
+                          <p class="mt-1 text-[11px] text-white/35">{{ keyInsightMap[item.api_name]?.activeUsers || 0 }} 活跃</p>
+                        </td>
                         <td class="px-2 py-2 text-white/70">{{ maskApiKey(item.api_key) }}</td>
+                        <td class="px-2 py-2 text-white/75">{{ formatUsd(keyInsightMap[item.api_name]?.attributedCostUsd || 0) }}</td>
                         <td class="px-2 py-2 text-white/75">{{ item.current_cost ?? 0 }}</td>
                         <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].limit_cost" type="number" min="0" class="ui-text-input !w-[110px]" /></td>
                         <td class="px-2 py-2"><input v-model.number="keyDrafts[item.api_name].limit_daily_cost" type="number" min="0" class="ui-text-input !w-[110px]" /></td>
@@ -722,19 +763,90 @@ const cards = computed(() => [
   { label: 'API 密钥', value: canManageApiKeys.value ? apiKeys.value.length : '--', note: canManageApiKeys.value ? '当前可管理的上游密钥数' : '无密钥管理权限' }
 ])
 
+const primaryApiKey = (user) => {
+  const attributed = user?.usageMeta?.byApiKey?.[0]?.apiName
+  const assigned = user?.assignedApiKeys?.[0]?.apiName
+  return attributed || assigned || '未归因'
+}
+
+const formatUsd = (value, digits = 2) => Number(value || 0).toFixed(digits)
+
+const topSpenders = computed(() => {
+  return [...users.value]
+    .filter((item) => Number(item?.usage?.totalCostUsd || 0) > 0)
+    .sort((a, b) => Number(b?.usage?.totalCostUsd || 0) - Number(a?.usage?.totalCostUsd || 0))
+    .slice(0, 5)
+})
+
+const unassignedActiveUsers = computed(() => {
+  return users.value.filter((item) => {
+    const status = String(item.status || 'active')
+    const hasAssignedKey = Array.isArray(item.assignedApiKeys) && item.assignedApiKeys.length > 0
+    return status === 'active' && !hasAssignedKey
+  })
+})
+
+const pendingBillingUsers = computed(() => {
+  return users.value.filter((item) => Number(item?.usageMeta?.pendingBillingCount || 0) > 0).length
+})
+
+const keyInsightMap = computed(() => {
+  const map = {}
+
+  for (const user of users.value) {
+    const isActive = String(user.status || 'active') === 'active'
+    for (const assigned of user.assignedApiKeys || []) {
+      const apiName = String(assigned.apiName || '').trim()
+      if (!apiName) continue
+      const current = map[apiName] || {
+        assignedUsers: 0,
+        activeUsers: 0,
+        attributedCostUsd: 0
+      }
+      current.assignedUsers += 1
+      if (isActive) current.activeUsers += 1
+      map[apiName] = current
+    }
+
+    for (const usageItem of user.usageMeta?.byApiKey || []) {
+      const apiName = String(usageItem.apiName || '').trim()
+      if (!apiName) continue
+      const current = map[apiName] || {
+        assignedUsers: 0,
+        activeUsers: 0,
+        attributedCostUsd: 0
+      }
+      current.attributedCostUsd += Number(usageItem.totalCostUsd || 0)
+      map[apiName] = current
+    }
+  }
+
+  return map
+})
+
+const activeAttributedKeys = computed(() => {
+  return Object.values(keyInsightMap.value).filter((item) => Number(item.attributedCostUsd || 0) > 0).length
+})
+
 const filteredUsers = computed(() => {
   const keyword = String(userSearchQuery.value || '').trim().toLowerCase()
   const filterStatus = String(userStatusFilter.value || 'all')
-  return users.value.filter((item) => {
-    const matchesKeyword = !keyword || [
-      item.id,
-      item.email,
-      item.displayName
-    ].some((value) => String(value || '').toLowerCase().includes(keyword))
-    const status = String(item.status || 'active')
-    const matchesStatus = filterStatus === 'all' || status === filterStatus
-    return matchesKeyword && matchesStatus
-  })
+  return users.value
+    .filter((item) => {
+      const matchesKeyword = !keyword || [
+        item.id,
+        item.email,
+        item.displayName
+      ].some((value) => String(value || '').toLowerCase().includes(keyword))
+      const status = String(item.status || 'active')
+      const matchesStatus = filterStatus === 'all' || status === filterStatus
+      return matchesKeyword && matchesStatus
+    })
+    .sort((a, b) => {
+      const costGap = Number(b?.usage?.totalCostUsd || 0) - Number(a?.usage?.totalCostUsd || 0)
+      if (costGap !== 0) return costGap
+      return String(b?.usageMeta?.lastActivityAt || b?.createdAt || '').localeCompare(String(a?.usageMeta?.lastActivityAt || a?.createdAt || ''))
+    })
 })
 
 const totalUserPages = computed(() => Math.max(1, Math.ceil(filteredUsers.value.length / userPageSize)))
@@ -1195,5 +1307,16 @@ onBeforeUnmount(() => {
   font-size: 13px;
   line-height: 1.6;
   color: rgba(255, 233, 169, 0.92);
+}
+
+.insight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 12px;
 }
 </style>
