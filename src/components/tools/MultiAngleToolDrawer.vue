@@ -233,7 +233,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:show', 'apply'])
+const emit = defineEmits(['update:show', 'pending', 'apply', 'error'])
 
 const imageGen = useImageGeneration()
 const defaultImage = ref('')
@@ -491,6 +491,21 @@ const applyTransform = async () => {
 
   try {
     const prompt = buildPrompt()
+    emit('pending', {
+      targetMode: 'new',
+      size: selectedSize.value,
+      ratio: selectedRatio.value,
+      resolution: selectedResolution.value || resolutionFromSizeString(selectedSize.value),
+      fileType: 'image/png',
+      meta: {
+        tool: 'multi-angle',
+        azimuth: Math.round(Number(azimuth.value) || 0),
+        elevation: Math.round(Number(elevation.value) || 0),
+        zoom: Number(Number(zoom.value || 0).toFixed(1)),
+        prompt,
+        model: props.model
+      }
+    })
     const generated = await imageGen.generate({
       model: props.model,
       prompt,
@@ -526,6 +541,9 @@ const applyTransform = async () => {
       }
     })
   } catch (error) {
+    emit('error', {
+      message: error?.message || 'Multi-angle generation failed'
+    })
     window.$message?.error(error?.message || 'Multi-angle generation failed')
   } finally {
     applying.value = false

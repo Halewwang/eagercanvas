@@ -194,7 +194,9 @@
       :resolution="localResolution"
       :ratio-options="ratioDropdownOptions"
       :size-options="imageSizeOptions"
+      @pending="handleMultiAnglePending"
       @apply="handleMultiAngleApply"
+      @error="handleMultiAngleError"
     />
   </div>
 </template>
@@ -260,6 +262,7 @@ const previewZoom = ref(1)
 const previewNaturalSize = ref({ width: 0, height: 0 })
 const activeTool = ref('')
 const showMultiAngleDrawer = ref(false)
+const pendingMultiAngleNodeId = ref('')
 const cropRect = ref({ x: 0, y: 0, width: 0, height: 0 })
 const cropInteraction = ref(null)
 const showErrorModal = ref(false)
@@ -986,6 +989,7 @@ const createLinkedImageNode = (payload = {}) => {
     base64: payload.base64 || '',
     fileType: payload.fileType || 'image/png',
     label: 'Image',
+    loading: !!payload.loading,
     error: '',
     updatedAt: Date.now()
   })
@@ -1012,6 +1016,27 @@ const createLinkedImageNode = (payload = {}) => {
   }, 60)
 
   return newNodeId
+}
+
+const updateLinkedImageNode = async (nodeId, payload = {}) => {
+  if (!nodeId) return
+  updateNode(nodeId, {
+    model: localImageModel.value,
+    quality: localImageQuality.value,
+    size: payload.size || localImageSize.value,
+    ratio: payload.ratio || localImageRatio.value,
+    resolution: payload.resolution || localResolution.value,
+    url: payload.url || '',
+    base64: payload.base64 || '',
+    fileType: payload.fileType || 'image/png',
+    loading: !!payload.loading,
+    error: payload.error || '',
+    updatedAt: Date.now()
+  })
+  setTimeout(() => updateNodeInternals(nodeId), 40)
+  if (!payload.loading) {
+    await flushSave()
+  }
 }
 
 const replaceCurrentImageNode = async (payload = {}) => {
@@ -1406,14 +1431,49 @@ const handleMultiAngleApply = async (payload = {}) => {
       await flushSave()
       window.$message?.success('Multi-angle result applied')
     } else {
-      createLinkedImageNode(nextPayload)
-      await flushSave()
+      if (pendingMultiAngleNodeId.value) {
+        await updateLinkedImageNode(pendingMultiAngleNodeId.value, {
+          ...nextPayload,
+          loading: false,
+          error: ''
+        })
+      } else {
+        createLinkedImageNode(nextPayload)
+        await flushSave()
+      }
       window.$message?.success('Multi-angle result created')
     }
+    pendingMultiAngleNodeId.value = ''
     showMultiAngleDrawer.value = false
   } catch (error) {
     window.$message?.error(error?.message || 'Multi-angle apply failed')
   }
+}
+
+const handleMultiAnglePending = async (payload = {}) => {
+  if (payload.targetMode === 'replace') return
+  if (pendingMultiAngleNodeId.value) return
+  const nodeId = createLinkedImageNode({
+    ...payload,
+    loading: true,
+    url: '',
+    base64: '',
+    error: ''
+  })
+  pendingMultiAngleNodeId.value = nodeId || ''
+  await flushSave()
+}
+
+const handleMultiAngleError = async (payload = {}) => {
+  if (!pendingMultiAngleNodeId.value) return
+  const failedNodeId = pendingMultiAngleNodeId.value
+  pendingMultiAngleNodeId.value = ''
+  await updateLinkedImageNode(failedNodeId, {
+    url: '',
+    base64: '',
+    loading: false,
+    error: payload?.message || 'Multi-angle generation failed'
+  })
 }
 
 
