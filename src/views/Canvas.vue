@@ -407,10 +407,13 @@ import {
   ChevronBackOutline,
   ChevronDownOutline,
   CloseOutline,
+  CopyOutline,
+  CreateOutline,
   SettingsOutline,
   AddOutline,
   ImageOutline,
   TextOutline,
+  TrashOutline,
   VideocamOutline,
   ArrowUndoOutline,
   ArrowRedoOutline,
@@ -1602,8 +1605,8 @@ onUnmounted(() => {
 }
 
 .canvas-group-title.is-selected {
-  border-color: rgba(165, 129, 99, 0.52);
-  box-shadow: 0 0 0 1px rgba(165, 129, 99, 0.28);
+  border-color: rgba(255, 255, 255, 0.38);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 
 .canvas-group-edge {
