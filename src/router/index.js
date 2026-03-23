@@ -111,7 +111,7 @@ router.beforeEach(async (to) => {
   if (to.path.startsWith('/admin')) {
     const allowed = await auth.loadAdminSession()
     if (!allowed) {
-      return '/'
+      return '/usage-admin'
     }
   }
 })
