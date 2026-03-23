@@ -129,26 +129,17 @@
                   <h3 class="text-lg font-medium text-white">管理员会话</h3>
                   <div class="mt-4 space-y-3 text-sm">
                     <div class="ui-info-line"><span>账号</span><strong>{{ adminAccountLabel }}</strong></div>
-                    <div class="ui-info-line"><span>角色</span><strong>{{ auth.roles.value.join(', ') || '-' }}</strong></div>
+                    <div class="ui-info-line"><span>角色</span><strong>{{ formatRoleList(auth.roles.value) || '-' }}</strong></div>
                     <div class="ui-info-line"><span>权限数</span><strong>{{ auth.permissions.value.length }}</strong></div>
                     <div class="ui-info-line"><span>状态</span><strong class="text-white">正常</strong></div>
                   </div>
                 </div>
 
                 <div class="ui-glass-card rounded-2xl p-4 md:p-5">
-                  <h3 class="text-lg font-medium text-white">快捷操作</h3>
-                  <div class="mt-4 grid grid-cols-1 gap-2">
-                    <button v-if="canReadUsers" class="ui-micro-btn text-left" @click="scrollToSection('users')">打开用户治理</button>
-                    <button v-if="showServiceSection" class="ui-micro-btn text-left" @click="scrollToSection('service')">打开服务运维</button>
-                    <button v-if="canReadAudit" class="ui-micro-btn text-left" @click="scrollToSection('audit')">打开审计日志</button>
-                  </div>
-                </div>
-
-                <div class="ui-glass-card rounded-2xl p-4 md:p-5">
                   <h3 class="text-lg font-medium text-white">重点观察</h3>
                   <div class="mt-4 space-y-3 text-sm">
-                    <div class="ui-info-line"><span>待分配 Key 用户</span><strong>{{ unassignedActiveUsers.length }}</strong></div>
-                    <div class="ui-info-line"><span>待对账用户</span><strong>{{ pendingBillingUsers }}</strong></div>
+                    <div class="ui-info-line"><span>待分配 Key 用户</span><strong class="text-amber-100">{{ unassignedActiveUsers.length }}</strong></div>
+                    <div class="ui-info-line"><span>待对账用户</span><strong class="text-amber-100">{{ pendingBillingUsers }}</strong></div>
                     <div class="ui-info-line"><span>活跃 Key</span><strong>{{ activeAttributedKeys }}</strong></div>
                   </div>
                   <div class="mt-4 space-y-2">
@@ -240,7 +231,7 @@
                     </td>
                     <td class="px-3 py-4">
                       <div class="flex flex-wrap gap-1.5">
-                        <span v-for="role in item.roles || []" :key="`${item.id}-${role}`" class="ui-tag-pill">{{ role }}</span>
+                        <span v-for="role in item.roles || []" :key="`${item.id}-${role}`" class="ui-tag-pill">{{ roleLabel(role) }}</span>
                       </div>
                     </td>
                     <td class="px-3 py-4 text-white/85">
@@ -281,22 +272,17 @@
                       </div>
                     </td>
                     <td v-if="canManageRoles" class="px-3 py-4">
-                      <div class="space-y-3">
-                        <div class="flex max-w-[280px] flex-wrap gap-2">
-                          <label
-                            v-for="role in roleOptions"
-                            :key="`${item.id}-${role}`"
-                            class="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs text-white/65"
-                          >
-                            <input
-                              type="checkbox"
-                              :checked="isSelected(item.id, role)"
-                              :disabled="item.status === 'deleted' || isSelf(item)"
-                              @change="toggleRole(item.id, role, $event)"
-                            />
-                            {{ role }}
-                          </label>
-                        </div>
+                      <div class="role-editor-card">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-white/35">目标角色</p>
+                        <select
+                          v-model="selectedRoles[item.id]"
+                          class="ui-text-input !w-[180px]"
+                          :disabled="item.status === 'deleted' || isSelf(item)"
+                        >
+                          <option v-for="role in roleOptions" :key="`${item.id}-${role.value}`" :value="role.value">
+                            {{ role.label }}
+                          </option>
+                        </select>
                         <button
                           class="ui-micro-btn ui-micro-btn-primary"
                           :disabled="saving[item.id] || item.status === 'deleted' || isSelf(item)"
@@ -619,7 +605,14 @@ const serviceRef = ref(null)
 const auditRef = ref(null)
 const activeSection = ref('overview')
 
-const roleOptions = ['super_admin', 'admin', 'ops', 'support', 'user']
+const roleOptions = [
+  { value: 'super_admin', label: '超级管理员' },
+  { value: 'admin', label: '管理员' },
+  { value: 'ops', label: '运维' },
+  { value: 'support', label: '客服' },
+  { value: 'user', label: '普通用户' }
+]
+const roleLabelMap = Object.fromEntries(roleOptions.map((item) => [item.value, item.label]))
 
 const users = ref([])
 const userSearchQuery = ref('')
@@ -744,6 +737,12 @@ const accessScope = computed(() => {
   if (canReadAudit.value) items.push('审计')
   return items
 })
+
+const roleLabel = (role) => roleLabelMap[String(role || '').trim()] || String(role || '').trim() || '-'
+
+const formatRoleList = (roles = []) => {
+  return (Array.isArray(roles) ? roles : []).map((item) => roleLabel(item)).join('、')
+}
 
 const userStats = computed(() => users.value.reduce((acc, item) => {
   const status = String(item.status || 'active')
@@ -962,20 +961,6 @@ const toPrettyJson = (value) => {
   }
 }
 
-const isSelected = (userId, role) => {
-  const list = selectedRoles.value[userId] || []
-  return list.includes(role)
-}
-
-const toggleRole = (userId, role, event) => {
-  const checked = !!event?.target?.checked
-  const list = [...(selectedRoles.value[userId] || [])]
-  const set = new Set(list)
-  if (checked) set.add(role)
-  else set.delete(role)
-  selectedRoles.value[userId] = [...set]
-}
-
 const isSelf = (user) => String(user?.id || '') === String(auth.adminUser.value?.id || auth.user.value?.id || '')
 
 const loadUsage = async () => {
@@ -1002,7 +987,7 @@ const loadUsers = async () => {
     const nextSelection = {}
     const nextAssignments = { ...assignSelections.value }
     for (const item of list) {
-      nextSelection[item.id] = Array.isArray(item.roles) ? [...item.roles] : ['user']
+      nextSelection[item.id] = Array.isArray(item.roles) && item.roles.length ? item.roles[0] : 'user'
       if (!Object.prototype.hasOwnProperty.call(nextAssignments, item.id)) nextAssignments[item.id] = ''
     }
     selectedRoles.value = nextSelection
@@ -1016,11 +1001,11 @@ const loadUsers = async () => {
 
 const saveRoles = async (user) => {
   if (!canManageRoles.value || isSelf(user)) return
-  const roles = [...new Set((selectedRoles.value[user.id] || []).filter(Boolean))]
-  if (!roles.length) return window.$message?.warning('至少保留一个角色')
+  const role = String(selectedRoles.value[user.id] || '').trim()
+  if (!role) return window.$message?.warning('请选择角色')
   saving.value = { ...saving.value, [user.id]: true }
   try {
-    await updateAdminUserRoles(user.id, roles)
+    await updateAdminUserRoles(user.id, [role])
     window.$message?.success('角色更新成功')
     await Promise.all([loadUsers(), loadLogs()])
   } catch (error) {
@@ -1278,6 +1263,17 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.58);
 }
 
+.role-editor-card {
+  display: flex;
+  min-width: 180px;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+}
+
 .user-action-stack {
   display: flex;
   min-width: 260px;
@@ -1316,7 +1312,7 @@ onBeforeUnmount(() => {
   gap: 12px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
   padding: 10px 12px;
 }
 </style>
