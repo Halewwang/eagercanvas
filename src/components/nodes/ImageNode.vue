@@ -5,7 +5,7 @@
       <span class="meta-title">Image</span>
     </div>
 
-    <div v-show="showCapsule || isSelected" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
+    <div v-show="showNodeCapsule" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
       <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
         <div class="capsule-group">
           <n-dropdown :options="imageModelDropdownOptions" @select="setImageModel">
@@ -219,6 +219,7 @@ const imageTools = useImageTools()
 const showCapsule = ref(false)
 const urlLoading = ref(false)
 const isSelected = computed(() => !!props.selected || !!props.data?.selected)
+const showNodeCapsule = computed(() => !props.data?.suppressCapsule && (showCapsule.value || isSelected.value))
 const showHandles = computed(() => showCapsule.value || isSelected.value)
 
 const localImageModel = ref(props.data?.model || DEFAULT_IMAGE_MODEL)

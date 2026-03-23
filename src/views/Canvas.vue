@@ -76,16 +76,18 @@
       <div class="group-overlay-layer">
         <div
           v-if="multiSelectMenuRect"
-          class="multi-select-capsule"
+          class="capsule-menu group-capsule-menu"
           :style="{
             left: `${multiSelectMenuRect.left + multiSelectMenuRect.width / 2}px`,
             top: `${Math.max(20, multiSelectMenuRect.top - 54)}px`
           }"
         >
-          <button class="group-capsule-btn" @click="handleCreateGroup">
-            <n-icon :size="14"><AppsOutline /></n-icon>
-            <span>编组</span>
-          </button>
+          <div class="capsule-inner capsule-inner-selected">
+            <button class="capsule-icon capsule-icon-solid capsule-create group-primary-btn" @click="handleCreateGroup" title="Group">
+              <n-icon :size="14"><AppsOutline /></n-icon>
+              <span class="capsule-create-label">Group</span>
+            </button>
+          </div>
         </div>
 
         <template v-for="group in renderedGroups" :key="group.id">
@@ -116,28 +118,34 @@
 
         <div
           v-if="selectedGroupMenuRect"
-          class="group-action-capsule"
+          class="capsule-menu group-capsule-menu"
           :style="{
             left: `${selectedGroupMenuRect.left + selectedGroupMenuRect.width / 2}px`,
             top: `${Math.max(20, selectedGroupMenuRect.top - 54)}px`
           }"
         >
-          <button class="group-capsule-btn" @click="openRenameGroupModal">
-            <n-icon :size="14"><CreateOutline /></n-icon>
-            <span>重命名</span>
-          </button>
-          <button class="group-capsule-btn" @click="handleDuplicateSelectedGroup">
-            <n-icon :size="14"><CopyOutline /></n-icon>
-            <span>复制编组</span>
-          </button>
-          <button class="group-capsule-btn" @click="handleUngroupSelectedGroup">
-            <n-icon :size="14"><RemoveOutline /></n-icon>
-            <span>解组</span>
-          </button>
-          <button class="group-capsule-btn danger" @click="handleDeleteSelectedGroup">
-            <n-icon :size="14"><TrashOutline /></n-icon>
-            <span>删除</span>
-          </button>
+          <div class="capsule-inner capsule-inner-selected">
+            <div class="capsule-group">
+              <button class="capsule-select group-title-pill" @mousedown="startGroupDrag(selectedGroup, $event)" @click.stop="selectGroup(selectedGroup.id)">
+                {{ selectedGroup?.name }}
+              </button>
+            </div>
+            <div class="capsule-divider" />
+            <div class="capsule-group">
+              <button class="capsule-icon" @click="openRenameGroupModal" title="Rename">
+                <n-icon :size="14"><CreateOutline /></n-icon>
+              </button>
+              <button class="capsule-icon" @click="handleDuplicateSelectedGroup" title="Duplicate Group">
+                <n-icon :size="14"><CopyOutline /></n-icon>
+              </button>
+              <button class="capsule-icon" @click="handleUngroupSelectedGroup" title="Ungroup">
+                <n-icon :size="14"><RemoveOutline /></n-icon>
+              </button>
+              <button class="capsule-icon group-danger-icon" @click="handleDeleteSelectedGroup" title="Delete Group">
+                <n-icon :size="14"><TrashOutline /></n-icon>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -635,10 +643,13 @@ const getNodeElement = (nodeId) => {
 
 const mergeRects = (rects, shellRect) => {
   if (!rects.length) return null
-  const left = Math.min(...rects.map((rect) => rect.left - shellRect.left))
-  const top = Math.min(...rects.map((rect) => rect.top - shellRect.top))
-  const right = Math.max(...rects.map((rect) => rect.right - shellRect.left))
-  const bottom = Math.max(...rects.map((rect) => rect.bottom - shellRect.top))
+  const paddingX = 24
+  const paddingTop = 22
+  const paddingBottom = 22
+  const left = Math.min(...rects.map((rect) => rect.left - shellRect.left)) - paddingX
+  const top = Math.min(...rects.map((rect) => rect.top - shellRect.top)) - paddingTop
+  const right = Math.max(...rects.map((rect) => rect.right - shellRect.left)) + paddingX
+  const bottom = Math.max(...rects.map((rect) => rect.bottom - shellRect.top)) + paddingBottom
   return {
     left,
     top,
@@ -944,15 +955,26 @@ const onConnectEnd = (event) => {
 
 // Keep runtime selected flag in node.data synchronized with VueFlow selected state.
 const syncNodeSelectedState = () => {
+  const multiSelected = nodes.value.filter((node) => !!node.selected).map((node) => node.id)
+  const multiSelectedSet = new Set(multiSelected)
+  const selectedGroupNodeIds = new Set(
+    selectedGroup.value?.nodeIds?.filter((nodeId) => !multiSelectedSet.has(nodeId)) || []
+  )
+
   const nextNodes = nodes.value.map((node) => {
     const selected = !!node.selected
     const current = !!node.data?.selected
-    if (selected === current) return node
+    const suppressCapsule = multiSelected.length >= 2
+      ? multiSelectedSet.has(node.id)
+      : selectedGroupNodeIds.has(node.id)
+    const currentSuppressCapsule = !!node.data?.suppressCapsule
+    if (selected === current && suppressCapsule === currentSuppressCapsule) return node
     return {
       ...node,
       data: {
         ...(node.data || {}),
-        selected
+        selected,
+        suppressCapsule
       }
     }
   })
@@ -1517,56 +1539,46 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-.multi-select-capsule,
-.group-action-capsule {
+.group-capsule-menu {
   position: absolute;
   transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 999px;
-  background: rgba(29, 29, 31, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 20px 36px rgba(0, 0, 0, 0.34);
-  backdrop-filter: blur(14px);
   pointer-events: auto;
 }
 
-.group-capsule-btn {
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  color: #f3f4f6;
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+.group-primary-btn {
+  min-width: 88px;
 }
 
-.group-capsule-btn:hover {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-1px);
+.group-title-pill {
+  cursor: grab;
+  max-width: 180px;
 }
 
-.group-capsule-btn.danger {
+.group-danger-icon {
   color: #d89b90;
   border-color: rgba(196, 106, 92, 0.24);
 }
 
-.group-capsule-btn.danger:hover {
+.group-danger-icon:hover:not(:disabled) {
+  color: #e5b0a8;
   border-color: rgba(196, 106, 92, 0.48);
   background: rgba(196, 106, 92, 0.1);
 }
 
 .canvas-group-box {
   position: absolute;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   pointer-events: none;
+}
+
+.canvas-group-box.is-selected {
+  border-color: rgba(235, 226, 216, 0.82);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 0 0 1px rgba(165, 129, 99, 0.18);
 }
 
 .canvas-group-title {
@@ -1607,12 +1619,6 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-}
-
-.canvas-group-box.is-selected .canvas-group-edge::before {
-  border-color: rgba(235, 226, 216, 0.88);
-  box-shadow: 0 0 0 1px rgba(165, 129, 99, 0.2);
 }
 
 .canvas-group-edge.top,
