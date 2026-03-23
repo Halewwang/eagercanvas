@@ -1545,7 +1545,83 @@ onUnmounted(() => {
 .group-capsule-menu {
   position: absolute;
   transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   pointer-events: auto;
+}
+
+.group-capsule-menu .capsule-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 15, 15, 0.96);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.34);
+  white-space: nowrap;
+}
+
+.group-capsule-menu .capsule-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-capsule-menu .capsule-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.group-capsule-menu .capsule-icon,
+.group-capsule-menu .capsule-select {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  color: #e7e8eb;
+  transition: all 0.2s ease;
+}
+
+.group-capsule-menu .capsule-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.group-capsule-menu .capsule-icon:hover:not(:disabled),
+.group-capsule-menu .capsule-select:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f3f4f6;
+}
+
+.group-capsule-menu .capsule-icon-solid {
+  background: #0f0f0f;
+  color: #f6f8fc;
+  border-color: rgba(143, 143, 143, 0.65);
+}
+
+.group-capsule-menu .capsule-create {
+  min-width: 86px;
+  height: 28px;
+  padding: 0 14px;
+  gap: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.group-capsule-menu .capsule-create-label {
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .group-primary-btn {
@@ -1555,6 +1631,13 @@ onUnmounted(() => {
 .group-title-pill {
   cursor: grab;
   max-width: 180px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .group-danger-icon {
