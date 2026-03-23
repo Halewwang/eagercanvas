@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
-import { getAdminSession } from '@/api/admin'
-import { STORAGE_KEYS } from '@/utils/constants'
+import { getAdminSession } from '../api/admin.js'
+import { STORAGE_KEYS } from '../utils/constants.js'
 import {
   getMe,
   logoutSession,
@@ -10,9 +10,15 @@ import {
   sendRegisterCode,
   verifyLoginCode,
   verifyRegisterCode
-} from '@/api/auth'
+} from '../api/auth.js'
 
-const BYPASS_AUTH_IN_DEV = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
+const isLocalPreviewHost = () => {
+  if (typeof window === 'undefined') return false
+  const host = String(window.location.hostname || '').trim().toLowerCase()
+  return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
+}
+
+const BYPASS_AUTH_IN_DEV = (import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true') || isLocalPreviewHost()
 const BYPASS_USER = {
   id: 'dev-bypass-user',
   email: 'preview@local.dev',

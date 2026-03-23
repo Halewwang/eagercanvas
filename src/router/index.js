@@ -2,7 +2,7 @@
  * Router configuration | 路由配置
  */
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '../stores/auth.js'
 
 const routes = [
   {
@@ -17,8 +17,7 @@ const routes = [
   },
   {
     path: '/',
-    name: 'Home',
-    component: () => import('../views/Home.vue')
+    redirect: '/canvas'
   },
   {
     path: '/canvas/:id?',

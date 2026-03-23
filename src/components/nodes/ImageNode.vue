@@ -107,11 +107,22 @@
           <span class="text-sm text-white font-medium">Loading...</span>
         </div>
 
-        <div v-else class="w-full h-full bg-[#0f0f0f] flex flex-col items-center justify-center gap-2 relative text-center px-4">
+        <div
+          v-else
+          class="w-full h-full bg-[#0f0f0f] flex flex-col items-center justify-center gap-2 relative text-center px-4 nodrag nopan"
+          @mousedown.stop
+        >
           <n-icon :size="32" class="text-[#7b818c]"><ImageOutline /></n-icon>
           <span class="text-sm text-[#7b818c]">Drop an image or click to upload</span>
-          <button class="upload-btn" @click="triggerUpload">Upload</button>
-          <input ref="uploadInputRef" type="file" accept="image/*" class="hidden" @change="handleFileUpload" />
+          <div class="upload-btn upload-btn-label nodrag nopan">Upload</div>
+          <input
+            :id="uploadInputId"
+            ref="uploadInputRef"
+            type="file"
+            accept="image/*"
+            class="upload-hit-area nodrag nopan"
+            @change="handleFileUpload"
+          />
         </div>
       </div>
 
@@ -173,6 +184,18 @@
         </div>
       </div>
     </div>
+
+    <MultiAngleToolDrawer
+      v-model:show="showMultiAngleDrawer"
+      :image-url="data.url || data.base64 || ''"
+      :model="localImageModel"
+      :ratio="localImageRatio"
+      :size="localImageSize"
+      :resolution="localResolution"
+      :ratio-options="ratioDropdownOptions"
+      :size-options="imageSizeOptions"
+      @apply="handleMultiAngleApply"
+    />
   </div>
 </template>
 
@@ -180,6 +203,7 @@
 import { computed, h, nextTick, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NDropdown, NIcon, NModal } from 'naive-ui'
+import MultiAngleToolDrawer from '@/components/tools/MultiAngleToolDrawer.vue'
 import {
   CloseCircleOutline,
   CopyOutline,
@@ -205,6 +229,7 @@ import { useImageTools } from '../../hooks/useApi'
 import toolsIcon from '@/assets/tools-icon.svg'
 import removeBgIcon from '@/assets/remove-bg-icon.svg'
 import cropIcon from '@/assets/crop-icon.svg'
+import cameraOrbitIcon from '@/assets/tools-icon.svg'
 
 const props = defineProps({
   id: String,
@@ -229,10 +254,12 @@ const localImageQuality = ref(props.data?.quality || 'standard')
 const localImageRatio = ref('1:1')
 const localResolution = ref('1k')
 const uploadInputRef = ref(null)
+const uploadInputId = `image-upload-${String(props.id || 'node')}`
 const showPreviewModal = ref(false)
 const previewZoom = ref(1)
 const previewNaturalSize = ref({ width: 0, height: 0 })
 const activeTool = ref('')
+const showMultiAngleDrawer = ref(false)
 const cropRect = ref({ x: 0, y: 0, width: 0, height: 0 })
 const cropInteraction = ref(null)
 const showErrorModal = ref(false)
@@ -260,6 +287,12 @@ const toolDropdownOptions = computed(() => ([
     key: 'crop',
     disabled: !props.data?.url || isToolBusy.value,
     renderIcon: () => h('img', { src: cropIcon, alt: '', class: 'tool-option-icon' })
+  },
+  {
+    label: 'Multi-Angle',
+    key: 'multi-angle',
+    disabled: !props.data?.url || isToolBusy.value,
+    renderIcon: () => h('img', { src: cameraOrbitIcon, alt: '', class: 'tool-option-icon' })
   }
 ]))
 const imageInputStatusMap = {
@@ -286,6 +319,13 @@ const PREVIEW_MAX_ZOOM = 4
 const PREVIEW_ZOOM_STEP = 0.25
 const MIN_CROP_SIZE = 48
 const cropHandles = ['nw', 'ne', 'sw', 'se']
+const isLocalPreviewHost = () => {
+  if (typeof window === 'undefined') return false
+  const host = String(window.location.hostname || '').trim().toLowerCase()
+  return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
+}
+
+const isLocalPreviewMode = computed(() => isLocalPreviewHost())
 
 const ratioFromSizeKey = (sizeKey) => {
   const [w, h] = String(sizeKey || '').split('x').map(Number)
@@ -799,10 +839,6 @@ const fileToBase64 = (file) =>
     reader.readAsDataURL(file)
   })
 
-const triggerUpload = () => {
-  uploadInputRef.value?.click()
-}
-
 const initializeCropRect = () => {
   const width = cropStageMetrics.value.frameWidth
   const height = cropStageMetrics.value.frameHeight
@@ -1005,6 +1041,10 @@ const replaceCurrentImageNode = async (payload = {}) => {
   const persistFileName = payload.fileName || `crop-${Date.now()}.png`
   const uploadTarget = nextBase64 || nextUrl
   const file = dataUrlToFile(uploadTarget, persistFileName)
+  if (isLocalPreviewMode.value) {
+    await flushSave()
+    return
+  }
   if (!file) {
     await flushSave()
     return
@@ -1094,6 +1134,17 @@ const handleFileUpload = async (event) => {
     
     setTimeout(() => updateNodeInternals(props.id), 30)
 
+    if (isLocalPreviewMode.value) {
+      await flushSave()
+      showUploadProgress.value = true
+      uploadStage.value = 'success'
+      uploadProgress.value = 100
+      isUploading.value = false
+      window.$message?.success('Image uploaded locally')
+      resetUploadProgress(900)
+      return
+    }
+
     // Upload + project save must both succeed before image is safe across refresh/login.
     isUploading.value = true
     showUploadProgress.value = true
@@ -1182,6 +1233,10 @@ const handleToolAction = async (key) => {
   }
   if (key === 'crop') {
     await startCropMode()
+    return
+  }
+  if (key === 'multi-angle') {
+    showMultiAngleDrawer.value = true
   }
 }
 const handleRemoveBackground = async () => {
@@ -1339,6 +1394,28 @@ const closeValidationModal = () => {
   validationMessage.value = ''
 }
 
+const handleMultiAngleApply = async (payload = {}) => {
+  const nextPayload = {
+    ...payload,
+    fileName: `multi-angle-${Date.now()}.png`
+  }
+
+  try {
+    if (payload.targetMode === 'replace') {
+      await replaceCurrentImageNode(nextPayload)
+      await flushSave()
+      window.$message?.success('Multi-angle result applied')
+    } else {
+      createLinkedImageNode(nextPayload)
+      await flushSave()
+      window.$message?.success('Multi-angle result created')
+    }
+    showMultiAngleDrawer.value = false
+  } catch (error) {
+    window.$message?.error(error?.message || 'Multi-angle apply failed')
+  }
+}
+
 
 </script>
 
@@ -1421,6 +1498,20 @@ const closeValidationModal = () => {
   font-size: 12px;
   padding: 6px 12px;
   line-height: 1;
+}
+
+.upload-btn-label {
+  pointer-events: none;
+}
+
+.upload-hit-area {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 3;
 }
 
 .zoom-modal-card {

@@ -12,7 +12,13 @@ import {
 import { useAuthStore } from '@/stores/auth'
 
 const STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-cache'
-const BYPASS_AUTH_IN_DEV = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
+const isLocalPreviewHost = () => {
+  if (typeof window === 'undefined') return false
+  const host = String(window.location.hostname || '').trim().toLowerCase()
+  return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
+}
+
+const BYPASS_AUTH_IN_DEV = (import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true') || isLocalPreviewHost()
 
 export const projects = ref([])
 export const currentProjectId = ref(null)

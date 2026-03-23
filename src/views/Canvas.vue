@@ -182,6 +182,14 @@
         >
           <n-icon :size="20"><SettingsOutline /></n-icon>
         </button>
+        <button
+          v-if="showLocalInjectButton"
+          @click="triggerLocalImageInject"
+          class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors text-white"
+          title="Inject Image"
+        >
+          <n-icon :size="20"><ImageOutline /></n-icon>
+        </button>
         <div class="w-full h-px bg-[var(--border-color)] my-1"></div>
         <button
           @click="triggerAvatarUpload"
@@ -191,6 +199,7 @@
           <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" class="w-full h-full object-cover" />
           <span v-else class="text-xs">{{ avatarInitial }}</span>
         </button>
+        <input ref="localInjectInputRef" type="file" accept="image/*" class="hidden" @change="handleLocalImageInject" />
         <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
       </aside>
 
@@ -462,6 +471,7 @@ onMounted(() => {
 // Vue Flow instance | Vue Flow 实例
 const { viewport, zoomIn, zoomOut, fitView, updateNodeInternals } = useVueFlow()
 const canvasShellRef = ref(null)
+const localInjectInputRef = ref(null)
 
 // Nodes factory | 节点工厂
 const nodesFactory = useNodesFactory({ updateNodeInternals, viewport })
@@ -520,6 +530,11 @@ const suppressPaneClickUntil = ref(0)
 // Flow key for forcing re-render on project switch | 项目切换时强制重新渲染的 key
 const flowKey = ref(Date.now())
 const showWorkflowPanel = ref(false)
+const showLocalInjectButton = computed(() => {
+  if (typeof window === 'undefined') return false
+  const host = String(window.location.hostname || '').trim().toLowerCase()
+  return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
+})
 const selectedGroupId = ref(null)
 const groupRects = ref({})
 const multiSelectRect = ref(null)
@@ -880,6 +895,90 @@ const increaseNodeCount = () => {
 
 const decreaseNodeCount = () => {
   nodeCreateCount.value = Math.max(1, nodeCreateCount.value - 1)
+}
+
+const readImageFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+
+const readImageDimensions = (file) =>
+  new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      resolve({ width: img.naturalWidth || img.width || 0, height: img.naturalHeight || img.height || 0 })
+      URL.revokeObjectURL(objectUrl)
+    }
+    img.onerror = () => {
+      resolve({ width: 0, height: 0 })
+      URL.revokeObjectURL(objectUrl)
+    }
+    img.src = objectUrl
+  })
+
+const ratioFromDimensions = (width, height) => {
+  if (!width || !height) return '1:1'
+  const ratio = width / height
+  if (Math.abs(ratio - 1) < 0.05) return '1:1'
+  if (Math.abs(ratio - 16 / 9) < 0.05) return '16:9'
+  if (Math.abs(ratio - 9 / 16) < 0.05) return '9:16'
+  if (Math.abs(ratio - 3 / 2) < 0.05) return '3:2'
+  if (Math.abs(ratio - 2 / 3) < 0.05) return '2:3'
+  if (Math.abs(ratio - 4 / 3) < 0.05) return '4:3'
+  if (Math.abs(ratio - 3 / 4) < 0.05) return '3:4'
+  if (Math.abs(ratio - 4 / 5) < 0.05) return '4:5'
+  if (Math.abs(ratio - 5 / 4) < 0.05) return '5:4'
+  if (Math.abs(ratio - 21 / 9) < 0.05) return '21:9'
+  return `${width}:${height}`
+}
+
+const triggerLocalImageInject = () => {
+  if (!localInjectInputRef.value) return
+  localInjectInputRef.value.value = ''
+  localInjectInputRef.value.click()
+}
+
+const handleLocalImageInject = async (event) => {
+  const file = event.target?.files?.[0]
+  if (!file) return
+
+  try {
+    const [dataUrl, dimensions] = await Promise.all([
+      readImageFileAsDataUrl(file),
+      readImageDimensions(file)
+    ])
+
+    const width = Number(dimensions?.width || 0)
+    const height = Number(dimensions?.height || 0)
+    const ratio = ratioFromDimensions(width, height)
+    const nodeId = addNode('image', {
+      x: 220 + (nodes.value.length % 3) * 120,
+      y: 180 + Math.floor(nodes.value.length / 3) * 60
+    }, {
+      url: dataUrl,
+      base64: dataUrl,
+      fileName: file.name,
+      fileType: file.type || 'image/png',
+      label: 'Image',
+      ratio,
+      size: width && height ? `${width}x${height}` : '',
+      loading: false,
+      error: ''
+    })
+
+    await nextTick()
+    updateNodeInternals(nodeId)
+    await flushSave()
+    notifier.success('Image node injected')
+  } catch (error) {
+    notifier.error(error?.message || 'Image inject failed')
+  } finally {
+    if (event?.target) event.target.value = ''
+  }
 }
 
 // Handle add workflow from panel | 处理从面板添加工作流
