@@ -1,6 +1,6 @@
 <template>
   <!-- Canvas page | 画布页面 -->
-  <div class="h-screen w-screen bg-[#1C1C1C]">
+  <div ref="canvasShellRef" class="h-screen w-screen bg-[#1C1C1C]">
     <!-- Main canvas area | 主画布区域 -->
     <div class="h-full relative overflow-hidden">
       <!-- Top capsules | 顶部胶囊菜单 -->
@@ -72,6 +72,74 @@
           mask-color="rgba(0,0,0,0.1)"
         />
       </VueFlow>
+
+      <div class="group-overlay-layer">
+        <div
+          v-if="multiSelectMenuRect"
+          class="multi-select-capsule"
+          :style="{
+            left: `${multiSelectMenuRect.left + multiSelectMenuRect.width / 2}px`,
+            top: `${Math.max(20, multiSelectMenuRect.top - 54)}px`
+          }"
+        >
+          <button class="group-capsule-btn" @click="handleCreateGroup">
+            <n-icon :size="14"><AppsOutline /></n-icon>
+            <span>编组</span>
+          </button>
+        </div>
+
+        <template v-for="group in renderedGroups" :key="group.id">
+          <div
+            class="canvas-group-box"
+            :class="{ 'is-selected': selectedGroupId === group.id }"
+            :style="{
+              left: `${group.rect.left}px`,
+              top: `${group.rect.top}px`,
+              width: `${group.rect.width}px`,
+              height: `${group.rect.height}px`
+            }"
+          >
+            <button
+              class="canvas-group-title"
+              :class="{ 'is-selected': selectedGroupId === group.id }"
+              @mousedown="startGroupDrag(group, $event)"
+              @click.stop="selectGroup(group.id)"
+            >
+              {{ group.name }}
+            </button>
+            <button class="canvas-group-edge top" @mousedown="startGroupDrag(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge right" @mousedown="startGroupDrag(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge bottom" @mousedown="startGroupDrag(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge left" @mousedown="startGroupDrag(group, $event)" @click.stop="selectGroup(group.id)" />
+          </div>
+        </template>
+
+        <div
+          v-if="selectedGroupMenuRect"
+          class="group-action-capsule"
+          :style="{
+            left: `${selectedGroupMenuRect.left + selectedGroupMenuRect.width / 2}px`,
+            top: `${Math.max(20, selectedGroupMenuRect.top - 54)}px`
+          }"
+        >
+          <button class="group-capsule-btn" @click="openRenameGroupModal">
+            <n-icon :size="14"><CreateOutline /></n-icon>
+            <span>重命名</span>
+          </button>
+          <button class="group-capsule-btn" @click="handleDuplicateSelectedGroup">
+            <n-icon :size="14"><CopyOutline /></n-icon>
+            <span>复制编组</span>
+          </button>
+          <button class="group-capsule-btn" @click="handleUngroupSelectedGroup">
+            <n-icon :size="14"><RemoveOutline /></n-icon>
+            <span>解组</span>
+          </button>
+          <button class="group-capsule-btn danger" @click="handleDeleteSelectedGroup">
+            <n-icon :size="14"><TrashOutline /></n-icon>
+            <span>删除</span>
+          </button>
+        </div>
+      </div>
 
       <!-- Left toolbar | 左侧工具栏 -->
       <aside class="flora-panel absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 p-2 rounded-[36px] z-20 w-[64px]">
@@ -237,6 +305,26 @@
       </div>
     </n-modal>
 
+    <n-modal v-model:show="showGroupRenameModal" :mask-closable="true">
+      <div class="ec-modal canvas-modal canvas-modal-sm">
+        <div class="ec-modal-header">
+          <h2 class="ec-modal-title">Rename Group</h2>
+          <button class="ec-modal-close" @click="showGroupRenameModal = false" aria-label="Close">
+            <n-icon :size="20"><CloseOutline /></n-icon>
+          </button>
+        </div>
+        <div class="ec-modal-body">
+          <section class="ec-modal-section">
+            <n-input v-model:value="groupRenameValue" placeholder="Enter group name" @keyup.enter="confirmRenameGroup" />
+          </section>
+        </div>
+        <div class="ec-modal-actions">
+          <button class="ec-btn ec-btn-secondary" @click="showGroupRenameModal = false">Cancel</button>
+          <button class="ec-btn ec-btn-primary" @click="confirmRenameGroup">Save</button>
+        </div>
+      </div>
+    </n-modal>
+
     <!-- Workflow Panel | 工作流面板 -->
     <WorkflowPanel v-model:show="showWorkflowPanel" @add-workflow="handleAddWorkflow" />
 
@@ -307,6 +395,7 @@ import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
 import { NIcon, NDropdown, NModal, NInput } from 'naive-ui'
 import { 
+  AppsOutline,
   ChevronBackOutline,
   ChevronDownOutline,
   CloseOutline,
@@ -321,7 +410,30 @@ import {
   RemoveOutline,
   FolderOutline
 } from '../icons/coolicons'
-import { nodes, edges, addEdge, addNode, loadProject, saveProject, flushSave, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory } from '../stores/canvas'
+import {
+  nodes,
+  edges,
+  groups,
+  addEdge,
+  addNode,
+  createGroup,
+  deleteGroupWithNodes,
+  duplicateGroup,
+  flushSave,
+  clearCanvas,
+  canvasViewport,
+  updateViewport,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
+  loadProject,
+  manualSaveHistory,
+  removeNodesByIds,
+  renameGroup,
+  translateNodesByIds,
+  ungroup
+} from '../stores/canvas'
 import { loadAllModels } from '../stores/models'
 import { useNodesFactory } from '../hooks'
 import { useAvatarUpload } from '@/hooks/useAvatarUpload'
@@ -344,6 +456,7 @@ onMounted(() => {
 
 // Vue Flow instance | Vue Flow 实例
 const { viewport, zoomIn, zoomOut, fitView, updateNodeInternals } = useVueFlow()
+const canvasShellRef = ref(null)
 
 // Nodes factory | 节点工厂
 const nodesFactory = useNodesFactory({ updateNodeInternals, viewport })
@@ -402,6 +515,15 @@ const suppressPaneClickUntil = ref(0)
 // Flow key for forcing re-render on project switch | 项目切换时强制重新渲染的 key
 const flowKey = ref(Date.now())
 const showWorkflowPanel = ref(false)
+const selectedGroupId = ref(null)
+const groupRects = ref({})
+const multiSelectRect = ref(null)
+const showGroupRenameModal = ref(false)
+const groupRenameTargetId = ref('')
+const groupRenameValue = ref('')
+
+let groupDragState = null
+let overlayRafId = null
 const {
   allowRemixing,
   confirmDelete,
@@ -460,6 +582,197 @@ const nodeMenuStyle = computed(() => {
     transform: 'translateY(-50%)'
   }
 })
+
+const selectedNodeIds = computed(() =>
+  nodes.value.filter((node) => node.selected || node.data?.selected).map((node) => node.id)
+)
+
+const renderedGroups = computed(() =>
+  groups.value
+    .map((group) => ({
+      ...group,
+      rect: groupRects.value[group.id]
+    }))
+    .filter((group) => group.rect)
+)
+
+const selectedGroup = computed(() => groups.value.find((group) => group.id === selectedGroupId.value) || null)
+const selectedGroupMenuRect = computed(() => (selectedGroupId.value ? groupRects.value[selectedGroupId.value] || null : null))
+const multiSelectMenuRect = computed(() => {
+  if (selectedGroupId.value) return null
+  if (selectedNodeIds.value.length < 2) return null
+  return multiSelectRect.value
+})
+
+const clearNodeSelection = () => {
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    selected: false,
+    data: {
+      ...(node.data || {}),
+      selected: false,
+      openPortMenu: null
+    }
+  }))
+}
+
+const clearGroupSelection = () => {
+  selectedGroupId.value = null
+}
+
+const selectGroup = (groupIdToSelect) => {
+  clearNodeSelection()
+  selectedGroupId.value = groupIdToSelect
+  showNodeMenu.value = false
+  clearNodeMenuContext()
+}
+
+const getNodeElement = (nodeId) => {
+  const root = canvasShellRef.value
+  if (!root) return null
+  return root.querySelector(`.vue-flow__node[data-id="${nodeId}"]`)
+}
+
+const mergeRects = (rects, shellRect) => {
+  if (!rects.length) return null
+  const left = Math.min(...rects.map((rect) => rect.left - shellRect.left))
+  const top = Math.min(...rects.map((rect) => rect.top - shellRect.top))
+  const right = Math.max(...rects.map((rect) => rect.right - shellRect.left))
+  const bottom = Math.max(...rects.map((rect) => rect.bottom - shellRect.top))
+  return {
+    left,
+    top,
+    width: right - left,
+    height: bottom - top
+  }
+}
+
+const updateOverlayRects = () => {
+  overlayRafId = null
+  const shell = canvasShellRef.value
+  if (!shell) return
+
+  const shellRect = shell.getBoundingClientRect()
+  const nextGroupRects = {}
+
+  groups.value.forEach((group) => {
+    const memberRects = (group.nodeIds || [])
+      .map((nodeId) => getNodeElement(nodeId)?.getBoundingClientRect() || null)
+      .filter(Boolean)
+    const merged = mergeRects(memberRects, shellRect)
+    if (merged) nextGroupRects[group.id] = merged
+  })
+
+  const selectedRects = selectedNodeIds.value
+    .map((nodeId) => getNodeElement(nodeId)?.getBoundingClientRect() || null)
+    .filter(Boolean)
+
+  groupRects.value = nextGroupRects
+  multiSelectRect.value = selectedNodeIds.value.length >= 2 ? mergeRects(selectedRects, shellRect) : null
+}
+
+const scheduleOverlayRectUpdate = () => {
+  if (overlayRafId) cancelAnimationFrame(overlayRafId)
+  nextTick(() => {
+    overlayRafId = requestAnimationFrame(updateOverlayRects)
+  })
+}
+
+const handleCreateGroup = () => {
+  if (selectedNodeIds.value.length < 2) return
+  const groupId = createGroup(selectedNodeIds.value)
+  if (!groupId) return
+  clearNodeSelection()
+  selectedGroupId.value = groupId
+  notifier.success('Group created')
+  scheduleOverlayRectUpdate()
+}
+
+const openRenameGroupModal = () => {
+  if (!selectedGroup.value) return
+  groupRenameTargetId.value = selectedGroup.value.id
+  groupRenameValue.value = selectedGroup.value.name || ''
+  showGroupRenameModal.value = true
+}
+
+const confirmRenameGroup = () => {
+  if (!groupRenameTargetId.value) return
+  const ok = renameGroup(groupRenameTargetId.value, groupRenameValue.value)
+  if (!ok) return
+  showGroupRenameModal.value = false
+  notifier.success('Group renamed')
+  scheduleOverlayRectUpdate()
+}
+
+const handleDuplicateSelectedGroup = () => {
+  if (!selectedGroupId.value) return
+  const newGroupId = duplicateGroup(selectedGroupId.value, { x: 60, y: 60 })
+  if (!newGroupId) return
+  selectedGroupId.value = newGroupId
+  notifier.success('Group duplicated')
+  scheduleOverlayRectUpdate()
+}
+
+const handleUngroupSelectedGroup = () => {
+  if (!selectedGroupId.value) return
+  const ok = ungroup(selectedGroupId.value)
+  if (!ok) return
+  selectedGroupId.value = null
+  notifier.success('Group removed')
+  scheduleOverlayRectUpdate()
+}
+
+const handleDeleteSelectedGroup = () => {
+  if (!selectedGroupId.value) return
+  const ok = deleteGroupWithNodes(selectedGroupId.value)
+  if (!ok) return
+  selectedGroupId.value = null
+  notifier.success('Group deleted')
+  scheduleOverlayRectUpdate()
+}
+
+const startGroupDrag = (group, event) => {
+  if (event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+  selectGroup(group.id)
+  groupDragState = {
+    groupId: group.id,
+    nodeIds: [...group.nodeIds],
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    lastDeltaX: 0,
+    lastDeltaY: 0,
+    didMove: false
+  }
+  window.addEventListener('mousemove', handleGroupDragMove)
+  window.addEventListener('mouseup', stopGroupDrag)
+}
+
+const handleGroupDragMove = (event) => {
+  if (!groupDragState) return
+  const zoom = viewport.value?.zoom || 1
+  const nextDeltaX = (event.clientX - groupDragState.startClientX) / zoom
+  const nextDeltaY = (event.clientY - groupDragState.startClientY) / zoom
+  const moveX = nextDeltaX - groupDragState.lastDeltaX
+  const moveY = nextDeltaY - groupDragState.lastDeltaY
+  if (!moveX && !moveY) return
+
+  groupDragState.didMove = true
+  groupDragState.lastDeltaX = nextDeltaX
+  groupDragState.lastDeltaY = nextDeltaY
+  translateNodesByIds(groupDragState.nodeIds, { x: moveX, y: moveY }, false)
+  scheduleOverlayRectUpdate()
+}
+
+const stopGroupDrag = () => {
+  window.removeEventListener('mousemove', handleGroupDragMove)
+  window.removeEventListener('mouseup', stopGroupDrag)
+  if (groupDragState?.didMove) {
+    manualSaveHistory()
+  }
+  groupDragState = null
+}
 
 const clearNodeMenuContext = () => {
   nodeMenuMode.value = 'toolbar'
@@ -650,6 +963,7 @@ const syncNodeSelectedState = () => {
 
 // Handle node click | 处理节点点击
 const onNodeClick = () => {
+  clearGroupSelection()
   showNodeMenu.value = false
   clearNodeMenuContext()
 }
@@ -658,12 +972,17 @@ const onNodeClick = () => {
 const onNodesChange = () => {
   nextTick(() => {
     syncNodeSelectedState()
+    if (selectedNodeIds.value.length > 0) {
+      clearGroupSelection()
+    }
+    scheduleOverlayRectUpdate()
   })
 }
 
 // Handle viewport change | 处理视口变化
 const handleViewportChange = (newViewport) => {
   updateViewport(newViewport)
+  scheduleOverlayRectUpdate()
 }
 
 // Handle edges change | 处理边变化
@@ -684,6 +1003,7 @@ const onPaneClick = () => {
   if (Date.now() < suppressPaneClickUntil.value) {
     return
   }
+  clearGroupSelection()
   showNodeMenu.value = false
   clearNodeMenuContext()
   nodes.value = nodes.value.map((node) => ({
@@ -712,18 +1032,19 @@ const removeSelectedElements = () => {
   const selectedEdgeIds = new Set(edges.value.filter((edge) => edge.selected).map((edge) => edge.id))
   if (selectedNodeIds.size === 0 && selectedEdgeIds.size === 0) return
 
-  nodes.value = nodes.value.filter((node) => !selectedNodeIds.has(node.id))
-  edges.value = edges.value.filter((edge) => {
-    if (selectedEdgeIds.has(edge.id)) return false
-    if (selectedNodeIds.has(edge.source) || selectedNodeIds.has(edge.target)) return false
-    return true
-  })
+  removeNodesByIds(Array.from(selectedNodeIds), false)
+  edges.value = edges.value.filter((edge) => !selectedEdgeIds.has(edge.id))
   manualSaveHistory()
 }
 
 const handleGlobalKeydown = (event) => {
   if (isTypingElement(event.target)) return
   if (event.key !== 'Delete' && event.key !== 'Backspace') return
+  if (selectedGroupId.value) {
+    event.preventDefault()
+    handleDeleteSelectedGroup()
+    return
+  }
   removeSelectedElements()
 }
 
@@ -788,6 +1109,17 @@ watch(
   }
 )
 
+watch([nodes, groups, viewport], () => {
+  scheduleOverlayRectUpdate()
+}, { deep: true })
+
+watch(selectedGroupId, (groupId) => {
+  if (groupId && !groups.value.some((group) => group.id === groupId)) {
+    selectedGroupId.value = null
+  }
+  scheduleOverlayRectUpdate()
+})
+
 const handlePageHide = () => {
   flushSave()
 }
@@ -802,6 +1134,7 @@ const handleVisibilityChange = () => {
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  window.addEventListener('resize', scheduleOverlayRectUpdate)
   window.addEventListener('pagehide', handlePageHide)
   window.addEventListener('keydown', handleGlobalKeydown)
   document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -814,14 +1147,18 @@ onMounted(async () => {
   loadProjectById(route.params.id)
   await nextTick()
   await applyPendingWorkflowTemplate()
+  scheduleOverlayRectUpdate()
 })
 
 // Cleanup on unmount | 卸载时清理
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  window.removeEventListener('resize', scheduleOverlayRectUpdate)
   window.removeEventListener('pagehide', handlePageHide)
   window.removeEventListener('keydown', handleGlobalKeydown)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
+  stopGroupDrag()
+  if (overlayRafId) cancelAnimationFrame(overlayRafId)
   // Save project before leaving | 离开前保存项目
   flushSave()
 })
@@ -1171,6 +1508,153 @@ onUnmounted(() => {
 
 .canvas-flow :deep(.vue-flow__pane) {
   background: #1c1c1c;
+}
+
+.group-overlay-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  pointer-events: none;
+}
+
+.multi-select-capsule,
+.group-action-capsule {
+  position: absolute;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(29, 29, 31, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 36px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+
+.group-capsule-btn {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f3f4f6;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.group-capsule-btn:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.group-capsule-btn.danger {
+  color: #d89b90;
+  border-color: rgba(196, 106, 92, 0.24);
+}
+
+.group-capsule-btn.danger:hover {
+  border-color: rgba(196, 106, 92, 0.48);
+  background: rgba(196, 106, 92, 0.1);
+}
+
+.canvas-group-box {
+  position: absolute;
+  pointer-events: none;
+}
+
+.canvas-group-title {
+  position: absolute;
+  left: 0;
+  top: -44px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(41, 41, 43, 0.96);
+  color: #f3f4f6;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+}
+
+.canvas-group-title.is-selected {
+  border-color: rgba(165, 129, 99, 0.52);
+  box-shadow: 0 0 0 1px rgba(165, 129, 99, 0.28);
+}
+
+.canvas-group-edge {
+  position: absolute;
+  border: none;
+  background: transparent;
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.canvas-group-edge::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+}
+
+.canvas-group-box.is-selected .canvas-group-edge::before {
+  border-color: rgba(235, 226, 216, 0.88);
+  box-shadow: 0 0 0 1px rgba(165, 129, 99, 0.2);
+}
+
+.canvas-group-edge.top,
+.canvas-group-edge.bottom {
+  left: 0;
+  width: 100%;
+  height: 14px;
+}
+
+.canvas-group-edge.left,
+.canvas-group-edge.right {
+  top: 0;
+  width: 14px;
+  height: 100%;
+}
+
+.canvas-group-edge.top {
+  top: 0;
+}
+
+.canvas-group-edge.top::before,
+.canvas-group-edge.bottom::before {
+  border-left: none;
+  border-right: none;
+}
+
+.canvas-group-edge.bottom {
+  bottom: 0;
+}
+
+.canvas-group-edge.left {
+  left: 0;
+}
+
+.canvas-group-edge.left::before,
+.canvas-group-edge.right::before {
+  border-top: none;
+  border-bottom: none;
+}
+
+.canvas-group-edge.right {
+  right: 0;
 }
 
 .canvas-flow :deep(.vue-flow__node-text),

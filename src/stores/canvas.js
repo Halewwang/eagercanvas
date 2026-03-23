@@ -16,6 +16,11 @@ export const currentProjectId = ref(null)
 // Nodes and edges | 节点和边
 export const nodes = ref([])
 export const edges = ref([])
+export const groups = ref([])
+
+// Group ID counter | 编组ID计数器
+let groupId = 0
+const getGroupId = () => `group_${groupId++}`
 
 // Viewport state | 视口状态
 export const canvasViewport = ref({ x: 100, y: 50, zoom: 0.8 })
@@ -43,7 +48,8 @@ const saveToHistory = () => {
   
   const state = {
     nodes: JSON.parse(JSON.stringify(nodes.value)),
-    edges: JSON.parse(JSON.stringify(edges.value))
+    edges: JSON.parse(JSON.stringify(edges.value)),
+    groups: JSON.parse(JSON.stringify(groups.value))
   }
   
   // Remove future history if we're not at the end | 如果不在末尾，删除未来历史
@@ -80,6 +86,202 @@ export const addNode = (type, position = { x: 100, y: 100 }, data = {}) => {
   nodes.value = [...nodes.value, newNode]
   saveToHistory() // Save after adding node | 添加节点后保存
   return id
+}
+
+const cloneNodes = (items) => JSON.parse(JSON.stringify(items))
+const cloneEdges = (items) => JSON.parse(JSON.stringify(items))
+
+const getNextGroupName = () => {
+  const indices = groups.value
+    .map((group) => {
+      const match = String(group.name || '').match(/^Field\s+(\d+)$/i)
+      return match ? Number(match[1]) : 0
+    })
+    .filter(Boolean)
+  const nextIndex = indices.length ? Math.max(...indices) + 1 : 1
+  return `Field ${nextIndex}`
+}
+
+const normalizeGroups = (inputGroups = groups.value, inputNodes = nodes.value) => {
+  const nodeIds = new Set(inputNodes.map((node) => node.id))
+  const seenNodeIds = new Set()
+  const nextGroups = []
+
+  inputGroups.forEach((group) => {
+    const memberIds = Array.from(
+      new Set((group.nodeIds || []).filter((nodeId) => nodeIds.has(nodeId) && !seenNodeIds.has(nodeId)))
+    )
+
+    if (memberIds.length < 2) return
+
+    memberIds.forEach((nodeId) => seenNodeIds.add(nodeId))
+    nextGroups.push({
+      ...group,
+      nodeIds: memberIds,
+      name: group.name || getNextGroupName()
+    })
+  })
+
+  return nextGroups
+}
+
+const commitGroups = (nextGroups, shouldSaveHistory = true) => {
+  groups.value = normalizeGroups(nextGroups, nodes.value)
+  if (shouldSaveHistory) saveToHistory()
+}
+
+export const createGroup = (nodeIds, name = '') => {
+  const uniqueNodeIds = Array.from(new Set(nodeIds)).filter((nodeId) => nodes.value.some((node) => node.id === nodeId))
+  if (uniqueNodeIds.length < 2) return null
+
+  const nextGroups = normalizeGroups(
+    groups.value.map((group) => ({
+      ...group,
+      nodeIds: (group.nodeIds || []).filter((nodeId) => !uniqueNodeIds.includes(nodeId))
+    })),
+    nodes.value
+  )
+
+  const newGroup = {
+    id: getGroupId(),
+    name: name || getNextGroupName(),
+    nodeIds: uniqueNodeIds,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  }
+
+  commitGroups([...nextGroups, newGroup], true)
+  return newGroup.id
+}
+
+export const renameGroup = (groupIdToRename, name) => {
+  const nextName = String(name || '').trim()
+  if (!nextName) return false
+
+  let changed = false
+  commitGroups(
+    groups.value.map((group) => {
+      if (group.id !== groupIdToRename) return group
+      changed = true
+      return {
+        ...group,
+        name: nextName,
+        updatedAt: Date.now()
+      }
+    }),
+    changed
+  )
+  return changed
+}
+
+export const ungroup = (groupIdToRemove) => {
+  const nextGroups = groups.value.filter((group) => group.id !== groupIdToRemove)
+  if (nextGroups.length === groups.value.length) return false
+  commitGroups(nextGroups, true)
+  return true
+}
+
+const removeNodesFromGroups = (nodeIds) => {
+  const nodeIdSet = new Set(nodeIds)
+  groups.value = normalizeGroups(
+    groups.value.map((group) => ({
+      ...group,
+      nodeIds: (group.nodeIds || []).filter((nodeId) => !nodeIdSet.has(nodeId))
+    })),
+    nodes.value
+  )
+}
+
+export const deleteGroupWithNodes = (groupIdToDelete) => {
+  const targetGroup = groups.value.find((group) => group.id === groupIdToDelete)
+  if (!targetGroup) return false
+
+  const targetIds = new Set(targetGroup.nodeIds || [])
+  nodes.value = nodes.value.filter((node) => !targetIds.has(node.id))
+  edges.value = edges.value.filter((edge) => !targetIds.has(edge.source) && !targetIds.has(edge.target))
+  groups.value = groups.value.filter((group) => group.id !== groupIdToDelete)
+  saveToHistory()
+  return true
+}
+
+export const translateNodesByIds = (nodeIds, delta, shouldSaveHistory = false) => {
+  const nodeIdSet = new Set(nodeIds)
+  const dx = Number(delta?.x || 0)
+  const dy = Number(delta?.y || 0)
+  if (!nodeIdSet.size || (!dx && !dy)) return false
+
+  nodes.value = nodes.value.map((node) => {
+    if (!nodeIdSet.has(node.id)) return node
+    return {
+      ...node,
+      position: {
+        x: node.position.x + dx,
+        y: node.position.y + dy
+      }
+    }
+  })
+
+  if (shouldSaveHistory) saveToHistory()
+  return true
+}
+
+export const duplicateGroup = (groupIdToDuplicate, offset = { x: 60, y: 60 }) => {
+  const sourceGroup = groups.value.find((group) => group.id === groupIdToDuplicate)
+  if (!sourceGroup) return null
+
+  const sourceNodeIds = new Set(sourceGroup.nodeIds || [])
+  const sourceNodes = nodes.value.filter((node) => sourceNodeIds.has(node.id))
+  if (sourceNodes.length < 2) return null
+
+  const idMap = new Map()
+  const maxZIndex = Math.max(0, ...nodes.value.map((node) => node.zIndex || 0))
+  const nextNodes = cloneNodes(nodes.value)
+  const nextEdges = cloneEdges(edges.value)
+
+  sourceNodes.forEach((node, index) => {
+    const newNodeId = getNodeId()
+    idMap.set(node.id, newNodeId)
+    nextNodes.push({
+      ...cloneNodes([node])[0],
+      id: newNodeId,
+      selected: false,
+      position: {
+        x: node.position.x + Number(offset?.x || 0),
+        y: node.position.y + Number(offset?.y || 0)
+      },
+      zIndex: maxZIndex + index + 1,
+      data: {
+        ...(node.data || {}),
+        selected: false,
+        openPortMenu: null
+      }
+    })
+  })
+
+  edges.value.forEach((edge, index) => {
+    if (!sourceNodeIds.has(edge.source) || !sourceNodeIds.has(edge.target)) return
+    nextEdges.push({
+      ...cloneEdges([edge])[0],
+      id: `edge_${idMap.get(edge.source)}_${idMap.get(edge.target)}_${Date.now()}_${index}`,
+      source: idMap.get(edge.source),
+      target: idMap.get(edge.target),
+      selected: false
+    })
+  })
+
+  nodes.value = nextNodes
+  edges.value = nextEdges
+
+  const nextGroup = {
+    id: getGroupId(),
+    name: getNextGroupName(),
+    nodeIds: sourceGroup.nodeIds.map((nodeId) => idMap.get(nodeId)).filter(Boolean),
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  }
+  groups.value = normalizeGroups([...groups.value, nextGroup], nodes.value)
+  saveToHistory()
+  return nextGroup.id
 }
 
 // Get default data for node type | 获取节点类型的默认数据
@@ -156,7 +358,18 @@ export const updateNode = (id, data) => {
 export const removeNode = (id) => {
   nodes.value = nodes.value.filter(node => node.id !== id)
   edges.value = edges.value.filter(edge => edge.source !== id && edge.target !== id)
+  removeNodesFromGroups([id])
   saveToHistory() // Save after removing node | 删除节点后保存
+}
+
+export const removeNodesByIds = (nodeIds, shouldSaveHistory = true) => {
+  const nodeIdSet = new Set(nodeIds)
+  if (!nodeIdSet.size) return false
+  nodes.value = nodes.value.filter((node) => !nodeIdSet.has(node.id))
+  edges.value = edges.value.filter((edge) => !nodeIdSet.has(edge.source) && !nodeIdSet.has(edge.target))
+  removeNodesFromGroups(nodeIds)
+  if (shouldSaveHistory) saveToHistory()
+  return true
 }
 
 // Duplicate node | 复制节点
@@ -212,7 +425,9 @@ export const removeEdge = (id) => {
 export const clearCanvas = () => {
   nodes.value = []
   edges.value = []
+  groups.value = []
   nodeId = 0
+  groupId = 0
 }
 
 // Initialize with sample data | 使用示例数据初始化
@@ -267,6 +482,7 @@ export const loadProject = (projectId) => {
     // Restore nodes | 恢复节点
     nodes.value = canvasData.nodes || []
     edges.value = canvasData.edges || []
+    groups.value = normalizeGroups(canvasData.groups || [], nodes.value)
     canvasViewport.value = canvasData.viewport || { x: 100, y: 50, zoom: 0.8 }
     
     // Normalize stale runtime state after page refresh.
@@ -301,6 +517,14 @@ export const loadProject = (projectId) => {
       return max
     }, -1)
     nodeId = maxId + 1
+    const maxGroupId = groups.value.reduce((max, group) => {
+      const match = String(group.id || '').match(/group_(\d+)/)
+      if (match) {
+        return Math.max(max, parseInt(match[1], 10))
+      }
+      return max
+    }, -1)
+    groupId = maxGroupId + 1
   } else {
     // Empty project | 空项目
     clearCanvas()
@@ -309,7 +533,8 @@ export const loadProject = (projectId) => {
   // Initialize history with current state | 用当前状态初始化历史
   history.value = [{
     nodes: JSON.parse(JSON.stringify(nodes.value)),
-    edges: JSON.parse(JSON.stringify(edges.value))
+    edges: JSON.parse(JSON.stringify(edges.value)),
+    groups: JSON.parse(JSON.stringify(groups.value))
   }]
   historyIndex.value = 0
   
@@ -336,6 +561,7 @@ export const saveProject = async () => {
     const snapshot = {
       nodes: JSON.parse(JSON.stringify(nodes.value)),
       edges: JSON.parse(JSON.stringify(edges.value)),
+      groups: JSON.parse(JSON.stringify(groups.value)),
       viewport: { ...canvasViewport.value }
     }
 
@@ -443,6 +669,7 @@ const restoreState = (state) => {
   isRestoring = true
   nodes.value = JSON.parse(JSON.stringify(state.nodes))
   edges.value = JSON.parse(JSON.stringify(state.edges))
+  groups.value = JSON.parse(JSON.stringify(state.groups || []))
   setTimeout(() => {
     isRestoring = false
   }, 100)
@@ -467,6 +694,6 @@ export const manualSaveHistory = () => {
 }
 
 // Watch for changes and auto-save (only save to project, not history) | 监听变化并自动保存（仅保存项目，不保存历史）
-watch([nodes, edges], () => {
+watch([nodes, edges, groups], () => {
   debouncedSave()
 }, { deep: true })
