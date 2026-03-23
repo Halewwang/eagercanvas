@@ -288,23 +288,25 @@
                           :disabled="saving[item.id] || item.status === 'deleted' || isSelf(item)"
                           @click="saveRoles(item)"
                         >
-                          {{ saving[item.id] ? '保存中...' : (isSelf(item) ? '禁止修改自己' : '保存角色') }}
+                          {{ saving[item.id] ? '保存中...' : (isSelf(item) ? '禁止操作自己' : '保存角色') }}
                         </button>
                       </div>
                     </td>
                     <td v-if="showUserActions" class="px-3 py-4">
-                      <div class="user-action-stack">
-                        <div v-if="canAssignApiKeys" class="user-action-line">
+                      <div class="action-editor-card">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-white/35">操作中心</p>
+                        <div v-if="canAssignApiKeys" class="action-editor-block">
+                          <p class="text-[11px] text-white/45">API 密钥分配</p>
                           <select
                             v-model="assignSelections[item.id]"
-                            class="ui-text-input !w-[180px]"
+                            class="ui-text-input action-editor-select"
                             :disabled="item.status === 'deleted' || !apiKeyOptions.length"
                           >
                             <option value="">选择 API 密钥</option>
                             <option v-for="name in apiKeyOptions" :key="`${item.id}-${name}`" :value="name">{{ name }}</option>
                           </select>
                           <button
-                            class="ui-micro-btn"
+                            class="ui-micro-btn ui-micro-btn-primary action-editor-main"
                             :disabled="assignmentLoading[item.id] || item.status === 'deleted' || !assignSelections[item.id]"
                             @click="assignApiKey(item)"
                           >
@@ -314,7 +316,9 @@
                         <p v-if="canAssignApiKeys && !apiKeyOptions.length" class="text-[11px] text-white/45">
                           当前没有可用于分配的 API 密钥库存。
                         </p>
-                        <div class="flex flex-wrap gap-2">
+                        <div class="action-editor-block">
+                          <p class="text-[11px] text-white/45">账号状态</p>
+                          <div class="action-editor-actions">
                           <button
                             v-if="canManageUserStatus && item.status === 'active'"
                             class="ui-micro-btn"
@@ -339,6 +343,7 @@
                           >
                             {{ deleting[item.id] ? '删除中...' : (isSelf(item) ? '禁止操作自己' : '删除') }}
                           </button>
+                        </div>
                         </div>
                       </div>
                     </td>
@@ -1274,14 +1279,33 @@ onBeforeUnmount(() => {
   padding: 12px;
 }
 
-.user-action-stack {
+.action-editor-card {
   display: flex;
   min-width: 260px;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+}
+
+.action-editor-block {
+  display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.user-action-line {
+.action-editor-select {
+  width: 100%;
+  min-width: 180px;
+}
+
+.action-editor-main {
+  width: 100%;
+}
+
+.action-editor-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
