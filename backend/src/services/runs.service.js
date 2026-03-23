@@ -184,9 +184,22 @@ const enrichUsageWith302Record = async (providerResponse = {}, fallbackUsage = {
   }
 }
 
+const assertAssignedProviderAccess = (providerAccess = {}) => {
+  if (String(providerAccess.apiName || '').trim() && String(providerAccess.apiKey || '').trim()) {
+    return
+  }
+
+  throw new HttpError(
+    403,
+    'No API key has been assigned to this account yet. Please contact an administrator.',
+    'API_KEY_NOT_ASSIGNED'
+  )
+}
+
 export const createRun = async (userId, input) => {
   const payload = runSchema.parse(input)
   const providerAccess = await resolveUserProviderAccess(userId, payload.payload?.api_name || payload.payload?.apiName)
+  assertAssignedProviderAccess(providerAccess)
   const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
 
   const startedAt = Date.now()
