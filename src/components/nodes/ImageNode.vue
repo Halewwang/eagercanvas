@@ -197,6 +197,7 @@ import {
   imageModelOptions
 } from '../../stores/models'
 import { useApiConfig, useImageGeneration } from '../../hooks'
+import { getErrorMessage } from '@/utils'
 import { dataUrlToFile, persistImageUrl, uploadImageFile } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
@@ -751,8 +752,9 @@ const runImageGeneration = async (mode = 'create') => {
     await saveProject()
     window.$message?.success(mode === 'regenerate' ? 'Image regenerated' : 'Image generated')
   } catch (err) {
-    updateNode(props.id, { loading: false, error: err?.message || 'Generation failed' })
-    window.$message?.error(err?.message || 'Image generation failed')
+    const message = getErrorMessage(err, 'Image generation failed')
+    updateNode(props.id, { loading: false, error: message })
+    window.$message?.error(message)
   } finally {
     imageActionLoading.value = ''
   }
@@ -1142,8 +1144,9 @@ const handleFileUpload = async (event) => {
       isUploading.value = false
     }
   } catch (err) {
-    updateNode(props.id, { loading: false, error: err?.message || 'Upload failed' })
-    window.$message?.error('Image upload failed')
+    const message = getErrorMessage(err, 'Image upload failed')
+    updateNode(props.id, { loading: false, error: message })
+    window.$message?.error(message)
   } finally {
     if (event?.target) event.target.value = ''
   }

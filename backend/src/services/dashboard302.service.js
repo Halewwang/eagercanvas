@@ -108,9 +108,27 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
     return cached.apiKey
   }
 
-  const response = await get302ApiKey(safeName)
-  const payload = response?.data && typeof response.data === 'object' ? response.data : response
-  const apiKey = String(payload?.api_key || payload?.key || '').trim()
+  let apiKey = ''
+
+  try {
+    const response = await get302ApiKey(safeName)
+    const payload = response?.data && typeof response.data === 'object' ? response.data : response
+    apiKey = String(payload?.api_key || payload?.key || '').trim()
+  } catch (error) {
+    apiKey = ''
+  }
+
+  if (!apiKey) {
+    try {
+      const response = await get302ApiKeys()
+      const list = Array.isArray(response?.data) ? response.data : (Array.isArray(response) ? response : [])
+      const matched = list.find((item) => String(item?.api_name || '').trim() === safeName)
+      apiKey = String(matched?.api_key || matched?.key || '').trim()
+    } catch (error) {
+      apiKey = ''
+    }
+  }
+
   if (!apiKey) return ''
 
   runtimeApiKeyCache.set(safeName, {
