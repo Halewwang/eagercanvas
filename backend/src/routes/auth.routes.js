@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { asyncHandler } from '../utils/http.js'
+import { asyncHandler, sendJson } from '../utils/http.js'
 import {
   clearRefreshCookie,
   getMe,
@@ -16,7 +16,7 @@ export const authRouter = Router()
 
 authRouter.post('/send-code', asyncHandler(async (req, res) => {
   const result = await sendCode({ email: req.body.email, ip: req.ip, purpose: 'login' })
-  res.json(result)
+  sendJson(res, result)
 }))
 
 authRouter.post('/verify-code', asyncHandler(async (req, res) => {
@@ -28,7 +28,7 @@ authRouter.post('/verify-code', asyncHandler(async (req, res) => {
   })
 
   setRefreshCookie(res, result.refreshToken)
-  res.json({
+  sendJson(res, {
     accessToken: result.accessToken,
     user: result.user
   })
@@ -36,7 +36,7 @@ authRouter.post('/verify-code', asyncHandler(async (req, res) => {
 
 authRouter.post('/register/send-code', asyncHandler(async (req, res) => {
   const result = await sendCode({ email: req.body.email, ip: req.ip, purpose: 'register' })
-  res.json(result)
+  sendJson(res, result)
 }))
 
 authRouter.post('/register/verify-code', asyncHandler(async (req, res) => {
@@ -49,7 +49,7 @@ authRouter.post('/register/verify-code', asyncHandler(async (req, res) => {
   })
 
   setRefreshCookie(res, result.refreshToken)
-  res.json({
+  sendJson(res, {
     accessToken: result.accessToken,
     user: result.user
   })
@@ -58,22 +58,22 @@ authRouter.post('/register/verify-code', asyncHandler(async (req, res) => {
 authRouter.post('/refresh', asyncHandler(async (req, res) => {
   const refreshToken = req.cookies.ec_refresh_token
   const result = await refreshAccessToken({ refreshToken })
-  res.json(result)
+  sendJson(res, result)
 }))
 
 authRouter.post('/logout', asyncHandler(async (req, res) => {
   const refreshToken = req.cookies.ec_refresh_token
   await logout({ refreshToken })
   clearRefreshCookie(res)
-  res.json({ ok: true })
+  sendJson(res, { ok: true })
 }))
 
 authRouter.get('/me', authRequired, asyncHandler(async (req, res) => {
   const user = await getMe({ userId: req.user.id })
-  res.json({ user })
+  sendJson(res, { user })
 }))
 
 authRouter.patch('/profile', authRequired, asyncHandler(async (req, res) => {
   const user = await updateProfile({ userId: req.user.id, input: req.body })
-  res.json({ user })
+  sendJson(res, { user })
 }))

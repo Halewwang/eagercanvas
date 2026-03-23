@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { authRequired } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/authz.js'
-import { asyncHandler } from '../utils/http.js'
+import { asyncHandler, sendData } from '../utils/http.js'
 import { getUsageSummary, getUsageTimeseries } from '../services/usage.service.js'
 import { get302ApiKeys, get302ApiRecords, get302Balance, get302RecordByRequestId } from '../services/dashboard302.service.js'
 
@@ -10,23 +10,23 @@ usageRouter.use(authRequired)
 
 usageRouter.get('/summary', asyncHandler(async (req, res) => {
   const summary = await getUsageSummary(req.user.id, req.query.from, req.query.to)
-  res.json({ data: summary })
+  sendData(res, summary)
 }))
 
 usageRouter.get('/timeseries', asyncHandler(async (req, res) => {
   const series = await getUsageTimeseries(req.user.id)
-  res.json({ data: series, granularity: req.query.granularity || 'day' })
+  sendData(res, series, { granularity: req.query.granularity || 'day' })
 }))
 
 
 usageRouter.get('/302/balance', requirePermission(['admin.usage.read_all']), asyncHandler(async (_req, res) => {
   const result = await get302Balance()
-  res.json({ data: result?.data ?? result })
+  sendData(res, result?.data ?? result)
 }))
 
 usageRouter.get('/302/record/:requestId', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
   const result = await get302RecordByRequestId(req.params.requestId)
-  res.json({ data: result?.data ?? result })
+  sendData(res, result?.data ?? result)
 }))
 
 usageRouter.get('/302/api-record', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
@@ -37,15 +37,13 @@ usageRouter.get('/302/api-record', requirePermission(['admin.usage.read_all']), 
     end_time: req.query.end_time
   })
 
-  res.json({
-    data: {
-      items: Array.isArray(result?.items) ? result.items : [],
-      pagination: result?.pagination || null
-    }
+  sendData(res, {
+    items: Array.isArray(result?.items) ? result.items : [],
+    pagination: result?.pagination || null
   })
 }))
 
 usageRouter.get('/302/api-keys', requirePermission(['admin.usage.read_all']), asyncHandler(async (_req, res) => {
   const result = await get302ApiKeys()
-  res.json({ data: Array.isArray(result?.data) ? result.data : [] })
+  sendData(res, Array.isArray(result?.data) ? result.data : [])
 }))

@@ -171,6 +171,7 @@ import { STORAGE_KEYS } from '@/utils/constants'
 import { getErrorMessage } from '@/utils'
 
 const router = useRouter()
+let loadAllPromise = null
 
 const loginForm = ref({ username: '', password: '' })
 const loggingIn = ref(false)
@@ -219,20 +220,28 @@ const maskApiKey = (value) => {
   return `${key.slice(0, 6)}...${key.slice(-4)}`
 }
 
-const loadAll = async () => {
+const loadAll = async ({ force = false } = {}) => {
+  if (loadAllPromise && !force) return loadAllPromise
   loadingAll.value = true
-  try {
-    const [balanceRsp, usersRsp, keysRsp] = await Promise.all([
-      getUsageAdminBalance(),
-      getUsageAdminUsers(),
-      getUsageAdminApiKeys()
-    ])
+  loadAllPromise = (async () => {
+    try {
+      const [balanceRsp, usersRsp, keysRsp] = await Promise.all([
+        getUsageAdminBalance(),
+        getUsageAdminUsers(),
+        getUsageAdminApiKeys()
+      ])
 
-    balance.value = String(balanceRsp?.data?.balance ?? '')
-    users.value = Array.isArray(usersRsp?.data) ? usersRsp.data : []
-    apiKeys.value = Array.isArray(keysRsp?.data) ? keysRsp.data : []
+      balance.value = String(balanceRsp?.data?.balance ?? '')
+      users.value = Array.isArray(usersRsp?.data) ? usersRsp.data : []
+      apiKeys.value = Array.isArray(keysRsp?.data) ? keysRsp.data : []
+    } finally {
+      loadingAll.value = false
+    }
+  })()
+  try {
+    return await loadAllPromise
   } finally {
-    loadingAll.value = false
+    loadAllPromise = null
   }
 }
 
@@ -248,7 +257,7 @@ const handleLogin = async () => {
     setUsageAdminToken(rsp?.token)
     const session = await usageAdminSession()
     adminSession.value = session
-    await loadAll()
+    await loadAll({ force: true })
     window.$message?.success('Admin login success')
   } catch (error) {
     clearUsageAdminToken()
@@ -279,7 +288,7 @@ const createApiKey = async () => {
     })
     window.$message?.success('API key created')
     createForm.value.api_name = ''
-    await loadAll()
+    await loadAll({ force: true })
   } catch (error) {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to create API key'))
   } finally {
@@ -292,7 +301,7 @@ const deleteApiKey = async (apiName) => {
   try {
     await deleteUsageAdminApiKey(apiName)
     window.$message?.success('API key deleted')
-    await loadAll()
+    await loadAll({ force: true })
   } catch (error) {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to delete API key'))
   }
@@ -308,7 +317,7 @@ const assignKeyFromRow = async (apiName) => {
   try {
     await assignUsageAdminUserKey(userId, apiName)
     window.$message?.success('Assigned')
-    await loadAll()
+    await loadAll({ force: true })
   } catch (error) {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to assign key'))
   }

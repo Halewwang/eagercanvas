@@ -1,5 +1,6 @@
 import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
+import { getSharedCacheValue, setSharedCacheValue } from './shared-cache.service.js'
 
 const normalizeBaseUrl = (input = '') => {
   const raw = String(input || '').trim()
@@ -32,8 +33,8 @@ const parseResponse = async (response) => {
   }
 }
 
-const runtimeApiKeyCache = new Map()
 const RUNTIME_API_KEY_TTL_MS = 60 * 1000
+const RUNTIME_API_KEY_NAMESPACE = 'dashboard302-runtime-api-key'
 
 const call302Dashboard = async (path, options = {}) => {
   const { method = 'GET', params = null, body } = options
@@ -103,10 +104,8 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
   const safeName = String(apiName || '').trim()
   if (!safeName) return ''
 
-  const cached = runtimeApiKeyCache.get(safeName)
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.apiKey
-  }
+  const cached = await getSharedCacheValue(RUNTIME_API_KEY_NAMESPACE, safeName)
+  if (cached) return String(cached || '')
 
   let apiKey = ''
 
@@ -131,10 +130,7 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
 
   if (!apiKey) return ''
 
-  runtimeApiKeyCache.set(safeName, {
-    apiKey,
-    expiresAt: Date.now() + RUNTIME_API_KEY_TTL_MS
-  })
+  await setSharedCacheValue(RUNTIME_API_KEY_NAMESPACE, safeName, apiKey, RUNTIME_API_KEY_TTL_MS)
   return apiKey
 }
 

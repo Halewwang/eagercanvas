@@ -1,8 +1,9 @@
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
+import { deleteSharedCacheValue, getSharedCacheValue, setSharedCacheValue } from './shared-cache.service.js'
 
 const CACHE_TTL_MS = Number(process.env.RBAC_CACHE_TTL_MS || 30000)
-const cache = new Map()
+const CACHE_NAMESPACE = 'rbac-authz'
 
 const isMissingRelation = (error) => {
   const msg = String(error?.message || '').toLowerCase()
@@ -76,27 +77,10 @@ const queryPermissionCodes = async (permissionIds) => {
   return (data || []).map((row) => row.code).filter(Boolean)
 }
 
-const readFromCache = (userId) => {
-  const entry = cache.get(userId)
-  if (!entry) return null
-  if (entry.expiresAt <= Date.now()) {
-    cache.delete(userId)
-    return null
-  }
-  return entry.value
-}
-
-const writeCache = (userId, value) => {
-  cache.set(userId, {
-    value,
-    expiresAt: Date.now() + CACHE_TTL_MS
-  })
-}
-
-export const invalidateUserAuthzCache = (userId) => {
+export const invalidateUserAuthzCache = async (userId) => {
   const safeUserId = String(userId || '').trim()
   if (!safeUserId) return
-  cache.delete(safeUserId)
+  await deleteSharedCacheValue(CACHE_NAMESPACE, safeUserId)
 }
 
 export const getUserAuthz = async (userId, { forceRefresh = false } = {}) => {
@@ -106,14 +90,14 @@ export const getUserAuthz = async (userId, { forceRefresh = false } = {}) => {
   }
 
   if (!forceRefresh) {
-    const cached = readFromCache(safeUserId)
+    const cached = await getSharedCacheValue(CACHE_NAMESPACE, safeUserId)
     if (cached) return cached
   }
 
   const { roleIds, missingSchema } = await queryUserRoleIds(safeUserId)
   if (missingSchema) {
     const fallback = { roles: ['user'], permissions: [] }
-    writeCache(safeUserId, fallback)
+    await setSharedCacheValue(CACHE_NAMESPACE, safeUserId, fallback, CACHE_TTL_MS)
     return fallback
   }
 
@@ -125,6 +109,6 @@ export const getUserAuthz = async (userId, { forceRefresh = false } = {}) => {
     roles: roleCodes.length ? roleCodes : ['user'],
     permissions: permissionCodes
   }
-  writeCache(safeUserId, result)
+  await setSharedCacheValue(CACHE_NAMESPACE, safeUserId, result, CACHE_TTL_MS)
   return result
 }

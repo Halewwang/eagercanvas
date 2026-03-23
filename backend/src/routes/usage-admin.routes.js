@@ -2,33 +2,27 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { env } from '../config/env.js'
 import { adminUsageRequired, issueAdminToken } from '../middleware/admin-auth.js'
-import { asyncHandler } from '../utils/http.js'
+import { asyncHandler, sendData, sendJson } from '../utils/http.js'
 import { HttpError } from '../utils/http.js'
 import {
-  create302ApiKey,
-  delete302ApiKey,
-  get302ApiKey,
-  get302ApiKeys,
-  get302ApiRecords,
-  get302Balance,
-  get302RecordByRequestId,
-  update302ApiKey
-} from '../services/dashboard302.service.js'
-import { assignApiKeyToUser, listUsersForAdmin, unassignApiKeyFromUser } from '../services/admin-usage.service.js'
+  assignApiKeyToUser,
+  listUsersForAdmin,
+  unassignApiKeyFromUser
+} from '../services/admin-usage.service.js'
+import {
+  handle302ApiKeyDetail,
+  handle302ApiKeys,
+  handle302ApiRecord,
+  handle302Balance,
+  handle302CreateApiKey,
+  handle302DeleteApiKey,
+  handle302Record,
+  handle302UpdateApiKey
+} from './dashboard302.handlers.js'
 
 const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1)
-})
-
-const apiKeySchema = z.object({
-  api_name: z.string().min(1),
-  allow_save_logs: z.boolean().default(false),
-  allow_custom_model: z.boolean().default(false),
-  allow_manage_key: z.boolean().default(false),
-  limit_cost: z.number().int().nonnegative().default(0),
-  limit_daily_cost: z.number().int().nonnegative().default(0),
-  expired_on: z.number().int().nonnegative().default(0)
 })
 
 const assignSchema = z.object({
@@ -51,72 +45,35 @@ usageAdminRouter.post('/login', asyncHandler(async (req, res) => {
   }
 
   const token = issueAdminToken({ username: payload.username })
-  res.json({
+  sendJson(res, {
     token,
     expiresInSec: Number(env.adminDashboardTokenTtlSec || 86400)
   })
 }))
 
 usageAdminRouter.get('/session', adminUsageRequired, asyncHandler(async (req, res) => {
-  res.json({ admin: req.admin })
+  sendJson(res, { admin: req.admin })
 }))
 
-usageAdminRouter.get('/302/balance', adminUsageRequired, asyncHandler(async (_req, res) => {
-  const result = await get302Balance()
-  res.json({ data: result?.data ?? result })
-}))
+usageAdminRouter.get('/302/balance', adminUsageRequired, handle302Balance)
 
-usageAdminRouter.get('/302/record/:requestId', adminUsageRequired, asyncHandler(async (req, res) => {
-  const result = await get302RecordByRequestId(req.params.requestId)
-  res.json({ data: result?.data ?? result })
-}))
+usageAdminRouter.get('/302/record/:requestId', adminUsageRequired, handle302Record)
 
-usageAdminRouter.get('/302/api-record', adminUsageRequired, asyncHandler(async (req, res) => {
-  const result = await get302ApiRecords({
-    page: req.query.page,
-    limit: req.query.limit,
-    start_time: req.query.start_time,
-    end_time: req.query.end_time
-  })
+usageAdminRouter.get('/302/api-record', adminUsageRequired, handle302ApiRecord)
 
-  res.json({
-    data: {
-      items: Array.isArray(result?.items) ? result.items : [],
-      pagination: result?.pagination || null
-    }
-  })
-}))
+usageAdminRouter.get('/302/api-keys', adminUsageRequired, handle302ApiKeys)
 
-usageAdminRouter.get('/302/api-keys', adminUsageRequired, asyncHandler(async (_req, res) => {
-  const result = await get302ApiKeys()
-  res.json({ data: Array.isArray(result?.data) ? result.data : [] })
-}))
+usageAdminRouter.get('/302/api-keys/:apiName', adminUsageRequired, handle302ApiKeyDetail)
 
-usageAdminRouter.get('/302/api-keys/:apiName', adminUsageRequired, asyncHandler(async (req, res) => {
-  const result = await get302ApiKey(req.params.apiName)
-  res.json({ data: result?.data ?? result })
-}))
+usageAdminRouter.post('/302/api-keys', adminUsageRequired, handle302CreateApiKey)
 
-usageAdminRouter.post('/302/api-keys', adminUsageRequired, asyncHandler(async (req, res) => {
-  const payload = apiKeySchema.parse(req.body || {})
-  const result = await create302ApiKey(payload)
-  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
-}))
+usageAdminRouter.put('/302/api-keys/:apiName', adminUsageRequired, handle302UpdateApiKey)
 
-usageAdminRouter.put('/302/api-keys/:apiName', adminUsageRequired, asyncHandler(async (req, res) => {
-  const payload = apiKeySchema.parse(req.body || {})
-  const result = await update302ApiKey(req.params.apiName, payload)
-  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
-}))
-
-usageAdminRouter.delete('/302/api-keys/:apiName', adminUsageRequired, asyncHandler(async (req, res) => {
-  const result = await delete302ApiKey(req.params.apiName)
-  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
-}))
+usageAdminRouter.delete('/302/api-keys/:apiName', adminUsageRequired, handle302DeleteApiKey)
 
 usageAdminRouter.get('/users', adminUsageRequired, asyncHandler(async (_req, res) => {
   const users = await listUsersForAdmin()
-  res.json({ data: users })
+  sendData(res, users)
 }))
 
 usageAdminRouter.post('/users/:userId/assignments', adminUsageRequired, asyncHandler(async (req, res) => {
@@ -125,7 +82,7 @@ usageAdminRouter.post('/users/:userId/assignments', adminUsageRequired, asyncHan
     userId: req.params.userId,
     apiName: payload.apiName
   })
-  res.json(result)
+  sendJson(res, result)
 }))
 
 usageAdminRouter.delete('/users/:userId/assignments/:apiName', adminUsageRequired, asyncHandler(async (req, res) => {
@@ -133,5 +90,5 @@ usageAdminRouter.delete('/users/:userId/assignments/:apiName', adminUsageRequire
     userId: req.params.userId,
     apiName: req.params.apiName
   })
-  res.json(result)
+  sendJson(res, result)
 }))

@@ -1,0 +1,3736 @@
+diff --git a/README.md b/README.md
+index 92c4587..edc4050 100644
+--- a/README.md
++++ b/README.md
+@@ -19,6 +19,72 @@
+ - 💾 **本地项目存储** - 项目数据本地持久化，支持多项目管理
+ - ↩️ **撤销/重做** - 完整的操作历史记录
+ 
++## 开发与基线压测
++
++- 启动前端：`npm run dev`
++- 启动后端：`npm run dev:api`
++- 启动独立 worker：`npm --prefix backend run worker`
++- 基线压测：`npm run perf:baseline`
++- 场景压测示例：`PERF_SCENARIO_FILE=scripts/perf-scenarios/health.json npm run perf:baseline`
++- 报告落盘：`PERF_SCENARIO_NAME=health npm run perf:report`
++
++队列与缓存运行模式：
++
++- `CACHE_BACKEND=redis`：共享缓存走 Redis
++- `RATE_LIMIT_STORE=redis`：限流走 Redis
++- `RUN_QUEUE_MODE=worker`：图片/视频任务由独立 worker 消费
++- `RUN_QUEUE_MODE=redis`：API 进程内执行，但使用 Redis 共享并发槽位
++- `RUN_QUEUE_MODE=inline`：默认模式，保持最强兼容
++
++当前兼容策略：
++
++- 聊天仍保持同步
++- 图片已改成“请求层透明轮询”的兼容式异步
++- 视频已支持独立 worker 模式，前端仍保持原有轮询交互
++
++常用环境变量：
++
++- `PERF_BASE_URL`：默认 `http://localhost:8787/api/v1`
++- `PERF_PATHS`：逗号分隔路径，默认 `/health`
++- `PERF_CONCURRENCY`：并发数，默认 `10`
++- `PERF_REQUESTS`：总请求数，默认 `100`
++- `PERF_METHOD`：请求方法，默认 `GET`
++- `PERF_BEARER_TOKEN`：需要登录接口时传入 Bearer Token
++- `PERF_BODY`：JSON 字符串，请求体
++- `PERF_SCENARIO_FILE`：场景文件路径，支持每类请求单独定义 method/path/body
++- `PERF_SCENARIO_NAME`：场景名，配合 `npm run perf:report` 使用
++- `PERF_OUTPUT_FILE`：压测结果输出文件
++- `PERF_REPORTS_DIR`：报告目录，默认 `perf-reports`
++- 场景文件支持 `${ENV_VAR}` 占位符，例如 `${PERF_PROJECT_ID}`
++
++常用业务场景变量：
++
++- `PERF_BASE_URL`：例如 `http://localhost:8787/api/v1`
++- `PERF_BEARER_TOKEN`：真实登录后的 access token
++- `PERF_PROJECT_ID`：真实项目 ID
++- `PERF_PROJECT_UPDATED_AT`：项目当前 `updatedAt`，用于保存冲突压测
++- `PERF_IMAGE_MODEL`：真实图片模型名
++
++请求观测相关环境变量：
++
++- `REQUEST_LOG_ENABLED`：默认 `true`
++- `REQUEST_LOG_SLOW_MS`：慢请求阈值，默认 `800`
++
++场景文件示例：
++
++- [health.json](/Users/adler/Documents/New%20project%202/scripts/perf-scenarios/health.json)
++- [auth-me.example.json](/Users/adler/Documents/New%20project%202/scripts/perf-scenarios/auth-me.example.json)
++- [projects-read.example.json](/Users/adler/Documents/New%20project%202/scripts/perf-scenarios/projects-read.example.json)
++- [project-save.example.json](/Users/adler/Documents/New%20project%202/scripts/perf-scenarios/project-save.example.json)
++- [generate-image.example.json](/Users/adler/Documents/New%20project%202/scripts/perf-scenarios/generate-image.example.json)
++
++运行手册与记录模板：
++
++- [perf-runbook.md](/Users/adler/Documents/New%20project%202/doc/perf-runbook.md)
++- [perf-baseline-template.md](/Users/adler/Documents/New%20project%202/doc/perf-baseline-template.md)
++- [worker-cutover-checklist.md](/Users/adler/Documents/New%20project%202/doc/worker-cutover-checklist.md)
++- [prelaunch-stability-checklist.md](/Users/adler/Documents/New%20project%202/doc/prelaunch-stability-checklist.md)
++
+ ## 📦 节点类型
+ 
+ | 节点 | 描述 |
+diff --git a/backend/README.md b/backend/README.md
+index 9e4ad91..d44ca2c 100644
+--- a/backend/README.md
++++ b/backend/README.md
+@@ -33,3 +33,44 @@ Compatibility endpoints used by current frontend workflow:
+ npm install
+ npm run dev
+ ```
++
++## Queue And Worker
++
++The backend now supports three run execution modes:
++
++- `RUN_QUEUE_MODE=inline`
++  Default. The API process handles runs directly. Chat stays synchronous. Image/video runs may still be detached inside the API process.
++- `RUN_QUEUE_MODE=redis`
++  The API process uses Redis-backed shared slots to cap concurrent run execution across instances.
++- `RUN_QUEUE_MODE=worker`
++  The API process only creates queued runs for image/video tasks. A separate worker process polls queued runs and executes them.
++
++Recommended production setup:
++
++```bash
++REDIS_URL=redis://your-redis-host:6379
++CACHE_BACKEND=redis
++RATE_LIMIT_STORE=redis
++RUN_QUEUE_MODE=worker
++RUN_QUEUE_CONCURRENCY=4
++RUN_WORKER_POLL_MS=2000
++RUN_WORKER_BATCH_SIZE=2
++```
++
++Start API:
++
++```bash
++npm start
++```
++
++Start worker:
++
++```bash
++npm run worker
++```
++
++Notes:
++
++- Chat completions remain synchronous to preserve current frontend behavior.
++- Image generation is now compatibly async: the frontend request layer transparently polls `/api/v1/runs/:id`.
++- Video generation is queued and can run in the detached worker mode without changing current frontend polling behavior.
+diff --git a/backend/import.env b/backend/import.env
+index c9e9a80..cfe9eac 100644
+--- a/backend/import.env
++++ b/backend/import.env
+@@ -20,5 +20,13 @@ PROVIDER_API_BASE_URL=https://api.302ai.cn
+ PROVIDER_API_BASE_URLS=https://api.302ai.cn,https://api.302.ai
+ PROVIDER_API_KEY=REPLACE_WITH_PROVIDER_API_KEY
+ 
++REDIS_URL=redis://YOUR_REDIS_HOST:6379
++CACHE_BACKEND=redis
++RATE_LIMIT_STORE=redis
++RUN_QUEUE_MODE=worker
++RUN_QUEUE_CONCURRENCY=4
++RUN_WORKER_POLL_MS=2000
++RUN_WORKER_BATCH_SIZE=2
++
+ RATE_LIMIT_PER_MINUTE=120
+ AUTH_CODE_COOLDOWN_SEC=60
+diff --git a/backend/package-lock.json b/backend/package-lock.json
+index fafa4e6..b26c73b 100644
+--- a/backend/package-lock.json
++++ b/backend/package-lock.json
+@@ -16,6 +16,7 @@
+         "helmet": "^8.1.0",
+         "jsonwebtoken": "^9.0.2",
+         "multer": "^2.1.0",
++        "redis": "^5.11.0",
+         "resend": "^4.8.0",
+         "zod": "^4.1.8"
+       }
+@@ -38,6 +39,75 @@
+         "react-dom": "^18.0 || ^19.0 || ^19.0.0-rc"
+       }
+     },
++    "node_modules/@redis/bloom": {
++      "version": "5.11.0",
++      "resolved": "https://registry.npmjs.org/@redis/bloom/-/bloom-5.11.0.tgz",
++      "integrity": "sha512-KYiVilAhAFN3057afUb/tfYJpsEyTkQB+tQcn5gVVA7DgcNOAj8lLxe4j8ov8BF6I9C1Fe/kwlbuAICcTMX8Lw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 18"
++      },
++      "peerDependencies": {
++        "@redis/client": "^5.11.0"
++      }
++    },
++    "node_modules/@redis/client": {
++      "version": "5.11.0",
++      "resolved": "https://registry.npmjs.org/@redis/client/-/client-5.11.0.tgz",
++      "integrity": "sha512-GHoprlNQD51Xq2Ztd94HHV94MdFZQ3CVrpA04Fz8MVoHM0B7SlbmPEVIjwTbcv58z8QyjnrOuikS0rWF03k5dQ==",
++      "license": "MIT",
++      "peer": true,
++      "dependencies": {
++        "cluster-key-slot": "1.1.2"
++      },
++      "engines": {
++        "node": ">= 18"
++      },
++      "peerDependencies": {
++        "@node-rs/xxhash": "^1.1.0"
++      },
++      "peerDependenciesMeta": {
++        "@node-rs/xxhash": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@redis/json": {
++      "version": "5.11.0",
++      "resolved": "https://registry.npmjs.org/@redis/json/-/json-5.11.0.tgz",
++      "integrity": "sha512-1iAy9kAtcD0quB21RbPTbUqqy+T2Uu2JxucwE+B4A+VaDbIRvpZR6DMqV8Iqaws2YxJYB3GC5JVNzPYio2ErUg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 18"
++      },
++      "peerDependencies": {
++        "@redis/client": "^5.11.0"
++      }
++    },
++    "node_modules/@redis/search": {
++      "version": "5.11.0",
++      "resolved": "https://registry.npmjs.org/@redis/search/-/search-5.11.0.tgz",
++      "integrity": "sha512-g1l7f3Rnyk/xI99oGHIgWHSKFl45Re5YTIcO8j/JE8olz389yUFyz2+A6nqVy/Zi031VgPDWscbbgOk8hlhZ3g==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 18"
++      },
++      "peerDependencies": {
++        "@redis/client": "^5.11.0"
++      }
++    },
++    "node_modules/@redis/time-series": {
++      "version": "5.11.0",
++      "resolved": "https://registry.npmjs.org/@redis/time-series/-/time-series-5.11.0.tgz",
++      "integrity": "sha512-TWFeOcU4xkj0DkndnOyhtxvX1KWD+78UHT3XX3x3XRBUGWeQrKo3jqzDsZwxbggUgf9yLJr/akFHXru66X5UQA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 18"
++      },
++      "peerDependencies": {
++        "@redis/client": "^5.11.0"
++      }
++    },
+     "node_modules/@selderee/plugin-htmlparser2": {
+       "version": "0.11.0",
+       "resolved": "https://registry.npmjs.org/@selderee/plugin-htmlparser2/-/plugin-htmlparser2-0.11.0.tgz",
+@@ -265,6 +335,15 @@
+         "url": "https://github.com/sponsors/ljharb"
+       }
+     },
++    "node_modules/cluster-key-slot": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/cluster-key-slot/-/cluster-key-slot-1.1.2.tgz",
++      "integrity": "sha512-RMr0FhtfXemyinomL4hrWcYJxmX6deFdCxpJzhDttxgO1+bcCnkk+9drydLVDmAMG7NE6aN/fl4F7ucU/90gAA==",
++      "license": "Apache-2.0",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
+     "node_modules/concat-stream": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/concat-stream/-/concat-stream-2.0.0.tgz",
+@@ -1201,6 +1280,22 @@
+         "node": ">= 6"
+       }
+     },
++    "node_modules/redis": {
++      "version": "5.11.0",
++      "resolved": "https://registry.npmjs.org/redis/-/redis-5.11.0.tgz",
++      "integrity": "sha512-YwXjATVDT+AuxcyfOwZn046aml9jMlQPvU1VXIlLDVAExe0u93aTfPYSeRgG4p9Q/Jlkj+LXJ1XEoFV+j2JKcQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@redis/bloom": "5.11.0",
++        "@redis/client": "5.11.0",
++        "@redis/json": "5.11.0",
++        "@redis/search": "5.11.0",
++        "@redis/time-series": "5.11.0"
++      },
++      "engines": {
++        "node": ">= 18"
++      }
++    },
+     "node_modules/resend": {
+       "version": "4.8.0",
+       "resolved": "https://registry.npmjs.org/resend/-/resend-4.8.0.tgz",
+diff --git a/backend/package.json b/backend/package.json
+index 812fa0a..1428442 100644
+--- a/backend/package.json
++++ b/backend/package.json
+@@ -5,7 +5,8 @@
+   "type": "module",
+   "scripts": {
+     "dev": "node --watch src/index.js",
+-    "start": "node src/index.js"
++    "start": "node src/index.js",
++    "worker": "node src/worker.js"
+   },
+   "dependencies": {
+     "@supabase/supabase-js": "^2.57.4",
+@@ -16,6 +17,7 @@
+     "helmet": "^8.1.0",
+     "jsonwebtoken": "^9.0.2",
+     "multer": "^2.1.0",
++    "redis": "^5.11.0",
+     "resend": "^4.8.0",
+     "zod": "^4.1.8"
+   }
+diff --git a/backend/src/app.js b/backend/src/app.js
+index 0a2e735..792f18d 100644
+--- a/backend/src/app.js
++++ b/backend/src/app.js
+@@ -46,13 +46,34 @@ app.use(cors({
+ }))
+ app.use(express.json({ limit: '10mb' }))
+ app.use(cookieParser())
+-app.use(rateLimit)
+ app.use((req, res, next) => {
+   const requestId = req.headers['x-request-id'] || randomUUID()
+   req.requestId = String(requestId)
+   res.setHeader('x-request-id', req.requestId)
+   next()
+ })
++app.use((req, res, next) => {
++  if (!env.requestLogEnabled) return next()
++
++  const startedAt = Date.now()
++  res.on('finish', () => {
++    const durationMs = Date.now() - startedAt
++    const shouldLog = res.statusCode >= 400 || durationMs >= env.requestLogSlowMs
++    if (!shouldLog) return
++
++    console.log('[api:request]', JSON.stringify({
++      requestId: req.requestId,
++      method: req.method,
++      path: req.originalUrl || req.path,
++      status: res.statusCode,
++      durationMs,
++      routeGroup: req.rateLimitRouteGroup || 'unknown',
++      userId: req.user?.id || null
++    }))
++  })
++  next()
++})
++app.use(rateLimit)
+ 
+ app.use('/api/v1', apiRouter)
+ 
+diff --git a/backend/src/config/env.js b/backend/src/config/env.js
+index cb268f0..590f18f 100644
+--- a/backend/src/config/env.js
++++ b/backend/src/config/env.js
+@@ -48,6 +48,21 @@ export const env = {
+   adminDashboardJwtSecret: process.env.ADMIN_DASHBOARD_JWT_SECRET || '',
+   adminDashboardTokenTtlSec: Number(process.env.ADMIN_DASHBOARD_TOKEN_TTL_SEC || 86400),
+ 
++  cacheBackend: String(process.env.CACHE_BACKEND || 'memory').trim() || 'memory',
++  rateLimitStore: String(process.env.RATE_LIMIT_STORE || 'memory').trim() || 'memory',
++  redisUrl: process.env.REDIS_URL || '',
++  runQueueMode: String(process.env.RUN_QUEUE_MODE || 'inline').trim() || 'inline',
++  runQueueConcurrency: Number(process.env.RUN_QUEUE_CONCURRENCY || 4),
++  runWorkerPollMs: Number(process.env.RUN_WORKER_POLL_MS || 2000),
++  runWorkerBatchSize: Number(process.env.RUN_WORKER_BATCH_SIZE || 2),
++  runRecoveryEnabled: String(process.env.RUN_RECOVERY_ENABLED || 'true') !== 'false',
++  runClaimTimeoutMs: Number(process.env.RUN_CLAIM_TIMEOUT_MS || 15 * 60 * 1000),
++
+   rateLimitPerMinute: Number(process.env.RATE_LIMIT_PER_MINUTE || 120),
++  rateLimitAuthPerMinute: Number(process.env.RATE_LIMIT_AUTH_PER_MINUTE || 30),
++  rateLimitGeneratePerMinute: Number(process.env.RATE_LIMIT_GENERATE_PER_MINUTE || 40),
++  rateLimitPollingPerMinute: Number(process.env.RATE_LIMIT_POLLING_PER_MINUTE || 240),
++  requestLogEnabled: String(process.env.REQUEST_LOG_ENABLED || 'true') !== 'false',
++  requestLogSlowMs: Number(process.env.REQUEST_LOG_SLOW_MS || 800),
+   codeCooldownSec: Number(process.env.AUTH_CODE_COOLDOWN_SEC || 60)
+ }
+diff --git a/backend/src/index.js b/backend/src/index.js
+index 46ef9d9..2139041 100644
+--- a/backend/src/index.js
++++ b/backend/src/index.js
+@@ -1,6 +1,14 @@
+ import { app } from './app.js'
+ import { env } from './config/env.js'
++import { startRunWorkerLoop } from './services/run-worker-loop.service.js'
+ 
+ app.listen(env.port, () => {
+   console.log(`[api] listening on http://localhost:${env.port}`)
+ })
++
++if (env.runRecoveryEnabled && env.runQueueMode !== 'worker') {
++  startRunWorkerLoop({
++    label: 'api-run-recovery',
++    shouldProcess: () => env.runQueueMode !== 'worker'
++  })
++}
+diff --git a/backend/src/middleware/auth.js b/backend/src/middleware/auth.js
+index 0724f9f..734aac1 100644
+--- a/backend/src/middleware/auth.js
++++ b/backend/src/middleware/auth.js
+@@ -1,6 +1,7 @@
+ import jwt from 'jsonwebtoken'
+ import { env } from '../config/env.js'
+ import { supabase } from '../config/supabase.js'
++import { getCachedAuthenticatedUser, setCachedAuthenticatedUser } from '../services/auth-user-cache.service.js'
+ import { getUserAuthz } from '../services/rbac.service.js'
+ import { HttpError } from '../utils/http.js'
+ 
+@@ -20,14 +21,25 @@ export const authRequired = async (req, _res, next) => {
+   }
+ 
+   try {
+-    const { data: user, error: userError } = await supabase
+-      .from('users')
+-      .select('*')
+-      .eq('id', payload.sub)
+-      .maybeSingle()
+-    if (userError) {
+-      return next(new HttpError(500, userError.message, 'USER_QUERY_FAILED'))
++    let user = await getCachedAuthenticatedUser(payload.sub)
++
++    if (!user) {
++      const { data, error: userError } = await supabase
++        .from('users')
++        .select('id, email, status, deleted_at')
++        .eq('id', payload.sub)
++        .maybeSingle()
++
++      if (userError) {
++        return next(new HttpError(500, userError.message, 'USER_QUERY_FAILED'))
++      }
++
++      user = data || null
++      if (user) {
++        await setCachedAuthenticatedUser(payload.sub, user)
++      }
+     }
++
+     if (!user || user.deleted_at || user.status === 'deleted') {
+       return next(new HttpError(403, 'Account is deleted', 'ACCOUNT_DELETED'))
+     }
+diff --git a/backend/src/middleware/error.js b/backend/src/middleware/error.js
+index de7a094..0b845ce 100644
+--- a/backend/src/middleware/error.js
++++ b/backend/src/middleware/error.js
+@@ -3,6 +3,7 @@ import { HttpError } from '../utils/http.js'
+ export const errorMiddleware = (err, req, res, _next) => {
+   const status = err instanceof HttpError ? err.status : 500
+   const code = err instanceof HttpError ? err.code : 'INTERNAL_ERROR'
++  const details = err instanceof HttpError ? err.details : null
+ 
+   if (status >= 500) {
+     console.error('[server:error]', {
+@@ -17,6 +18,7 @@ export const errorMiddleware = (err, req, res, _next) => {
+   res.status(status).json({
+     code,
+     message: err.message || 'Unexpected server error',
++    ...(details ? { details } : {}),
+     requestId: req.requestId
+   })
+ }
+diff --git a/backend/src/middleware/rate-limit.js b/backend/src/middleware/rate-limit.js
+index fcaa887..b59aa88 100644
+--- a/backend/src/middleware/rate-limit.js
++++ b/backend/src/middleware/rate-limit.js
+@@ -1,39 +1,102 @@
+ import { env } from '../config/env.js'
++import { consumeRateLimit } from '../services/rate-limit-store.service.js'
+ import { HttpError } from '../utils/http.js'
+ 
+-const buckets = new Map()
+-let lastPruneTs = 0
+-
+ const nowSec = () => Math.floor(Date.now() / 1000)
+ const WINDOW_SECONDS = 60
+-const PRUNE_INTERVAL_SECONDS = 300
+ 
+-const pruneBuckets = (current) => {
+-  if (current - lastPruneTs < PRUNE_INTERVAL_SECONDS) return
+-  const windowStart = current - WINDOW_SECONDS
+-  for (const [key, items] of buckets.entries()) {
+-    const valid = items.filter((t) => t >= windowStart)
+-    if (valid.length === 0) buckets.delete(key)
+-    else buckets.set(key, valid)
+-  }
+-  lastPruneTs = current
++const stripQuery = (value = '') => String(value || '').split('?')[0] || '/'
++
++const getClientIp = (req) => {
++  const forwardedFor = String(req.headers['x-forwarded-for'] || '')
++  const firstForwarded = forwardedFor.split(',').map((item) => item.trim()).find(Boolean)
++  return firstForwarded || req.ip || 'unknown'
+ }
+ 
+-export const rateLimit = (req, _res, next) => {
++const getIdentityKey = (req) => {
+   const authHeader = String(req.headers.authorization || '')
+-  const authSuffix = authHeader.startsWith('Bearer ') ? authHeader.slice(-16) : 'anonymous'
+-  const key = `${req.ip}:${req.path}:${authSuffix}`
+-  const current = nowSec()
+-  const windowStart = current - WINDOW_SECONDS
+-  pruneBuckets(current)
+-  const items = buckets.get(key) || []
+-  const valid = items.filter((t) => t >= windowStart)
++  if (authHeader.startsWith('Bearer ')) {
++    return `bearer:${authHeader.slice(-16)}`
++  }
++
++  const refreshToken = req.cookies?.ec_refresh_token
++  if (refreshToken) {
++    return `refresh:${String(refreshToken).slice(-16)}`
++  }
++
++  return 'anonymous'
++}
++
++const getRoutePolicy = (req) => {
++  const method = String(req.method || 'GET').toUpperCase()
++  const path = stripQuery(req.originalUrl || req.path)
++
++  if (path === '/api/v1/health') {
++    return { skip: true, key: 'health', limit: 0 }
++  }
+ 
+-  if (valid.length >= env.rateLimitPerMinute) {
+-    return next(new HttpError(429, 'Too many requests', 'RATE_LIMITED'))
++  if (path === '/api/v1/auth/send-code' || path === '/api/v1/auth/register/send-code') {
++    return { key: 'auth-code', limit: env.rateLimitAuthPerMinute }
+   }
+ 
+-  valid.push(current)
+-  buckets.set(key, valid)
+-  next()
++  if (
++    method === 'POST' &&
++    [
++      '/api/v1/chat/completions',
++      '/api/v1/images/generations',
++      '/api/v1/images/remove-background',
++      '/api/v1/videos',
++      '/api/v1/runs',
++      '/api/v1/runs/compat/chat/completions',
++      '/api/v1/runs/compat/images/generations',
++      '/api/v1/runs/compat/videos'
++    ].includes(path)
++  ) {
++    return { key: 'generate', limit: env.rateLimitGeneratePerMinute }
++  }
++
++  if (
++    method === 'GET' &&
++    (
++      /^\/api\/v1\/videos\/[^/]+$/.test(path) ||
++      /^\/api\/v1\/runs\/compat\/videos\/[^/]+$/.test(path) ||
++      /^\/api\/v1\/runs\/[^/]+$/.test(path)
++    )
++  ) {
++    return { key: 'polling', limit: env.rateLimitPollingPerMinute }
++  }
++
++  return { key: 'default', limit: env.rateLimitPerMinute }
++}
++
++export const rateLimit = async (req, _res, next) => {
++  const policy = getRoutePolicy(req)
++  req.rateLimitRouteGroup = policy.key
++  if (policy.skip) {
++    return next()
++  }
++
++  const clientIp = getClientIp(req)
++  const identityKey = getIdentityKey(req)
++  const path = stripQuery(req.originalUrl || req.path)
++  const key = `${policy.key}:${req.method}:${path}:${clientIp}:${identityKey}`
++  try {
++    const result = await consumeRateLimit({
++      key,
++      limit: policy.limit,
++      windowSeconds: WINDOW_SECONDS,
++      currentSec: nowSec()
++    })
++
++    if (!result.allowed) {
++      return next(new HttpError(429, 'Too many requests', 'RATE_LIMITED', {
++        retryAfterSec: result.retryAfterSec || WINDOW_SECONDS,
++        limit: policy.limit,
++        routeGroup: policy.key
++      }))
++    }
++    next()
++  } catch (error) {
++    next(error)
++  }
+ }
+diff --git a/backend/src/routes/admin.routes.js b/backend/src/routes/admin.routes.js
+index e95c72a..1732d59 100644
+--- a/backend/src/routes/admin.routes.js
++++ b/backend/src/routes/admin.routes.js
+@@ -2,16 +2,7 @@ import { Router } from 'express'
+ import { z } from 'zod'
+ import { authRequired } from '../middleware/auth.js'
+ import { requirePermission } from '../middleware/authz.js'
+-import { asyncHandler } from '../utils/http.js'
+-import {
+-  create302ApiKey,
+-  delete302ApiKey,
+-  get302ApiKeys,
+-  get302ApiRecords,
+-  get302Balance,
+-  get302RecordByRequestId,
+-  update302ApiKey
+-} from '../services/dashboard302.service.js'
++import { asyncHandler, sendData, sendJson } from '../utils/http.js'
+ import {
+   assignApiKeyToUser,
+   deleteUserAccount,
+@@ -23,6 +14,15 @@ import {
+   updateUserStatus,
+   updateUserRoles
+ } from '../services/admin-usage.service.js'
++import {
++  handle302ApiKeys,
++  handle302ApiRecord,
++  handle302Balance,
++  handle302CreateApiKey,
++  handle302DeleteApiKey,
++  handle302Record,
++  handle302UpdateApiKey
++} from './dashboard302.handlers.js'
+ 
+ export const adminRouter = Router()
+ adminRouter.use(authRequired)
+@@ -36,23 +36,13 @@ const apiKeyAssignSchema = z.object({
+   apiName: z.string().min(1)
+ })
+ 
+-const admin302ApiKeySchema = z.object({
+-  api_name: z.string().min(1),
+-  allow_save_logs: z.boolean().default(false),
+-  allow_custom_model: z.boolean().default(false),
+-  allow_manage_key: z.boolean().default(false),
+-  limit_cost: z.number().int().nonnegative().default(0),
+-  limit_daily_cost: z.number().int().nonnegative().default(0),
+-  expired_on: z.number().int().nonnegative().default(0)
+-})
+-
+ const updateUserStatusSchema = z.object({
+   status: z.enum(['active', 'suspended']),
+   reason: z.string().max(200).optional()
+ })
+ 
+ adminRouter.get('/session', requirePermission(['admin.dashboard.read']), asyncHandler(async (req, res) => {
+-  res.json({
++  sendJson(res, {
+     user: {
+       id: req.user.id,
+       email: req.user.email
+@@ -64,7 +54,7 @@ adminRouter.get('/session', requirePermission(['admin.dashboard.read']), asyncHa
+ 
+ adminRouter.get('/users', requirePermission(['admin.user.read']), asyncHandler(async (_req, res) => {
+   const users = await listUsersForAdmin()
+-  res.json({ data: users })
++  sendData(res, users)
+ }))
+ 
+ adminRouter.patch('/users/:userId/roles', requirePermission(['admin.user.role.update']), asyncHandler(async (req, res) => {
+@@ -77,7 +67,7 @@ adminRouter.patch('/users/:userId/roles', requirePermission(['admin.user.role.up
+     ip: req.ip,
+     userAgent: req.headers['user-agent'] || ''
+   })
+-  res.json(result)
++  sendJson(res, result)
+ }))
+ 
+ adminRouter.patch('/users/:userId/status', requirePermission(['admin.user.status.update']), asyncHandler(async (req, res) => {
+@@ -91,7 +81,7 @@ adminRouter.patch('/users/:userId/status', requirePermission(['admin.user.status
+     ip: req.ip,
+     userAgent: req.headers['user-agent'] || ''
+   })
+-  res.json(result)
++  sendJson(res, result)
+ }))
+ 
+ adminRouter.delete('/users/:userId', requirePermission(['admin.user.status.update']), asyncHandler(async (req, res) => {
+@@ -102,7 +92,7 @@ adminRouter.delete('/users/:userId', requirePermission(['admin.user.status.updat
+     ip: req.ip,
+     userAgent: req.headers['user-agent'] || ''
+   })
+-  res.json(result)
++  sendJson(res, result)
+ }))
+ 
+ adminRouter.post('/api-keys/assign', requirePermission(['admin.api_key.assign']), asyncHandler(async (req, res) => {
+@@ -114,7 +104,7 @@ adminRouter.post('/api-keys/assign', requirePermission(['admin.api_key.assign'])
+     ip: req.ip,
+     userAgent: req.headers['user-agent'] || ''
+   })
+-  res.json(result)
++  sendJson(res, result)
+ }))
+ 
+ adminRouter.delete('/api-keys/assign', requirePermission(['admin.api_key.assign']), asyncHandler(async (req, res) => {
+@@ -126,7 +116,7 @@ adminRouter.delete('/api-keys/assign', requirePermission(['admin.api_key.assign'
+     ip: req.ip,
+     userAgent: req.headers['user-agent'] || ''
+   })
+-  res.json(result)
++  sendJson(res, result)
+ }))
+ 
+ adminRouter.get('/audit-logs', requirePermission(['admin.audit.read']), asyncHandler(async (req, res) => {
+@@ -134,7 +124,7 @@ adminRouter.get('/audit-logs', requirePermission(['admin.audit.read']), asyncHan
+     page: req.query.page,
+     limit: req.query.limit
+   })
+-  res.json({ data: result.items, pagination: result.pagination })
++  sendData(res, result.items, { pagination: result.pagination })
+ }))
+ 
+ adminRouter.get('/usage/summary', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
+@@ -143,7 +133,7 @@ adminRouter.get('/usage/summary', requirePermission(['admin.usage.read_all']), a
+     to: req.query.to,
+     userId: req.query.userId
+   })
+-  res.json({ data })
++  sendData(res, data)
+ }))
+ 
+ adminRouter.get('/usage/timeseries', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
+@@ -152,52 +142,19 @@ adminRouter.get('/usage/timeseries', requirePermission(['admin.usage.read_all'])
+     to: req.query.to,
+     userId: req.query.userId
+   })
+-  res.json({ data, granularity: 'day' })
++  sendData(res, data, { granularity: 'day' })
+ }))
+ 
+-adminRouter.get('/302/balance', requirePermission(['admin.usage.read_all']), asyncHandler(async (_req, res) => {
+-  const result = await get302Balance()
+-  res.json({ data: result?.data ?? result })
+-}))
++adminRouter.get('/302/balance', requirePermission(['admin.usage.read_all']), handle302Balance)
+ 
+-adminRouter.get('/302/record/:requestId', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
+-  const result = await get302RecordByRequestId(req.params.requestId)
+-  res.json({ data: result?.data ?? result })
+-}))
++adminRouter.get('/302/record/:requestId', requirePermission(['admin.usage.read_all']), handle302Record)
+ 
+-adminRouter.get('/302/api-record', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
+-  const result = await get302ApiRecords({
+-    page: req.query.page,
+-    limit: req.query.limit,
+-    start_time: req.query.start_time,
+-    end_time: req.query.end_time
+-  })
+-  res.json({
+-    data: {
+-      items: Array.isArray(result?.items) ? result.items : [],
+-      pagination: result?.pagination || null
+-    }
+-  })
+-}))
++adminRouter.get('/302/api-record', requirePermission(['admin.usage.read_all']), handle302ApiRecord)
+ 
+-adminRouter.get('/302/api-keys', requirePermission(['admin.api_key.manage']), asyncHandler(async (_req, res) => {
+-  const result = await get302ApiKeys()
+-  res.json({ data: Array.isArray(result?.data) ? result.data : [] })
+-}))
++adminRouter.get('/302/api-keys', requirePermission(['admin.api_key.manage']), handle302ApiKeys)
+ 
+-adminRouter.post('/302/api-keys', requirePermission(['admin.api_key.manage']), asyncHandler(async (req, res) => {
+-  const payload = admin302ApiKeySchema.parse(req.body || {})
+-  const result = await create302ApiKey(payload)
+-  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
+-}))
++adminRouter.post('/302/api-keys', requirePermission(['admin.api_key.manage']), handle302CreateApiKey)
+ 
+-adminRouter.put('/302/api-keys/:apiName', requirePermission(['admin.api_key.manage']), asyncHandler(async (req, res) => {
+-  const payload = admin302ApiKeySchema.parse(req.body || {})
+-  const result = await update302ApiKey(req.params.apiName, payload)
+-  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
+-}))
++adminRouter.put('/302/api-keys/:apiName', requirePermission(['admin.api_key.manage']), handle302UpdateApiKey)
+ 
+-adminRouter.delete('/302/api-keys/:apiName', requirePermission(['admin.api_key.manage']), asyncHandler(async (req, res) => {
+-  const result = await delete302ApiKey(req.params.apiName)
+-  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
+-}))
++adminRouter.delete('/302/api-keys/:apiName', requirePermission(['admin.api_key.manage']), handle302DeleteApiKey)
+diff --git a/backend/src/routes/auth.routes.js b/backend/src/routes/auth.routes.js
+index 3f005bb..2cc108a 100644
+--- a/backend/src/routes/auth.routes.js
++++ b/backend/src/routes/auth.routes.js
+@@ -1,5 +1,5 @@
+ import { Router } from 'express'
+-import { asyncHandler } from '../utils/http.js'
++import { asyncHandler, sendJson } from '../utils/http.js'
+ import {
+   clearRefreshCookie,
+   getMe,
+@@ -16,7 +16,7 @@ export const authRouter = Router()
+ 
+ authRouter.post('/send-code', asyncHandler(async (req, res) => {
+   const result = await sendCode({ email: req.body.email, ip: req.ip, purpose: 'login' })
+-  res.json(result)
++  sendJson(res, result)
+ }))
+ 
+ authRouter.post('/verify-code', asyncHandler(async (req, res) => {
+@@ -28,7 +28,7 @@ authRouter.post('/verify-code', asyncHandler(async (req, res) => {
+   })
+ 
+   setRefreshCookie(res, result.refreshToken)
+-  res.json({
++  sendJson(res, {
+     accessToken: result.accessToken,
+     user: result.user
+   })
+@@ -36,7 +36,7 @@ authRouter.post('/verify-code', asyncHandler(async (req, res) => {
+ 
+ authRouter.post('/register/send-code', asyncHandler(async (req, res) => {
+   const result = await sendCode({ email: req.body.email, ip: req.ip, purpose: 'register' })
+-  res.json(result)
++  sendJson(res, result)
+ }))
+ 
+ authRouter.post('/register/verify-code', asyncHandler(async (req, res) => {
+@@ -49,7 +49,7 @@ authRouter.post('/register/verify-code', asyncHandler(async (req, res) => {
+   })
+ 
+   setRefreshCookie(res, result.refreshToken)
+-  res.json({
++  sendJson(res, {
+     accessToken: result.accessToken,
+     user: result.user
+   })
+@@ -58,22 +58,22 @@ authRouter.post('/register/verify-code', asyncHandler(async (req, res) => {
+ authRouter.post('/refresh', asyncHandler(async (req, res) => {
+   const refreshToken = req.cookies.ec_refresh_token
+   const result = await refreshAccessToken({ refreshToken })
+-  res.json(result)
++  sendJson(res, result)
+ }))
+ 
+ authRouter.post('/logout', asyncHandler(async (req, res) => {
+   const refreshToken = req.cookies.ec_refresh_token
+   await logout({ refreshToken })
+   clearRefreshCookie(res)
+-  res.json({ ok: true })
++  sendJson(res, { ok: true })
+ }))
+ 
+ authRouter.get('/me', authRequired, asyncHandler(async (req, res) => {
+   const user = await getMe({ userId: req.user.id })
+-  res.json({ user })
++  sendJson(res, { user })
+ }))
+ 
+ authRouter.patch('/profile', authRequired, asyncHandler(async (req, res) => {
+   const user = await updateProfile({ userId: req.user.id, input: req.body })
+-  res.json({ user })
++  sendJson(res, { user })
+ }))
+diff --git a/backend/src/routes/index.js b/backend/src/routes/index.js
+index 850682e..b85cf99 100644
+--- a/backend/src/routes/index.js
++++ b/backend/src/routes/index.js
+@@ -1,10 +1,15 @@
+ import { Router } from 'express'
+ import { authRequired } from '../middleware/auth.js'
+-import { asyncHandler } from '../utils/http.js'
+-import { createChatCompletion, createImageGeneration, createVideoGeneration, getVideoTask } from '../services/runs.service.js'
+-import { providerRemoveBackground } from '../services/provider.service.js'
++import { sendJson } from '../utils/http.js'
+ import { adminRouter } from './admin.routes.js'
+ import { authRouter } from './auth.routes.js'
++import {
++  handleCompatChatCompletions,
++  handleCompatImageGenerations,
++  handleCompatRemoveBackground,
++  handleCompatVideoTask,
++  handleCompatVideos
++} from './compat-runs.handlers.js'
+ import { projectsRouter } from './projects.routes.js'
+ import { runsRouter } from './runs.routes.js'
+ import { usageRouter } from './usage.routes.js'
+@@ -15,7 +20,7 @@ import { uploadRouter } from './upload.routes.js'
+ export const apiRouter = Router()
+ 
+ apiRouter.get('/health', (_req, res) => {
+-  res.json({ ok: true, service: 'eagercanvas-api' })
++  sendJson(res, { ok: true, service: 'eagercanvas-api' })
+ })
+ 
+ apiRouter.use('/auth', authRouter)
+@@ -27,27 +32,12 @@ apiRouter.use('/usage-admin', usageAdminRouter)
+ apiRouter.use('/upload', uploadRouter)
+ 
+ // Compatibility endpoints for existing frontend hooks
+-apiRouter.post('/chat/completions', authRequired, asyncHandler(async (req, res) => {
+-  const run = await createChatCompletion(req.user.id, req.body)
+-  res.json(run.result)
+-}))
+-
+-apiRouter.post('/images/generations', authRequired, asyncHandler(async (req, res) => {
+-  const run = await createImageGeneration(req.user.id, req.body)
+-  res.json(run.result)
+-}))
+-
+-apiRouter.post('/images/remove-background', authRequired, asyncHandler(async (req, res) => {
+-  const result = await providerRemoveBackground(req.body || {})
+-  res.json(result)
+-}))
+-
+-apiRouter.post('/videos', authRequired, asyncHandler(async (req, res) => {
+-  const run = await createVideoGeneration(req.user.id, req.body)
+-  res.json(run.result)
+-}))
+-
+-apiRouter.get('/videos/:taskId', authRequired, asyncHandler(async (req, res) => {
+-  const result = await getVideoTask(req.user.id, req.params.taskId)
+-  res.json(result)
+-}))
++apiRouter.post('/chat/completions', authRequired, handleCompatChatCompletions)
++
++apiRouter.post('/images/generations', authRequired, handleCompatImageGenerations)
++
++apiRouter.post('/images/remove-background', authRequired, handleCompatRemoveBackground)
++
++apiRouter.post('/videos', authRequired, handleCompatVideos)
++
++apiRouter.get('/videos/:taskId', authRequired, handleCompatVideoTask)
+diff --git a/backend/src/routes/projects.routes.js b/backend/src/routes/projects.routes.js
+index f02031f..70b963d 100644
+--- a/backend/src/routes/projects.routes.js
++++ b/backend/src/routes/projects.routes.js
+@@ -1,6 +1,6 @@
+ import { Router } from 'express'
+ import { authRequired } from '../middleware/auth.js'
+-import { asyncHandler } from '../utils/http.js'
++import { asyncHandler, sendData, sendJson } from '../utils/http.js'
+ import {
+   createProject,
+   getProject,
+@@ -14,25 +14,25 @@ projectsRouter.use(authRequired)
+ 
+ projectsRouter.get('/', asyncHandler(async (req, res) => {
+   const projects = await listProjects(req.user.id)
+-  res.json({ data: projects })
++  sendData(res, projects)
+ }))
+ 
+ projectsRouter.post('/', asyncHandler(async (req, res) => {
+   const project = await createProject(req.user.id, req.body)
+-  res.status(201).json({ data: project })
++  sendData(res, project, { status: 201 })
+ }))
+ 
+ projectsRouter.get('/:id', asyncHandler(async (req, res) => {
+   const project = await getProject(req.user.id, req.params.id)
+-  res.json({ data: project })
++  sendData(res, project)
+ }))
+ 
+ projectsRouter.patch('/:id', asyncHandler(async (req, res) => {
+   const project = await updateProject(req.user.id, req.params.id, req.body)
+-  res.json({ data: project })
++  sendData(res, project)
+ }))
+ 
+ projectsRouter.delete('/:id', asyncHandler(async (req, res) => {
+   const result = await removeProject(req.user.id, req.params.id)
+-  res.json(result)
++  sendJson(res, result)
+ }))
+diff --git a/backend/src/routes/runs.routes.js b/backend/src/routes/runs.routes.js
+index 23fa514..a7d76a2 100644
+--- a/backend/src/routes/runs.routes.js
++++ b/backend/src/routes/runs.routes.js
+@@ -1,13 +1,15 @@
+ import { Router } from 'express'
+ import { authRequired } from '../middleware/auth.js'
+-import { asyncHandler } from '../utils/http.js'
++import { asyncHandler, sendData, sendJson } from '../utils/http.js'
++import {
++  handleCompatChatCompletions,
++  handleCompatImageGenerations,
++  handleCompatVideoTask,
++  handleCompatVideos
++} from './compat-runs.handlers.js'
+ import {
+-  createChatCompletion,
+-  createImageGeneration,
+   createRun,
+-  createVideoGeneration,
+-  getRunById,
+-  getVideoTask
++  getRunById
+ } from '../services/runs.service.js'
+ 
+ export const runsRouter = Router()
+@@ -15,31 +17,19 @@ runsRouter.use(authRequired)
+ 
+ runsRouter.post('/', asyncHandler(async (req, res) => {
+   const run = await createRun(req.user.id, req.body)
+-  res.status(201).json(run)
++  sendJson(res, run, 201)
+ }))
+ 
+ runsRouter.get('/:id', asyncHandler(async (req, res) => {
+   const run = await getRunById(req.user.id, req.params.id)
+-  res.json({ data: run })
++  sendData(res, run)
+ }))
+ 
+ // Backward-compatible endpoints for existing frontend hooks
+-runsRouter.post('/compat/chat/completions', asyncHandler(async (req, res) => {
+-  const run = await createChatCompletion(req.user.id, req.body)
+-  res.json(run.result)
+-}))
++runsRouter.post('/compat/chat/completions', handleCompatChatCompletions)
+ 
+-runsRouter.post('/compat/images/generations', asyncHandler(async (req, res) => {
+-  const run = await createImageGeneration(req.user.id, req.body)
+-  res.json(run.result)
+-}))
++runsRouter.post('/compat/images/generations', handleCompatImageGenerations)
+ 
+-runsRouter.post('/compat/videos', asyncHandler(async (req, res) => {
+-  const run = await createVideoGeneration(req.user.id, req.body)
+-  res.json(run.result)
+-}))
++runsRouter.post('/compat/videos', handleCompatVideos)
+ 
+-runsRouter.get('/compat/videos/:taskId', asyncHandler(async (req, res) => {
+-  const result = await getVideoTask(req.user.id, req.params.taskId)
+-  res.json(result)
+-}))
++runsRouter.get('/compat/videos/:taskId', handleCompatVideoTask)
+diff --git a/backend/src/routes/upload.routes.js b/backend/src/routes/upload.routes.js
+index ec365b8..85f9e1a 100644
+--- a/backend/src/routes/upload.routes.js
++++ b/backend/src/routes/upload.routes.js
+@@ -2,7 +2,7 @@ import { Router } from 'express'
+ import multer from 'multer'
+ import { authRequired } from '../middleware/auth.js'
+ import { uploadFile } from '../services/upload.service.js'
+-import { HttpError, asyncHandler } from '../utils/http.js'
++import { HttpError, asyncHandler, sendJson } from '../utils/http.js'
+ 
+ const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+ 
+@@ -31,5 +31,5 @@ uploadRouter.post('/', authRequired, (req, res, next) => {
+   }
+   
+   const result = await uploadFile(req.file)
+-  res.json(result)
++  sendJson(res, result)
+ }))
+diff --git a/backend/src/routes/usage-admin.routes.js b/backend/src/routes/usage-admin.routes.js
+index 4518af8..2b841e8 100644
+--- a/backend/src/routes/usage-admin.routes.js
++++ b/backend/src/routes/usage-admin.routes.js
+@@ -2,35 +2,29 @@ import { Router } from 'express'
+ import { z } from 'zod'
+ import { env } from '../config/env.js'
+ import { adminUsageRequired, issueAdminToken } from '../middleware/admin-auth.js'
+-import { asyncHandler } from '../utils/http.js'
++import { asyncHandler, sendData, sendJson } from '../utils/http.js'
+ import { HttpError } from '../utils/http.js'
+ import {
+-  create302ApiKey,
+-  delete302ApiKey,
+-  get302ApiKey,
+-  get302ApiKeys,
+-  get302ApiRecords,
+-  get302Balance,
+-  get302RecordByRequestId,
+-  update302ApiKey
+-} from '../services/dashboard302.service.js'
+-import { assignApiKeyToUser, listUsersForAdmin, unassignApiKeyFromUser } from '../services/admin-usage.service.js'
++  assignApiKeyToUser,
++  listUsersForAdmin,
++  unassignApiKeyFromUser
++} from '../services/admin-usage.service.js'
++import {
++  handle302ApiKeyDetail,
++  handle302ApiKeys,
++  handle302ApiRecord,
++  handle302Balance,
++  handle302CreateApiKey,
++  handle302DeleteApiKey,
++  handle302Record,
++  handle302UpdateApiKey
++} from './dashboard302.handlers.js'
+ 
+ const loginSchema = z.object({
+   username: z.string().min(1),
+   password: z.string().min(1)
+ })
+ 
+-const apiKeySchema = z.object({
+-  api_name: z.string().min(1),
+-  allow_save_logs: z.boolean().default(false),
+-  allow_custom_model: z.boolean().default(false),
+-  allow_manage_key: z.boolean().default(false),
+-  limit_cost: z.number().int().nonnegative().default(0),
+-  limit_daily_cost: z.number().int().nonnegative().default(0),
+-  expired_on: z.number().int().nonnegative().default(0)
+-})
+-
+ const assignSchema = z.object({
+   apiName: z.string().min(1)
+ })
+@@ -51,72 +45,35 @@ usageAdminRouter.post('/login', asyncHandler(async (req, res) => {
+   }
+ 
+   const token = issueAdminToken({ username: payload.username })
+-  res.json({
++  sendJson(res, {
+     token,
+     expiresInSec: Number(env.adminDashboardTokenTtlSec || 86400)
+   })
+ }))
+ 
+ usageAdminRouter.get('/session', adminUsageRequired, asyncHandler(async (req, res) => {
+-  res.json({ admin: req.admin })
++  sendJson(res, { admin: req.admin })
+ }))
+ 
+-usageAdminRouter.get('/302/balance', adminUsageRequired, asyncHandler(async (_req, res) => {
+-  const result = await get302Balance()
+-  res.json({ data: result?.data ?? result })
+-}))
++usageAdminRouter.get('/302/balance', adminUsageRequired, handle302Balance)
+ 
+-usageAdminRouter.get('/302/record/:requestId', adminUsageRequired, asyncHandler(async (req, res) => {
+-  const result = await get302RecordByRequestId(req.params.requestId)
+-  res.json({ data: result?.data ?? result })
+-}))
+-
+-usageAdminRouter.get('/302/api-record', adminUsageRequired, asyncHandler(async (req, res) => {
+-  const result = await get302ApiRecords({
+-    page: req.query.page,
+-    limit: req.query.limit,
+-    start_time: req.query.start_time,
+-    end_time: req.query.end_time
+-  })
++usageAdminRouter.get('/302/record/:requestId', adminUsageRequired, handle302Record)
+ 
+-  res.json({
+-    data: {
+-      items: Array.isArray(result?.items) ? result.items : [],
+-      pagination: result?.pagination || null
+-    }
+-  })
+-}))
++usageAdminRouter.get('/302/api-record', adminUsageRequired, handle302ApiRecord)
+ 
+-usageAdminRouter.get('/302/api-keys', adminUsageRequired, asyncHandler(async (_req, res) => {
+-  const result = await get302ApiKeys()
+-  res.json({ data: Array.isArray(result?.data) ? result.data : [] })
+-}))
++usageAdminRouter.get('/302/api-keys', adminUsageRequired, handle302ApiKeys)
+ 
+-usageAdminRouter.get('/302/api-keys/:apiName', adminUsageRequired, asyncHandler(async (req, res) => {
+-  const result = await get302ApiKey(req.params.apiName)
+-  res.json({ data: result?.data ?? result })
+-}))
++usageAdminRouter.get('/302/api-keys/:apiName', adminUsageRequired, handle302ApiKeyDetail)
+ 
+-usageAdminRouter.post('/302/api-keys', adminUsageRequired, asyncHandler(async (req, res) => {
+-  const payload = apiKeySchema.parse(req.body || {})
+-  const result = await create302ApiKey(payload)
+-  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
+-}))
++usageAdminRouter.post('/302/api-keys', adminUsageRequired, handle302CreateApiKey)
+ 
+-usageAdminRouter.put('/302/api-keys/:apiName', adminUsageRequired, asyncHandler(async (req, res) => {
+-  const payload = apiKeySchema.parse(req.body || {})
+-  const result = await update302ApiKey(req.params.apiName, payload)
+-  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
+-}))
++usageAdminRouter.put('/302/api-keys/:apiName', adminUsageRequired, handle302UpdateApiKey)
+ 
+-usageAdminRouter.delete('/302/api-keys/:apiName', adminUsageRequired, asyncHandler(async (req, res) => {
+-  const result = await delete302ApiKey(req.params.apiName)
+-  res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
+-}))
++usageAdminRouter.delete('/302/api-keys/:apiName', adminUsageRequired, handle302DeleteApiKey)
+ 
+ usageAdminRouter.get('/users', adminUsageRequired, asyncHandler(async (_req, res) => {
+   const users = await listUsersForAdmin()
+-  res.json({ data: users })
++  sendData(res, users)
+ }))
+ 
+ usageAdminRouter.post('/users/:userId/assignments', adminUsageRequired, asyncHandler(async (req, res) => {
+@@ -125,7 +82,7 @@ usageAdminRouter.post('/users/:userId/assignments', adminUsageRequired, asyncHan
+     userId: req.params.userId,
+     apiName: payload.apiName
+   })
+-  res.json(result)
++  sendJson(res, result)
+ }))
+ 
+ usageAdminRouter.delete('/users/:userId/assignments/:apiName', adminUsageRequired, asyncHandler(async (req, res) => {
+@@ -133,5 +90,5 @@ usageAdminRouter.delete('/users/:userId/assignments/:apiName', adminUsageRequire
+     userId: req.params.userId,
+     apiName: req.params.apiName
+   })
+-  res.json(result)
++  sendJson(res, result)
+ }))
+diff --git a/backend/src/routes/usage.routes.js b/backend/src/routes/usage.routes.js
+index 0cbf913..ea70df2 100644
+--- a/backend/src/routes/usage.routes.js
++++ b/backend/src/routes/usage.routes.js
+@@ -1,7 +1,7 @@
+ import { Router } from 'express'
+ import { authRequired } from '../middleware/auth.js'
+ import { requirePermission } from '../middleware/authz.js'
+-import { asyncHandler } from '../utils/http.js'
++import { asyncHandler, sendData } from '../utils/http.js'
+ import { getUsageSummary, getUsageTimeseries } from '../services/usage.service.js'
+ import { get302ApiKeys, get302ApiRecords, get302Balance, get302RecordByRequestId } from '../services/dashboard302.service.js'
+ 
+@@ -10,23 +10,23 @@ usageRouter.use(authRequired)
+ 
+ usageRouter.get('/summary', asyncHandler(async (req, res) => {
+   const summary = await getUsageSummary(req.user.id, req.query.from, req.query.to)
+-  res.json({ data: summary })
++  sendData(res, summary)
+ }))
+ 
+ usageRouter.get('/timeseries', asyncHandler(async (req, res) => {
+   const series = await getUsageTimeseries(req.user.id)
+-  res.json({ data: series, granularity: req.query.granularity || 'day' })
++  sendData(res, series, { granularity: req.query.granularity || 'day' })
+ }))
+ 
+ 
+ usageRouter.get('/302/balance', requirePermission(['admin.usage.read_all']), asyncHandler(async (_req, res) => {
+   const result = await get302Balance()
+-  res.json({ data: result?.data ?? result })
++  sendData(res, result?.data ?? result)
+ }))
+ 
+ usageRouter.get('/302/record/:requestId', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
+   const result = await get302RecordByRequestId(req.params.requestId)
+-  res.json({ data: result?.data ?? result })
++  sendData(res, result?.data ?? result)
+ }))
+ 
+ usageRouter.get('/302/api-record', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
+@@ -37,15 +37,13 @@ usageRouter.get('/302/api-record', requirePermission(['admin.usage.read_all']),
+     end_time: req.query.end_time
+   })
+ 
+-  res.json({
+-    data: {
+-      items: Array.isArray(result?.items) ? result.items : [],
+-      pagination: result?.pagination || null
+-    }
++  sendData(res, {
++    items: Array.isArray(result?.items) ? result.items : [],
++    pagination: result?.pagination || null
+   })
+ }))
+ 
+ usageRouter.get('/302/api-keys', requirePermission(['admin.usage.read_all']), asyncHandler(async (_req, res) => {
+   const result = await get302ApiKeys()
+-  res.json({ data: Array.isArray(result?.data) ? result.data : [] })
++  sendData(res, Array.isArray(result?.data) ? result.data : [])
+ }))
+diff --git a/backend/src/services/admin-usage.service.js b/backend/src/services/admin-usage.service.js
+index cecaa2a..84837e7 100644
+--- a/backend/src/services/admin-usage.service.js
++++ b/backend/src/services/admin-usage.service.js
+@@ -1,9 +1,16 @@
+ import { supabase } from '../config/supabase.js'
++import { invalidateAuthenticatedUserCache } from './auth-user-cache.service.js'
+ import { invalidateUserAuthzCache } from './rbac.service.js'
+ import { get302RuntimeApiKeyByName } from './dashboard302.service.js'
+ import { HttpError } from '../utils/http.js'
++import { deleteSharedCacheValue, getSharedCacheValue, setSharedCacheValue } from './shared-cache.service.js'
+ 
+ const ASSIGNMENT_TABLE = 'user_api_key_assignments'
++const ASSIGNMENT_CACHE_TTL_MS = Number(process.env.ASSIGNMENT_CACHE_TTL_MS || 15000)
++const ASSIGNMENT_CACHE_NAMESPACE = 'user-api-key-assignments'
++const ADMIN_USERS_CACHE_TTL_MS = Number(process.env.ADMIN_USERS_CACHE_TTL_MS || 10000)
++const ADMIN_USERS_CACHE_NAMESPACE = 'admin-users-overview'
++const ADMIN_USERS_CACHE_KEY = 'all'
+ 
+ const isMissingRelation = (error) => {
+   const msg = String(error?.message || '').toLowerCase()
+@@ -21,6 +28,41 @@ const requireAssignmentTable = (error) => {
+   throw new HttpError(500, error.message || 'Assignment query failed', 'ASSIGNMENT_QUERY_FAILED')
+ }
+ 
++const readAssignmentCache = async (userId) => {
++  const safeUserId = String(userId || '').trim()
++  if (!safeUserId) return null
++  return getSharedCacheValue(ASSIGNMENT_CACHE_NAMESPACE, safeUserId)
++}
++
++const writeAssignmentCache = async (userId, assignments) => {
++  const safeUserId = String(userId || '').trim()
++  if (!safeUserId) return
++  await setSharedCacheValue(
++    ASSIGNMENT_CACHE_NAMESPACE,
++    safeUserId,
++    Array.isArray(assignments) ? assignments : [],
++    ASSIGNMENT_CACHE_TTL_MS
++  )
++}
++
++const invalidateAssignmentCache = async (userId) => {
++  const safeUserId = String(userId || '').trim()
++  if (!safeUserId) return
++  await deleteSharedCacheValue(ASSIGNMENT_CACHE_NAMESPACE, safeUserId)
++}
++
++const readAdminUsersCache = async () => {
++  return getSharedCacheValue(ADMIN_USERS_CACHE_NAMESPACE, ADMIN_USERS_CACHE_KEY)
++}
++
++const writeAdminUsersCache = async (data) => {
++  await setSharedCacheValue(ADMIN_USERS_CACHE_NAMESPACE, ADMIN_USERS_CACHE_KEY, data, ADMIN_USERS_CACHE_TTL_MS)
++}
++
++const invalidateAdminUsersCache = async () => {
++  await deleteSharedCacheValue(ADMIN_USERS_CACHE_NAMESPACE, ADMIN_USERS_CACHE_KEY)
++}
++
+ const loadAssignments = async () => {
+   const { data, error } = await supabase
+     .from(ASSIGNMENT_TABLE)
+@@ -38,6 +80,9 @@ export const getUserAssignedApiKeys = async (userId) => {
+   const safeUserId = String(userId || '').trim()
+   if (!safeUserId) return []
+ 
++  const cached = await readAssignmentCache(safeUserId)
++  if (cached) return cached
++
+   const { data, error } = await supabase
+     .from(ASSIGNMENT_TABLE)
+     .select('api_name, created_at')
+@@ -49,7 +94,9 @@ export const getUserAssignedApiKeys = async (userId) => {
+     throw new HttpError(500, error.message, 'ASSIGNMENT_QUERY_FAILED')
+   }
+ 
+-  return Array.isArray(data) ? data : []
++  const assignments = Array.isArray(data) ? data : []
++  await writeAssignmentCache(safeUserId, assignments)
++  return assignments
+ }
+ 
+ export const resolveUserProviderAccess = async (userId, requestedApiName = '') => {
+@@ -153,6 +200,9 @@ const toIsoDateEnd = (value) => {
+ }
+ 
+ export const listUsersForAdmin = async () => {
++  const cached = await readAdminUsersCache()
++  if (cached) return cached
++
+   const [usersRes, profilesRes, dailyAggRes, assignments, usageEventsRes] = await Promise.all([
+     supabase.from('users').select('*').order('created_at', { ascending: false }),
+     supabase.from('user_profiles').select('user_id, display_name, registered_at, last_login_at'),
+@@ -225,7 +275,7 @@ export const listUsersForAdmin = async () => {
+     usageEventMetaMap.set(key, current)
+   }
+ 
+-  return (usersRes.data || []).map((user) => {
++  const result = (usersRes.data || []).map((user) => {
+     const profile = profileMap.get(user.id)
+     const usageMeta = usageEventMetaMap.get(user.id)
+     return {
+@@ -258,6 +308,9 @@ export const listUsersForAdmin = async () => {
+       roles: rolesMap.get(user.id) || ['user']
+     }
+   })
++
++  await writeAdminUsersCache(result)
++  return result
+ }
+ 
+ const getRoleCodeMap = async () => {
+@@ -346,7 +399,11 @@ export const updateUserRoles = async ({
+     })))
+   if (insertError) throw new HttpError(500, insertError.message, 'USER_ROLES_INSERT_FAILED')
+ 
+-  invalidateUserAuthzCache(safeTargetUserId)
++  await Promise.all([
++    invalidateUserAuthzCache(safeTargetUserId),
++    invalidateAuthenticatedUserCache(safeTargetUserId),
++    invalidateAdminUsersCache()
++  ])
+ 
+   await createAdminLog({
+     operatorUserId,
+@@ -424,7 +481,11 @@ export const updateUserStatus = async ({
+       .eq('revoked', false)
+   }
+ 
+-  invalidateUserAuthzCache(safeTargetUserId)
++  await Promise.all([
++    invalidateUserAuthzCache(safeTargetUserId),
++    invalidateAuthenticatedUserCache(safeTargetUserId),
++    invalidateAdminUsersCache()
++  ])
+   await createAdminLog({
+     operatorUserId,
+     targetUserId: safeTargetUserId,
+@@ -505,7 +566,12 @@ export const deleteUserAccount = async ({
+       .eq('user_id', safeTargetUserId)
+   ])
+ 
+-  invalidateUserAuthzCache(safeTargetUserId)
++  await Promise.all([
++    invalidateAssignmentCache(safeTargetUserId),
++    invalidateUserAuthzCache(safeTargetUserId),
++    invalidateAuthenticatedUserCache(safeTargetUserId),
++    invalidateAdminUsersCache()
++  ])
+   await createAdminLog({
+     operatorUserId,
+     targetUserId: safeTargetUserId,
+@@ -521,35 +587,58 @@ export const deleteUserAccount = async ({
+ }
+ 
+ export const getAdminUsageSummary = async ({ from, to, userId } = {}) => {
+-  const query = supabase
++  const aggQuery = supabase
++    .from('usage_daily_agg')
++    .select('date,user_id,total_calls,total_images,total_video_seconds,total_cost_usd')
++
++  const tokenQuery = supabase
+     .from('usage_events')
+-    .select('user_id,input_tokens,output_tokens,image_count,video_seconds,cost_usd,created_at')
++    .select('user_id,input_tokens,output_tokens,created_at')
+ 
+-  if (userId) query.eq('user_id', String(userId))
+-  if (from) query.gte('created_at', toIsoDateStart(from))
+-  if (to) query.lte('created_at', toIsoDateEnd(to))
++  if (userId) {
++    aggQuery.eq('user_id', String(userId))
++    tokenQuery.eq('user_id', String(userId))
++  }
++  if (from) {
++    aggQuery.gte('date', String(from))
++    tokenQuery.gte('created_at', toIsoDateStart(from))
++  }
++  if (to) {
++    aggQuery.lte('date', String(to))
++    tokenQuery.lte('created_at', toIsoDateEnd(to))
++  }
+ 
+-  const { data, error } = await query
+-  if (error) throw new HttpError(500, error.message, 'ADMIN_USAGE_SUMMARY_FAILED')
++  const [{ data: aggData, error: aggError }, { data: tokenData, error: tokenError }] = await Promise.all([
++    aggQuery,
++    tokenQuery
++  ])
++
++  if (aggError) throw new HttpError(500, aggError.message, 'ADMIN_USAGE_SUMMARY_FAILED')
++  if (tokenError) throw new HttpError(500, tokenError.message, 'ADMIN_USAGE_SUMMARY_FAILED')
+ 
+   const users = new Set()
+-  const summary = (data || []).reduce((acc, item) => {
+-    users.add(item.user_id)
+-    acc.totalCalls += 1
+-    acc.totalInputTokens += Number(item.input_tokens || 0)
+-    acc.totalOutputTokens += Number(item.output_tokens || 0)
+-    acc.totalImages += Number(item.image_count || 0)
+-    acc.totalVideoSeconds += Number(item.video_seconds || 0)
+-    acc.totalCostUsd += Number(item.cost_usd || 0)
+-    return acc
+-  }, {
++  const summary = {
+     totalCalls: 0,
+     totalInputTokens: 0,
+     totalOutputTokens: 0,
+     totalImages: 0,
+     totalVideoSeconds: 0,
+     totalCostUsd: 0
+-  })
++  }
++
++  for (const row of aggData || []) {
++    users.add(row.user_id)
++    summary.totalCalls += Number(row.total_calls || 0)
++    summary.totalImages += Number(row.total_images || 0)
++    summary.totalVideoSeconds += Number(row.total_video_seconds || 0)
++    summary.totalCostUsd += Number(row.total_cost_usd || 0)
++  }
++
++  for (const row of tokenData || []) {
++    users.add(row.user_id)
++    summary.totalInputTokens += Number(row.input_tokens || 0)
++    summary.totalOutputTokens += Number(row.output_tokens || 0)
++  }
+ 
+   return {
+     ...summary,
+@@ -671,6 +760,10 @@ export const assignApiKeyToUser = async ({ userId, apiName, operatorUserId = nul
+     )
+ 
+   if (error) requireAssignmentTable(error)
++  await Promise.all([
++    invalidateAssignmentCache(safeUserId),
++    invalidateAdminUsersCache()
++  ])
+ 
+   if (operatorUserId) {
+     await createAdminLog({
+@@ -701,6 +794,10 @@ export const unassignApiKeyFromUser = async ({ userId, apiName, operatorUserId =
+     .eq('api_name', safeApiName)
+ 
+   if (error) requireAssignmentTable(error)
++  await Promise.all([
++    invalidateAssignmentCache(safeUserId),
++    invalidateAdminUsersCache()
++  ])
+ 
+   if (operatorUserId) {
+     await createAdminLog({
+diff --git a/backend/src/services/dashboard302.service.js b/backend/src/services/dashboard302.service.js
+index 20de9ce..e243424 100644
+--- a/backend/src/services/dashboard302.service.js
++++ b/backend/src/services/dashboard302.service.js
+@@ -1,5 +1,6 @@
+ import { env } from '../config/env.js'
+ import { HttpError } from '../utils/http.js'
++import { getSharedCacheValue, setSharedCacheValue } from './shared-cache.service.js'
+ 
+ const normalizeBaseUrl = (input = '') => {
+   const raw = String(input || '').trim()
+@@ -32,8 +33,8 @@ const parseResponse = async (response) => {
+   }
+ }
+ 
+-const runtimeApiKeyCache = new Map()
+ const RUNTIME_API_KEY_TTL_MS = 60 * 1000
++const RUNTIME_API_KEY_NAMESPACE = 'dashboard302-runtime-api-key'
+ 
+ const call302Dashboard = async (path, options = {}) => {
+   const { method = 'GET', params = null, body } = options
+@@ -103,10 +104,8 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
+   const safeName = String(apiName || '').trim()
+   if (!safeName) return ''
+ 
+-  const cached = runtimeApiKeyCache.get(safeName)
+-  if (cached && cached.expiresAt > Date.now()) {
+-    return cached.apiKey
+-  }
++  const cached = await getSharedCacheValue(RUNTIME_API_KEY_NAMESPACE, safeName)
++  if (cached) return String(cached || '')
+ 
+   let apiKey = ''
+ 
+@@ -131,10 +130,7 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
+ 
+   if (!apiKey) return ''
+ 
+-  runtimeApiKeyCache.set(safeName, {
+-    apiKey,
+-    expiresAt: Date.now() + RUNTIME_API_KEY_TTL_MS
+-  })
++  await setSharedCacheValue(RUNTIME_API_KEY_NAMESPACE, safeName, apiKey, RUNTIME_API_KEY_TTL_MS)
+   return apiKey
+ }
+ 
+diff --git a/backend/src/services/projects.service.js b/backend/src/services/projects.service.js
+index b2ebd71..118c7b3 100644
+--- a/backend/src/services/projects.service.js
++++ b/backend/src/services/projects.service.js
+@@ -23,7 +23,7 @@ const normalizeThumbnailUrl = (value) => {
+ export const listProjects = async (userId) => {
+   const { data, error } = await supabase
+     .from('projects')
+-    .select('*')
++    .select('id,name,thumbnail_url,created_at,updated_at')
+     .eq('user_id', userId)
+     .order('updated_at', { ascending: false })
+ 
+diff --git a/backend/src/services/rbac.service.js b/backend/src/services/rbac.service.js
+index f51a700..f496b89 100644
+--- a/backend/src/services/rbac.service.js
++++ b/backend/src/services/rbac.service.js
+@@ -1,8 +1,9 @@
+ import { supabase } from '../config/supabase.js'
+ import { HttpError } from '../utils/http.js'
++import { deleteSharedCacheValue, getSharedCacheValue, setSharedCacheValue } from './shared-cache.service.js'
+ 
+ const CACHE_TTL_MS = Number(process.env.RBAC_CACHE_TTL_MS || 30000)
+-const cache = new Map()
++const CACHE_NAMESPACE = 'rbac-authz'
+ 
+ const isMissingRelation = (error) => {
+   const msg = String(error?.message || '').toLowerCase()
+@@ -76,27 +77,10 @@ const queryPermissionCodes = async (permissionIds) => {
+   return (data || []).map((row) => row.code).filter(Boolean)
+ }
+ 
+-const readFromCache = (userId) => {
+-  const entry = cache.get(userId)
+-  if (!entry) return null
+-  if (entry.expiresAt <= Date.now()) {
+-    cache.delete(userId)
+-    return null
+-  }
+-  return entry.value
+-}
+-
+-const writeCache = (userId, value) => {
+-  cache.set(userId, {
+-    value,
+-    expiresAt: Date.now() + CACHE_TTL_MS
+-  })
+-}
+-
+-export const invalidateUserAuthzCache = (userId) => {
++export const invalidateUserAuthzCache = async (userId) => {
+   const safeUserId = String(userId || '').trim()
+   if (!safeUserId) return
+-  cache.delete(safeUserId)
++  await deleteSharedCacheValue(CACHE_NAMESPACE, safeUserId)
+ }
+ 
+ export const getUserAuthz = async (userId, { forceRefresh = false } = {}) => {
+@@ -106,14 +90,14 @@ export const getUserAuthz = async (userId, { forceRefresh = false } = {}) => {
+   }
+ 
+   if (!forceRefresh) {
+-    const cached = readFromCache(safeUserId)
++    const cached = await getSharedCacheValue(CACHE_NAMESPACE, safeUserId)
+     if (cached) return cached
+   }
+ 
+   const { roleIds, missingSchema } = await queryUserRoleIds(safeUserId)
+   if (missingSchema) {
+     const fallback = { roles: ['user'], permissions: [] }
+-    writeCache(safeUserId, fallback)
++    await setSharedCacheValue(CACHE_NAMESPACE, safeUserId, fallback, CACHE_TTL_MS)
+     return fallback
+   }
+ 
+@@ -125,6 +109,6 @@ export const getUserAuthz = async (userId, { forceRefresh = false } = {}) => {
+     roles: roleCodes.length ? roleCodes : ['user'],
+     permissions: permissionCodes
+   }
+-  writeCache(safeUserId, result)
++  await setSharedCacheValue(CACHE_NAMESPACE, safeUserId, result, CACHE_TTL_MS)
+   return result
+ }
+diff --git a/backend/src/services/runs.service.js b/backend/src/services/runs.service.js
+index ab26306..57e8797 100644
+--- a/backend/src/services/runs.service.js
++++ b/backend/src/services/runs.service.js
+@@ -10,6 +10,7 @@ import {
+ } from './provider.service.js'
+ import { get302RecordByRequestId } from './dashboard302.service.js'
+ import { resolveUserProviderAccess } from './admin-usage.service.js'
++import { submitRunJob } from './run-queue.service.js'
+ import {
+   extractProviderRequestId,
+   extractUsageSnapshot,
+@@ -106,6 +107,177 @@ const findVideoRunIdByTask = async ({ userId, taskId }) => {
+   return runId ? String(runId) : ''
+ }
+ 
++const persistRunJobPayload = async ({ userId, runId, type, payload, model }) => {
++  const { error } = await supabase.from('audit_logs').insert({
++    user_id: userId,
++    action: 'run.job.created',
++    metadata: {
++      run_id: runId,
++      type,
++      model: model || payload?.model || payload?.model_name || '',
++      api_name: payload?.api_name || payload?.apiName || '',
++      payload: payload || {}
++    }
++  })
++
++  if (error) {
++    console.warn('[run-worker] persist run payload failed', error.message)
++  }
++}
++
++const loadRunJobPayload = async ({ userId, runId }) => {
++  const { data, error } = await supabase
++    .from('audit_logs')
++    .select('metadata')
++    .eq('user_id', userId)
++    .eq('action', 'run.job.created')
++    .contains('metadata', { run_id: String(runId) })
++    .order('created_at', { ascending: false })
++    .limit(1)
++
++  if (error) {
++    throw new HttpError(500, error.message, 'RUN_JOB_METADATA_QUERY_FAILED')
++  }
++
++  const metadata = data?.[0]?.metadata || {}
++  return {
++    type: String(metadata.type || '').trim(),
++    model: String(metadata.model || '').trim(),
++    apiName: String(metadata.api_name || '').trim(),
++    payload: metadata.payload && typeof metadata.payload === 'object' ? metadata.payload : {}
++  }
++}
++
++const persistRunResult = async ({ userId, runId, status, result = null, errorMessage = '' }) => {
++  const { error } = await supabase.from('audit_logs').insert({
++    user_id: userId,
++    action: 'run.result.updated',
++    metadata: {
++      run_id: runId,
++      status: String(status || '').trim(),
++      result: result && typeof result === 'object' ? result : null,
++      error_message: String(errorMessage || '').trim()
++    }
++  })
++
++  if (error) {
++    console.warn('[run-worker] persist run result failed', error.message)
++  }
++}
++
++const loadRunResult = async ({ userId, runId }) => {
++  const { data, error } = await supabase
++    .from('audit_logs')
++    .select('metadata')
++    .eq('user_id', userId)
++    .eq('action', 'run.result.updated')
++    .contains('metadata', { run_id: String(runId) })
++    .order('created_at', { ascending: false })
++    .limit(1)
++
++  if (error) {
++    throw new HttpError(500, error.message, 'RUN_RESULT_QUERY_FAILED')
++  }
++
++  const metadata = data?.[0]?.metadata || {}
++  return {
++    status: String(metadata.status || '').trim(),
++    result: metadata.result && typeof metadata.result === 'object' ? metadata.result : null,
++    errorMessage: String(metadata.error_message || '').trim()
++  }
++}
++
++const reclaimStaleRunningRuns = async ({ limit = 10 } = {}) => {
++  const cutoffIso = new Date(Date.now() - env.runClaimTimeoutMs).toISOString()
++  const safeLimit = Math.max(1, Math.min(Number(limit) || 1, 20))
++  const { data: staleRuns, error } = await supabase
++    .from('workflow_runs')
++    .select('id,user_id,type,started_at')
++    .in('type', ['image', 'video'])
++    .eq('status', 'running')
++    .is('finished_at', null)
++    .lt('started_at', cutoffIso)
++    .order('started_at', { ascending: true })
++    .limit(safeLimit)
++
++  if (error) {
++    console.warn('[run-worker] reclaim stale runs query failed', error.message)
++    return { reclaimed: 0 }
++  }
++
++  if (!Array.isArray(staleRuns) || staleRuns.length === 0) {
++    return { reclaimed: 0 }
++  }
++
++  const videoRunIds = staleRuns.filter((run) => run.type === 'video').map((run) => run.id)
++  const protectedVideoRuns = new Set()
++
++  if (videoRunIds.length) {
++    const { data: auditRows, error: auditError } = await supabase
++      .from('audit_logs')
++      .select('metadata')
++      .eq('action', 'video.task.created')
++      .in('user_id', staleRuns.filter((run) => run.type === 'video').map((run) => run.user_id))
++
++    if (auditError) {
++      console.warn('[run-worker] reclaim stale video audit query failed', auditError.message)
++    } else {
++      for (const row of auditRows || []) {
++        const runId = row?.metadata?.run_id
++        if (runId) protectedVideoRuns.add(String(runId))
++      }
++    }
++  }
++
++  let reclaimed = 0
++  for (const run of staleRuns) {
++    if (run.type === 'video' && protectedVideoRuns.has(String(run.id))) {
++      continue
++    }
++
++    const { data: updatedRun, error: updateError } = await supabase
++      .from('workflow_runs')
++      .update({
++        status: 'queued',
++        error_msg: 'Recovered stale run for retry'
++      })
++      .eq('id', run.id)
++      .eq('status', 'running')
++      .select('id')
++      .maybeSingle()
++
++    if (updateError) {
++      console.warn('[run-worker] reclaim stale run failed', run.id, updateError.message)
++      continue
++    }
++
++    if (updatedRun?.id) {
++      reclaimed += 1
++    }
++  }
++
++  return { reclaimed }
++}
++
++const findVideoTaskIdByRunId = async ({ userId, runId }) => {
++  const { data, error } = await supabase
++    .from('audit_logs')
++    .select('metadata')
++    .eq('user_id', userId)
++    .eq('action', 'video.task.created')
++    .contains('metadata', { run_id: String(runId) })
++    .order('created_at', { ascending: false })
++    .limit(1)
++
++  if (error) {
++    console.warn('[video] resolve task by run failed', error.message)
++    return ''
++  }
++
++  const taskId = data?.[0]?.metadata?.task_id
++  return taskId ? String(taskId) : ''
++}
++
+ const syncRunStatusFromVideoTask = async ({ userId, runId, taskResult }) => {
+   if (!runId || !taskResult) return
+   const status = String(taskResult?.status || '').toLowerCase()
+@@ -196,28 +368,21 @@ const assertAssignedProviderAccess = (providerAccess = {}) => {
+   )
+ }
+ 
+-export const createRun = async (userId, input) => {
+-  const payload = runSchema.parse(input)
+-  const providerAccess = await resolveUserProviderAccess(userId, payload.payload?.api_name || payload.payload?.apiName)
+-  assertAssignedProviderAccess(providerAccess)
+-  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
+-
+-  const startedAt = Date.now()
+-  const { data: run, error: runInsertError } = await supabase
+-    .from('workflow_runs')
+-    .insert({
+-      user_id: userId,
+-      project_id: payload.projectId || null,
+-      type: payload.type,
+-      status: 'running',
+-      started_at: new Date().toISOString()
+-    })
+-    .select('*')
+-    .single()
+-
+-  if (runInsertError) throw new HttpError(500, runInsertError.message, 'RUN_CREATE_FAILED')
+-
++const executeRunLifecycle = async ({
++  userId,
++  payload,
++  run,
++  providerAccess,
++  providerRequestOptions,
++  startedAt
++}) => {
+   try {
++    await supabase
++      .from('workflow_runs')
++      .update({ status: 'running', error_msg: null, started_at: new Date().toISOString() })
++      .eq('id', run.id)
++      .eq('user_id', userId)
++
+     let providerResponse
+     if (payload.type === 'chat') {
+       providerResponse = await providerChatCompletions(payload.payload, providerRequestOptions)
+@@ -266,6 +431,16 @@ export const createRun = async (userId, input) => {
+           eventType: payload.type
+         })
+ 
++        await persistRunResult({
++          userId,
++          runId: run.id,
++          status: 'completed',
++          result: {
++            ...providerResponse,
++            run_id: run.id
++          }
++        })
++
+         return {
+           runId: run.id,
+           status: 'completed',
+@@ -298,6 +473,16 @@ export const createRun = async (userId, input) => {
+         eventType: 'video_task_created'
+       })
+ 
++      await persistRunResult({
++        userId,
++        runId: run.id,
++        status: 'running',
++        result: {
++          ...providerResponse,
++          run_id: run.id
++        }
++      })
++
+       return {
+         runId: run.id,
+         status: 'running',
+@@ -336,6 +521,13 @@ export const createRun = async (userId, input) => {
+       eventType: payload.type
+     })
+ 
++    await persistRunResult({
++      userId,
++      runId: run.id,
++      status: 'completed',
++      result: providerResponse
++    })
++
+     return { runId: run.id, status: 'completed', result: providerResponse }
+   } catch (err) {
+     await supabase
+@@ -343,10 +535,155 @@ export const createRun = async (userId, input) => {
+       .update({ status: 'failed', finished_at: new Date().toISOString(), error_msg: err.message })
+       .eq('id', run.id)
+ 
++    await persistRunResult({
++      userId,
++      runId: run.id,
++      status: 'failed',
++      errorMessage: err.message || 'Run failed'
++    })
++
+     throw err
+   }
+ }
+ 
++export const createRun = async (userId, input) => {
++  const payload = runSchema.parse(input)
++  const providerAccess = await resolveUserProviderAccess(userId, payload.payload?.api_name || payload.payload?.apiName)
++  assertAssignedProviderAccess(providerAccess)
++  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
++
++  const startedAt = Date.now()
++  const { data: run, error: runInsertError } = await supabase
++    .from('workflow_runs')
++    .insert({
++      user_id: userId,
++      project_id: payload.projectId || null,
++      type: payload.type,
++      status: ['image', 'video'].includes(payload.type) ? 'queued' : 'running',
++      started_at: new Date().toISOString()
++    })
++    .select('*')
++    .single()
++
++  if (runInsertError) throw new HttpError(500, runInsertError.message, 'RUN_CREATE_FAILED')
++
++  if (payload.type === 'image' || payload.type === 'video') {
++    await persistRunJobPayload({
++      userId,
++      runId: run.id,
++      type: payload.type,
++      payload: payload.payload,
++      model: payload.model
++    })
++
++    if (env.runQueueMode !== 'worker') {
++      await submitRunJob({
++        waitForCompletion: false,
++        handler: () => executeRunLifecycle({
++          userId,
++          payload,
++          run,
++          providerAccess,
++          providerRequestOptions,
++          startedAt
++        })
++      })
++    }
++
++    return {
++      runId: run.id,
++      status: 'queued',
++      result: {
++        run_id: run.id,
++        task_id: run.id,
++        status: 'queued',
++        type: payload.type
++      }
++    }
++  }
++
++  return submitRunJob({
++    handler: () => executeRunLifecycle({
++      userId,
++      payload,
++      run,
++      providerAccess,
++      providerRequestOptions,
++      startedAt
++    })
++  })
++}
++
++export const processQueuedRuns = async ({ limit = 1, types = ['image', 'video'] } = {}) => {
++  await reclaimStaleRunningRuns({ limit })
++  const safeLimit = Math.max(1, Math.min(Number(limit) || 1, 10))
++  const { data: queuedRuns, error } = await supabase
++    .from('workflow_runs')
++    .select('id,user_id,project_id,type,status,started_at')
++    .in('type', types)
++    .eq('status', 'queued')
++    .order('started_at', { ascending: true })
++    .limit(safeLimit)
++
++  if (error) {
++    throw new HttpError(500, error.message, 'RUN_QUEUE_READ_FAILED')
++  }
++
++  let processed = 0
++  for (const candidate of queuedRuns || []) {
++    const { data: claimedRun, error: claimError } = await supabase
++      .from('workflow_runs')
++      .update({ status: 'running', error_msg: null, started_at: new Date().toISOString() })
++      .eq('id', candidate.id)
++      .eq('status', 'queued')
++      .select('*')
++      .maybeSingle()
++
++    if (claimError) {
++      console.warn('[run-worker] claim queued run failed', claimError.message)
++      continue
++    }
++    if (!claimedRun) continue
++
++    try {
++      const jobPayload = await loadRunJobPayload({ userId: claimedRun.user_id, runId: claimedRun.id })
++      const providerAccess = await resolveUserProviderAccess(
++        claimedRun.user_id,
++        jobPayload.apiName || jobPayload.payload?.api_name || jobPayload.payload?.apiName
++      )
++      assertAssignedProviderAccess(providerAccess)
++      const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
++
++      await executeRunLifecycle({
++        userId: claimedRun.user_id,
++        payload: {
++          type: claimedRun.type,
++          projectId: claimedRun.project_id || null,
++          model: jobPayload.model || jobPayload.payload?.model || jobPayload.payload?.model_name,
++          payload: jobPayload.payload || {}
++        },
++        run: claimedRun,
++        providerAccess,
++        providerRequestOptions,
++        startedAt: Date.now()
++      })
++      processed += 1
++    } catch (jobError) {
++      console.warn('[run-worker] process queued run failed', claimedRun.id, jobError?.message || jobError)
++      await supabase
++        .from('workflow_runs')
++        .update({
++          status: 'failed',
++          finished_at: new Date().toISOString(),
++          error_msg: jobError?.message || 'Queued run processing failed'
++        })
++        .eq('id', claimedRun.id)
++    }
++  }
++
++  return { processed }
++}
++
+ export const getRunById = async (userId, runId) => {
+   const { data, error } = await supabase
+     .from('workflow_runs')
+@@ -358,7 +695,13 @@ export const getRunById = async (userId, runId) => {
+   if (error) throw new HttpError(500, error.message, 'RUN_GET_FAILED')
+   if (!data) throw new HttpError(404, 'Run not found', 'RUN_NOT_FOUND')
+ 
+-  return data
++  const runResult = await loadRunResult({ userId, runId: data.id }).catch(() => null)
++
++  return {
++    ...data,
++    result: runResult?.result || null,
++    error_msg: data.error_msg || runResult?.errorMessage || null
++  }
+ }
+ 
+ export const createChatCompletion = async (userId, payload) => {
+@@ -374,6 +717,35 @@ export const createVideoGeneration = async (userId, payload) => {
+ }
+ 
+ export const getVideoTask = async (_userId, taskId) => {
++  const requestedTaskId = String(taskId || '').trim()
++  if (!requestedTaskId) throw new HttpError(400, 'taskId is required', 'INVALID_TASK_ID')
++
++  const run = await getRunById(_userId, requestedTaskId).catch(() => null)
++  if (run && run.type === 'video') {
++    const providerTaskId = await findVideoTaskIdByRunId({ userId: _userId, runId: run.id })
++    if (!providerTaskId) {
++      return {
++        task_id: requestedTaskId,
++        run_id: run.id,
++        status: run.status === 'failed'
++          ? 'failed'
++          : (run.status === 'completed'
++              ? 'completed'
++              : (run.status === 'running' ? 'running' : 'queued')),
++        message: run.error_msg || undefined
++      }
++    }
++
++    const providerAccess = await resolveUserProviderAccess(_userId)
++    const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
++    const result = await providerVideoStatus(providerTaskId, providerRequestOptions)
++    await syncRunStatusFromVideoTask({ userId: _userId, runId: run.id, taskResult: result })
++    return {
++      ...result,
++      run_id: run.id
++    }
++  }
++
+   await assertVideoTaskOwnership({ userId: _userId, taskId })
+   const providerAccess = await resolveUserProviderAccess(_userId)
+   const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
+diff --git a/backend/src/services/usage-ledger.service.js b/backend/src/services/usage-ledger.service.js
+index 73c640d..4bd07d8 100644
+--- a/backend/src/services/usage-ledger.service.js
++++ b/backend/src/services/usage-ledger.service.js
+@@ -122,37 +122,35 @@ export const buildUsageEventPayload = ({
+   }
+ }
+ 
+-export const rebuildUsageDailyAggregateForUserDate = async (userId, dateValue) => {
++const summarizeUsageRecord = (item = {}) => ({
++  total_calls: 1,
++  total_tokens: toNumber(item.input_tokens) + toNumber(item.output_tokens),
++  total_images: toNumber(item.image_count),
++  total_video_seconds: toNumber(item.video_seconds),
++  total_cost_usd: toNumber(item.cost_usd)
++})
++
++const applyAggregateDelta = async (userId, dateValue, delta = {}) => {
+   const date = toIsoDate(dateValue)
+-  const start = `${date}T00:00:00.000Z`
+-  const end = `${date}T23:59:59.999Z`
+-
+-  const { data, error } = await supabase
+-    .from('usage_events')
+-    .select('input_tokens,output_tokens,image_count,video_seconds,cost_usd')
++  const { data: current, error: readError } = await supabase
++    .from('usage_daily_agg')
++    .select('date,user_id,total_calls,total_tokens,total_images,total_video_seconds,total_cost_usd')
++    .eq('date', date)
+     .eq('user_id', userId)
+-    .gte('created_at', start)
+-    .lte('created_at', end)
++    .maybeSingle()
+ 
+-  if (error) {
+-    console.warn('[usage] rebuild daily aggregate failed', error.message)
++  if (readError) {
++    console.warn('[usage] aggregate read failed', readError.message)
+     return
+   }
+ 
+-  const summary = (data || []).reduce((acc, item) => {
+-    acc.total_calls += 1
+-    acc.total_tokens += toNumber(item.input_tokens) + toNumber(item.output_tokens)
+-    acc.total_images += toNumber(item.image_count)
+-    acc.total_video_seconds += toNumber(item.video_seconds)
+-    acc.total_cost_usd += toNumber(item.cost_usd)
+-    return acc
+-  }, {
+-    total_calls: 0,
+-    total_tokens: 0,
+-    total_images: 0,
+-    total_video_seconds: 0,
+-    total_cost_usd: 0
+-  })
++  const summary = {
++    total_calls: Math.max(0, toNumber(current?.total_calls) + toNumber(delta.total_calls)),
++    total_tokens: Math.max(0, toNumber(current?.total_tokens) + toNumber(delta.total_tokens)),
++    total_images: Math.max(0, toNumber(current?.total_images) + toNumber(delta.total_images)),
++    total_video_seconds: Math.max(0, toNumber(current?.total_video_seconds) + toNumber(delta.total_video_seconds)),
++    total_cost_usd: Math.max(0, toNumber(current?.total_cost_usd) + toNumber(delta.total_cost_usd))
++  }
+ 
+   const { error: upsertError } = await supabase
+     .from('usage_daily_agg')
+@@ -181,7 +179,7 @@ export const insertUsageEvent = async (payload = {}) => {
+     return null
+   }
+ 
+-  await rebuildUsageDailyAggregateForUserDate(record.user_id, data?.created_at)
++  await applyAggregateDelta(record.user_id, data?.created_at, summarizeUsageRecord(record))
+   return data
+ }
+ 
+@@ -218,6 +216,14 @@ export const updateUsageEventByRunId = async (runId, patch = {}) => {
+     return null
+   }
+ 
+-  await rebuildUsageDailyAggregateForUserDate(data.user_id, data.created_at)
++  const beforeSummary = summarizeUsageRecord(current)
++  const afterSummary = summarizeUsageRecord(data)
++  await applyAggregateDelta(data.user_id, data.created_at, {
++    total_calls: afterSummary.total_calls - beforeSummary.total_calls,
++    total_tokens: afterSummary.total_tokens - beforeSummary.total_tokens,
++    total_images: afterSummary.total_images - beforeSummary.total_images,
++    total_video_seconds: afterSummary.total_video_seconds - beforeSummary.total_video_seconds,
++    total_cost_usd: afterSummary.total_cost_usd - beforeSummary.total_cost_usd
++  })
+   return data
+ }
+diff --git a/backend/src/services/usage.service.js b/backend/src/services/usage.service.js
+index 051a305..eb92b04 100644
+--- a/backend/src/services/usage.service.js
++++ b/backend/src/services/usage.service.js
+@@ -2,36 +2,53 @@ import { supabase } from '../config/supabase.js'
+ import { HttpError } from '../utils/http.js'
+ 
+ export const getUsageSummary = async (userId, from, to) => {
+-  const query = supabase
++  const aggQuery = supabase
++    .from('usage_daily_agg')
++    .select('total_calls,total_images,total_video_seconds,total_cost_usd')
++    .eq('user_id', userId)
++
++  const tokenQuery = supabase
+     .from('usage_events')
+-    .select('input_tokens,output_tokens,image_count,video_seconds,cost_usd')
++    .select('input_tokens,output_tokens')
+     .eq('user_id', userId)
+ 
+-  if (from) query.gte('created_at', `${from}T00:00:00.000Z`)
+-  if (to) query.lte('created_at', `${to}T23:59:59.999Z`)
+-
+-  const { data, error } = await query
+-  if (error) throw new HttpError(500, error.message, 'USAGE_SUMMARY_FAILED')
+-
+-  const summary = data.reduce(
+-    (acc, item) => {
+-      acc.totalCalls += 1
+-      acc.totalInputTokens += item.input_tokens || 0
+-      acc.totalOutputTokens += item.output_tokens || 0
+-      acc.totalImages += item.image_count || 0
+-      acc.totalVideoSeconds += item.video_seconds || 0
+-      acc.totalCostUsd += Number(item.cost_usd || 0)
+-      return acc
+-    },
+-    {
+-      totalCalls: 0,
+-      totalInputTokens: 0,
+-      totalOutputTokens: 0,
+-      totalImages: 0,
+-      totalVideoSeconds: 0,
+-      totalCostUsd: 0
+-    }
+-  )
++  if (from) {
++    aggQuery.gte('date', String(from))
++    tokenQuery.gte('created_at', `${from}T00:00:00.000Z`)
++  }
++  if (to) {
++    aggQuery.lte('date', String(to))
++    tokenQuery.lte('created_at', `${to}T23:59:59.999Z`)
++  }
++
++  const [{ data: aggData, error: aggError }, { data: tokenData, error: tokenError }] = await Promise.all([
++    aggQuery,
++    tokenQuery
++  ])
++
++  if (aggError) throw new HttpError(500, aggError.message, 'USAGE_SUMMARY_FAILED')
++  if (tokenError) throw new HttpError(500, tokenError.message, 'USAGE_SUMMARY_FAILED')
++
++  const summary = {
++    totalCalls: 0,
++    totalInputTokens: 0,
++    totalOutputTokens: 0,
++    totalImages: 0,
++    totalVideoSeconds: 0,
++    totalCostUsd: 0
++  }
++
++  for (const row of aggData || []) {
++    summary.totalCalls += Number(row.total_calls || 0)
++    summary.totalImages += Number(row.total_images || 0)
++    summary.totalVideoSeconds += Number(row.total_video_seconds || 0)
++    summary.totalCostUsd += Number(row.total_cost_usd || 0)
++  }
++
++  for (const row of tokenData || []) {
++    summary.totalInputTokens += Number(row.input_tokens || 0)
++    summary.totalOutputTokens += Number(row.output_tokens || 0)
++  }
+ 
+   return summary
+ }
+diff --git a/backend/src/utils/http.js b/backend/src/utils/http.js
+index 16fc674..86af3d1 100644
+--- a/backend/src/utils/http.js
++++ b/backend/src/utils/http.js
+@@ -1,11 +1,26 @@
+ export class HttpError extends Error {
+-  constructor(status, message, code = 'BAD_REQUEST') {
++  constructor(status, message, code = 'BAD_REQUEST', details = null) {
+     super(message)
+     this.status = status
+     this.code = code
++    this.details = details
+   }
+ }
+ 
+ export const asyncHandler = (fn) => (req, res, next) => {
+   Promise.resolve(fn(req, res, next)).catch(next)
+ }
++
++export const buildResponseBody = (res, payload = {}) => ({
++  ...payload,
++  requestId: payload?.requestId || res.req?.requestId || null
++})
++
++export const sendJson = (res, payload = {}, status = 200) => {
++  res.status(status).json(buildResponseBody(res, payload))
++}
++
++export const sendData = (res, data, options = {}) => {
++  const { status = 200, ...extra } = options
++  sendJson(res, { data, ...extra }, status)
++}
+diff --git a/package.json b/package.json
+index 4f592b8..067d1f7 100644
+--- a/package.json
++++ b/package.json
+@@ -7,7 +7,10 @@
+     "dev": "vite",
+     "dev:api": "npm --prefix backend run dev",
+     "build": "vite build",
+-    "preview": "vite preview"
++    "preview": "vite preview",
++    "perf:baseline": "node scripts/perf-baseline.mjs",
++    "perf:report": "node scripts/perf-report.mjs",
++    "perf:probe": "node scripts/perf-probe.mjs"
+   },
+   "dependencies": {
+     "@iconify-icons/ci": "^1.2.9",
+diff --git a/src/api/chat.js b/src/api/chat.js
+index 229d581..4912af9 100644
+--- a/src/api/chat.js
++++ b/src/api/chat.js
+@@ -2,8 +2,7 @@
+  * Chat API | 对话 API
+  */
+ 
+-import { request, getBaseUrl } from '@/utils'
+-import { STORAGE_KEYS } from '@/utils/constants'
++import { request } from '@/utils'
+ 
+ // 对话补全
+ export const chatCompletions = (data) =>
+@@ -15,34 +14,6 @@ export const chatCompletions = (data) =>
+ 
+ // 流式对话补全
+ export const streamChatCompletions = async function* (data, signal) {
+-  const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
+-  const baseUrl = getBaseUrl()
+-  const authToken = accessToken
+-  
+-  const response = await fetch(`${baseUrl}/chat/completions`, {
+-    method: 'POST',
+-    headers: {
+-      'Content-Type': 'application/json',
+-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+-    },
+-    credentials: 'include',
+-    // Backend currently returns JSON. Force non-stream to avoid empty parsed chunks.
+-    body: JSON.stringify({ ...data, stream: false }),
+-    signal
+-  })
+-
+-  if (!response.ok) {
+-    let message = 'Stream request failed'
+-    try {
+-      const error = await response.json()
+-      message = error?.error?.message || error?.message || message
+-    } catch {
+-      const text = await response.text()
+-      if (text?.trim()) message = text.trim()
+-    }
+-    throw new Error(message)
+-  }
+-
+   const extractTextFromContent = (content) => {
+     if (typeof content === 'string') return content
+     if (!Array.isArray(content)) return ''
+@@ -95,18 +66,16 @@ export const streamChatCompletions = async function* (data, signal) {
+     return ''
+   }
+ 
+-  const contentType = String(response.headers.get('content-type') || '').toLowerCase()
+-  if (contentType.includes('application/json')) {
+-    const payload = await response.json()
+-    const text = extractText(payload)
+-
+-    if (text) yield text
+-    return
+-  }
++  const payload = await request({
++    url: '/chat/completions',
++    method: 'post',
++    data: { ...data, stream: false },
++    signal,
++    silentErrorToast: true
++  })
+ 
+-  // Fallback for plain text response body.
+-  const textBody = await response.text()
+-  if (textBody && textBody.trim()) {
+-    yield textBody.trim()
++  const text = extractText(payload)
++  if (text) {
++    yield text
+   }
+ }
+diff --git a/src/api/index.js b/src/api/index.js
+index 2c132e6..9ec145e 100644
+--- a/src/api/index.js
++++ b/src/api/index.js
+@@ -9,3 +9,4 @@ export * from './chat'
+ export * from './auth'
+ export * from './projects'
+ export * from './usage'
++export * from './runs'
+diff --git a/src/components/ApiSettings.vue b/src/components/ApiSettings.vue
+index d08059b..b2a56fc 100644
+--- a/src/components/ApiSettings.vue
++++ b/src/components/ApiSettings.vue
+@@ -48,6 +48,7 @@
+ import { computed, reactive, ref, watch } from 'vue'
+ import { NIcon, NInput, NModal } from 'naive-ui'
+ import { useAuthStore } from '@/stores/auth'
++import { isDataImageUrl, uploadImageFile } from '@/utils/media'
+ import { CloseOutline } from '../icons/coolicons'
+ import { getErrorMessage } from '@/utils'
+ 
+@@ -67,6 +68,7 @@ const saving = ref(false)
+ const avatarInputRef = ref(null)
+ const avatarPreview = ref('')
+ const hasAvatarChange = ref(false)
++const avatarFile = ref(null)
+ 
+ const formData = reactive({
+   profileId: '',
+@@ -83,6 +85,7 @@ const syncForm = () => {
+   formData.userId = current.id || ''
+   avatarPreview.value = current.avatarUrl || ''
+   hasAvatarChange.value = false
++  avatarFile.value = null
+ }
+ 
+ watch(
+@@ -127,6 +130,7 @@ const handleAvatarChange = (event) => {
+   reader.onload = () => {
+     avatarPreview.value = String(reader.result || '')
+     hasAvatarChange.value = true
++    avatarFile.value = file
+   }
+   reader.readAsDataURL(file)
+   event.target.value = ''
+@@ -146,7 +150,23 @@ const handleSave = async () => {
+     payload.displayName = nextId
+   }
+   if (hasAvatarChange.value) {
+-    payload.avatarUrl = avatarPreview.value || null
++    if (avatarPreview.value) {
++      if (isDataImageUrl(avatarPreview.value)) {
++        if (!avatarFile.value) {
++          throw new Error('Avatar file is missing')
++        }
++
++        const uploadedAvatarUrl = await uploadImageFile(avatarFile.value)
++        if (!uploadedAvatarUrl) {
++          throw new Error('Avatar upload returned empty URL')
++        }
++        payload.avatarUrl = uploadedAvatarUrl
++      } else {
++        payload.avatarUrl = avatarPreview.value
++      }
++    } else {
++      payload.avatarUrl = null
++    }
+   }
+ 
+   if (Object.keys(payload).length === 0) {
+diff --git a/src/hooks/useAdminServiceOps.js b/src/hooks/useAdminServiceOps.js
+index 4cb78e8..69625b8 100644
+--- a/src/hooks/useAdminServiceOps.js
++++ b/src/hooks/useAdminServiceOps.js
+@@ -60,6 +60,11 @@ export const useAdminServiceOps = ({
+   loadUsers,
+   loadLogs
+ }) => {
++  let load302AllPromise = null
++  let loadBalancePromise = null
++  let loadApiLogsPromise = null
++  let loadApiKeysPromise = null
++
+   const balance = ref('')
+   const loadingBalance = ref(false)
+   const recordRequestId = ref('')
+@@ -89,20 +94,28 @@ export const useAdminServiceOps = ({
+     return `${key.slice(0, 6)}...${key.slice(-4)}`
+   }
+ 
+-  const load302Balance = async ({ silent = false } = {}) => {
++  const load302Balance = async ({ silent = false, force = false } = {}) => {
+     if (!canReadUsage.value) return
++    if (loadBalancePromise && !force) return loadBalancePromise
+     loadingBalance.value = true
++    loadBalancePromise = (async () => {
++      try {
++        const rsp = await getAdmin302Balance()
++        balance.value = String(rsp?.data?.balance ?? '')
++        return { ok: true }
++      } catch (error) {
++        balance.value = ''
++        const message = toServiceNotice('加载 Eager 服务余额失败', error)
++        if (!silent && !error?.__handled) window.$message?.error(message)
++        return { ok: false, message, error }
++      } finally {
++        loadingBalance.value = false
++      }
++    })()
+     try {
+-      const rsp = await getAdmin302Balance()
+-      balance.value = String(rsp?.data?.balance ?? '')
+-      return { ok: true }
+-    } catch (error) {
+-      balance.value = ''
+-      const message = toServiceNotice('加载 Eager 服务余额失败', error)
+-      if (!silent && !error?.__handled) window.$message?.error(message)
+-      return { ok: false, message, error }
++      return await loadBalancePromise
+     } finally {
+-      loadingBalance.value = false
++      loadBalancePromise = null
+     }
+   }
+ 
+@@ -121,47 +134,63 @@ export const useAdminServiceOps = ({
+     }
+   }
+ 
+-  const loadApiLogs = async ({ silent = false } = {}) => {
++  const loadApiLogs = async ({ silent = false, force = false } = {}) => {
+     if (!canReadUsage.value) return
++    if (loadApiLogsPromise && !force) return loadApiLogsPromise
+     loadingApiLogs.value = true
++    loadApiLogsPromise = (async () => {
++      try {
++        const rsp = await getAdmin302ApiRecord({
++          page: log302Query.page,
++          limit: log302Query.limit,
++          start_time: toUnixSeconds(log302Query.start),
++          end_time: toUnixSeconds(log302Query.end)
++        })
++        apiLogs.value = Array.isArray(rsp?.data?.items) ? rsp.data.items : []
++        return { ok: true }
++      } catch (error) {
++        apiLogs.value = []
++        const message = toServiceNotice('加载 API 日志失败', error)
++        if (!silent && !error?.__handled) window.$message?.error(message)
++        return { ok: false, message, error }
++      } finally {
++        loadingApiLogs.value = false
++      }
++    })()
+     try {
+-      const rsp = await getAdmin302ApiRecord({
+-        page: log302Query.page,
+-        limit: log302Query.limit,
+-        start_time: toUnixSeconds(log302Query.start),
+-        end_time: toUnixSeconds(log302Query.end)
+-      })
+-      apiLogs.value = Array.isArray(rsp?.data?.items) ? rsp.data.items : []
+-      return { ok: true }
+-    } catch (error) {
+-      apiLogs.value = []
+-      const message = toServiceNotice('加载 API 日志失败', error)
+-      if (!silent && !error?.__handled) window.$message?.error(message)
+-      return { ok: false, message, error }
++      return await loadApiLogsPromise
+     } finally {
+-      loadingApiLogs.value = false
++      loadApiLogsPromise = null
+     }
+   }
+ 
+-  const loadApiKeys = async ({ silent = false } = {}) => {
++  const loadApiKeys = async ({ silent = false, force = false } = {}) => {
+     if (!canManageApiKeys.value && !canAssignApiKeys.value) return
++    if (loadApiKeysPromise && !force) return loadApiKeysPromise
+     loadingKeys.value = true
++    loadApiKeysPromise = (async () => {
++      try {
++        const rsp = await getAdmin302ApiKeys()
++        const list = Array.isArray(rsp?.data) ? rsp.data : []
++        apiKeys.value = list
++        const drafts = {}
++        for (const item of list) drafts[item.api_name] = buildDraft(item)
++        keyDrafts.value = drafts
++        return { ok: true }
++      } catch (error) {
++        apiKeys.value = []
++        keyDrafts.value = {}
++        const message = toServiceNotice('加载 API 密钥失败', error)
++        if (!silent && !error?.__handled) window.$message?.error(message)
++        return { ok: false, message, error }
++      } finally {
++        loadingKeys.value = false
++      }
++    })()
+     try {
+-      const rsp = await getAdmin302ApiKeys()
+-      const list = Array.isArray(rsp?.data) ? rsp.data : []
+-      apiKeys.value = list
+-      const drafts = {}
+-      for (const item of list) drafts[item.api_name] = buildDraft(item)
+-      keyDrafts.value = drafts
+-      return { ok: true }
+-    } catch (error) {
+-      apiKeys.value = []
+-      keyDrafts.value = {}
+-      const message = toServiceNotice('加载 API 密钥失败', error)
+-      if (!silent && !error?.__handled) window.$message?.error(message)
+-      return { ok: false, message, error }
++      return await loadApiKeysPromise
+     } finally {
+-      loadingKeys.value = false
++      loadApiKeysPromise = null
+     }
+   }
+ 
+@@ -175,7 +204,7 @@ export const useAdminServiceOps = ({
+       await createAdmin302ApiKey({ ...createKeyForm, api_name: createKeyForm.api_name.trim() })
+       window.$message?.success('API 密钥创建成功')
+       resetCreateKeyForm(createKeyForm)
+-      await loadApiKeys()
++      await loadApiKeys({ force: true })
+     } catch (error) {
+       if (!error?.__handled) window.$message?.error(getErrorMessage(error, '创建 API 密钥失败'))
+     } finally {
+@@ -192,7 +221,7 @@ export const useAdminServiceOps = ({
+     try {
+       await updateAdmin302ApiKey(name, { ...draft, api_name: name })
+       window.$message?.success('API 密钥更新成功')
+-      await loadApiKeys()
++      await loadApiKeys({ force: true })
+     } catch (error) {
+       if (!error?.__handled) window.$message?.error(getErrorMessage(error, '更新 API 密钥失败'))
+     } finally {
+@@ -209,7 +238,7 @@ export const useAdminServiceOps = ({
+     try {
+       await deleteAdmin302ApiKey(name)
+       window.$message?.success('API 密钥删除成功')
+-      await Promise.all([loadApiKeys(), loadUsers(), loadLogs()])
++      await Promise.all([loadApiKeys({ force: true }), loadUsers({ force: true }), loadLogs({ force: true })])
+     } catch (error) {
+       if (!error?.__handled) window.$message?.error(getErrorMessage(error, '删除 API 密钥失败'))
+     } finally {
+@@ -217,19 +246,27 @@ export const useAdminServiceOps = ({
+     }
+   }
+ 
+-  const load302All = async () => {
++  const load302All = async ({ force = false } = {}) => {
++    if (load302AllPromise && !force) return load302AllPromise
+     serviceLoadNotice.value = ''
+-    const tasks = []
+-    if (canReadUsage.value) {
+-      tasks.push(load302Balance({ silent: true }), loadApiLogs({ silent: true }))
+-    }
+-    if (canManageApiKeys.value || canAssignApiKeys.value) {
+-      tasks.push(loadApiKeys({ silent: true }))
+-    }
+-    const results = await Promise.all(tasks)
+-    const failures = results.filter((item) => item && item.ok === false)
+-    if (failures.length > 0) {
+-      serviceLoadNotice.value = failures[0].message || '服务数据加载失败'
++    load302AllPromise = (async () => {
++      const tasks = []
++      if (canReadUsage.value) {
++        tasks.push(load302Balance({ silent: true, force }), loadApiLogs({ silent: true, force }))
++      }
++      if (canManageApiKeys.value || canAssignApiKeys.value) {
++        tasks.push(loadApiKeys({ silent: true, force }))
++      }
++      const results = await Promise.all(tasks)
++      const failures = results.filter((item) => item && item.ok === false)
++      if (failures.length > 0) {
++        serviceLoadNotice.value = failures[0].message || '服务数据加载失败'
++      }
++    })()
++    try {
++      return await load302AllPromise
++    } finally {
++      load302AllPromise = null
+     }
+   }
+ 
+diff --git a/src/hooks/useApi.js b/src/hooks/useApi.js
+index beb72e0..846d2d3 100644
+--- a/src/hooks/useApi.js
++++ b/src/hooks/useApi.js
+@@ -9,6 +9,7 @@ import {
+   removeBackground,
+   createVideoTask,
+   getVideoTaskStatus,
++  getRunStatus,
+   streamChatCompletions
+ } from '@/api'
+ import { DEFAULT_CHAT_MODEL, getModelByName } from '@/config/models'
+@@ -97,6 +98,36 @@ const resolutionFromSize = (size, ratioKey = '') => {
+   return '1k'
+ }
+ 
++const queuedRunStatuses = new Set(['queued', 'running'])
++const runDoneStatuses = new Set(['completed', 'succeeded', 'success', 'done', 'finished', 'succeed', 'successed'])
++const transientRunPollStatuses = new Set([408, 425, 429, 500, 502, 503, 504])
++
++const getQueuedRunId = (payload = {}) => {
++  const candidates = [
++    payload?.run_id,
++    payload?.runId,
++    payload?.task_id,
++    payload?.taskId,
++    payload?.data?.run_id,
++    payload?.data?.runId,
++    payload?.data?.task_id,
++    payload?.data?.taskId
++  ]
++  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
++  return found ? String(found) : ''
++}
++
++const getQueuedStatus = (payload = {}) => {
++  const candidates = [
++    payload?.status,
++    payload?.task_status,
++    payload?.data?.status,
++    payload?.data?.task_status
++  ]
++  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
++  return found ? String(found).toLowerCase() : ''
++}
++
+ /**
+  * Chat composable | 问答组合式函数
+  */
+@@ -223,6 +254,54 @@ export const useImageGeneration = () => {
+         timeout: IMAGE_REQUEST_TIMEOUT_MS
+       })
+ 
++      const queuedStatus = getQueuedStatus(response)
++      const queuedRunId = getQueuedRunId(response)
++      if (queuedRunId && queuedRunStatuses.has(queuedStatus)) {
++        const maxAttempts = 120
++        const interval = 2000
++
++        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
++          let runResponse
++          try {
++            runResponse = await getRunStatus(queuedRunId, {
++              silentErrorToast: true,
++              silentNetworkErrorToast: true
++            })
++          } catch (pollError) {
++            const statusCode = Number(pollError?.response?.status || pollError?.status || 0)
++            const isTransient = transientRunPollStatuses.has(statusCode) || !statusCode
++            if (!isTransient) throw pollError
++
++            await new Promise((resolve) => setTimeout(resolve, interval))
++            continue
++          }
++
++          const runData = runResponse?.data || runResponse
++          const runStatus = String(runData?.status || '').toLowerCase()
++
++          if (runStatus === 'failed') {
++            throw new Error(runData?.error_msg || '图片生成失败')
++          }
++
++          if (runDoneStatuses.has(runStatus) && runData?.result) {
++            const finalData = runData.result?.data || runData.result
++            const generatedImages = (Array.isArray(finalData) ? finalData : [finalData]).map(item => ({
++              url: item.url || item.b64_json || item,
++              revisedPrompt: item.revised_prompt || ''
++            }))
++
++            images.value = generatedImages
++            currentImage.value = generatedImages[0] || null
++            setSuccess()
++            return generatedImages
++          }
++
++          await new Promise((resolve) => setTimeout(resolve, interval))
++        }
++
++        throw new Error('图片生成超时')
++      }
++
+       // Parse response (OpenAI format) | 解析响应
+       const data = response.data || response
+       const generatedImages = (Array.isArray(data) ? data : [data]).map(item => ({
+diff --git a/src/hooks/useAvatarUpload.js b/src/hooks/useAvatarUpload.js
+index 519411e..4319f21 100644
+--- a/src/hooks/useAvatarUpload.js
++++ b/src/hooks/useAvatarUpload.js
+@@ -1,5 +1,6 @@
+ import { computed, ref } from 'vue'
+ import { getErrorMessage } from '@/utils'
++import { uploadImageFile } from '@/utils/media'
+ 
+ const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+ 
+@@ -17,25 +18,33 @@ export const useAvatarUpload = ({ user, updateProfile, notify }) => {
+     const file = event.target?.files?.[0]
+     if (!file) return
+ 
++    if (!file.type.startsWith('image/')) {
++      notify.error('Please choose an image file')
++      event.target.value = ''
++      return
++    }
++
+     if (file.size > MAX_AVATAR_BYTES) {
+       notify.error('Avatar must be <= 2MB')
++      event.target.value = ''
+       return
+     }
+ 
+-    const reader = new FileReader()
+-    reader.onload = async () => {
+-      try {
+-        await updateProfile({ avatarUrl: String(reader.result || '') })
+-        notify.success('Avatar updated')
+-      } catch (err) {
+-        if (!err?.__handled) {
+-          notify.error(getErrorMessage(err, 'Failed to update avatar'))
+-        }
++    try {
++      const avatarUrl = await uploadImageFile(file)
++      if (!avatarUrl) {
++        throw new Error('Avatar upload returned empty URL')
+       }
+-    }
+ 
+-    reader.readAsDataURL(file)
+-    event.target.value = ''
++      await updateProfile({ avatarUrl })
++      notify.success('Avatar updated')
++    } catch (err) {
++      if (!err?.__handled) {
++        notify.error(getErrorMessage(err, 'Failed to update avatar'))
++      }
++    } finally {
++      event.target.value = ''
++    }
+   }
+ 
+   return {
+diff --git a/src/hooks/useCanvasProjectActions.js b/src/hooks/useCanvasProjectActions.js
+index 690eb24..9756812 100644
+--- a/src/hooks/useCanvasProjectActions.js
++++ b/src/hooks/useCanvasProjectActions.js
+@@ -1,5 +1,5 @@
+ import { computed, ref } from 'vue'
+-import { deleteProject, duplicateProject, projects, renameProject } from '@/stores/projects'
++import { deleteProject, duplicateProject, ensureProjectLoaded, projects, renameProject } from '@/stores/projects'
+ 
+ export const useCanvasProjectActions = ({
+   route,
+@@ -51,7 +51,7 @@ export const useCanvasProjectActions = ({
+   }
+ 
+   const saveSharedTemplate = async () => {
+-    const project = currentProject.value
++    const project = await ensureProjectLoaded(route.params.id)
+     if (!project?.id || !project?.canvasData) {
+       notifier.error('Project data unavailable')
+       return
+diff --git a/src/stores/auth.js b/src/stores/auth.js
+index 42ee329..9b05ccf 100644
+--- a/src/stores/auth.js
++++ b/src/stores/auth.js
+@@ -27,6 +27,9 @@ const roles = ref([])
+ const permissions = ref([])
+ const adminBootstrapped = ref(false)
+ 
++let bootstrapPromise = null
++let adminSessionPromise = null
++
+ const readToken = () => {
+   try {
+     return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
+@@ -37,6 +40,9 @@ const readToken = () => {
+ 
+ const persistToken = (token) => {
+   accessToken.value = token || ''
++  bootstrapped.value = false
++  bootstrapPromise = null
++  adminSessionPromise = null
+   if (!token) {
+     adminUser.value = null
+     roles.value = []
+@@ -65,6 +71,7 @@ export const useAuthStore = () => {
+     if (result?.accessToken) {
+       persistToken(result.accessToken)
+       user.value = result.user || null
++      bootstrapped.value = true
+     }
+     return result
+   }
+@@ -74,39 +81,49 @@ export const useAuthStore = () => {
+     if (result?.accessToken) {
+       persistToken(result.accessToken)
+       user.value = result.user || null
++      bootstrapped.value = true
+     }
+     return result
+   }
+ 
+   const bootstrapAuth = async () => {
+     if (bootstrapped.value) return
++    if (bootstrapPromise) return bootstrapPromise
++
++    bootstrapPromise = (async () => {
++      if (BYPASS_AUTH_IN_DEV) {
++        accessToken.value = 'dev-bypass-token'
++        user.value = { ...BYPASS_USER }
++        bootstrapped.value = true
++        return
++      }
+ 
+-    if (BYPASS_AUTH_IN_DEV) {
+-      accessToken.value = 'dev-bypass-token'
+-      user.value = { ...BYPASS_USER }
+-      bootstrapped.value = true
+-      return
+-    }
+-
+-    const token = readToken()
+-    if (token) {
+-      accessToken.value = token
+-      try {
+-        const me = await getMe()
+-        user.value = me.user
+-      } catch {
++      const token = readToken()
++      if (token) {
++        accessToken.value = token
+         try {
+-          const refreshed = await refreshSession()
+-          persistToken(refreshed.accessToken)
+-          user.value = refreshed.user
++          const me = await getMe()
++          user.value = me.user
+         } catch {
+-          persistToken('')
+-          user.value = null
++          try {
++            const refreshed = await refreshSession()
++            persistToken(refreshed.accessToken)
++            user.value = refreshed.user
++          } catch {
++            persistToken('')
++            user.value = null
++          }
+         }
+       }
+-    }
+ 
+-    bootstrapped.value = true
++      bootstrapped.value = true
++    })()
++
++    try {
++      await bootstrapPromise
++    } finally {
++      bootstrapPromise = null
++    }
+   }
+ 
+   const loadAdminSession = async ({ force = false } = {}) => {
+@@ -122,20 +139,32 @@ export const useAuthStore = () => {
+       return isAdmin.value
+     }
+ 
++    if (adminSessionPromise && !force) {
++      return adminSessionPromise
++    }
++
++    adminSessionPromise = (async () => {
++      try {
++        const session = await getAdminSession()
++        adminUser.value = session?.user || null
++        roles.value = Array.isArray(session?.roles) ? session.roles : []
++        permissions.value = Array.isArray(session?.permissions) ? session.permissions : []
++      } catch {
++        adminUser.value = null
++        roles.value = []
++        permissions.value = []
++      } finally {
++        adminBootstrapped.value = true
++      }
++
++      return isAdmin.value
++    })()
++
+     try {
+-      const session = await getAdminSession()
+-      adminUser.value = session?.user || null
+-      roles.value = Array.isArray(session?.roles) ? session.roles : []
+-      permissions.value = Array.isArray(session?.permissions) ? session.permissions : []
+-    } catch {
+-      adminUser.value = null
+-      roles.value = []
+-      permissions.value = []
++      return await adminSessionPromise
+     } finally {
+-      adminBootstrapped.value = true
++      adminSessionPromise = null
+     }
+-
+-    return isAdmin.value
+   }
+ 
+   const hasPermission = (code) => permissions.value.includes(String(code || ''))
+diff --git a/src/stores/canvas.js b/src/stores/canvas.js
+index 3f91136..e2adc5f 100644
+--- a/src/stores/canvas.js
++++ b/src/stores/canvas.js
+@@ -32,7 +32,13 @@ export const selectedNode = ref(null)
+ let autoSaveEnabled = false
+ let saveTimeout = null
+ let saveInFlight = null
++let saveInFlightSnapshotKey = ''
+ let saveQueued = false
++let queuedSnapshotKey = ''
++let lastPersistedSnapshotKey = ''
++const AUTO_SAVE_DELAY_MS = 1200
++const VIEWPORT_POSITION_THRESHOLD = 24
++const VIEWPORT_ZOOM_THRESHOLD = 0.02
+ 
+ // History for undo/redo | 撤销/重做历史
+ const history = ref([])
+@@ -40,6 +46,30 @@ const historyIndex = ref(-1)
+ const MAX_HISTORY = 50
+ let isRestoring = false
+ 
++const roundViewport = (viewport = {}) => ({
++  x: Math.round(Number(viewport.x || 0)),
++  y: Math.round(Number(viewport.y || 0)),
++  zoom: Number(Number(viewport.zoom || 1).toFixed(3))
++})
++
++const buildCanvasSnapshot = () => ({
++  nodes: JSON.parse(JSON.stringify(nodes.value)),
++  edges: JSON.parse(JSON.stringify(edges.value)),
++  groups: JSON.parse(JSON.stringify(groups.value)),
++  viewport: roundViewport(canvasViewport.value)
++})
++
++const getSnapshotKey = (snapshot) => JSON.stringify(snapshot)
++
++const shouldPersistViewport = (current, next) => {
++  const currentViewport = roundViewport(current)
++  const nextViewport = roundViewport(next)
++  const dx = Math.abs(nextViewport.x - currentViewport.x)
++  const dy = Math.abs(nextViewport.y - currentViewport.y)
++  const dz = Math.abs(nextViewport.zoom - currentViewport.zoom)
++  return dx >= VIEWPORT_POSITION_THRESHOLD || dy >= VIEWPORT_POSITION_THRESHOLD || dz >= VIEWPORT_ZOOM_THRESHOLD
++}
++
+ /**
+  * Save current state to history | 保存当前状态到历史
+  */
+@@ -467,6 +497,14 @@ export const currentProjectVersion = ref(null) // Stores updated_at for optimist
+ export const loadProject = (projectId) => {
+   autoSaveEnabled = false
+   isRestoring = true
++  if (saveTimeout) {
++    clearTimeout(saveTimeout)
++    saveTimeout = null
++  }
++  saveQueued = false
++  saveInFlight = null
++  saveInFlightSnapshotKey = ''
++  queuedSnapshotKey = ''
+   currentProjectId.value = projectId
+   
+   const canvasData = getProjectCanvas(projectId)
+@@ -537,6 +575,7 @@ export const loadProject = (projectId) => {
+     groups: JSON.parse(JSON.stringify(groups.value))
+   }]
+   historyIndex.value = 0
++  lastPersistedSnapshotKey = getSnapshotKey(buildCanvasSnapshot())
+   
+   // Enable auto-save after loading | 加载后启用自动保存
+   setTimeout(() => {
+@@ -551,24 +590,32 @@ export const loadProject = (projectId) => {
+ export const saveProject = async () => {
+   if (!currentProjectId.value) return
+ 
++  const snapshot = buildCanvasSnapshot()
++  const snapshotKey = getSnapshotKey(snapshot)
++
++  if (snapshotKey === lastPersistedSnapshotKey) {
++    return true
++  }
++
+   if (saveInFlight) {
++    if (snapshotKey === saveInFlightSnapshotKey || snapshotKey === queuedSnapshotKey) {
++      return saveInFlight
++    }
+     saveQueued = true
++    queuedSnapshotKey = snapshotKey
+     return saveInFlight
+   }
+ 
+-  const runSave = async () => {
++  const runSave = async (pendingSnapshot, pendingSnapshotKey) => {
+     let saved = true
+-    const snapshot = {
+-      nodes: JSON.parse(JSON.stringify(nodes.value)),
+-      edges: JSON.parse(JSON.stringify(edges.value)),
+-      groups: JSON.parse(JSON.stringify(groups.value)),
+-      viewport: { ...canvasViewport.value }
++    if (pendingSnapshotKey === lastPersistedSnapshotKey) {
++      return true
+     }
+ 
+     try {
+       const updatedProject = await updateProjectCanvas(
+         currentProjectId.value,
+-        snapshot,
++        pendingSnapshot,
+         currentProjectVersion.value
+       )
+ 
+@@ -576,6 +623,7 @@ export const saveProject = async () => {
+       if (updatedProject?.updatedAt) {
+         currentProjectVersion.value = updatedProject.updatedAt
+       }
++      lastPersistedSnapshotKey = pendingSnapshotKey
+     } catch (error) {
+       saved = false
+       if (error.status === 409 || error.code === 'PROJECT_CONFLICT') {
+@@ -587,8 +635,10 @@ export const saveProject = async () => {
+       }
+     } finally {
+       saveInFlight = null
++      saveInFlightSnapshotKey = ''
+       if (saveQueued) {
+         saveQueued = false
++        queuedSnapshotKey = ''
+         // Fire next save with latest canvas snapshot.
+         await saveProject()
+       }
+@@ -596,7 +646,8 @@ export const saveProject = async () => {
+     return saved
+   }
+ 
+-  saveInFlight = runSave()
++  saveInFlightSnapshotKey = snapshotKey
++  saveInFlight = runSave(snapshot, snapshotKey)
+   return saveInFlight
+ }
+ 
+@@ -616,22 +667,35 @@ export const flushSave = async () => {
+  */
+ const debouncedSave = () => {
+   if (!autoSaveEnabled || !currentProjectId.value) return
++
++  const snapshotKey = getSnapshotKey(buildCanvasSnapshot())
++  if (
++    snapshotKey === lastPersistedSnapshotKey ||
++    snapshotKey === saveInFlightSnapshotKey ||
++    snapshotKey === queuedSnapshotKey
++  ) {
++    return
++  }
+   
+   if (saveTimeout) {
+     clearTimeout(saveTimeout)
+   }
+   
+   saveTimeout = setTimeout(() => {
++    saveTimeout = null
+     saveProject()
+-  }, 500)
++  }, AUTO_SAVE_DELAY_MS)
+ }
+ 
+ /**
+  * Update viewport and save | 更新视口并保存
+  */
+ export const updateViewport = (viewport) => {
++  const currentViewport = canvasViewport.value
+   canvasViewport.value = viewport
+-  debouncedSave()
++  if (shouldPersistViewport(currentViewport, viewport)) {
++    debouncedSave()
++  }
+ }
+ 
+ /**
+diff --git a/src/stores/projects.js b/src/stores/projects.js
+index 844c340..b3d53a4 100644
+--- a/src/stores/projects.js
++++ b/src/stores/projects.js
+@@ -6,6 +6,7 @@ import { computed, ref } from 'vue'
+ import {
+   apiCreateProject,
+   apiDeleteProject,
++  apiGetProject,
+   apiListProjects,
+   apiPatchProject
+ } from '@/api/projects'
+@@ -13,10 +14,15 @@ import { useAuthStore } from '@/stores/auth'
+ 
+ const STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-cache'
+ const BYPASS_AUTH_IN_DEV = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
++const PROJECT_LIST_CACHE_TTL_MS = 5000
+ 
+ export const projects = ref([])
+ export const currentProjectId = ref(null)
+ 
++let loadProjectsPromise = null
++let lastProjectsLoadedAt = 0
++const projectDetailPromises = new Map()
++
+ export const currentProject = computed(() => {
+   return projects.value.find((p) => p.id === currentProjectId.value) || null
+ })
+@@ -39,13 +45,15 @@ const createLocalProjectRecord = (name = 'Untitled') => {
+   }
+ }
+ 
++const hasCanvasPayload = (row) => Object.prototype.hasOwnProperty.call(row || {}, 'canvas_json')
++
+ const mapProjectFromApi = (row) => ({
+   id: row.id,
+   name: row.name,
+   thumbnail: row.thumbnail_url || '',
+   createdAt: row.created_at,
+   updatedAt: row.updated_at,
+-  canvasData: row.canvas_json || { ...defaultCanvasData }
++  canvasData: hasCanvasPayload(row) ? (row.canvas_json || { ...defaultCanvasData }) : null
+ })
+ 
+ const mapProjectToApi = (project) => ({
+@@ -158,23 +166,79 @@ export const loadProjects = async () => {
+   const { isAuthenticated } = useAuthStore()
+   if (!isAuthenticated.value) {
+     projects.value = []
++    lastProjectsLoadedAt = 0
+     return projects.value
+   }
+   const localDrafts = loadLocalCache()
+   if (BYPASS_AUTH_IN_DEV) {
+     projects.value = localDrafts
++    lastProjectsLoadedAt = Date.now()
+     return projects.value
+   }
+-  try {
+-    const response = await apiListProjects()
+-    const remote = (response?.data || []).map(mapProjectFromApi)
+-    projects.value = mergeRemoteWithLocalDrafts(remote, localDrafts)
+-    saveLocalCache()
+-    return projects.value
+-  } catch (error) {
+-    projects.value = localDrafts
++  const now = Date.now()
++  if (loadProjectsPromise) {
++    return loadProjectsPromise
++  }
++  if (projects.value.length > 0 && now - lastProjectsLoadedAt < PROJECT_LIST_CACHE_TTL_MS) {
+     return projects.value
+   }
++  loadProjectsPromise = (async () => {
++    try {
++      const response = await apiListProjects()
++      const remote = (response?.data || []).map(mapProjectFromApi)
++      projects.value = mergeRemoteWithLocalDrafts(remote, localDrafts)
++      saveLocalCache()
++      lastProjectsLoadedAt = Date.now()
++      return projects.value
++    } catch (error) {
++      projects.value = localDrafts
++      lastProjectsLoadedAt = Date.now()
++      return projects.value
++    } finally {
++      loadProjectsPromise = null
++    }
++  })()
++  return loadProjectsPromise
++}
++
++export const ensureProjectLoaded = async (id, { force = false } = {}) => {
++  const safeId = String(id || '').trim()
++  if (!safeId) return null
++
++  const current = projects.value.find((p) => p.id === safeId) || null
++  if (BYPASS_AUTH_IN_DEV || (current?.canvasData && !force)) {
++    return current
++  }
++
++  const existingPromise = projectDetailPromises.get(safeId)
++  if (existingPromise && !force) {
++    return existingPromise
++  }
++
++  const loadPromise = (async () => {
++    const response = await apiGetProject(safeId)
++    const project = mapProjectFromApi(response.data)
++    const index = projects.value.findIndex((item) => item.id === safeId)
++    if (index === -1) {
++      projects.value = [project, ...projects.value]
++    } else {
++      projects.value[index] = {
++        ...projects.value[index],
++        ...project
++      }
++    }
++    saveLocalCache()
++    return projects.value.find((item) => item.id === safeId) || project
++  })()
++
++  projectDetailPromises.set(safeId, loadPromise)
++  try {
++    return await loadPromise
++  } finally {
++    if (projectDetailPromises.get(safeId) === loadPromise) {
++      projectDetailPromises.delete(safeId)
++    }
++  }
+ }
+ 
+ export const createProject = async (name = 'Untitled') => {
+@@ -285,6 +349,7 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
+ 
+ export const getProjectCanvas = (id) => {
+   const project = projects.value.find((p) => p.id === id)
++  if (!project?.canvasData) return null
+   // Return full project to access metadata like updatedAt
+   return project ? { ...project.canvasData, _meta: project } : null
+ }
+@@ -348,6 +413,7 @@ if (typeof window !== 'undefined') {
+   window.__aiCanvasProjects = {
+     projects,
+     loadProjects,
++    ensureProjectLoaded,
+     createProject,
+     deleteProject
+   }
+diff --git a/src/views/AdminUsers.vue b/src/views/AdminUsers.vue
+index 31af7a5..55d9863 100644
+--- a/src/views/AdminUsers.vue
++++ b/src/views/AdminUsers.vue
+@@ -603,6 +603,11 @@ const router = useRouter()
+ const route = useRoute()
+ const auth = useAuthStore()
+ 
++let loadUsagePromise = null
++let loadUsersPromise = null
++let loadLogsPromise = null
++let loadAllPromise = null
++
+ const adminShellRef = ref(null)
+ const overviewRef = ref(null)
+ const usersRef = ref(null)
+@@ -968,39 +973,55 @@ const toPrettyJson = (value) => {
+ 
+ const isSelf = (user) => String(user?.id || '') === String(auth.adminUser.value?.id || auth.user.value?.id || '')
+ 
+-const loadUsage = async () => {
++const loadUsage = async ({ force = false } = {}) => {
+   if (!canReadUsage.value) return
++  if (loadUsagePromise && !force) return loadUsagePromise
+   loadingUsage.value = true
++  loadUsagePromise = (async () => {
++    try {
++      const [summaryRsp, seriesRsp] = await Promise.all([getAdminUsageSummary(), getAdminUsageTimeseries()])
++      usageSummary.value = summaryRsp?.data || usageSummary.value
++      usageSeries.value = Array.isArray(seriesRsp?.data) ? seriesRsp.data : []
++    } catch (error) {
++      if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载用量概览失败'))
++    } finally {
++      loadingUsage.value = false
++    }
++  })()
+   try {
+-    const [summaryRsp, seriesRsp] = await Promise.all([getAdminUsageSummary(), getAdminUsageTimeseries()])
+-    usageSummary.value = summaryRsp?.data || usageSummary.value
+-    usageSeries.value = Array.isArray(seriesRsp?.data) ? seriesRsp.data : []
+-  } catch (error) {
+-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载用量概览失败'))
++    return await loadUsagePromise
+   } finally {
+-    loadingUsage.value = false
++    loadUsagePromise = null
+   }
+ }
+ 
+-const loadUsers = async () => {
++const loadUsers = async ({ force = false } = {}) => {
+   if (!canReadUsers.value) return
++  if (loadUsersPromise && !force) return loadUsersPromise
+   loadingUsers.value = true
+-  try {
+-    const rsp = await getAdminUsers()
+-    const list = Array.isArray(rsp?.data) ? rsp.data : []
+-    users.value = list
+-    const nextSelection = {}
+-    const nextAssignments = { ...assignSelections.value }
+-    for (const item of list) {
+-      nextSelection[item.id] = Array.isArray(item.roles) && item.roles.length ? item.roles[0] : 'user'
+-      if (!Object.prototype.hasOwnProperty.call(nextAssignments, item.id)) nextAssignments[item.id] = ''
++  loadUsersPromise = (async () => {
++    try {
++      const rsp = await getAdminUsers()
++      const list = Array.isArray(rsp?.data) ? rsp.data : []
++      users.value = list
++      const nextSelection = {}
++      const nextAssignments = { ...assignSelections.value }
++      for (const item of list) {
++        nextSelection[item.id] = Array.isArray(item.roles) && item.roles.length ? item.roles[0] : 'user'
++        if (!Object.prototype.hasOwnProperty.call(nextAssignments, item.id)) nextAssignments[item.id] = ''
++      }
++      selectedRoles.value = nextSelection
++      assignSelections.value = nextAssignments
++    } catch (error) {
++      if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载用户列表失败'))
++    } finally {
++      loadingUsers.value = false
+     }
+-    selectedRoles.value = nextSelection
+-    assignSelections.value = nextAssignments
+-  } catch (error) {
+-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载用户列表失败'))
++  })()
++  try {
++    return await loadUsersPromise
+   } finally {
+-    loadingUsers.value = false
++    loadUsersPromise = null
+   }
+ }
+ 
+@@ -1012,7 +1033,7 @@ const saveRoles = async (user) => {
+   try {
+     await updateAdminUserRoles(user.id, [role])
+     window.$message?.success('角色更新成功')
+-    await Promise.all([loadUsers(), loadLogs()])
++    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
+   } catch (error) {
+     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '更新角色失败'))
+   } finally {
+@@ -1027,7 +1048,7 @@ const suspendUser = async (user) => {
+   try {
+     await updateAdminUserStatus(user.id, 'suspended', reason)
+     window.$message?.success('用户已暂停')
+-    await Promise.all([loadUsers(), loadLogs()])
++    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
+   } catch (error) {
+     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '暂停用户失败'))
+   } finally {
+@@ -1041,7 +1062,7 @@ const activateUser = async (user) => {
+   try {
+     await updateAdminUserStatus(user.id, 'active')
+     window.$message?.success('用户已恢复')
+-    await Promise.all([loadUsers(), loadLogs()])
++    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
+   } catch (error) {
+     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '恢复用户失败'))
+   } finally {
+@@ -1057,7 +1078,7 @@ const deleteUser = async (user) => {
+   try {
+     await deleteAdminUser(user.id)
+     window.$message?.success('用户已删除')
+-    await Promise.all([loadUsers(), loadLogs()])
++    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
+   } catch (error) {
+     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '删除用户失败'))
+   } finally {
+@@ -1074,7 +1095,7 @@ const assignApiKey = async (user) => {
+     await assignAdminApiKeyToUser(user.id, apiName)
+     window.$message?.success('API 密钥分配成功')
+     assignSelections.value = { ...assignSelections.value, [user.id]: '' }
+-    await Promise.all([loadUsers(), loadLogs()])
++    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
+   } catch (error) {
+     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '分配 API 密钥失败'))
+   } finally {
+@@ -1088,7 +1109,7 @@ const unassignApiKey = async (user, apiName) => {
+   try {
+     await unassignAdminApiKeyFromUser(user.id, apiName)
+     window.$message?.success('API 密钥解绑成功')
+-    await Promise.all([loadUsers(), loadLogs()])
++    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
+   } catch (error) {
+     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '解绑 API 密钥失败'))
+   } finally {
+@@ -1096,41 +1117,57 @@ const unassignApiKey = async (user, apiName) => {
+   }
+ }
+ 
+-const loadLogs = async () => {
++const loadLogs = async ({ force = false } = {}) => {
+   if (!canReadAudit.value) return
++  if (loadLogsPromise && !force) return loadLogsPromise
+   loadingLogs.value = true
+-  try {
+-    const rsp = await getAdminAuditLogs({ page: logQuery.value.page, limit: logQuery.value.limit })
+-    auditLogs.value = Array.isArray(rsp?.data) ? rsp.data : []
+-    pagination.value = {
+-      page: Number(rsp?.pagination?.page || logQuery.value.page || 1),
+-      limit: Number(rsp?.pagination?.limit || logQuery.value.limit || 20),
+-      total: Number(rsp?.pagination?.total || 0)
++  loadLogsPromise = (async () => {
++    try {
++      const rsp = await getAdminAuditLogs({ page: logQuery.value.page, limit: logQuery.value.limit })
++      auditLogs.value = Array.isArray(rsp?.data) ? rsp.data : []
++      pagination.value = {
++        page: Number(rsp?.pagination?.page || logQuery.value.page || 1),
++        limit: Number(rsp?.pagination?.limit || logQuery.value.limit || 20),
++        total: Number(rsp?.pagination?.total || 0)
++      }
++    } catch (error) {
++      if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载审计日志失败'))
++    } finally {
++      loadingLogs.value = false
+     }
+-  } catch (error) {
+-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载审计日志失败'))
++  })()
++  try {
++    return await loadLogsPromise
+   } finally {
+-    loadingLogs.value = false
++    loadLogsPromise = null
+   }
+ }
+ 
+ const refreshOverview = async () => {
+-  await loadUsage()
++  await loadUsage({ force: true })
+ }
+ 
+-const loadAll = async () => {
++const loadAll = async ({ force = false } = {}) => {
++  if (loadAllPromise && !force) return loadAllPromise
+   const allowed = await auth.loadAdminSession({ force: true })
+   if (!allowed) {
+     router.replace('/')
+     return
+   }
+ 
+-  const tasks = []
+-  if (canReadUsage.value) tasks.push(loadUsage())
+-  if (canReadUsers.value) tasks.push(loadUsers())
+-  if (showServiceSection.value) tasks.push(load302All())
+-  if (canReadAudit.value) tasks.push(loadLogs())
+-  await Promise.all(tasks)
++  loadAllPromise = (async () => {
++    const tasks = []
++    if (canReadUsage.value) tasks.push(loadUsage({ force }))
++    if (canReadUsers.value) tasks.push(loadUsers({ force }))
++    if (showServiceSection.value) tasks.push(load302All({ force }))
++    if (canReadAudit.value) tasks.push(loadLogs({ force }))
++    await Promise.all(tasks)
++  })()
++  try {
++    return await loadAllPromise
++  } finally {
++    loadAllPromise = null
++  }
+ }
+ 
+ onMounted(async () => {
+diff --git a/src/views/Canvas.vue b/src/views/Canvas.vue
+index b02c040..669b56c 100644
+--- a/src/views/Canvas.vue
++++ b/src/views/Canvas.vue
+@@ -446,7 +446,7 @@ import { useCanvasProjectActions } from '@/hooks/useCanvasProjectActions'
+ import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
+ import { notifier } from '../utils/notifier'
+ import { getWorkflowById } from '@/config/workflows'
+-import { initProjectsStore } from '../stores/projects'
++import { ensureProjectLoaded, initProjectsStore } from '../stores/projects'
+ import { useAuthStore } from '@/stores/auth'
+ import { useWorkflowsStore } from '@/stores/workflows'
+ 
+@@ -1079,11 +1079,12 @@ const checkMobile = () => {
+ }
+ 
+ // Load project by ID | 根据ID加载项目
+-const loadProjectById = (projectId) => {
++const loadProjectById = async (projectId) => {
+   // Update flow key to force VueFlow re-render | 更新 key 强制 VueFlow 重新渲染
+   flowKey.value = Date.now()
+   
+   if (projectId && projectId !== 'new') {
++    await ensureProjectLoaded(projectId)
+     loadProject(projectId)
+   } else {
+     // New project - clear canvas | 新项目 - 清空画布
+@@ -1116,14 +1117,14 @@ const applyPendingWorkflowTemplate = async () => {
+ // Watch for route changes | 监听路由变化
+ watch(
+   () => route.params.id,
+-  (newId, oldId) => {
++  async (newId, oldId) => {
+     if (newId && newId !== oldId) {
+       // Save current project before switching | 切换前保存当前项目
+       if (oldId) {
+         flushSave()
+       }
+       // Load new project | 加载新项目
+-      loadProjectById(newId)
++      await loadProjectById(newId)
+     }
+   }
+ )
+@@ -1163,7 +1164,7 @@ onMounted(async () => {
+   await loadWorkflowTemplates()
+   
+   // Load project data | 加载项目数据
+-  loadProjectById(route.params.id)
++  await loadProjectById(route.params.id)
+   await nextTick()
+   await applyPendingWorkflowTemplate()
+   scheduleOverlayRectUpdate()
+diff --git a/src/views/UsageAdmin.vue b/src/views/UsageAdmin.vue
+index 948426c..a6dc396 100644
+--- a/src/views/UsageAdmin.vue
++++ b/src/views/UsageAdmin.vue
+@@ -171,6 +171,7 @@ import { STORAGE_KEYS } from '@/utils/constants'
+ import { getErrorMessage } from '@/utils'
+ 
+ const router = useRouter()
++let loadAllPromise = null
+ 
+ const loginForm = ref({ username: '', password: '' })
+ const loggingIn = ref(false)
+@@ -219,20 +220,28 @@ const maskApiKey = (value) => {
+   return `${key.slice(0, 6)}...${key.slice(-4)}`
+ }
+ 
+-const loadAll = async () => {
++const loadAll = async ({ force = false } = {}) => {
++  if (loadAllPromise && !force) return loadAllPromise
+   loadingAll.value = true
+-  try {
+-    const [balanceRsp, usersRsp, keysRsp] = await Promise.all([
+-      getUsageAdminBalance(),
+-      getUsageAdminUsers(),
+-      getUsageAdminApiKeys()
+-    ])
++  loadAllPromise = (async () => {
++    try {
++      const [balanceRsp, usersRsp, keysRsp] = await Promise.all([
++        getUsageAdminBalance(),
++        getUsageAdminUsers(),
++        getUsageAdminApiKeys()
++      ])
+ 
+-    balance.value = String(balanceRsp?.data?.balance ?? '')
+-    users.value = Array.isArray(usersRsp?.data) ? usersRsp.data : []
+-    apiKeys.value = Array.isArray(keysRsp?.data) ? keysRsp.data : []
++      balance.value = String(balanceRsp?.data?.balance ?? '')
++      users.value = Array.isArray(usersRsp?.data) ? usersRsp.data : []
++      apiKeys.value = Array.isArray(keysRsp?.data) ? keysRsp.data : []
++    } finally {
++      loadingAll.value = false
++    }
++  })()
++  try {
++    return await loadAllPromise
+   } finally {
+-    loadingAll.value = false
++    loadAllPromise = null
+   }
+ }
+ 
+@@ -248,7 +257,7 @@ const handleLogin = async () => {
+     setUsageAdminToken(rsp?.token)
+     const session = await usageAdminSession()
+     adminSession.value = session
+-    await loadAll()
++    await loadAll({ force: true })
+     window.$message?.success('Admin login success')
+   } catch (error) {
+     clearUsageAdminToken()
+@@ -279,7 +288,7 @@ const createApiKey = async () => {
+     })
+     window.$message?.success('API key created')
+     createForm.value.api_name = ''
+-    await loadAll()
++    await loadAll({ force: true })
+   } catch (error) {
+     if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to create API key'))
+   } finally {
+@@ -292,7 +301,7 @@ const deleteApiKey = async (apiName) => {
+   try {
+     await deleteUsageAdminApiKey(apiName)
+     window.$message?.success('API key deleted')
+-    await loadAll()
++    await loadAll({ force: true })
+   } catch (error) {
+     if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to delete API key'))
+   }
+@@ -308,7 +317,7 @@ const assignKeyFromRow = async (apiName) => {
+   try {
+     await assignUsageAdminUserKey(userId, apiName)
+     window.$message?.success('Assigned')
+-    await loadAll()
++    await loadAll({ force: true })
+   } catch (error) {
+     if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to assign key'))
+   }

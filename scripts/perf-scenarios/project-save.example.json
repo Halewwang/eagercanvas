@@ -1,0 +1,26 @@
+{
+  "baseUrl": "${PERF_BASE_URL}",
+  "concurrency": 5,
+  "requests": 20,
+  "bearerToken": "${PERF_BEARER_TOKEN}",
+  "requestsList": [
+    {
+      "method": "PATCH",
+      "path": "/projects/${PERF_PROJECT_ID}",
+      "body": {
+        "name": "Perf Save Project",
+        "currentUpdatedAt": "${PERF_PROJECT_UPDATED_AT}",
+        "canvasData": {
+          "nodes": [],
+          "edges": [],
+          "groups": [],
+          "viewport": {
+            "x": 100,
+            "y": 50,
+            "zoom": 0.8
+          }
+        }
+      }
+    }
+  ]
+}

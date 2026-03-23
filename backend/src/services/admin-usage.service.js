@@ -1,9 +1,16 @@
 import { supabase } from '../config/supabase.js'
+import { invalidateAuthenticatedUserCache } from './auth-user-cache.service.js'
 import { invalidateUserAuthzCache } from './rbac.service.js'
 import { get302RuntimeApiKeyByName } from './dashboard302.service.js'
 import { HttpError } from '../utils/http.js'
+import { deleteSharedCacheValue, getSharedCacheValue, setSharedCacheValue } from './shared-cache.service.js'
 
 const ASSIGNMENT_TABLE = 'user_api_key_assignments'
+const ASSIGNMENT_CACHE_TTL_MS = Number(process.env.ASSIGNMENT_CACHE_TTL_MS || 15000)
+const ASSIGNMENT_CACHE_NAMESPACE = 'user-api-key-assignments'
+const ADMIN_USERS_CACHE_TTL_MS = Number(process.env.ADMIN_USERS_CACHE_TTL_MS || 10000)
+const ADMIN_USERS_CACHE_NAMESPACE = 'admin-users-overview'
+const ADMIN_USERS_CACHE_KEY = 'all'
 
 const isMissingRelation = (error) => {
   const msg = String(error?.message || '').toLowerCase()
@@ -19,6 +26,41 @@ const requireAssignmentTable = (error) => {
     )
   }
   throw new HttpError(500, error.message || 'Assignment query failed', 'ASSIGNMENT_QUERY_FAILED')
+}
+
+const readAssignmentCache = async (userId) => {
+  const safeUserId = String(userId || '').trim()
+  if (!safeUserId) return null
+  return getSharedCacheValue(ASSIGNMENT_CACHE_NAMESPACE, safeUserId)
+}
+
+const writeAssignmentCache = async (userId, assignments) => {
+  const safeUserId = String(userId || '').trim()
+  if (!safeUserId) return
+  await setSharedCacheValue(
+    ASSIGNMENT_CACHE_NAMESPACE,
+    safeUserId,
+    Array.isArray(assignments) ? assignments : [],
+    ASSIGNMENT_CACHE_TTL_MS
+  )
+}
+
+const invalidateAssignmentCache = async (userId) => {
+  const safeUserId = String(userId || '').trim()
+  if (!safeUserId) return
+  await deleteSharedCacheValue(ASSIGNMENT_CACHE_NAMESPACE, safeUserId)
+}
+
+const readAdminUsersCache = async () => {
+  return getSharedCacheValue(ADMIN_USERS_CACHE_NAMESPACE, ADMIN_USERS_CACHE_KEY)
+}
+
+const writeAdminUsersCache = async (data) => {
+  await setSharedCacheValue(ADMIN_USERS_CACHE_NAMESPACE, ADMIN_USERS_CACHE_KEY, data, ADMIN_USERS_CACHE_TTL_MS)
+}
+
+const invalidateAdminUsersCache = async () => {
+  await deleteSharedCacheValue(ADMIN_USERS_CACHE_NAMESPACE, ADMIN_USERS_CACHE_KEY)
 }
 
 const loadAssignments = async () => {
@@ -38,6 +80,9 @@ export const getUserAssignedApiKeys = async (userId) => {
   const safeUserId = String(userId || '').trim()
   if (!safeUserId) return []
 
+  const cached = await readAssignmentCache(safeUserId)
+  if (cached) return cached
+
   const { data, error } = await supabase
     .from(ASSIGNMENT_TABLE)
     .select('api_name, created_at')
@@ -49,7 +94,9 @@ export const getUserAssignedApiKeys = async (userId) => {
     throw new HttpError(500, error.message, 'ASSIGNMENT_QUERY_FAILED')
   }
 
-  return Array.isArray(data) ? data : []
+  const assignments = Array.isArray(data) ? data : []
+  await writeAssignmentCache(safeUserId, assignments)
+  return assignments
 }
 
 export const resolveUserProviderAccess = async (userId, requestedApiName = '') => {
@@ -153,6 +200,9 @@ const toIsoDateEnd = (value) => {
 }
 
 export const listUsersForAdmin = async () => {
+  const cached = await readAdminUsersCache()
+  if (cached) return cached
+
   const [usersRes, profilesRes, dailyAggRes, assignments, usageEventsRes] = await Promise.all([
     supabase.from('users').select('*').order('created_at', { ascending: false }),
     supabase.from('user_profiles').select('user_id, display_name, registered_at, last_login_at'),
@@ -225,7 +275,7 @@ export const listUsersForAdmin = async () => {
     usageEventMetaMap.set(key, current)
   }
 
-  return (usersRes.data || []).map((user) => {
+  const result = (usersRes.data || []).map((user) => {
     const profile = profileMap.get(user.id)
     const usageMeta = usageEventMetaMap.get(user.id)
     return {
@@ -258,6 +308,9 @@ export const listUsersForAdmin = async () => {
       roles: rolesMap.get(user.id) || ['user']
     }
   })
+
+  await writeAdminUsersCache(result)
+  return result
 }
 
 const getRoleCodeMap = async () => {
@@ -346,7 +399,11 @@ export const updateUserRoles = async ({
     })))
   if (insertError) throw new HttpError(500, insertError.message, 'USER_ROLES_INSERT_FAILED')
 
-  invalidateUserAuthzCache(safeTargetUserId)
+  await Promise.all([
+    invalidateUserAuthzCache(safeTargetUserId),
+    invalidateAuthenticatedUserCache(safeTargetUserId),
+    invalidateAdminUsersCache()
+  ])
 
   await createAdminLog({
     operatorUserId,
@@ -424,7 +481,11 @@ export const updateUserStatus = async ({
       .eq('revoked', false)
   }
 
-  invalidateUserAuthzCache(safeTargetUserId)
+  await Promise.all([
+    invalidateUserAuthzCache(safeTargetUserId),
+    invalidateAuthenticatedUserCache(safeTargetUserId),
+    invalidateAdminUsersCache()
+  ])
   await createAdminLog({
     operatorUserId,
     targetUserId: safeTargetUserId,
@@ -505,7 +566,12 @@ export const deleteUserAccount = async ({
       .eq('user_id', safeTargetUserId)
   ])
 
-  invalidateUserAuthzCache(safeTargetUserId)
+  await Promise.all([
+    invalidateAssignmentCache(safeTargetUserId),
+    invalidateUserAuthzCache(safeTargetUserId),
+    invalidateAuthenticatedUserCache(safeTargetUserId),
+    invalidateAdminUsersCache()
+  ])
   await createAdminLog({
     operatorUserId,
     targetUserId: safeTargetUserId,
@@ -521,35 +587,58 @@ export const deleteUserAccount = async ({
 }
 
 export const getAdminUsageSummary = async ({ from, to, userId } = {}) => {
-  const query = supabase
+  const aggQuery = supabase
+    .from('usage_daily_agg')
+    .select('date,user_id,total_calls,total_images,total_video_seconds,total_cost_usd')
+
+  const tokenQuery = supabase
     .from('usage_events')
-    .select('user_id,input_tokens,output_tokens,image_count,video_seconds,cost_usd,created_at')
+    .select('user_id,input_tokens,output_tokens,created_at')
 
-  if (userId) query.eq('user_id', String(userId))
-  if (from) query.gte('created_at', toIsoDateStart(from))
-  if (to) query.lte('created_at', toIsoDateEnd(to))
+  if (userId) {
+    aggQuery.eq('user_id', String(userId))
+    tokenQuery.eq('user_id', String(userId))
+  }
+  if (from) {
+    aggQuery.gte('date', String(from))
+    tokenQuery.gte('created_at', toIsoDateStart(from))
+  }
+  if (to) {
+    aggQuery.lte('date', String(to))
+    tokenQuery.lte('created_at', toIsoDateEnd(to))
+  }
 
-  const { data, error } = await query
-  if (error) throw new HttpError(500, error.message, 'ADMIN_USAGE_SUMMARY_FAILED')
+  const [{ data: aggData, error: aggError }, { data: tokenData, error: tokenError }] = await Promise.all([
+    aggQuery,
+    tokenQuery
+  ])
+
+  if (aggError) throw new HttpError(500, aggError.message, 'ADMIN_USAGE_SUMMARY_FAILED')
+  if (tokenError) throw new HttpError(500, tokenError.message, 'ADMIN_USAGE_SUMMARY_FAILED')
 
   const users = new Set()
-  const summary = (data || []).reduce((acc, item) => {
-    users.add(item.user_id)
-    acc.totalCalls += 1
-    acc.totalInputTokens += Number(item.input_tokens || 0)
-    acc.totalOutputTokens += Number(item.output_tokens || 0)
-    acc.totalImages += Number(item.image_count || 0)
-    acc.totalVideoSeconds += Number(item.video_seconds || 0)
-    acc.totalCostUsd += Number(item.cost_usd || 0)
-    return acc
-  }, {
+  const summary = {
     totalCalls: 0,
     totalInputTokens: 0,
     totalOutputTokens: 0,
     totalImages: 0,
     totalVideoSeconds: 0,
     totalCostUsd: 0
-  })
+  }
+
+  for (const row of aggData || []) {
+    users.add(row.user_id)
+    summary.totalCalls += Number(row.total_calls || 0)
+    summary.totalImages += Number(row.total_images || 0)
+    summary.totalVideoSeconds += Number(row.total_video_seconds || 0)
+    summary.totalCostUsd += Number(row.total_cost_usd || 0)
+  }
+
+  for (const row of tokenData || []) {
+    users.add(row.user_id)
+    summary.totalInputTokens += Number(row.input_tokens || 0)
+    summary.totalOutputTokens += Number(row.output_tokens || 0)
+  }
 
   return {
     ...summary,
@@ -671,6 +760,10 @@ export const assignApiKeyToUser = async ({ userId, apiName, operatorUserId = nul
     )
 
   if (error) requireAssignmentTable(error)
+  await Promise.all([
+    invalidateAssignmentCache(safeUserId),
+    invalidateAdminUsersCache()
+  ])
 
   if (operatorUserId) {
     await createAdminLog({
@@ -701,6 +794,10 @@ export const unassignApiKeyFromUser = async ({ userId, apiName, operatorUserId =
     .eq('api_name', safeApiName)
 
   if (error) requireAssignmentTable(error)
+  await Promise.all([
+    invalidateAssignmentCache(safeUserId),
+    invalidateAdminUsersCache()
+  ])
 
   if (operatorUserId) {
     await createAdminLog({

@@ -2,7 +2,7 @@ import { Router } from 'express'
 import multer from 'multer'
 import { authRequired } from '../middleware/auth.js'
 import { uploadFile } from '../services/upload.service.js'
-import { HttpError, asyncHandler } from '../utils/http.js'
+import { HttpError, asyncHandler, sendJson } from '../utils/http.js'
 
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 
@@ -31,5 +31,5 @@ uploadRouter.post('/', authRequired, (req, res, next) => {
   }
   
   const result = await uploadFile(req.file)
-  res.json(result)
+  sendJson(res, result)
 }))

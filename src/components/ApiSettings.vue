@@ -48,6 +48,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { NIcon, NInput, NModal } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
+import { isDataImageUrl, uploadImageFile } from '@/utils/media'
 import { CloseOutline } from '../icons/coolicons'
 import { getErrorMessage } from '@/utils'
 
@@ -67,6 +68,7 @@ const saving = ref(false)
 const avatarInputRef = ref(null)
 const avatarPreview = ref('')
 const hasAvatarChange = ref(false)
+const avatarFile = ref(null)
 
 const formData = reactive({
   profileId: '',
@@ -83,6 +85,7 @@ const syncForm = () => {
   formData.userId = current.id || ''
   avatarPreview.value = current.avatarUrl || ''
   hasAvatarChange.value = false
+  avatarFile.value = null
 }
 
 watch(
@@ -127,6 +130,7 @@ const handleAvatarChange = (event) => {
   reader.onload = () => {
     avatarPreview.value = String(reader.result || '')
     hasAvatarChange.value = true
+    avatarFile.value = file
   }
   reader.readAsDataURL(file)
   event.target.value = ''
@@ -146,7 +150,23 @@ const handleSave = async () => {
     payload.displayName = nextId
   }
   if (hasAvatarChange.value) {
-    payload.avatarUrl = avatarPreview.value || null
+    if (avatarPreview.value) {
+      if (isDataImageUrl(avatarPreview.value)) {
+        if (!avatarFile.value) {
+          throw new Error('Avatar file is missing')
+        }
+
+        const uploadedAvatarUrl = await uploadImageFile(avatarFile.value)
+        if (!uploadedAvatarUrl) {
+          throw new Error('Avatar upload returned empty URL')
+        }
+        payload.avatarUrl = uploadedAvatarUrl
+      } else {
+        payload.avatarUrl = avatarPreview.value
+      }
+    } else {
+      payload.avatarUrl = null
+    }
   }
 
   if (Object.keys(payload).length === 0) {

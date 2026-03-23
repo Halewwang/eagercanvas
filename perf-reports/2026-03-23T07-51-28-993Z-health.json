@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-03-23T07:51:29.053Z",
+  "baseUrl": "http://localhost:8787/api/v1",
+  "scenarioFile": "scripts/perf-scenarios/health.json",
+  "paths": [
+    "/health"
+  ],
+  "method": "GET",
+  "concurrency": 10,
+  "requests": 100,
+  "ok": 100,
+  "failed": 0,
+  "totalDurationMs": 20.4,
+  "throughputRps": 4902.64,
+  "latencyMs": {
+    "min": 0.5,
+    "p50": 0.92,
+    "p95": 9.42,
+    "p99": 25.69,
+    "max": 25.69
+  },
+  "byStatus": {
+    "200": 100
+  },
+  "sampleErrors": []
+}

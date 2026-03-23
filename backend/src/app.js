@@ -46,13 +46,34 @@ app.use(cors({
 }))
 app.use(express.json({ limit: '10mb' }))
 app.use(cookieParser())
-app.use(rateLimit)
 app.use((req, res, next) => {
   const requestId = req.headers['x-request-id'] || randomUUID()
   req.requestId = String(requestId)
   res.setHeader('x-request-id', req.requestId)
   next()
 })
+app.use((req, res, next) => {
+  if (!env.requestLogEnabled) return next()
+
+  const startedAt = Date.now()
+  res.on('finish', () => {
+    const durationMs = Date.now() - startedAt
+    const shouldLog = res.statusCode >= 400 || durationMs >= env.requestLogSlowMs
+    if (!shouldLog) return
+
+    console.log('[api:request]', JSON.stringify({
+      requestId: req.requestId,
+      method: req.method,
+      path: req.originalUrl || req.path,
+      status: res.statusCode,
+      durationMs,
+      routeGroup: req.rateLimitRouteGroup || 'unknown',
+      userId: req.user?.id || null
+    }))
+  })
+  next()
+})
+app.use(rateLimit)
 
 app.use('/api/v1', apiRouter)
 

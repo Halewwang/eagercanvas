@@ -32,13 +32,43 @@ export const selectedNode = ref(null)
 let autoSaveEnabled = false
 let saveTimeout = null
 let saveInFlight = null
+let saveInFlightSnapshotKey = ''
 let saveQueued = false
+let queuedSnapshotKey = ''
+let lastPersistedSnapshotKey = ''
+const AUTO_SAVE_DELAY_MS = 1200
+const VIEWPORT_POSITION_THRESHOLD = 24
+const VIEWPORT_ZOOM_THRESHOLD = 0.02
 
 // History for undo/redo | 撤销/重做历史
 const history = ref([])
 const historyIndex = ref(-1)
 const MAX_HISTORY = 50
 let isRestoring = false
+
+const roundViewport = (viewport = {}) => ({
+  x: Math.round(Number(viewport.x || 0)),
+  y: Math.round(Number(viewport.y || 0)),
+  zoom: Number(Number(viewport.zoom || 1).toFixed(3))
+})
+
+const buildCanvasSnapshot = () => ({
+  nodes: JSON.parse(JSON.stringify(nodes.value)),
+  edges: JSON.parse(JSON.stringify(edges.value)),
+  groups: JSON.parse(JSON.stringify(groups.value)),
+  viewport: roundViewport(canvasViewport.value)
+})
+
+const getSnapshotKey = (snapshot) => JSON.stringify(snapshot)
+
+const shouldPersistViewport = (current, next) => {
+  const currentViewport = roundViewport(current)
+  const nextViewport = roundViewport(next)
+  const dx = Math.abs(nextViewport.x - currentViewport.x)
+  const dy = Math.abs(nextViewport.y - currentViewport.y)
+  const dz = Math.abs(nextViewport.zoom - currentViewport.zoom)
+  return dx >= VIEWPORT_POSITION_THRESHOLD || dy >= VIEWPORT_POSITION_THRESHOLD || dz >= VIEWPORT_ZOOM_THRESHOLD
+}
 
 /**
  * Save current state to history | 保存当前状态到历史
@@ -467,6 +497,14 @@ export const currentProjectVersion = ref(null) // Stores updated_at for optimist
 export const loadProject = (projectId) => {
   autoSaveEnabled = false
   isRestoring = true
+  if (saveTimeout) {
+    clearTimeout(saveTimeout)
+    saveTimeout = null
+  }
+  saveQueued = false
+  saveInFlight = null
+  saveInFlightSnapshotKey = ''
+  queuedSnapshotKey = ''
   currentProjectId.value = projectId
   
   const canvasData = getProjectCanvas(projectId)
@@ -537,6 +575,7 @@ export const loadProject = (projectId) => {
     groups: JSON.parse(JSON.stringify(groups.value))
   }]
   historyIndex.value = 0
+  lastPersistedSnapshotKey = getSnapshotKey(buildCanvasSnapshot())
   
   // Enable auto-save after loading | 加载后启用自动保存
   setTimeout(() => {
@@ -551,24 +590,32 @@ export const loadProject = (projectId) => {
 export const saveProject = async () => {
   if (!currentProjectId.value) return
 
+  const snapshot = buildCanvasSnapshot()
+  const snapshotKey = getSnapshotKey(snapshot)
+
+  if (snapshotKey === lastPersistedSnapshotKey) {
+    return true
+  }
+
   if (saveInFlight) {
+    if (snapshotKey === saveInFlightSnapshotKey || snapshotKey === queuedSnapshotKey) {
+      return saveInFlight
+    }
     saveQueued = true
+    queuedSnapshotKey = snapshotKey
     return saveInFlight
   }
 
-  const runSave = async () => {
+  const runSave = async (pendingSnapshot, pendingSnapshotKey) => {
     let saved = true
-    const snapshot = {
-      nodes: JSON.parse(JSON.stringify(nodes.value)),
-      edges: JSON.parse(JSON.stringify(edges.value)),
-      groups: JSON.parse(JSON.stringify(groups.value)),
-      viewport: { ...canvasViewport.value }
+    if (pendingSnapshotKey === lastPersistedSnapshotKey) {
+      return true
     }
 
     try {
       const updatedProject = await updateProjectCanvas(
         currentProjectId.value,
-        snapshot,
+        pendingSnapshot,
         currentProjectVersion.value
       )
 
@@ -576,6 +623,7 @@ export const saveProject = async () => {
       if (updatedProject?.updatedAt) {
         currentProjectVersion.value = updatedProject.updatedAt
       }
+      lastPersistedSnapshotKey = pendingSnapshotKey
     } catch (error) {
       saved = false
       if (error.status === 409 || error.code === 'PROJECT_CONFLICT') {
@@ -587,8 +635,10 @@ export const saveProject = async () => {
       }
     } finally {
       saveInFlight = null
+      saveInFlightSnapshotKey = ''
       if (saveQueued) {
         saveQueued = false
+        queuedSnapshotKey = ''
         // Fire next save with latest canvas snapshot.
         await saveProject()
       }
@@ -596,7 +646,8 @@ export const saveProject = async () => {
     return saved
   }
 
-  saveInFlight = runSave()
+  saveInFlightSnapshotKey = snapshotKey
+  saveInFlight = runSave(snapshot, snapshotKey)
   return saveInFlight
 }
 
@@ -616,22 +667,35 @@ export const flushSave = async () => {
  */
 const debouncedSave = () => {
   if (!autoSaveEnabled || !currentProjectId.value) return
+
+  const snapshotKey = getSnapshotKey(buildCanvasSnapshot())
+  if (
+    snapshotKey === lastPersistedSnapshotKey ||
+    snapshotKey === saveInFlightSnapshotKey ||
+    snapshotKey === queuedSnapshotKey
+  ) {
+    return
+  }
   
   if (saveTimeout) {
     clearTimeout(saveTimeout)
   }
   
   saveTimeout = setTimeout(() => {
+    saveTimeout = null
     saveProject()
-  }, 500)
+  }, AUTO_SAVE_DELAY_MS)
 }
 
 /**
  * Update viewport and save | 更新视口并保存
  */
 export const updateViewport = (viewport) => {
+  const currentViewport = canvasViewport.value
   canvasViewport.value = viewport
-  debouncedSave()
+  if (shouldPersistViewport(currentViewport, viewport)) {
+    debouncedSave()
+  }
 }
 
 /**

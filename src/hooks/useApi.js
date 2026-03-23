@@ -9,6 +9,7 @@ import {
   removeBackground,
   createVideoTask,
   getVideoTaskStatus,
+  getRunStatus,
   streamChatCompletions
 } from '@/api'
 import { DEFAULT_CHAT_MODEL, getModelByName } from '@/config/models'
@@ -95,6 +96,36 @@ const resolutionFromSize = (size, ratioKey = '') => {
   if (scale >= 3.5) return '4k'
   if (scale >= 1.8) return '2k'
   return '1k'
+}
+
+const queuedRunStatuses = new Set(['queued', 'running'])
+const runDoneStatuses = new Set(['completed', 'succeeded', 'success', 'done', 'finished', 'succeed', 'successed'])
+const transientRunPollStatuses = new Set([408, 425, 429, 500, 502, 503, 504])
+
+const getQueuedRunId = (payload = {}) => {
+  const candidates = [
+    payload?.run_id,
+    payload?.runId,
+    payload?.task_id,
+    payload?.taskId,
+    payload?.data?.run_id,
+    payload?.data?.runId,
+    payload?.data?.task_id,
+    payload?.data?.taskId
+  ]
+  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+  return found ? String(found) : ''
+}
+
+const getQueuedStatus = (payload = {}) => {
+  const candidates = [
+    payload?.status,
+    payload?.task_status,
+    payload?.data?.status,
+    payload?.data?.task_status
+  ]
+  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+  return found ? String(found).toLowerCase() : ''
 }
 
 /**
@@ -222,6 +253,54 @@ export const useImageGeneration = () => {
         endpoint: modelConfig?.endpoint || '/images/generations',
         timeout: IMAGE_REQUEST_TIMEOUT_MS
       })
+
+      const queuedStatus = getQueuedStatus(response)
+      const queuedRunId = getQueuedRunId(response)
+      if (queuedRunId && queuedRunStatuses.has(queuedStatus)) {
+        const maxAttempts = 120
+        const interval = 2000
+
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          let runResponse
+          try {
+            runResponse = await getRunStatus(queuedRunId, {
+              silentErrorToast: true,
+              silentNetworkErrorToast: true
+            })
+          } catch (pollError) {
+            const statusCode = Number(pollError?.response?.status || pollError?.status || 0)
+            const isTransient = transientRunPollStatuses.has(statusCode) || !statusCode
+            if (!isTransient) throw pollError
+
+            await new Promise((resolve) => setTimeout(resolve, interval))
+            continue
+          }
+
+          const runData = runResponse?.data || runResponse
+          const runStatus = String(runData?.status || '').toLowerCase()
+
+          if (runStatus === 'failed') {
+            throw new Error(runData?.error_msg || '图片生成失败')
+          }
+
+          if (runDoneStatuses.has(runStatus) && runData?.result) {
+            const finalData = runData.result?.data || runData.result
+            const generatedImages = (Array.isArray(finalData) ? finalData : [finalData]).map(item => ({
+              url: item.url || item.b64_json || item,
+              revisedPrompt: item.revised_prompt || ''
+            }))
+
+            images.value = generatedImages
+            currentImage.value = generatedImages[0] || null
+            setSuccess()
+            return generatedImages
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, interval))
+        }
+
+        throw new Error('图片生成超时')
+      }
 
       // Parse response (OpenAI format) | 解析响应
       const data = response.data || response

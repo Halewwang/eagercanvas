@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { authRequired } from '../middleware/auth.js'
-import { asyncHandler } from '../utils/http.js'
+import { asyncHandler, sendData, sendJson } from '../utils/http.js'
 import {
   createProject,
   getProject,
@@ -14,25 +14,25 @@ projectsRouter.use(authRequired)
 
 projectsRouter.get('/', asyncHandler(async (req, res) => {
   const projects = await listProjects(req.user.id)
-  res.json({ data: projects })
+  sendData(res, projects)
 }))
 
 projectsRouter.post('/', asyncHandler(async (req, res) => {
   const project = await createProject(req.user.id, req.body)
-  res.status(201).json({ data: project })
+  sendData(res, project, { status: 201 })
 }))
 
 projectsRouter.get('/:id', asyncHandler(async (req, res) => {
   const project = await getProject(req.user.id, req.params.id)
-  res.json({ data: project })
+  sendData(res, project)
 }))
 
 projectsRouter.patch('/:id', asyncHandler(async (req, res) => {
   const project = await updateProject(req.user.id, req.params.id, req.body)
-  res.json({ data: project })
+  sendData(res, project)
 }))
 
 projectsRouter.delete('/:id', asyncHandler(async (req, res) => {
   const result = await removeProject(req.user.id, req.params.id)
-  res.json(result)
+  sendJson(res, result)
 }))

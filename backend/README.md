@@ -33,3 +33,44 @@ Compatibility endpoints used by current frontend workflow:
 npm install
 npm run dev
 ```
+
+## Queue And Worker
+
+The backend now supports three run execution modes:
+
+- `RUN_QUEUE_MODE=inline`
+  Default. The API process handles runs directly. Chat stays synchronous. Image/video runs may still be detached inside the API process.
+- `RUN_QUEUE_MODE=redis`
+  The API process uses Redis-backed shared slots to cap concurrent run execution across instances.
+- `RUN_QUEUE_MODE=worker`
+  The API process only creates queued runs for image/video tasks. A separate worker process polls queued runs and executes them.
+
+Recommended production setup:
+
+```bash
+REDIS_URL=redis://your-redis-host:6379
+CACHE_BACKEND=redis
+RATE_LIMIT_STORE=redis
+RUN_QUEUE_MODE=worker
+RUN_QUEUE_CONCURRENCY=4
+RUN_WORKER_POLL_MS=2000
+RUN_WORKER_BATCH_SIZE=2
+```
+
+Start API:
+
+```bash
+npm start
+```
+
+Start worker:
+
+```bash
+npm run worker
+```
+
+Notes:
+
+- Chat completions remain synchronous to preserve current frontend behavior.
+- Image generation is now compatibly async: the frontend request layer transparently polls `/api/v1/runs/:id`.
+- Video generation is queued and can run in the detached worker mode without changing current frontend polling behavior.

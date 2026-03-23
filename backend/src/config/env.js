@@ -48,6 +48,21 @@ export const env = {
   adminDashboardJwtSecret: process.env.ADMIN_DASHBOARD_JWT_SECRET || '',
   adminDashboardTokenTtlSec: Number(process.env.ADMIN_DASHBOARD_TOKEN_TTL_SEC || 86400),
 
+  cacheBackend: String(process.env.CACHE_BACKEND || 'memory').trim() || 'memory',
+  rateLimitStore: String(process.env.RATE_LIMIT_STORE || 'memory').trim() || 'memory',
+  redisUrl: process.env.REDIS_URL || '',
+  runQueueMode: String(process.env.RUN_QUEUE_MODE || 'inline').trim() || 'inline',
+  runQueueConcurrency: Number(process.env.RUN_QUEUE_CONCURRENCY || 4),
+  runWorkerPollMs: Number(process.env.RUN_WORKER_POLL_MS || 2000),
+  runWorkerBatchSize: Number(process.env.RUN_WORKER_BATCH_SIZE || 2),
+  runRecoveryEnabled: String(process.env.RUN_RECOVERY_ENABLED || 'true') !== 'false',
+  runClaimTimeoutMs: Number(process.env.RUN_CLAIM_TIMEOUT_MS || 15 * 60 * 1000),
+
   rateLimitPerMinute: Number(process.env.RATE_LIMIT_PER_MINUTE || 120),
+  rateLimitAuthPerMinute: Number(process.env.RATE_LIMIT_AUTH_PER_MINUTE || 30),
+  rateLimitGeneratePerMinute: Number(process.env.RATE_LIMIT_GENERATE_PER_MINUTE || 40),
+  rateLimitPollingPerMinute: Number(process.env.RATE_LIMIT_POLLING_PER_MINUTE || 240),
+  requestLogEnabled: String(process.env.REQUEST_LOG_ENABLED || 'true') !== 'false',
+  requestLogSlowMs: Number(process.env.REQUEST_LOG_SLOW_MS || 800),
   codeCooldownSec: Number(process.env.AUTH_CODE_COOLDOWN_SEC || 60)
 }

@@ -1,0 +1,18 @@
+{
+  "baseUrl": "${PERF_BASE_URL}",
+  "concurrency": 2,
+  "requests": 4,
+  "bearerToken": "${PERF_BEARER_TOKEN}",
+  "requestsList": [
+    {
+      "method": "POST",
+      "path": "/images/generations",
+      "body": {
+        "prompt": "A small red cube on white background",
+        "model": "${PERF_IMAGE_MODEL}",
+        "n": 1,
+        "size": "1024x1024"
+      }
+    }
+  ]
+}

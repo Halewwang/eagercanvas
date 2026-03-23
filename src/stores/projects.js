@@ -6,6 +6,7 @@ import { computed, ref } from 'vue'
 import {
   apiCreateProject,
   apiDeleteProject,
+  apiGetProject,
   apiListProjects,
   apiPatchProject
 } from '@/api/projects'
@@ -13,9 +14,14 @@ import { useAuthStore } from '@/stores/auth'
 
 const STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-cache'
 const BYPASS_AUTH_IN_DEV = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
+const PROJECT_LIST_CACHE_TTL_MS = 5000
 
 export const projects = ref([])
 export const currentProjectId = ref(null)
+
+let loadProjectsPromise = null
+let lastProjectsLoadedAt = 0
+const projectDetailPromises = new Map()
 
 export const currentProject = computed(() => {
   return projects.value.find((p) => p.id === currentProjectId.value) || null
@@ -39,13 +45,15 @@ const createLocalProjectRecord = (name = 'Untitled') => {
   }
 }
 
+const hasCanvasPayload = (row) => Object.prototype.hasOwnProperty.call(row || {}, 'canvas_json')
+
 const mapProjectFromApi = (row) => ({
   id: row.id,
   name: row.name,
   thumbnail: row.thumbnail_url || '',
   createdAt: row.created_at,
   updatedAt: row.updated_at,
-  canvasData: row.canvas_json || { ...defaultCanvasData }
+  canvasData: hasCanvasPayload(row) ? (row.canvas_json || { ...defaultCanvasData }) : null
 })
 
 const mapProjectToApi = (project) => ({
@@ -158,22 +166,78 @@ export const loadProjects = async () => {
   const { isAuthenticated } = useAuthStore()
   if (!isAuthenticated.value) {
     projects.value = []
+    lastProjectsLoadedAt = 0
     return projects.value
   }
   const localDrafts = loadLocalCache()
   if (BYPASS_AUTH_IN_DEV) {
     projects.value = localDrafts
+    lastProjectsLoadedAt = Date.now()
     return projects.value
   }
-  try {
-    const response = await apiListProjects()
-    const remote = (response?.data || []).map(mapProjectFromApi)
-    projects.value = mergeRemoteWithLocalDrafts(remote, localDrafts)
+  const now = Date.now()
+  if (loadProjectsPromise) {
+    return loadProjectsPromise
+  }
+  if (projects.value.length > 0 && now - lastProjectsLoadedAt < PROJECT_LIST_CACHE_TTL_MS) {
+    return projects.value
+  }
+  loadProjectsPromise = (async () => {
+    try {
+      const response = await apiListProjects()
+      const remote = (response?.data || []).map(mapProjectFromApi)
+      projects.value = mergeRemoteWithLocalDrafts(remote, localDrafts)
+      saveLocalCache()
+      lastProjectsLoadedAt = Date.now()
+      return projects.value
+    } catch (error) {
+      projects.value = localDrafts
+      lastProjectsLoadedAt = Date.now()
+      return projects.value
+    } finally {
+      loadProjectsPromise = null
+    }
+  })()
+  return loadProjectsPromise
+}
+
+export const ensureProjectLoaded = async (id, { force = false } = {}) => {
+  const safeId = String(id || '').trim()
+  if (!safeId) return null
+
+  const current = projects.value.find((p) => p.id === safeId) || null
+  if (BYPASS_AUTH_IN_DEV || (current?.canvasData && !force)) {
+    return current
+  }
+
+  const existingPromise = projectDetailPromises.get(safeId)
+  if (existingPromise && !force) {
+    return existingPromise
+  }
+
+  const loadPromise = (async () => {
+    const response = await apiGetProject(safeId)
+    const project = mapProjectFromApi(response.data)
+    const index = projects.value.findIndex((item) => item.id === safeId)
+    if (index === -1) {
+      projects.value = [project, ...projects.value]
+    } else {
+      projects.value[index] = {
+        ...projects.value[index],
+        ...project
+      }
+    }
     saveLocalCache()
-    return projects.value
-  } catch (error) {
-    projects.value = localDrafts
-    return projects.value
+    return projects.value.find((item) => item.id === safeId) || project
+  })()
+
+  projectDetailPromises.set(safeId, loadPromise)
+  try {
+    return await loadPromise
+  } finally {
+    if (projectDetailPromises.get(safeId) === loadPromise) {
+      projectDetailPromises.delete(safeId)
+    }
   }
 }
 
@@ -285,6 +349,7 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
 
 export const getProjectCanvas = (id) => {
   const project = projects.value.find((p) => p.id === id)
+  if (!project?.canvasData) return null
   // Return full project to access metadata like updatedAt
   return project ? { ...project.canvasData, _meta: project } : null
 }
@@ -348,6 +413,7 @@ if (typeof window !== 'undefined') {
   window.__aiCanvasProjects = {
     projects,
     loadProjects,
+    ensureProjectLoaded,
     createProject,
     deleteProject
   }

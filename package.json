@@ -7,7 +7,10 @@
     "dev": "vite",
     "dev:api": "npm --prefix backend run dev",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "perf:baseline": "node scripts/perf-baseline.mjs",
+    "perf:report": "node scripts/perf-report.mjs",
+    "perf:probe": "node scripts/perf-probe.mjs"
   },
   "dependencies": {
     "@iconify-icons/ci": "^1.2.9",

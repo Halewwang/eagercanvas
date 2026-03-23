@@ -2,8 +2,7 @@
  * Chat API | 对话 API
  */
 
-import { request, getBaseUrl } from '@/utils'
-import { STORAGE_KEYS } from '@/utils/constants'
+import { request } from '@/utils'
 
 // 对话补全
 export const chatCompletions = (data) =>
@@ -15,34 +14,6 @@ export const chatCompletions = (data) =>
 
 // 流式对话补全
 export const streamChatCompletions = async function* (data, signal) {
-  const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
-  const baseUrl = getBaseUrl()
-  const authToken = accessToken
-  
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
-    },
-    credentials: 'include',
-    // Backend currently returns JSON. Force non-stream to avoid empty parsed chunks.
-    body: JSON.stringify({ ...data, stream: false }),
-    signal
-  })
-
-  if (!response.ok) {
-    let message = 'Stream request failed'
-    try {
-      const error = await response.json()
-      message = error?.error?.message || error?.message || message
-    } catch {
-      const text = await response.text()
-      if (text?.trim()) message = text.trim()
-    }
-    throw new Error(message)
-  }
-
   const extractTextFromContent = (content) => {
     if (typeof content === 'string') return content
     if (!Array.isArray(content)) return ''
@@ -95,18 +66,16 @@ export const streamChatCompletions = async function* (data, signal) {
     return ''
   }
 
-  const contentType = String(response.headers.get('content-type') || '').toLowerCase()
-  if (contentType.includes('application/json')) {
-    const payload = await response.json()
-    const text = extractText(payload)
+  const payload = await request({
+    url: '/chat/completions',
+    method: 'post',
+    data: { ...data, stream: false },
+    signal,
+    silentErrorToast: true
+  })
 
-    if (text) yield text
-    return
-  }
-
-  // Fallback for plain text response body.
-  const textBody = await response.text()
-  if (textBody && textBody.trim()) {
-    yield textBody.trim()
+  const text = extractText(payload)
+  if (text) {
+    yield text
   }
 }

@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { getErrorMessage } from '@/utils'
+import { uploadImageFile } from '@/utils/media'
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024
 
@@ -17,25 +18,33 @@ export const useAvatarUpload = ({ user, updateProfile, notify }) => {
     const file = event.target?.files?.[0]
     if (!file) return
 
-    if (file.size > MAX_AVATAR_BYTES) {
-      notify.error('Avatar must be <= 2MB')
+    if (!file.type.startsWith('image/')) {
+      notify.error('Please choose an image file')
+      event.target.value = ''
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        await updateProfile({ avatarUrl: String(reader.result || '') })
-        notify.success('Avatar updated')
-      } catch (err) {
-        if (!err?.__handled) {
-          notify.error(getErrorMessage(err, 'Failed to update avatar'))
-        }
-      }
+    if (file.size > MAX_AVATAR_BYTES) {
+      notify.error('Avatar must be <= 2MB')
+      event.target.value = ''
+      return
     }
 
-    reader.readAsDataURL(file)
-    event.target.value = ''
+    try {
+      const avatarUrl = await uploadImageFile(file)
+      if (!avatarUrl) {
+        throw new Error('Avatar upload returned empty URL')
+      }
+
+      await updateProfile({ avatarUrl })
+      notify.success('Avatar updated')
+    } catch (err) {
+      if (!err?.__handled) {
+        notify.error(getErrorMessage(err, 'Failed to update avatar'))
+      }
+    } finally {
+      event.target.value = ''
+    }
   }
 
   return {

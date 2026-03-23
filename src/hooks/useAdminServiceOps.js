@@ -60,6 +60,11 @@ export const useAdminServiceOps = ({
   loadUsers,
   loadLogs
 }) => {
+  let load302AllPromise = null
+  let loadBalancePromise = null
+  let loadApiLogsPromise = null
+  let loadApiKeysPromise = null
+
   const balance = ref('')
   const loadingBalance = ref(false)
   const recordRequestId = ref('')
@@ -89,20 +94,28 @@ export const useAdminServiceOps = ({
     return `${key.slice(0, 6)}...${key.slice(-4)}`
   }
 
-  const load302Balance = async ({ silent = false } = {}) => {
+  const load302Balance = async ({ silent = false, force = false } = {}) => {
     if (!canReadUsage.value) return
+    if (loadBalancePromise && !force) return loadBalancePromise
     loadingBalance.value = true
+    loadBalancePromise = (async () => {
+      try {
+        const rsp = await getAdmin302Balance()
+        balance.value = String(rsp?.data?.balance ?? '')
+        return { ok: true }
+      } catch (error) {
+        balance.value = ''
+        const message = toServiceNotice('加载 Eager 服务余额失败', error)
+        if (!silent && !error?.__handled) window.$message?.error(message)
+        return { ok: false, message, error }
+      } finally {
+        loadingBalance.value = false
+      }
+    })()
     try {
-      const rsp = await getAdmin302Balance()
-      balance.value = String(rsp?.data?.balance ?? '')
-      return { ok: true }
-    } catch (error) {
-      balance.value = ''
-      const message = toServiceNotice('加载 Eager 服务余额失败', error)
-      if (!silent && !error?.__handled) window.$message?.error(message)
-      return { ok: false, message, error }
+      return await loadBalancePromise
     } finally {
-      loadingBalance.value = false
+      loadBalancePromise = null
     }
   }
 
@@ -121,47 +134,63 @@ export const useAdminServiceOps = ({
     }
   }
 
-  const loadApiLogs = async ({ silent = false } = {}) => {
+  const loadApiLogs = async ({ silent = false, force = false } = {}) => {
     if (!canReadUsage.value) return
+    if (loadApiLogsPromise && !force) return loadApiLogsPromise
     loadingApiLogs.value = true
+    loadApiLogsPromise = (async () => {
+      try {
+        const rsp = await getAdmin302ApiRecord({
+          page: log302Query.page,
+          limit: log302Query.limit,
+          start_time: toUnixSeconds(log302Query.start),
+          end_time: toUnixSeconds(log302Query.end)
+        })
+        apiLogs.value = Array.isArray(rsp?.data?.items) ? rsp.data.items : []
+        return { ok: true }
+      } catch (error) {
+        apiLogs.value = []
+        const message = toServiceNotice('加载 API 日志失败', error)
+        if (!silent && !error?.__handled) window.$message?.error(message)
+        return { ok: false, message, error }
+      } finally {
+        loadingApiLogs.value = false
+      }
+    })()
     try {
-      const rsp = await getAdmin302ApiRecord({
-        page: log302Query.page,
-        limit: log302Query.limit,
-        start_time: toUnixSeconds(log302Query.start),
-        end_time: toUnixSeconds(log302Query.end)
-      })
-      apiLogs.value = Array.isArray(rsp?.data?.items) ? rsp.data.items : []
-      return { ok: true }
-    } catch (error) {
-      apiLogs.value = []
-      const message = toServiceNotice('加载 API 日志失败', error)
-      if (!silent && !error?.__handled) window.$message?.error(message)
-      return { ok: false, message, error }
+      return await loadApiLogsPromise
     } finally {
-      loadingApiLogs.value = false
+      loadApiLogsPromise = null
     }
   }
 
-  const loadApiKeys = async ({ silent = false } = {}) => {
+  const loadApiKeys = async ({ silent = false, force = false } = {}) => {
     if (!canManageApiKeys.value && !canAssignApiKeys.value) return
+    if (loadApiKeysPromise && !force) return loadApiKeysPromise
     loadingKeys.value = true
+    loadApiKeysPromise = (async () => {
+      try {
+        const rsp = await getAdmin302ApiKeys()
+        const list = Array.isArray(rsp?.data) ? rsp.data : []
+        apiKeys.value = list
+        const drafts = {}
+        for (const item of list) drafts[item.api_name] = buildDraft(item)
+        keyDrafts.value = drafts
+        return { ok: true }
+      } catch (error) {
+        apiKeys.value = []
+        keyDrafts.value = {}
+        const message = toServiceNotice('加载 API 密钥失败', error)
+        if (!silent && !error?.__handled) window.$message?.error(message)
+        return { ok: false, message, error }
+      } finally {
+        loadingKeys.value = false
+      }
+    })()
     try {
-      const rsp = await getAdmin302ApiKeys()
-      const list = Array.isArray(rsp?.data) ? rsp.data : []
-      apiKeys.value = list
-      const drafts = {}
-      for (const item of list) drafts[item.api_name] = buildDraft(item)
-      keyDrafts.value = drafts
-      return { ok: true }
-    } catch (error) {
-      apiKeys.value = []
-      keyDrafts.value = {}
-      const message = toServiceNotice('加载 API 密钥失败', error)
-      if (!silent && !error?.__handled) window.$message?.error(message)
-      return { ok: false, message, error }
+      return await loadApiKeysPromise
     } finally {
-      loadingKeys.value = false
+      loadApiKeysPromise = null
     }
   }
 
@@ -175,7 +204,7 @@ export const useAdminServiceOps = ({
       await createAdmin302ApiKey({ ...createKeyForm, api_name: createKeyForm.api_name.trim() })
       window.$message?.success('API 密钥创建成功')
       resetCreateKeyForm(createKeyForm)
-      await loadApiKeys()
+      await loadApiKeys({ force: true })
     } catch (error) {
       if (!error?.__handled) window.$message?.error(getErrorMessage(error, '创建 API 密钥失败'))
     } finally {
@@ -192,7 +221,7 @@ export const useAdminServiceOps = ({
     try {
       await updateAdmin302ApiKey(name, { ...draft, api_name: name })
       window.$message?.success('API 密钥更新成功')
-      await loadApiKeys()
+      await loadApiKeys({ force: true })
     } catch (error) {
       if (!error?.__handled) window.$message?.error(getErrorMessage(error, '更新 API 密钥失败'))
     } finally {
@@ -209,7 +238,7 @@ export const useAdminServiceOps = ({
     try {
       await deleteAdmin302ApiKey(name)
       window.$message?.success('API 密钥删除成功')
-      await Promise.all([loadApiKeys(), loadUsers(), loadLogs()])
+      await Promise.all([loadApiKeys({ force: true }), loadUsers({ force: true }), loadLogs({ force: true })])
     } catch (error) {
       if (!error?.__handled) window.$message?.error(getErrorMessage(error, '删除 API 密钥失败'))
     } finally {
@@ -217,19 +246,27 @@ export const useAdminServiceOps = ({
     }
   }
 
-  const load302All = async () => {
+  const load302All = async ({ force = false } = {}) => {
+    if (load302AllPromise && !force) return load302AllPromise
     serviceLoadNotice.value = ''
-    const tasks = []
-    if (canReadUsage.value) {
-      tasks.push(load302Balance({ silent: true }), loadApiLogs({ silent: true }))
-    }
-    if (canManageApiKeys.value || canAssignApiKeys.value) {
-      tasks.push(loadApiKeys({ silent: true }))
-    }
-    const results = await Promise.all(tasks)
-    const failures = results.filter((item) => item && item.ok === false)
-    if (failures.length > 0) {
-      serviceLoadNotice.value = failures[0].message || '服务数据加载失败'
+    load302AllPromise = (async () => {
+      const tasks = []
+      if (canReadUsage.value) {
+        tasks.push(load302Balance({ silent: true, force }), loadApiLogs({ silent: true, force }))
+      }
+      if (canManageApiKeys.value || canAssignApiKeys.value) {
+        tasks.push(loadApiKeys({ silent: true, force }))
+      }
+      const results = await Promise.all(tasks)
+      const failures = results.filter((item) => item && item.ok === false)
+      if (failures.length > 0) {
+        serviceLoadNotice.value = failures[0].message || '服务数据加载失败'
+      }
+    })()
+    try {
+      return await load302AllPromise
+    } finally {
+      load302AllPromise = null
     }
   }
 

@@ -27,6 +27,9 @@ const roles = ref([])
 const permissions = ref([])
 const adminBootstrapped = ref(false)
 
+let bootstrapPromise = null
+let adminSessionPromise = null
+
 const readToken = () => {
   try {
     return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
@@ -37,6 +40,9 @@ const readToken = () => {
 
 const persistToken = (token) => {
   accessToken.value = token || ''
+  bootstrapped.value = false
+  bootstrapPromise = null
+  adminSessionPromise = null
   if (!token) {
     adminUser.value = null
     roles.value = []
@@ -65,6 +71,7 @@ export const useAuthStore = () => {
     if (result?.accessToken) {
       persistToken(result.accessToken)
       user.value = result.user || null
+      bootstrapped.value = true
     }
     return result
   }
@@ -74,39 +81,49 @@ export const useAuthStore = () => {
     if (result?.accessToken) {
       persistToken(result.accessToken)
       user.value = result.user || null
+      bootstrapped.value = true
     }
     return result
   }
 
   const bootstrapAuth = async () => {
     if (bootstrapped.value) return
+    if (bootstrapPromise) return bootstrapPromise
 
-    if (BYPASS_AUTH_IN_DEV) {
-      accessToken.value = 'dev-bypass-token'
-      user.value = { ...BYPASS_USER }
-      bootstrapped.value = true
-      return
-    }
+    bootstrapPromise = (async () => {
+      if (BYPASS_AUTH_IN_DEV) {
+        accessToken.value = 'dev-bypass-token'
+        user.value = { ...BYPASS_USER }
+        bootstrapped.value = true
+        return
+      }
 
-    const token = readToken()
-    if (token) {
-      accessToken.value = token
-      try {
-        const me = await getMe()
-        user.value = me.user
-      } catch {
+      const token = readToken()
+      if (token) {
+        accessToken.value = token
         try {
-          const refreshed = await refreshSession()
-          persistToken(refreshed.accessToken)
-          user.value = refreshed.user
+          const me = await getMe()
+          user.value = me.user
         } catch {
-          persistToken('')
-          user.value = null
+          try {
+            const refreshed = await refreshSession()
+            persistToken(refreshed.accessToken)
+            user.value = refreshed.user
+          } catch {
+            persistToken('')
+            user.value = null
+          }
         }
       }
-    }
 
-    bootstrapped.value = true
+      bootstrapped.value = true
+    })()
+
+    try {
+      await bootstrapPromise
+    } finally {
+      bootstrapPromise = null
+    }
   }
 
   const loadAdminSession = async ({ force = false } = {}) => {
@@ -122,20 +139,32 @@ export const useAuthStore = () => {
       return isAdmin.value
     }
 
-    try {
-      const session = await getAdminSession()
-      adminUser.value = session?.user || null
-      roles.value = Array.isArray(session?.roles) ? session.roles : []
-      permissions.value = Array.isArray(session?.permissions) ? session.permissions : []
-    } catch {
-      adminUser.value = null
-      roles.value = []
-      permissions.value = []
-    } finally {
-      adminBootstrapped.value = true
+    if (adminSessionPromise && !force) {
+      return adminSessionPromise
     }
 
-    return isAdmin.value
+    adminSessionPromise = (async () => {
+      try {
+        const session = await getAdminSession()
+        adminUser.value = session?.user || null
+        roles.value = Array.isArray(session?.roles) ? session.roles : []
+        permissions.value = Array.isArray(session?.permissions) ? session.permissions : []
+      } catch {
+        adminUser.value = null
+        roles.value = []
+        permissions.value = []
+      } finally {
+        adminBootstrapped.value = true
+      }
+
+      return isAdmin.value
+    })()
+
+    try {
+      return await adminSessionPromise
+    } finally {
+      adminSessionPromise = null
+    }
   }
 
   const hasPermission = (code) => permissions.value.includes(String(code || ''))

@@ -603,6 +603,11 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 
+let loadUsagePromise = null
+let loadUsersPromise = null
+let loadLogsPromise = null
+let loadAllPromise = null
+
 const adminShellRef = ref(null)
 const overviewRef = ref(null)
 const usersRef = ref(null)
@@ -968,39 +973,55 @@ const toPrettyJson = (value) => {
 
 const isSelf = (user) => String(user?.id || '') === String(auth.adminUser.value?.id || auth.user.value?.id || '')
 
-const loadUsage = async () => {
+const loadUsage = async ({ force = false } = {}) => {
   if (!canReadUsage.value) return
+  if (loadUsagePromise && !force) return loadUsagePromise
   loadingUsage.value = true
+  loadUsagePromise = (async () => {
+    try {
+      const [summaryRsp, seriesRsp] = await Promise.all([getAdminUsageSummary(), getAdminUsageTimeseries()])
+      usageSummary.value = summaryRsp?.data || usageSummary.value
+      usageSeries.value = Array.isArray(seriesRsp?.data) ? seriesRsp.data : []
+    } catch (error) {
+      if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载用量概览失败'))
+    } finally {
+      loadingUsage.value = false
+    }
+  })()
   try {
-    const [summaryRsp, seriesRsp] = await Promise.all([getAdminUsageSummary(), getAdminUsageTimeseries()])
-    usageSummary.value = summaryRsp?.data || usageSummary.value
-    usageSeries.value = Array.isArray(seriesRsp?.data) ? seriesRsp.data : []
-  } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载用量概览失败'))
+    return await loadUsagePromise
   } finally {
-    loadingUsage.value = false
+    loadUsagePromise = null
   }
 }
 
-const loadUsers = async () => {
+const loadUsers = async ({ force = false } = {}) => {
   if (!canReadUsers.value) return
+  if (loadUsersPromise && !force) return loadUsersPromise
   loadingUsers.value = true
-  try {
-    const rsp = await getAdminUsers()
-    const list = Array.isArray(rsp?.data) ? rsp.data : []
-    users.value = list
-    const nextSelection = {}
-    const nextAssignments = { ...assignSelections.value }
-    for (const item of list) {
-      nextSelection[item.id] = Array.isArray(item.roles) && item.roles.length ? item.roles[0] : 'user'
-      if (!Object.prototype.hasOwnProperty.call(nextAssignments, item.id)) nextAssignments[item.id] = ''
+  loadUsersPromise = (async () => {
+    try {
+      const rsp = await getAdminUsers()
+      const list = Array.isArray(rsp?.data) ? rsp.data : []
+      users.value = list
+      const nextSelection = {}
+      const nextAssignments = { ...assignSelections.value }
+      for (const item of list) {
+        nextSelection[item.id] = Array.isArray(item.roles) && item.roles.length ? item.roles[0] : 'user'
+        if (!Object.prototype.hasOwnProperty.call(nextAssignments, item.id)) nextAssignments[item.id] = ''
+      }
+      selectedRoles.value = nextSelection
+      assignSelections.value = nextAssignments
+    } catch (error) {
+      if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载用户列表失败'))
+    } finally {
+      loadingUsers.value = false
     }
-    selectedRoles.value = nextSelection
-    assignSelections.value = nextAssignments
-  } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载用户列表失败'))
+  })()
+  try {
+    return await loadUsersPromise
   } finally {
-    loadingUsers.value = false
+    loadUsersPromise = null
   }
 }
 
@@ -1012,7 +1033,7 @@ const saveRoles = async (user) => {
   try {
     await updateAdminUserRoles(user.id, [role])
     window.$message?.success('角色更新成功')
-    await Promise.all([loadUsers(), loadLogs()])
+    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
   } catch (error) {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '更新角色失败'))
   } finally {
@@ -1027,7 +1048,7 @@ const suspendUser = async (user) => {
   try {
     await updateAdminUserStatus(user.id, 'suspended', reason)
     window.$message?.success('用户已暂停')
-    await Promise.all([loadUsers(), loadLogs()])
+    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
   } catch (error) {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '暂停用户失败'))
   } finally {
@@ -1041,7 +1062,7 @@ const activateUser = async (user) => {
   try {
     await updateAdminUserStatus(user.id, 'active')
     window.$message?.success('用户已恢复')
-    await Promise.all([loadUsers(), loadLogs()])
+    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
   } catch (error) {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '恢复用户失败'))
   } finally {
@@ -1057,7 +1078,7 @@ const deleteUser = async (user) => {
   try {
     await deleteAdminUser(user.id)
     window.$message?.success('用户已删除')
-    await Promise.all([loadUsers(), loadLogs()])
+    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
   } catch (error) {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '删除用户失败'))
   } finally {
@@ -1074,7 +1095,7 @@ const assignApiKey = async (user) => {
     await assignAdminApiKeyToUser(user.id, apiName)
     window.$message?.success('API 密钥分配成功')
     assignSelections.value = { ...assignSelections.value, [user.id]: '' }
-    await Promise.all([loadUsers(), loadLogs()])
+    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
   } catch (error) {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '分配 API 密钥失败'))
   } finally {
@@ -1088,7 +1109,7 @@ const unassignApiKey = async (user, apiName) => {
   try {
     await unassignAdminApiKeyFromUser(user.id, apiName)
     window.$message?.success('API 密钥解绑成功')
-    await Promise.all([loadUsers(), loadLogs()])
+    await Promise.all([loadUsers({ force: true }), loadLogs({ force: true })])
   } catch (error) {
     if (!error?.__handled) window.$message?.error(getErrorMessage(error, '解绑 API 密钥失败'))
   } finally {
@@ -1096,41 +1117,57 @@ const unassignApiKey = async (user, apiName) => {
   }
 }
 
-const loadLogs = async () => {
+const loadLogs = async ({ force = false } = {}) => {
   if (!canReadAudit.value) return
+  if (loadLogsPromise && !force) return loadLogsPromise
   loadingLogs.value = true
-  try {
-    const rsp = await getAdminAuditLogs({ page: logQuery.value.page, limit: logQuery.value.limit })
-    auditLogs.value = Array.isArray(rsp?.data) ? rsp.data : []
-    pagination.value = {
-      page: Number(rsp?.pagination?.page || logQuery.value.page || 1),
-      limit: Number(rsp?.pagination?.limit || logQuery.value.limit || 20),
-      total: Number(rsp?.pagination?.total || 0)
+  loadLogsPromise = (async () => {
+    try {
+      const rsp = await getAdminAuditLogs({ page: logQuery.value.page, limit: logQuery.value.limit })
+      auditLogs.value = Array.isArray(rsp?.data) ? rsp.data : []
+      pagination.value = {
+        page: Number(rsp?.pagination?.page || logQuery.value.page || 1),
+        limit: Number(rsp?.pagination?.limit || logQuery.value.limit || 20),
+        total: Number(rsp?.pagination?.total || 0)
+      }
+    } catch (error) {
+      if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载审计日志失败'))
+    } finally {
+      loadingLogs.value = false
     }
-  } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, '加载审计日志失败'))
+  })()
+  try {
+    return await loadLogsPromise
   } finally {
-    loadingLogs.value = false
+    loadLogsPromise = null
   }
 }
 
 const refreshOverview = async () => {
-  await loadUsage()
+  await loadUsage({ force: true })
 }
 
-const loadAll = async () => {
+const loadAll = async ({ force = false } = {}) => {
+  if (loadAllPromise && !force) return loadAllPromise
   const allowed = await auth.loadAdminSession({ force: true })
   if (!allowed) {
     router.replace('/')
     return
   }
 
-  const tasks = []
-  if (canReadUsage.value) tasks.push(loadUsage())
-  if (canReadUsers.value) tasks.push(loadUsers())
-  if (showServiceSection.value) tasks.push(load302All())
-  if (canReadAudit.value) tasks.push(loadLogs())
-  await Promise.all(tasks)
+  loadAllPromise = (async () => {
+    const tasks = []
+    if (canReadUsage.value) tasks.push(loadUsage({ force }))
+    if (canReadUsers.value) tasks.push(loadUsers({ force }))
+    if (showServiceSection.value) tasks.push(load302All({ force }))
+    if (canReadAudit.value) tasks.push(loadLogs({ force }))
+    await Promise.all(tasks)
+  })()
+  try {
+    return await loadAllPromise
+  } finally {
+    loadAllPromise = null
+  }
 }
 
 onMounted(async () => {

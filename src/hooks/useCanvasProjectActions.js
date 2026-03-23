@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { deleteProject, duplicateProject, projects, renameProject } from '@/stores/projects'
+import { deleteProject, duplicateProject, ensureProjectLoaded, projects, renameProject } from '@/stores/projects'
 
 export const useCanvasProjectActions = ({
   route,
@@ -51,7 +51,7 @@ export const useCanvasProjectActions = ({
   }
 
   const saveSharedTemplate = async () => {
-    const project = currentProject.value
+    const project = await ensureProjectLoaded(route.params.id)
     if (!project?.id || !project?.canvasData) {
       notifier.error('Project data unavailable')
       return

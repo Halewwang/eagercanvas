@@ -446,7 +446,7 @@ import { useCanvasProjectActions } from '@/hooks/useCanvasProjectActions'
 import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { getWorkflowById } from '@/config/workflows'
-import { initProjectsStore } from '../stores/projects'
+import { ensureProjectLoaded, initProjectsStore } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkflowsStore } from '@/stores/workflows'
 
@@ -1079,11 +1079,12 @@ const checkMobile = () => {
 }
 
 // Load project by ID | 根据ID加载项目
-const loadProjectById = (projectId) => {
+const loadProjectById = async (projectId) => {
   // Update flow key to force VueFlow re-render | 更新 key 强制 VueFlow 重新渲染
   flowKey.value = Date.now()
   
   if (projectId && projectId !== 'new') {
+    await ensureProjectLoaded(projectId)
     loadProject(projectId)
   } else {
     // New project - clear canvas | 新项目 - 清空画布
@@ -1116,14 +1117,14 @@ const applyPendingWorkflowTemplate = async () => {
 // Watch for route changes | 监听路由变化
 watch(
   () => route.params.id,
-  (newId, oldId) => {
+  async (newId, oldId) => {
     if (newId && newId !== oldId) {
       // Save current project before switching | 切换前保存当前项目
       if (oldId) {
         flushSave()
       }
       // Load new project | 加载新项目
-      loadProjectById(newId)
+      await loadProjectById(newId)
     }
   }
 )
@@ -1163,7 +1164,7 @@ onMounted(async () => {
   await loadWorkflowTemplates()
   
   // Load project data | 加载项目数据
-  loadProjectById(route.params.id)
+  await loadProjectById(route.params.id)
   await nextTick()
   await applyPendingWorkflowTemplate()
   scheduleOverlayRectUpdate()

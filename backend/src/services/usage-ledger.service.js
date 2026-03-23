@@ -122,37 +122,35 @@ export const buildUsageEventPayload = ({
   }
 }
 
-export const rebuildUsageDailyAggregateForUserDate = async (userId, dateValue) => {
+const summarizeUsageRecord = (item = {}) => ({
+  total_calls: 1,
+  total_tokens: toNumber(item.input_tokens) + toNumber(item.output_tokens),
+  total_images: toNumber(item.image_count),
+  total_video_seconds: toNumber(item.video_seconds),
+  total_cost_usd: toNumber(item.cost_usd)
+})
+
+const applyAggregateDelta = async (userId, dateValue, delta = {}) => {
   const date = toIsoDate(dateValue)
-  const start = `${date}T00:00:00.000Z`
-  const end = `${date}T23:59:59.999Z`
-
-  const { data, error } = await supabase
-    .from('usage_events')
-    .select('input_tokens,output_tokens,image_count,video_seconds,cost_usd')
+  const { data: current, error: readError } = await supabase
+    .from('usage_daily_agg')
+    .select('date,user_id,total_calls,total_tokens,total_images,total_video_seconds,total_cost_usd')
+    .eq('date', date)
     .eq('user_id', userId)
-    .gte('created_at', start)
-    .lte('created_at', end)
+    .maybeSingle()
 
-  if (error) {
-    console.warn('[usage] rebuild daily aggregate failed', error.message)
+  if (readError) {
+    console.warn('[usage] aggregate read failed', readError.message)
     return
   }
 
-  const summary = (data || []).reduce((acc, item) => {
-    acc.total_calls += 1
-    acc.total_tokens += toNumber(item.input_tokens) + toNumber(item.output_tokens)
-    acc.total_images += toNumber(item.image_count)
-    acc.total_video_seconds += toNumber(item.video_seconds)
-    acc.total_cost_usd += toNumber(item.cost_usd)
-    return acc
-  }, {
-    total_calls: 0,
-    total_tokens: 0,
-    total_images: 0,
-    total_video_seconds: 0,
-    total_cost_usd: 0
-  })
+  const summary = {
+    total_calls: Math.max(0, toNumber(current?.total_calls) + toNumber(delta.total_calls)),
+    total_tokens: Math.max(0, toNumber(current?.total_tokens) + toNumber(delta.total_tokens)),
+    total_images: Math.max(0, toNumber(current?.total_images) + toNumber(delta.total_images)),
+    total_video_seconds: Math.max(0, toNumber(current?.total_video_seconds) + toNumber(delta.total_video_seconds)),
+    total_cost_usd: Math.max(0, toNumber(current?.total_cost_usd) + toNumber(delta.total_cost_usd))
+  }
 
   const { error: upsertError } = await supabase
     .from('usage_daily_agg')
@@ -181,7 +179,7 @@ export const insertUsageEvent = async (payload = {}) => {
     return null
   }
 
-  await rebuildUsageDailyAggregateForUserDate(record.user_id, data?.created_at)
+  await applyAggregateDelta(record.user_id, data?.created_at, summarizeUsageRecord(record))
   return data
 }
 
@@ -218,6 +216,14 @@ export const updateUsageEventByRunId = async (runId, patch = {}) => {
     return null
   }
 
-  await rebuildUsageDailyAggregateForUserDate(data.user_id, data.created_at)
+  const beforeSummary = summarizeUsageRecord(current)
+  const afterSummary = summarizeUsageRecord(data)
+  await applyAggregateDelta(data.user_id, data.created_at, {
+    total_calls: afterSummary.total_calls - beforeSummary.total_calls,
+    total_tokens: afterSummary.total_tokens - beforeSummary.total_tokens,
+    total_images: afterSummary.total_images - beforeSummary.total_images,
+    total_video_seconds: afterSummary.total_video_seconds - beforeSummary.total_video_seconds,
+    total_cost_usd: afterSummary.total_cost_usd - beforeSummary.total_cost_usd
+  })
   return data
 }
