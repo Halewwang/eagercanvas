@@ -6,6 +6,7 @@ import { computed, ref } from 'vue'
 import {
   apiCreateProject,
   apiDeleteProject,
+  apiGetProject,
   apiListProjects,
   apiPatchProject
 } from '@/api/projects'
@@ -181,6 +182,24 @@ export const loadProjects = async () => {
     projects.value = localDrafts
     return projects.value
   }
+}
+
+export const refreshProjectById = async (id) => {
+  if (!id) return null
+
+  const localProject = projects.value.find((project) => project.id === id) || null
+  if (BYPASS_AUTH_IN_DEV) {
+    return localProject
+  }
+
+  const response = await apiGetProject(id)
+  const remoteProject = mapProjectFromApi(response.data)
+  projects.value = [
+    remoteProject,
+    ...projects.value.filter((project) => project.id !== id)
+  ]
+  saveLocalCache()
+  return remoteProject
 }
 
 export const createProject = async (name = 'Untitled') => {

@@ -435,7 +435,7 @@ import {
   deleteGroupWithNodes,
   duplicateGroup,
   flushSave,
-  clearCanvas,
+  resetCanvasSession,
   canvasViewport,
   updateViewport,
   undo,
@@ -456,7 +456,7 @@ import { useCanvasProjectActions } from '@/hooks/useCanvasProjectActions'
 import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { getWorkflowById } from '@/config/workflows'
-import { initProjectsStore } from '../stores/projects'
+import { initProjectsStore, refreshProjectById } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
@@ -1192,8 +1192,9 @@ const loadProjectById = (projectId) => {
   if (projectId && projectId !== 'new') {
     loadProject(projectId)
   } else {
-    // New project - clear canvas | 新项目 - 清空画布
-    clearCanvas()
+    // New project - detach from the previous project before clearing canvas.
+    // 新建/空白画布先解绑旧项目，避免后续 flushSave 把空画布写回旧项目。
+    resetCanvasSession()
   }
 }
 
@@ -1267,6 +1268,14 @@ onMounted(async () => {
   // Initialize projects store | 初始化项目存储
   await initProjectsStore()
   await loadWorkflowTemplates()
+
+  if (route.params.id && route.params.id !== 'new') {
+    try {
+      await refreshProjectById(route.params.id)
+    } catch {
+      // Fall back to local cache when remote detail refresh is unavailable.
+    }
+  }
   
   // Load project data | 加载项目数据
   loadProjectById(route.params.id)

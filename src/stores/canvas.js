@@ -460,6 +460,19 @@ export const initSampleData = () => {
 // Current project metadata | 当前项目元数据
 export const currentProjectVersion = ref(null) // Stores updated_at for optimistic locking
 
+export const resetCanvasSession = () => {
+  autoSaveEnabled = false
+  isRestoring = true
+  currentProjectId.value = null
+  currentProjectVersion.value = null
+  saveQueued = false
+  if (saveTimeout) {
+    clearTimeout(saveTimeout)
+    saveTimeout = null
+  }
+  clearCanvas()
+}
+
 /**
  * Load project data | 加载项目数据
  * @param {string} projectId - Project ID | 项目ID
@@ -527,7 +540,7 @@ export const loadProject = (projectId) => {
     groupId = maxGroupId + 1
   } else {
     // Empty project | 空项目
-    clearCanvas()
+    resetCanvasSession()
   }
   
   // Initialize history with current state | 用当前状态初始化历史
@@ -550,6 +563,7 @@ export const loadProject = (projectId) => {
  */
 export const saveProject = async () => {
   if (!currentProjectId.value) return
+  if (!getProjectCanvas(currentProjectId.value)) return false
 
   if (saveInFlight) {
     saveQueued = true
