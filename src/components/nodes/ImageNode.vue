@@ -134,21 +134,30 @@
     <n-modal v-model:show="showPreviewModal" :mask-closable="true">
       <div class="zoom-modal-card" @click.stop>
         <div class="zoom-modal-toolbar">
-          <div class="zoom-modal-chip">{{ Math.round(previewZoom * 100) }}%</div>
+          <div class="zoom-modal-actions">
+            <button class="zoom-tool-btn zoom-tool-btn-download" @click="downloadPreviewImage">
+              <n-icon :size="14"><DownloadOutline /></n-icon>
+              <span>Download</span>
+            </button>
+          </div>
           <div class="zoom-modal-actions">
             <button class="zoom-tool-btn" @click="zoomOutPreview" :disabled="previewZoom <= PREVIEW_MIN_ZOOM">-</button>
             <button class="zoom-tool-btn" @click="resetPreviewZoom">Fit</button>
             <button class="zoom-tool-btn" @click="zoomInPreview" :disabled="previewZoom >= PREVIEW_MAX_ZOOM">+</button>
+            <div class="zoom-modal-divider" />
+            <div class="zoom-modal-chip">{{ Math.round(previewZoom * 100) }}%</div>
           </div>
         </div>
-        <div class="zoom-modal-stage">
-          <div class="zoom-image-wrap" :style="previewImageStyle">
-            <img
-              :src="data.url"
-              alt="Preview"
-              class="zoom-image-original"
-              @load="handlePreviewImageLoad"
-            />
+        <div ref="previewStageRef" class="zoom-modal-stage">
+          <div class="zoom-stage-canvas">
+            <div class="zoom-image-wrap" :style="previewImageStyle">
+              <img
+                :src="data.url"
+                alt="Preview"
+                class="zoom-image-original"
+                @load="handlePreviewImageLoad"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -222,6 +231,7 @@ import MultiAngleToolDrawer from '@/components/tools/MultiAngleToolDrawer.vue'
 import {
   CloseCircleOutline,
   CopyOutline,
+  DownloadOutline,
   ExpandOutline,
   ImageOutline,
   RefreshOutline,
@@ -271,6 +281,7 @@ const localResolution = ref('1k')
 const uploadInputRef = ref(null)
 const uploadInputId = `image-upload-${String(props.id || 'node')}`
 const showPreviewModal = ref(false)
+const previewStageRef = ref(null)
 const previewZoom = ref(1)
 const previewNaturalSize = ref({ width: 0, height: 0 })
 const activeTool = ref('')
@@ -496,14 +507,20 @@ const stageStyle = computed(() => {
 const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
 const progressPercent = computed(() => Math.round(progressValue.value))
 const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
-const previewImageStyle = computed(() => {
+const previewRenderedSize = computed(() => {
   const naturalWidth = previewNaturalSize.value.width || 1
   const naturalHeight = previewNaturalSize.value.height || 1
   const maxWidth = Math.max(320, window.innerWidth - 180)
   const maxHeight = Math.max(240, window.innerHeight - 220)
   const fitScale = Math.min(maxWidth / naturalWidth, maxHeight / naturalHeight, 1)
-  const width = Math.max(180, Math.round(naturalWidth * fitScale * previewZoom.value))
-  const height = Math.max(180, Math.round(naturalHeight * fitScale * previewZoom.value))
+  return {
+    width: Math.max(180, Math.round(naturalWidth * fitScale * previewZoom.value)),
+    height: Math.max(180, Math.round(naturalHeight * fitScale * previewZoom.value))
+  }
+})
+
+const previewImageStyle = computed(() => {
+  const { width, height } = previewRenderedSize.value
   return {
     width: `${width}px`,
     height: `${height}px`
@@ -1413,14 +1430,81 @@ const handlePreviewImageLoad = (event) => {
     initializeCropRect()
   }
 }
+const getPreviewDownloadFilename = () => {
+  const rawLabel = String(props.data?.label || 'image-preview').trim()
+  const safeLabel = rawLabel.replace(/[^a-zA-Z0-9-_]+/g, '-').replace(/^-+|-+$/g, '') || 'image-preview'
+  let extension = 'png'
+
+  try {
+    const sourceUrl = new URL(String(props.data?.url || ''), window.location.origin)
+    const match = sourceUrl.pathname.match(/\.([a-zA-Z0-9]+)$/)
+    if (match?.[1]) extension = match[1].toLowerCase()
+  } catch {
+    extension = 'png'
+  }
+
+  return `${safeLabel}.${extension}`
+}
+const triggerPreviewDownload = (href, filename) => {
+  const link = document.createElement('a')
+  link.href = href
+  link.download = filename
+  link.rel = 'noopener'
+  link.target = '_blank'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+const downloadPreviewImage = async () => {
+  const sourceUrl = String(props.data?.url || '').trim()
+  if (!sourceUrl) return
+
+  const filename = getPreviewDownloadFilename()
+  try {
+    const response = await fetch(sourceUrl)
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`)
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    triggerPreviewDownload(objectUrl, filename)
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+  } catch {
+    triggerPreviewDownload(sourceUrl, filename)
+  }
+}
+const setPreviewZoom = (nextZoom) => {
+  const normalizedZoom = Math.max(PREVIEW_MIN_ZOOM, Math.min(PREVIEW_MAX_ZOOM, Number(nextZoom.toFixed(2))))
+  if (normalizedZoom === previewZoom.value) return
+
+  const stage = previewStageRef.value
+  const previousSize = previewRenderedSize.value
+  if (!stage) {
+    previewZoom.value = normalizedZoom
+    return
+  }
+
+  const viewportCenterX = stage.scrollLeft + (stage.clientWidth / 2)
+  const viewportCenterY = stage.scrollTop + (stage.clientHeight / 2)
+  const focusX = previousSize.width > 0 ? viewportCenterX / previousSize.width : 0.5
+  const focusY = previousSize.height > 0 ? viewportCenterY / previousSize.height : 0.5
+
+  previewZoom.value = normalizedZoom
+
+  nextTick(() => {
+    const nextSize = previewRenderedSize.value
+    const targetLeft = (nextSize.width * focusX) - (stage.clientWidth / 2)
+    const targetTop = (nextSize.height * focusY) - (stage.clientHeight / 2)
+    stage.scrollLeft = Math.max(0, targetLeft)
+    stage.scrollTop = Math.max(0, targetTop)
+  })
+}
 const zoomInPreview = () => {
-  previewZoom.value = Math.min(PREVIEW_MAX_ZOOM, Number((previewZoom.value + PREVIEW_ZOOM_STEP).toFixed(2)))
+  setPreviewZoom(previewZoom.value + PREVIEW_ZOOM_STEP)
 }
 const zoomOutPreview = () => {
-  previewZoom.value = Math.max(PREVIEW_MIN_ZOOM, Number((previewZoom.value - PREVIEW_ZOOM_STEP).toFixed(2)))
+  setPreviewZoom(previewZoom.value - PREVIEW_ZOOM_STEP)
 }
 const resetPreviewZoom = () => {
-  previewZoom.value = 1
+  setPreviewZoom(1)
 }
 const closeErrorModal = () => {
   showErrorModal.value = false
@@ -1588,6 +1672,8 @@ const handleMultiAngleError = async (payload = {}) => {
 }
 
 .zoom-modal-card {
+  width: min(1400px, calc(100vw - 80px));
+  height: min(960px, calc(100vh - 80px));
   max-width: calc(100vw - 80px);
   max-height: calc(100vh - 80px);
   overflow: hidden;
@@ -1626,6 +1712,12 @@ const handleMultiAngleError = async (payload = {}) => {
   gap: 8px;
 }
 
+.zoom-modal-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
 .zoom-tool-btn {
   min-width: 38px;
   height: 34px;
@@ -1636,6 +1728,11 @@ const handleMultiAngleError = async (payload = {}) => {
   color: #f3f4f6;
   font-size: 12px;
   transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+.zoom-tool-btn-download {
+  gap: 8px;
+  padding: 0 14px;
 }
 
 .zoom-tool-btn:hover:not(:disabled) {
@@ -1661,8 +1758,7 @@ const handleMultiAngleError = async (payload = {}) => {
 
 .zoom-modal-stage {
   flex: 1;
-  min-height: min(72vh, 720px);
-  max-height: calc(100vh - 160px);
+  min-height: 0;
   overflow: auto;
   border-radius: 12px;
   background:
@@ -1671,15 +1767,20 @@ const handleMultiAngleError = async (payload = {}) => {
     linear-gradient(45deg, #171717 25%, #0f0f0f 25%, #0f0f0f 75%, #171717 75%, #171717);
   background-size: auto, 24px 24px, 24px 24px;
   background-position: 0 0, 0 0, 12px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 20px;
+}
+
+.zoom-stage-canvas {
+  min-width: 100%;
+  min-height: 100%;
+  display: flex;
 }
 
 .zoom-image-wrap {
   position: relative;
-  flex: 0 0 auto;
+  width: max-content;
+  height: max-content;
+  margin: auto;
 }
 
 .zoom-image-original {
