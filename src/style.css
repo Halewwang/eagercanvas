@@ -93,6 +93,135 @@ body {
   gap: 12px;
 }
 
+.ui-pill-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--text);
+  background: transparent;
+  outline: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+.ui-pill-button:hover {
+  background: var(--bg-tertiary);
+}
+
+.ui-pill-button:focus,
+.ui-pill-button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.ui-pill-button--compact {
+  padding: 0 12px;
+}
+
+.ui-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--text);
+  background: transparent;
+  outline: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+.ui-icon-button:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+}
+
+.ui-icon-button:focus,
+.ui-icon-button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.ui-icon-button:disabled,
+.ui-pill-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ui-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 18px;
+  border: 1px solid transparent;
+  color: var(--text);
+  background: transparent;
+  outline: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, filter 0.2s ease, opacity 0.2s ease;
+}
+
+.ui-toolbar-button:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+}
+
+.ui-toolbar-button:focus,
+.ui-toolbar-button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.ui-toolbar-button--round {
+  border-radius: 999px;
+}
+
+.ui-toolbar-button--solid {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.ui-toolbar-button--solid:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.ui-action-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 12, 12, 0.9);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+.ui-action-pill:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(18, 18, 18, 0.96);
+}
+
+.ui-action-pill:focus,
+.ui-action-pill:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.ui-action-pill-label {
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
 .flora-panel {
   background: color-mix(in srgb, var(--bg-secondary) 84%, transparent);
   border: 1px solid var(--border-color);

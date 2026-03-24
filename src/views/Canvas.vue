@@ -8,7 +8,7 @@
         <div class="flora-panel rounded-full p-1.5">
           <button
             @click="goHome"
-            class="h-9 flex items-center gap-2 px-3 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors"
+            class="ui-pill-button"
             title="Home"
           >
             <n-icon :size="18"><ChevronBackOutline /></n-icon>
@@ -17,7 +17,7 @@
         </div>
         <div class="flora-panel rounded-full p-1.5">
           <BaseDropdown :options="projectOptions" compact @select="handleProjectAction">
-            <button class="h-9 flex items-center gap-2 rounded-full px-3 outline-none transition-colors hover:bg-[var(--bg-tertiary)] focus-visible:outline-none focus-visible:ring-0">
+            <button class="ui-pill-button ui-pill-button--compact">
               <span class="text-sm font-medium">{{ projectName }}</span>
               <n-icon :size="16"><ChevronDownOutline /></n-icon>
             </button>
@@ -29,7 +29,7 @@
         <div class="flora-panel rounded-full p-1.5">
           <button
             @click="goWorkspace"
-            class="h-9 flex items-center gap-2 px-3 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors"
+            class="ui-pill-button"
             title="Workspace"
           >
             <n-icon :size="16"><FolderOutline /></n-icon>
@@ -39,7 +39,7 @@
         <div class="flora-panel rounded-full p-1.5">
           <button
             @click="openShareDialog"
-            class="h-9 flex items-center gap-2 px-4 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors"
+            class="ui-pill-button"
             title="Share"
           >
             <n-icon :size="16"><CopyOutline /></n-icon>
@@ -159,14 +159,14 @@
       <aside class="flora-panel absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 p-2 rounded-[36px] z-20 w-[64px]">
         <button 
           @click="toggleToolbarNodeMenu"
-          class="w-12 h-12 flex items-center justify-center rounded-full bg-[#f1f1f1] text-[#111111] outline-none hover:brightness-95 focus:outline-none focus-visible:outline-none focus-visible:ring-0 transition-all"
+          class="ui-toolbar-button ui-toolbar-button--round ui-toolbar-button--solid"
           title="Add Node"
         >
           <n-icon :size="20"><AddOutline /></n-icon>
         </button>
         <button 
           @click="showWorkflowPanel = true"
-          class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors"
+          class="ui-toolbar-button"
           title="Workflow Templates"
         >
           <n-icon :size="20"><FolderOutline /></n-icon>
@@ -174,7 +174,7 @@
         <button
           @click="undo"
           :disabled="!canUndo()"
-          class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors disabled:opacity-35"
+          class="ui-toolbar-button"
           title="Undo"
         >
           <n-icon :size="20"><ArrowUndoOutline /></n-icon>
@@ -182,14 +182,14 @@
         <button 
           @click="redo"
           :disabled="!canRedo()"
-          class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors disabled:opacity-35"
+          class="ui-toolbar-button"
           title="Redo"
         >
           <n-icon :size="20"><ArrowRedoOutline /></n-icon>
         </button>
         <button
           @click="showApiSettings = true"
-          class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors text-white"
+          class="ui-toolbar-button text-white"
           title="API Settings"
         >
           <n-icon :size="20"><SettingsOutline /></n-icon>
@@ -197,7 +197,7 @@
         <button
           v-if="showLocalInjectButton"
           @click="triggerLocalImageInject"
-          class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors text-white"
+          class="ui-toolbar-button text-white"
           title="Inject Image"
         >
           <n-icon :size="20"><ImageOutline /></n-icon>
@@ -205,7 +205,7 @@
         <div class="w-full h-px bg-[var(--border-color)] my-1"></div>
         <button
           @click="triggerAvatarUpload"
-          class="w-12 h-12 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center justify-center mt-auto"
+          class="ui-toolbar-button ui-toolbar-button--round mt-auto overflow-hidden border border-[var(--border-color)] bg-[var(--bg-secondary)]"
           title="Upload avatar"
         >
           <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" class="w-full h-full object-cover" />
@@ -265,17 +265,17 @@
         </button> -->
         <button 
           @click="fitView({ padding: 0.2 })" 
-          class="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-[var(--bg-tertiary)]"
+          class="ui-icon-button"
           title="Fit View"
         >
           <n-icon :size="16"><LocateOutline /></n-icon>
         </button>
         <div class="flex h-9 items-center gap-1 rounded-full px-2">
-          <button @click="zoomOut" class="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-[var(--bg-tertiary)]">
+          <button @click="zoomOut" class="ui-icon-button !h-8 !w-8">
             <n-icon :size="14"><RemoveOutline /></n-icon>
           </button>
           <span class="flex min-w-[48px] items-center justify-center text-xs font-medium leading-none">{{ Math.round(viewport.zoom * 100) }}%</span>
-          <button @click="zoomIn" class="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-[var(--bg-tertiary)]">
+          <button @click="zoomIn" class="ui-icon-button !h-8 !w-8">
             <n-icon :size="14"><AddOutline /></n-icon>
           </button>
         </div>

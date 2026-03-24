@@ -27,9 +27,6 @@
         </nav>
       </section>
 
-      <div class="sidebar-footer">
-        <button class="link-btn" @click="router.push('/')">Back Home</button>
-      </div>
     </aside>
 
     <main class="workspace-main">
@@ -39,10 +36,13 @@
           <p>{{ sectionDescription }}</p>
         </div>
         <div class="header-actions">
-          <button class="ghost-btn" @click="createBlankProject">Blank Project</button>
-          <button class="primary-btn" @click="createBlankProject">
+          <button class="ui-action-pill" @click="router.push('/')">
+            <n-icon :size="18"><GridOutline /></n-icon>
+            <span class="ui-action-pill-label">Back Home</span>
+          </button>
+          <button class="ui-action-pill" @click="createBlankProject">
             <n-icon :size="16"><AddOutline /></n-icon>
-            <span>New Project</span>
+            <span class="ui-action-pill-label">New Project</span>
           </button>
         </div>
       </header>
@@ -91,7 +91,7 @@
                   :options="projectMenuOptions(item)"
                   @select="(key) => handleProjectMenuSelect(key, item)"
                 >
-                  <button class="menu-btn project-menu-btn outline-none focus-visible:outline-none focus-visible:ring-0" @click.stop>
+                  <button class="menu-btn project-menu-btn" @click.stop>
                     <n-icon :size="16"><EllipsisHorizontalOutline /></n-icon>
                   </button>
                 </BaseDropdown>
@@ -108,14 +108,14 @@
 
             <div v-if="activeSection !== 'projects'" class="card-actions" @click.stop>
               <template v-if="activeSection === 'my-templates'">
-                <button class="mini-btn" @click="toggleTemplateVisibility(item)">
+                <BaseButton variant="secondary" size="sm" @click="toggleTemplateVisibility(item)">
                   {{ item.visibility === 'public' ? 'Unpublish' : 'Publish' }}
-                </button>
-                <button class="mini-btn danger" @click="deleteTemplate(item.id)">Delete</button>
+                </BaseButton>
+                <BaseButton variant="ghost" size="sm" @click="deleteTemplate(item.id)">Delete</BaseButton>
               </template>
               <template v-else>
-                <button class="mini-btn" @click="saveAsMyTemplate(item)">Save to My</button>
-                <button class="mini-btn" @click="useTemplate(item)">Use</button>
+                <BaseButton variant="secondary" size="sm" @click="saveAsMyTemplate(item)">Save to My</BaseButton>
+                <BaseButton size="sm" @click="useTemplate(item)">Use</BaseButton>
               </template>
             </div>
           </div>
@@ -429,25 +429,29 @@ onMounted(async () => {
 <style scoped>
 .workspace-shell {
   min-height: 100vh;
-  background: #0d0e10;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.025), transparent 24%),
+    #0d0e10;
   color: #f0f1f3;
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 272px 1fr;
 }
 
 .workspace-sidebar {
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 22px 14px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 24px 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 8px;
+  padding: 0 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .brand-logo {
@@ -457,19 +461,20 @@ onMounted(async () => {
 }
 
 .brand-text {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   line-height: 1;
+  letter-spacing: -0.01em;
 }
 
 .search-box {
   display: flex;
   align-items: center;
-  gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.025);
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .search-box input {
@@ -478,97 +483,94 @@ onMounted(async () => {
   border: none;
   outline: none;
   color: #f0f1f3;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .nav-menu {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .sidebar-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.sidebar-group + .sidebar-group {
-  margin-top: 6px;
+  gap: 10px;
 }
 
 .sidebar-group-title {
   padding: 0 12px;
   color: rgba(236, 238, 244, 0.45);
   font-size: 12px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .nav-item {
-  height: 40px;
+  height: 42px;
   border: none;
   background: transparent;
   color: rgba(236, 238, 244, 0.72);
-  border-radius: 10px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 12px;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .nav-item.active {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
 
-.sidebar-footer {
-  margin-top: auto;
-}
-
 .workspace-main {
-  padding: 24px;
+  padding: 28px;
 }
 
 .main-header {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  padding-bottom: 16px;
-  margin-bottom: 18px;
+  gap: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 20px;
+  margin-bottom: 22px;
 }
 
 .main-header h1 {
   margin: 0;
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .main-header p {
-  margin: 6px 0 0;
+  margin: 10px 0 0;
   color: rgba(236, 238, 244, 0.65);
   font-size: 13px;
+  line-height: 1.55;
+  max-width: 560px;
 }
 
 .header-actions {
   display: flex;
   gap: 10px;
+  align-items: flex-start;
 }
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 22px;
 }
 
 .project-card {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .create-card {
@@ -583,9 +585,14 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 20px;
+  border-radius: 24px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+.project-card:hover .card-media {
+  border-color: rgba(255, 255, 255, 0.14);
 }
 
 .card-media img {
@@ -613,7 +620,7 @@ onMounted(async () => {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -633,47 +640,56 @@ onMounted(async () => {
 
 .title-row h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: 15px;
   flex: 1;
 }
 
 .badge {
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   color: rgba(240, 241, 243, 0.88);
   background: rgba(255, 255, 255, 0.04);
   border-radius: 999px;
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 3px 9px;
 }
 
 .badge.mine {
-  border-color: rgba(165, 129, 99, 0.42);
-  color: #d5b08d;
-  background: rgba(165, 129, 99, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .menu-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: rgba(236, 238, 244, 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  outline: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .menu-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
   color: #fff;
+}
+
+.menu-btn:focus,
+.menu-btn:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .card-body p {
   margin: 8px 0 0;
   color: rgba(236, 238, 244, 0.65);
   font-size: 13px;
+  line-height: 1.45;
 }
 
 .project-meta-row {
@@ -689,7 +705,7 @@ onMounted(async () => {
 
 .project-meta-main h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.2;
   overflow: hidden;
@@ -701,7 +717,7 @@ onMounted(async () => {
   margin: 6px 0 0;
   color: rgba(236, 238, 244, 0.65);
   font-size: 13px;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .project-menu-btn {
@@ -712,50 +728,9 @@ onMounted(async () => {
 .card-actions {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
-}
-
-.mini-btn,
-.primary-btn,
-.ghost-btn,
-.link-btn {
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: transparent;
-  color: #f0f1f3;
-  height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.primary-btn {
-  background: linear-gradient(180deg, #f0f2f4 0%, #d6dadd 100%);
-  color: #090b0d;
-  border-color: rgba(255, 255, 255, 0.32);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ghost-btn:hover,
-.mini-btn:hover,
-.link-btn:hover {
-  border-color: rgba(255, 255, 255, 0.38);
-}
-
-.mini-btn.danger {
-  border-color: #c46a5c;
-  color: #c46a5c;
-}
-
-.modal-input {
-  width: 100%;
-  background: linear-gradient(180deg, #17181b 0%, #111214 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  color: #f0f1f3;
-  padding: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 @media (max-width: 900px) {
@@ -765,7 +740,7 @@ onMounted(async () => {
 
   .workspace-sidebar {
     border-right: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 }
 </style>
