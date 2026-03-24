@@ -1,55 +1,54 @@
 <template>
-  <n-modal v-model:show="showModal" :mask-closable="true" :auto-focus="false" :trap-focus="true">
-    <div class="profile-modal ec-modal">
-      <div class="profile-header ec-modal-header">
-        <h2 class="profile-title ec-modal-title">Profile</h2>
-        <button class="close-btn ec-modal-close" @click="showModal = false" aria-label="Close">
-          <n-icon :size="20"><CloseOutline /></n-icon>
+  <BaseModal
+    v-model:show="showModal"
+    title="Profile"
+    description="Update your public identity and avatar."
+    size="lg"
+  >
+    <div class="profile-shell">
+      <aside class="profile-aside">
+        <button class="avatar-wrap" @click="triggerAvatarUpload" title="Edit avatar">
+          <img v-if="avatarPreview" :src="avatarPreview" alt="avatar" class="avatar-image" />
+          <div v-else class="avatar-fallback">{{ avatarInitial }}</div>
         </button>
-      </div>
+        <button class="avatar-link" @click="triggerAvatarUpload">Change avatar</button>
+        <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
+      </aside>
 
-      <div class="profile-body">
-        <div class="avatar-column">
-          <button class="avatar-wrap" @click="triggerAvatarUpload" title="Edit avatar">
-            <img v-if="avatarPreview" :src="avatarPreview" alt="avatar" class="avatar-image" />
-            <div v-else class="avatar-fallback">{{ avatarInitial }}</div>
-          </button>
-          <button class="avatar-edit-btn" @click="triggerAvatarUpload">Edit</button>
-          <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
+      <section class="form-panel">
+        <div class="field-grid">
+          <label class="field-block">
+            <span class="field-label ui-label">ID</span>
+            <BaseInput v-model="formData.profileId" placeholder="Enter your ID" />
+          </label>
+          <label class="field-block">
+            <span class="field-label ui-label">Email</span>
+            <BaseInput :model-value="formData.email" readonly />
+          </label>
         </div>
 
-        <div class="form-column">
-          <div class="field-grid">
-            <div class="field-card">
-              <label class="field-label">ID</label>
-              <n-input v-model:value="formData.profileId" placeholder="Enter your ID" />
-            </div>
-            <div class="field-card">
-              <label class="field-label">Email</label>
-              <n-input :value="formData.email" readonly />
-            </div>
-          </div>
-
-          <div class="field-card field-card-full">
-            <label class="field-label">User UID</label>
-            <n-input :value="formData.userId" readonly />
-          </div>
-
-          <div class="actions-row">
-            <button class="ec-btn ec-btn-primary" :disabled="saving" @click="handleSave">{{ saving ? 'Saving...' : 'Save changes' }}</button>
-          </div>
-        </div>
-      </div>
+        <label class="field-block field-block-full">
+          <span class="field-label ui-label">User UID</span>
+          <BaseInput :model-value="formData.userId" readonly />
+        </label>
+      </section>
     </div>
-  </n-modal>
+
+    <template #footer>
+      <div class="ui-modal-actions">
+        <BaseButton variant="ghost" @click="showModal = false">Cancel</BaseButton>
+        <BaseButton :loading="saving" :disabled="saving" @click="handleSave">{{ saving ? 'Saving...' : 'Save changes' }}</BaseButton>
+      </div>
+    </template>
+  </BaseModal>
 </template>
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { NIcon, NInput, NModal } from 'naive-ui'
+import { BaseButton, BaseInput, BaseModal } from '@/components/ui'
 import { useAuthStore } from '@/stores/auth'
-import { CloseOutline } from '../icons/coolicons'
 import { getErrorMessage } from '@/utils'
+import { notifier } from '@/utils/notifier'
 
 const props = defineProps({
   show: {
@@ -114,12 +113,12 @@ const handleAvatarChange = (event) => {
   if (!file) return
 
   if (!file.type.startsWith('image/')) {
-    window.$message?.warning('Please choose an image file')
+    notifier.warning('Please choose an image file')
     return
   }
 
   if (file.size > 2 * 1024 * 1024) {
-    window.$message?.warning('Avatar must be <= 2MB')
+    notifier.warning('Avatar must be <= 2MB')
     return
   }
 
@@ -137,7 +136,7 @@ const handleSave = async () => {
   const currentUser = user.value || {}
 
   if (!nextId || nextId.length < 2) {
-    window.$message?.warning('ID must be at least 2 characters')
+    notifier.warning('ID must be at least 2 characters')
     return
   }
 
@@ -150,19 +149,19 @@ const handleSave = async () => {
   }
 
   if (Object.keys(payload).length === 0) {
-    window.$message?.info('No changes to save')
+    notifier.info('No changes to save')
     return
   }
 
   saving.value = true
   try {
     await updateProfile(payload)
-    window.$message?.success('Profile updated')
+    notifier.success('Profile updated')
     emit('saved')
     showModal.value = false
   } catch (err) {
     if (!err?.__handled) {
-      window.$message?.error(getErrorMessage(err, 'Failed to update profile'))
+      notifier.error(getErrorMessage(err, 'Failed to update profile'))
     }
   } finally {
     saving.value = false
@@ -171,37 +170,36 @@ const handleSave = async () => {
 </script>
 
 <style scoped>
-.profile-modal {
-  min-height: 400px;
-}
-
-.profile-body {
+.profile-shell {
   display: grid;
-  grid-template-columns: 128px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
 }
 
-.avatar-column {
+.profile-aside {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding-top: 10px;
 }
 
 .avatar-wrap {
-  width: 100px;
-  height: 100px;
+  width: 104px;
+  height: 104px;
   border-radius: 999px;
-  border: 1px solid rgba(143, 143, 143, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   overflow: hidden;
-  background: linear-gradient(180deg, #16171a 0%, #101113 100%);
+  background: linear-gradient(180deg, #111111 0%, #080808 100%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .avatar-wrap:hover {
-  border-color: rgba(226, 229, 235, 0.5);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .avatar-image {
@@ -217,108 +215,56 @@ const handleSave = async () => {
   align-items: center;
   justify-content: center;
   color: #f2f3f5;
-  font-size: 32px;
+  font-size: 42px;
   font-weight: 600;
 }
 
-.avatar-edit-btn {
-  color: #8f939e;
-  font-size: 13px;
-  line-height: 1;
+.avatar-link {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: color 0.2s ease;
 }
 
-.avatar-edit-btn:hover {
-  color: #f2f3f5;
+.avatar-link:hover {
+  color: var(--text);
 }
 
-.form-column {
+.form-panel {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 22px;
+  padding-top: 10px;
 }
 
 .field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 20px;
 }
 
-.field-card {
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(143, 143, 143, 0.24);
-  background: linear-gradient(180deg, rgba(24, 25, 28, 0.92) 0%, rgba(15, 16, 18, 0.92) 100%);
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
 
-.field-card-full {
+.field-block-full {
   width: 100%;
 }
 
 .field-label {
-  display: block;
-  color: #9ea4af;
-  font-size: 11px;
-  margin-bottom: 4px;
-  line-height: 1;
-}
-
-.actions-row {
-  margin-top: auto;
-  display: flex;
-  justify-content: flex-end;
-}
-
-:deep(.n-input .n-input__input-el) {
-  color: #f2f3f5;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-:deep(.n-input.n-input--disabled .n-input__input-el) {
-  color: #7f8590;
-}
-
-:deep(.n-input .n-input__border),
-:deep(.n-input .n-input__state-border) {
-  display: none;
-}
-
-:deep(.n-input) {
-  background: transparent;
-  --n-color: transparent !important;
-  --n-color-disabled: transparent !important;
-  --n-color-focus: transparent !important;
-  --n-border: transparent !important;
-  --n-border-hover: transparent !important;
-  --n-border-focus: transparent !important;
-  --n-box-shadow-focus: none !important;
-}
-
-:deep(.n-input-wrapper),
-:deep(.n-input__input-el),
-:deep(.n-input__textarea-el) {
-  background: transparent !important;
-}
-
-:deep(.n-input.n-input--focus .n-input-wrapper),
-:deep(.n-input.n-input--focus .n-input__input-el),
-:deep(.n-input.n-input--focus .n-input__textarea-el) {
-  background: transparent !important;
+  color: var(--text-muted);
 }
 
 @media (max-width: 1200px) {
-  .profile-modal {
-    width: min(620px, calc(100vw - 24px));
-    min-height: auto;
-    padding: 14px;
-  }
-
-  .profile-body {
+  .profile-shell {
     grid-template-columns: 1fr;
   }
 
-  .avatar-column {
-    align-items: flex-start;
+  .profile-aside {
+    align-items: center;
+    padding-top: 0;
   }
 
   .field-grid {
@@ -331,10 +277,6 @@ const handleSave = async () => {
   }
 
   .field-label {
-    font-size: 10px;
-  }
-
-  :deep(.n-input .n-input__input-el) {
     font-size: 12px;
   }
 }

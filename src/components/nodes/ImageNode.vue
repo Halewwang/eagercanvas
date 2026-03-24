@@ -8,28 +8,28 @@
     <div v-show="showNodeCapsule" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
       <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
         <div class="capsule-group">
-          <n-dropdown :options="imageModelDropdownOptions" @select="setImageModel">
+          <BaseDropdown :options="imageModelDropdownOptions" compact @select="setImageModel">
             <button class="capsule-select">{{ displayImageModel }}</button>
-          </n-dropdown>
+          </BaseDropdown>
 
-          <n-dropdown v-if="ratioDropdownOptions.length > 0" :options="ratioDropdownOptions" @select="setImageRatio">
+          <BaseDropdown v-if="ratioDropdownOptions.length > 0" :options="ratioDropdownOptions" compact @select="setImageRatio">
             <button class="capsule-select">{{ displayRatio }}</button>
-          </n-dropdown>
+          </BaseDropdown>
 
-          <n-dropdown v-if="resolutionDropdownOptions.length > 0 && localImageModel.includes('gemini')" :options="resolutionDropdownOptions" @select="setResolution">
+          <BaseDropdown v-if="resolutionDropdownOptions.length > 0 && localImageModel.includes('gemini')" :options="resolutionDropdownOptions" compact @select="setResolution">
             <button class="capsule-select capsule-resolution">{{ displayResolution }}</button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
 
         <div class="capsule-divider" />
 
         <div class="capsule-group">
-          <n-dropdown :options="toolDropdownOptions" @select="handleToolAction">
+          <BaseDropdown :options="toolDropdownOptions" compact @select="handleToolAction">
             <button class="capsule-select capsule-tool-trigger" :disabled="!data.url || isToolBusy">
               <img :src="toolsIcon" alt="" class="capsule-tool-icon" />
               <span>Tools</span>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
           <button class="capsule-icon" :disabled="!data.url" @click="openPreviewModal" title="Preview">
             <n-icon :size="14"><ExpandOutline /></n-icon>
           </button>
@@ -153,18 +153,30 @@
         </div>
       </div>
     </n-modal>
-    <n-modal v-model:show="showErrorModal" preset="dialog" title="Image Module Error" :show-icon="false">
-      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ data.error }}</div>
-      <template #action>
-        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeErrorModal">Close</button>
+    <BaseModal
+      v-model:show="showErrorModal"
+      title="Image Module Error"
+      size="sm"
+    >
+      <p class="ui-body ui-modal-copy whitespace-pre-wrap">{{ data.error }}</p>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton @click="closeErrorModal">Close</BaseButton>
+        </div>
       </template>
-    </n-modal>
-    <n-modal v-model:show="showValidationModal" preset="dialog" title="Upload Limit" :show-icon="false">
-      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ validationMessage }}</div>
-      <template #action>
-        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeValidationModal">OK</button>
+    </BaseModal>
+    <BaseModal
+      v-model:show="showValidationModal"
+      title="Upload Limit"
+      size="sm"
+    >
+      <p class="ui-body ui-modal-copy whitespace-pre-wrap">{{ validationMessage }}</p>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton @click="closeValidationModal">OK</BaseButton>
+        </div>
       </template>
-    </n-modal>
+    </BaseModal>
 
     <div v-if="showUploadProgress" class="upload-progress-wrap" :style="moduleStyle">
       <div class="upload-progress-track">
@@ -204,7 +216,8 @@
 <script setup>
 import { computed, h, nextTick, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NDropdown, NIcon, NModal } from 'naive-ui'
+import { NIcon, NModal } from 'naive-ui'
+import { BaseButton, BaseDropdown, BaseModal } from '@/components/ui'
 import MultiAngleToolDrawer from '@/components/tools/MultiAngleToolDrawer.vue'
 import {
   CloseCircleOutline,

@@ -86,16 +86,15 @@
                   <h3>{{ item.name }}</h3>
                   <p>{{ describeItem(item) }}</p>
                 </div>
-                <n-dropdown
-                  trigger="click"
+                <BaseDropdown
                   placement="bottom-end"
                   :options="projectMenuOptions(item)"
                   @select="(key) => handleProjectMenuSelect(key, item)"
                 >
-                  <button class="menu-btn project-menu-btn" @click.stop>
+                  <button class="menu-btn project-menu-btn outline-none focus-visible:outline-none focus-visible:ring-0" @click.stop>
                     <n-icon :size="16"><EllipsisHorizontalOutline /></n-icon>
                   </button>
-                </n-dropdown>
+                </BaseDropdown>
               </div>
             </template>
             <template v-else>
@@ -124,33 +123,46 @@
       </section>
     </main>
 
-    <n-modal v-model:show="showRenameModal" preset="dialog" title="Rename Project" :show-icon="false" class="custom-modal">
-      <input
+    <BaseModal
+      v-model:show="showRenameModal"
+      title="Rename project"
+      description="Update the project name shown in your workspace."
+      size="sm"
+    >
+      <BaseInput
         v-model="renameValue"
-        class="modal-input"
         placeholder="Enter project name"
         @keyup.enter="confirmRename"
       />
-      <template #action>
-        <button class="ghost-btn" @click="showRenameModal = false">Cancel</button>
-        <button class="primary-btn" @click="confirmRename">Save</button>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton variant="ghost" @click="showRenameModal = false">Cancel</BaseButton>
+          <BaseButton @click="confirmRename">Save</BaseButton>
+        </div>
       </template>
-    </n-modal>
+    </BaseModal>
 
-    <n-modal v-model:show="showDeleteModal" preset="dialog" title="Delete Project" type="warning" class="custom-modal">
-      <p>Delete "{{ deleteTargetName }}"? This action cannot be undone.</p>
-      <template #action>
-        <button class="ghost-btn" @click="showDeleteModal = false">Cancel</button>
-        <button class="mini-btn danger" @click="confirmDelete">Delete</button>
+    <BaseModal
+      v-model:show="showDeleteModal"
+      title="Delete project"
+      description="This action permanently removes the project from your workspace."
+      size="sm"
+    >
+      <p class="ui-body ui-modal-copy">Delete "{{ deleteTargetName }}"? This action cannot be undone.</p>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton variant="ghost" @click="showDeleteModal = false">Cancel</BaseButton>
+          <BaseButton variant="danger" @click="confirmDelete">Delete</BaseButton>
+        </div>
       </template>
-    </n-modal>
+    </BaseModal>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NDropdown, NIcon, NModal } from 'naive-ui'
+import { NIcon } from 'naive-ui'
 import {
   AddOutline,
   FolderOpenOutline,
@@ -169,9 +181,11 @@ import {
   deleteProject,
   updateProject
 } from '@/stores/projects'
+import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 import { getErrorMessage } from '@/utils'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { useAuthStore } from '@/stores/auth'
+import { notifier } from '@/utils/notifier'
 
 const router = useRouter()
 const { user, bootstrapAuth } = useAuthStore()
@@ -276,7 +290,7 @@ const handleProjectMenuSelect = async (key, project) => {
   if (key === 'copy-link') {
     const origin = window.location.origin
     const ok = await copyText(`${origin}/canvas/${project.id}`)
-    window.$message?.[ok ? 'success' : 'warning'](ok ? 'Project link copied' : 'Copy failed')
+    notifier[ok ? 'success' : 'warning'](ok ? 'Project link copied' : 'Copy failed')
     return
   }
   if (key === 'rename') {
@@ -297,7 +311,7 @@ const createBlankProject = async () => {
     const id = await createProject('Untitled')
     await router.push(`/canvas/${id}`)
   } catch (error) {
-    window.$message?.error(getErrorMessage(error, 'Failed to create project'))
+    notifier.error(getErrorMessage(error, 'Failed to create project'))
   }
 }
 
@@ -319,14 +333,14 @@ const useTemplate = async (item) => {
       })
       await router.push(`/canvas/${id}`)
     } catch (error) {
-      window.$message?.error(getErrorMessage(error, 'Failed to create project from template'))
+      notifier.error(getErrorMessage(error, 'Failed to create project from template'))
     }
     return
   }
 
   const workflow = resolveWorkflowTemplate(item)
   if (!workflow) {
-    window.$message?.warning('Template unavailable')
+    notifier.warning('Template unavailable')
     return
   }
   try {
@@ -337,25 +351,25 @@ const useTemplate = async (item) => {
     )
     await router.push(`/canvas/${id}`)
   } catch (error) {
-    window.$message?.error(getErrorMessage(error, 'Failed to create project from template'))
+    notifier.error(getErrorMessage(error, 'Failed to create project from template'))
   }
 }
 
 const saveAsMyTemplate = async (item) => {
   await createMyWorkflowTemplate({ baseWorkflowId: item.baseWorkflowId || item.id })
   activeSection.value = 'my-templates'
-  window.$message?.success('Saved to My Templates')
+  notifier.success('Saved to My Templates')
 }
 
 const toggleTemplateVisibility = async (item) => {
   const nextVisibility = item.visibility === 'public' ? 'private' : 'public'
   await setWorkflowTemplateVisibility(item.id, nextVisibility)
-  window.$message?.success(nextVisibility === 'public' ? 'Template published' : 'Template unpublished')
+  notifier.success(nextVisibility === 'public' ? 'Template published' : 'Template unpublished')
 }
 
 const deleteTemplate = async (id) => {
   await deleteMyWorkflowTemplate(id)
-  window.$message?.success('Template deleted')
+  notifier.success('Template deleted')
 }
 
 const openRename = (project) => {
@@ -370,12 +384,12 @@ const confirmRename = async () => {
   showRenameModal.value = false
   renameTargetId.value = ''
   renameValue.value = ''
-  window.$message?.success('Project renamed')
+  notifier.success('Project renamed')
 }
 
 const duplicate = async (project) => {
   await duplicateProject(project.id)
-  window.$message?.success('Project duplicated')
+  notifier.success('Project duplicated')
 }
 
 const openDelete = (project) => {
@@ -390,7 +404,7 @@ const confirmDelete = async () => {
   showDeleteModal.value = false
   deleteTargetId.value = ''
   deleteTargetName.value = ''
-  window.$message?.success('Project deleted')
+  notifier.success('Project deleted')
 }
 
 const formatDate = (date) => {

@@ -8,12 +8,12 @@
     <div v-show="showNodeCapsule" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
       <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
         <div class="capsule-group">
-          <n-dropdown :options="modelOptions" @select="setModel"><button class="capsule-select">{{ displayModel }}</button></n-dropdown>
-          <n-dropdown :options="ratioOptions" @select="setRatio"><button class="capsule-select">{{ localRatio }}</button></n-dropdown>
-          <n-dropdown v-if="sizeOptions.length > 0" :options="sizeOptions" @select="setSize"><button class="capsule-select">{{ displaySize }}</button></n-dropdown>
-          <n-dropdown v-if="resolutionOptions.length > 0" :options="resolutionOptions" @select="setResolution"><button class="capsule-select">{{ displayResolution }}</button></n-dropdown>
-          <n-dropdown v-if="supportsAudioToggle" :options="audioOptions" @select="setGenerateAudio"><button class="capsule-select">{{ displayAudio }}</button></n-dropdown>
-          <n-dropdown v-if="durationOptions.length > 0" :options="durationOptions" @select="setDuration"><button class="capsule-select">{{ localDuration }}s</button></n-dropdown>
+          <BaseDropdown :options="modelOptions" compact @select="setModel"><button class="capsule-select">{{ displayModel }}</button></BaseDropdown>
+          <BaseDropdown :options="ratioOptions" compact @select="setRatio"><button class="capsule-select">{{ localRatio }}</button></BaseDropdown>
+          <BaseDropdown v-if="sizeOptions.length > 0" :options="sizeOptions" compact @select="setSize"><button class="capsule-select">{{ displaySize }}</button></BaseDropdown>
+          <BaseDropdown v-if="resolutionOptions.length > 0" :options="resolutionOptions" compact @select="setResolution"><button class="capsule-select">{{ displayResolution }}</button></BaseDropdown>
+          <BaseDropdown v-if="supportsAudioToggle" :options="audioOptions" compact @select="setGenerateAudio"><button class="capsule-select">{{ displayAudio }}</button></BaseDropdown>
+          <BaseDropdown v-if="durationOptions.length > 0" :options="durationOptions" compact @select="setDuration"><button class="capsule-select">{{ localDuration }}s</button></BaseDropdown>
         </div>
 
         <div class="capsule-divider" />
@@ -88,18 +88,30 @@
         <video :src="data.url" controls autoplay class="zoom-video-original" />
       </div>
     </n-modal>
-    <n-modal v-model:show="showErrorModal" preset="dialog" title="Video Module Error" :show-icon="false">
-      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ data.error }}</div>
-      <template #action>
-        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeErrorModal">Close</button>
+    <BaseModal
+      v-model:show="showErrorModal"
+      title="Video Module Error"
+      size="sm"
+    >
+      <p class="ui-body ui-modal-copy whitespace-pre-wrap">{{ data.error }}</p>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton @click="closeErrorModal">Close</BaseButton>
+        </div>
       </template>
-    </n-modal>
-    <n-modal v-model:show="showValidationModal" preset="dialog" :title="validationTitle" :show-icon="false">
-      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ validationMessage }}</div>
-      <template #action>
-        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeValidationModal">OK</button>
+    </BaseModal>
+    <BaseModal
+      v-model:show="showValidationModal"
+      :title="validationTitle"
+      size="sm"
+    >
+      <p class="ui-body ui-modal-copy whitespace-pre-wrap">{{ validationMessage }}</p>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton @click="closeValidationModal">OK</BaseButton>
+        </div>
       </template>
-    </n-modal>
+    </BaseModal>
 
     <div v-if="showUploadProgress" class="upload-progress-wrap" :style="moduleStyle">
       <div class="upload-progress-track">
@@ -126,7 +138,8 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NDropdown, NIcon, NModal } from 'naive-ui'
+import { NIcon, NModal } from 'naive-ui'
+import { BaseButton, BaseDropdown, BaseModal } from '@/components/ui'
 import { CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
 import { duplicateNode, edges, flushSave, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'

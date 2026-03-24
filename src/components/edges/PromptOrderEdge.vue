@@ -12,17 +12,18 @@
       }"
       class="nodrag nopan"
     >
-      <n-dropdown 
+      <BaseDropdown
         :options="orderOptions" 
+        :selected-key="currentOrder"
+        compact
         @select="handleOrderSelect"
-        size="small"
       >
         <button 
-          class="flex items-center justify-center w-6 h-6 text-xs font-bold rounded-full bg-white text-black border border-[rgba(17,17,17,0.22)] shadow-sm hover:scale-110 transition-transform"
+          class="flex h-6 w-6 items-center justify-center rounded-full border border-[rgba(17,17,17,0.22)] bg-white text-xs font-bold text-black shadow-sm outline-none transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-0"
         >
           {{ currentOrder }}
         </button>
-      </n-dropdown>
+      </BaseDropdown>
     </div>
   </EdgeLabelRenderer>
   <EdgeLabelRenderer>
@@ -34,7 +35,7 @@
 <script setup>
 import { computed } from 'vue'
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, useVueFlow } from '@vue-flow/core'
-import { NDropdown } from 'naive-ui'
+import { BaseDropdown } from '@/components/ui'
 import { edges } from '../../stores/canvas'
 
 // Get VueFlow instance | 获取 VueFlow 实例

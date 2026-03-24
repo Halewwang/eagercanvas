@@ -14,8 +14,12 @@
         <button
           v-else
           type="button"
-          class="ui-body flex w-full items-center rounded-[14px] px-3 py-2.5 text-left transition-colors"
-          :class="item.danger ? 'text-[var(--text)] hover:bg-white/6' : 'text-[var(--text)] hover:bg-white/6'"
+          class="flex w-full items-center rounded-[14px] text-left transition-colors"
+          :class="[
+            props.compact ? 'px-3 py-2 text-[13px] leading-[1.25]' : 'ui-body px-3 py-2.5',
+            'text-[var(--text)] hover:bg-[rgba(255,255,255,0.12)]'
+          ]"
+          :data-danger="item.danger ? 'true' : 'false'"
           @click="handleSelect(item.key)"
         >
           {{ item.label }}
@@ -39,6 +43,14 @@ const props = defineProps({
     type: String,
     default: 'bottom-end'
   },
+  compact: {
+    type: Boolean,
+    default: false
+  },
+  selectedKey: {
+    type: [String, Number],
+    default: undefined
+  },
   show: {
     type: Boolean,
     default: undefined
@@ -61,7 +73,8 @@ const open = computed({
 const normalizedOptions = computed(() =>
   props.options.map((item) => ({
     ...item,
-    danger: item.key === 'delete' || item.danger === true
+    danger: item.key === 'delete' || item.danger === true,
+    selected: typeof props.selectedKey === 'undefined' ? false : item.key === props.selectedKey
   }))
 )
 
@@ -69,9 +82,11 @@ const menuClass = computed(() => {
   const placementClass = props.placement === 'bottom-end'
     ? 'right-0 top-[calc(100%+10px)]'
     : 'left-0 top-[calc(100%+10px)]'
+  const densityClass = props.compact ? 'min-w-[168px] p-1.5' : 'min-w-[192px] p-2'
 
   return [
-    'absolute z-[1300] min-w-[192px] rounded-[20px] border border-white/8 bg-[rgba(20,20,20,0.96)] p-2 shadow-[0_12px_28px_rgba(0,0,0,0.24)] backdrop-blur-[10px]',
+    'absolute z-[1300] rounded-[20px] border border-[rgba(255,255,255,0.06)] bg-[rgba(20,20,20,0.94)] shadow-[0_10px_24px_rgba(0,0,0,0.18)] backdrop-blur-[8px]',
+    densityClass,
     placementClass
   ]
 })

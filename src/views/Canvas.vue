@@ -16,6 +16,17 @@
           </button>
         </div>
         <div class="flora-panel rounded-full p-1.5">
+          <BaseDropdown :options="projectOptions" compact @select="handleProjectAction">
+            <button class="h-9 flex items-center gap-2 rounded-full px-3 outline-none transition-colors hover:bg-[var(--bg-tertiary)] focus-visible:outline-none focus-visible:ring-0">
+              <span class="text-sm font-medium">{{ projectName }}</span>
+              <n-icon :size="16"><ChevronDownOutline /></n-icon>
+            </button>
+          </BaseDropdown>
+        </div>
+      </div>
+
+      <div class="absolute right-4 top-4 z-20 flex items-center gap-2">
+        <div class="flora-panel rounded-full p-1.5">
           <button
             @click="goWorkspace"
             class="h-9 flex items-center gap-2 px-3 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors"
@@ -26,22 +37,12 @@
           </button>
         </div>
         <div class="flora-panel rounded-full p-1.5">
-          <BaseDropdown :options="projectOptions" @select="handleProjectAction">
-            <button class="h-9 flex items-center gap-2 px-3 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors">
-              <span class="text-sm font-medium">{{ projectName }}</span>
-              <n-icon :size="16"><ChevronDownOutline /></n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
-      </div>
-
-      <div class="absolute right-4 top-4 z-20">
-        <div class="flora-panel rounded-full p-1.5">
           <button
             @click="openShareDialog"
             class="h-9 flex items-center gap-2 px-4 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors"
             title="Share"
           >
+            <n-icon :size="16"><CopyOutline /></n-icon>
             <span class="text-sm font-medium">Share</span>
           </button>
         </div>
@@ -158,7 +159,7 @@
       <aside class="flora-panel absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 p-2 rounded-[36px] z-20 w-[64px]">
         <button 
           @click="toggleToolbarNodeMenu"
-          class="w-12 h-12 flex items-center justify-center rounded-full bg-[#f1f1f1] text-[#111111] hover:brightness-95 transition-all"
+          class="w-12 h-12 flex items-center justify-center rounded-full bg-[#f1f1f1] text-[#111111] outline-none hover:brightness-95 focus:outline-none focus-visible:outline-none focus-visible:ring-0 transition-all"
           title="Add Node"
         >
           <n-icon :size="20"><AddOutline /></n-icon>
@@ -215,7 +216,7 @@
       </aside>
 
       <!-- Node menu popup | 节点菜单弹窗 -->
-      <div v-if="showNodeMenu" class="flora-panel absolute rounded-[20px] p-3 z-30 w-[310px] border border-[rgba(143,143,143,0.24)] bg-[rgba(18,18,18,0.96)] backdrop-blur-xl" :style="nodeMenuStyle">
+      <div v-if="showNodeMenu" class="flora-panel absolute rounded-[22px] p-6 z-30 w-[338px] border border-[rgba(143,143,143,0.24)] bg-[rgba(18,18,18,0.96)] backdrop-blur-xl" :style="nodeMenuStyle">
         <div v-if="nodeMenuMode !== 'connect'" class="node-menu-header">
           <div>
             <div class="node-menu-eyebrow">ADD MODULE</div>
@@ -253,7 +254,7 @@
       </div>
 
       <!-- Bottom controls | 底部控制 -->
-      <div class="flora-panel absolute bottom-4 left-4 flex items-center gap-2 rounded-xl p-1.5">
+      <div class="flora-panel absolute bottom-4 left-4 flex items-center gap-2 rounded-full p-1.5">
         <!-- <button 
           @click="showGrid = !showGrid" 
           :class="showGrid ? 'bg-[var(--accent-color)] text-white' : 'hover:bg-[var(--bg-tertiary)]'"
@@ -264,17 +265,17 @@
         </button> -->
         <button 
           @click="fitView({ padding: 0.2 })" 
-          class="p-2 hover:bg-[var(--bg-tertiary)] rounded transition-colors"
+          class="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-[var(--bg-tertiary)]"
           title="Fit View"
         >
           <n-icon :size="16"><LocateOutline /></n-icon>
         </button>
-        <div class="flex items-center gap-1 px-2">
-          <button @click="zoomOut" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
+        <div class="flex h-9 items-center gap-1 rounded-full px-2">
+          <button @click="zoomOut" class="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-[var(--bg-tertiary)]">
             <n-icon :size="14"><RemoveOutline /></n-icon>
           </button>
-          <span class="text-xs min-w-[40px] text-center">{{ Math.round(viewport.zoom * 100) }}%</span>
-          <button @click="zoomIn" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
+          <span class="flex min-w-[48px] items-center justify-center text-xs font-medium leading-none">{{ Math.round(viewport.zoom * 100) }}%</span>
+          <button @click="zoomIn" class="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-[var(--bg-tertiary)]">
             <n-icon :size="14"><AddOutline /></n-icon>
           </button>
         </div>
@@ -1424,7 +1425,7 @@ onUnmounted(() => {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 
 .node-menu-eyebrow {
@@ -1432,54 +1433,61 @@ onUnmounted(() => {
   line-height: 1;
   letter-spacing: 0.14em;
   color: #6b7280;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .node-menu-title {
   margin: 0;
-  font-size: 16px;
-  line-height: 1.2;
+  font-size: 17px;
+  line-height: 1.25;
   font-weight: 600;
   color: #f3f4f6;
 }
 
 .node-menu-copy {
-  margin: 8px 0 0;
+  margin: 12px 0 0;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.65;
   color: #9ca3af;
 }
 
 .node-menu-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 10px;
 }
 
 .node-menu-item {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
-  border-radius: 16px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  gap: 14px;
+  position: relative;
+  border-radius: 18px;
+  padding: 14px 10px;
+  background: transparent;
+  border: 0;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.node-menu-item + .node-menu-item {
+  margin-top: 10px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .node-menu-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.12);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .node-menu-item-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: #202020;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1490,12 +1498,13 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
+  padding-right: 12px;
 }
 
 .node-menu-item-title {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.2;
   color: #f3f4f6;
   font-weight: 600;
@@ -1503,15 +1512,15 @@ onUnmounted(() => {
 
 .node-menu-item-description {
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: #9ca3af;
   text-align: left;
 }
 
 .node-menu-quantity {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1536,7 +1545,7 @@ onUnmounted(() => {
   gap: 8px;
   padding: 4px;
   border-radius: 999px;
-  background: #141414;
+  background: #161616;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -1547,16 +1556,16 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #1f1f1f;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #202020;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: #f3f4f6;
   font-size: 16px;
   transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
 }
 
 .node-menu-stepper-btn:hover:not(:disabled) {
-  background: #2b2b2b;
-  border-color: rgba(255, 255, 255, 0.24);
+  background: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.14);
 }
 
 .node-menu-stepper-btn:disabled {

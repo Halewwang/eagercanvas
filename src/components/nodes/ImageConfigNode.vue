@@ -14,13 +14,13 @@
               <TrashOutline />
             </n-icon>
           </button>
-          <n-dropdown :options="modelOptions" @select="handleModelSelect">
+          <BaseDropdown :options="modelOptions" compact @select="handleModelSelect">
             <button class="p-1 hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors">
               <n-icon :size="14">
                 <ChevronDownOutline />
               </n-icon>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
       </div>
 
@@ -29,30 +29,30 @@
         <!-- Model selector | Model选择 -->
         <div class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Model</span>
-          <n-dropdown :options="modelOptions" @select="handleModelSelect">
+          <BaseDropdown :options="modelOptions" compact @select="handleModelSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ displayModelName }}
               <n-icon :size="12"><ChevronDownOutline /></n-icon>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
 
         <!-- Quality selector | Quality选择 -->
         <div v-if="hasQualityOptions" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Quality</span>
-          <n-dropdown :options="qualityOptions" @select="handleQualitySelect">
+          <BaseDropdown :options="qualityOptions" compact @select="handleQualitySelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ displayQuality }}
               <n-icon :size="12"><ChevronForwardOutline /></n-icon>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
 
         <!-- Size selector | Size选择 -->
         <div v-if="hasSizeOptions" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Size</span>
           <div class="flex items-center gap-2">
-            <n-dropdown :options="sizeOptions" @select="handleSizeSelect">
+            <BaseDropdown :options="sizeOptions" compact @select="handleSizeSelect">
               <button
                 class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
                 {{ displaySize }}
@@ -60,7 +60,7 @@
                   <ChevronForwardOutline />
                 </n-icon>
               </button>
-            </n-dropdown>
+            </BaseDropdown>
           </div>
         </div>
 
@@ -159,7 +159,8 @@
  */
 import { ref, computed, watch, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NIcon, NDropdown, NSpin } from 'naive-ui'
+import { NIcon, NSpin } from 'naive-ui'
+import { BaseDropdown } from '@/components/ui'
 import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline, RefreshOutline, AddOutline } from '../../icons/coolicons'
 import { useImageGeneration, useApiConfig } from '../../hooks'
 import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject } from '../../stores/canvas'

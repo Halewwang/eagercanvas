@@ -2,8 +2,8 @@
 /**
  * Root App component.
  */
-import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme } from 'naive-ui'
-import MessageBridge from './components/MessageBridge.vue'
+import { NConfigProvider, darkTheme } from 'naive-ui'
+import { BaseToastViewport } from './components/ui'
 
 const themeOverrides = {
   common: {
@@ -38,12 +38,8 @@ const themeOverrides = {
 
 <template>
   <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides">
-    <n-message-provider>
-      <MessageBridge />
-      <n-dialog-provider>
-        <router-view />
-      </n-dialog-provider>
-    </n-message-provider>
+    <BaseToastViewport />
+    <router-view />
   </n-config-provider>
 </template>
 

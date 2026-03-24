@@ -1,16 +1,21 @@
 <template>
-  <n-modal v-model:show="visible" preset="dialog" :title="isRegister ? 'Create account' : 'Sign in'" :show-icon="false">
-    <div class="space-y-3 py-2">
-      <div class="flex gap-2">
+  <BaseModal
+    v-model:show="visible"
+    :title="isRegister ? 'Create account' : 'Sign in'"
+    :description="isRegister ? 'Create your account with email verification.' : 'Enter your email and verification code to continue.'"
+    size="sm"
+  >
+    <div class="auth-panel">
+      <div class="auth-tabs">
         <button
-          class="flex-1 py-2 rounded-lg border transition-colors"
+          class="auth-tab"
           :class="!isRegister ? activeTabClass : inactiveTabClass"
           @click="setMode('login')"
         >
           Login
         </button>
         <button
-          class="flex-1 py-2 rounded-lg border transition-colors"
+          class="auth-tab"
           :class="isRegister ? activeTabClass : inactiveTabClass"
           @click="setMode('register')"
         >
@@ -18,48 +23,47 @@
         </button>
       </div>
 
-      <input
+      <BaseInput
         v-if="isRegister"
         v-model="displayName"
         type="text"
         placeholder="Display name"
-        class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[rgba(212,198,182,0.68)] focus:shadow-[0_0_0_1px_rgba(165,129,99,0.22)]"
       />
-      <input
+      <BaseInput
         v-model="email"
         type="email"
         placeholder="you@example.com"
-        class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[rgba(212,198,182,0.68)] focus:shadow-[0_0_0_1px_rgba(165,129,99,0.22)]"
       />
-      <div class="flex gap-2">
-        <input
+      <div class="auth-code-row">
+        <BaseInput
           v-model="code"
           type="text"
           maxlength="6"
           placeholder="6-digit code"
-          class="flex-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[rgba(212,198,182,0.68)] focus:shadow-[0_0_0_1px_rgba(165,129,99,0.22)]"
+          class="flex-1"
         />
-        <button class="flora-button-ghost px-4 rounded-xl" :disabled="sending" @click="handleSendCode">
+        <BaseButton variant="secondary" :disabled="sending" @click="handleSendCode">
           {{ sending ? 'Sending' : 'Send Code' }}
-        </button>
+        </BaseButton>
       </div>
     </div>
-    <template #action>
-      <div class="flex justify-end gap-3">
-        <button @click="handleClose" class="px-4 py-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>
-        <button class="flora-button-primary px-6 py-2 rounded-lg transition-opacity" :disabled="verifying" @click="handleSubmit">
+    <template #footer>
+      <div class="ui-modal-actions">
+        <BaseButton variant="ghost" @click="handleClose">Cancel</BaseButton>
+        <BaseButton :disabled="verifying" :loading="verifying" @click="handleSubmit">
           {{ verifying ? (isRegister ? 'Registering...' : 'Signing in...') : (isRegister ? 'Verify & Register' : 'Verify & Sign In') }}
-        </button>
+        </BaseButton>
       </div>
     </template>
-  </n-modal>
+  </BaseModal>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { NModal } from 'naive-ui'
+import { BaseButton, BaseInput, BaseModal } from '@/components/ui'
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils'
+import { notifier } from '@/utils/notifier'
 
 const props = defineProps({
   show: {
@@ -89,8 +93,8 @@ const sending = ref(false)
 const verifying = ref(false)
 
 const isRegister = computed(() => currentMode.value === 'register')
-const activeTabClass = 'border-[var(--accent-color)] text-white bg-[var(--bg-tertiary)]'
-const inactiveTabClass = 'border-[var(--border-color)] text-[var(--text-secondary)]'
+const activeTabClass = 'border-white/10 bg-[var(--surface-2)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]'
+const inactiveTabClass = 'border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface)]'
 
 watch(
   () => props.mode,
@@ -119,7 +123,7 @@ const handleClose = () => {
 
 const handleSendCode = async () => {
   if (!email.value.trim()) {
-    window.$message?.warning('Please enter email')
+    notifier.warning('Please enter email')
     return
   }
 
@@ -127,14 +131,14 @@ const handleSendCode = async () => {
   try {
     if (isRegister.value) {
       await sendRegister(email.value.trim())
-      window.$message?.success('Registration code sent')
+      notifier.success('Registration code sent')
     } else {
       await sendCode(email.value.trim())
-      window.$message?.success('Login code sent')
+      notifier.success('Login code sent')
     }
   } catch (error) {
     if (!error?.__handled) {
-      window.$message?.error(getErrorMessage(error, 'Failed to send code'))
+      notifier.error(getErrorMessage(error, 'Failed to send code'))
     }
   } finally {
     sending.value = false
@@ -143,15 +147,15 @@ const handleSendCode = async () => {
 
 const handleSubmit = async () => {
   if (!email.value.trim()) {
-    window.$message?.warning('Please enter email')
+    notifier.warning('Please enter email')
     return
   }
   if (code.value.trim().length !== 6) {
-    window.$message?.warning('Please enter a 6-digit code')
+    notifier.warning('Please enter a 6-digit code')
     return
   }
   if (isRegister.value && !displayName.value.trim()) {
-    window.$message?.warning('Please enter display name')
+    notifier.warning('Please enter display name')
     return
   }
 
@@ -159,20 +163,50 @@ const handleSubmit = async () => {
   try {
     if (isRegister.value) {
       await verifyRegister(email.value.trim(), code.value.trim(), displayName.value.trim())
-      window.$message?.success('Registered and signed in')
+      notifier.success('Registered and signed in')
     } else {
       await verifyCode(email.value.trim(), code.value.trim())
-      window.$message?.success('Signed in')
+      notifier.success('Signed in')
     }
 
     visible.value = false
     emit('success')
   } catch (error) {
     if (!error?.__handled) {
-      window.$message?.error(getErrorMessage(error, isRegister.value ? 'Register failed' : 'Sign in failed'))
+      notifier.error(getErrorMessage(error, isRegister.value ? 'Register failed' : 'Sign in failed'))
     }
   } finally {
     verifying.value = false
   }
 }
 </script>
+
+<style scoped>
+.auth-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.auth-tab {
+  height: 42px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.auth-code-row {
+  display: flex;
+  gap: 10px;
+}
+
+</style>

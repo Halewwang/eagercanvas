@@ -8,9 +8,9 @@
     <div v-show="showNodeCapsule" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
       <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
         <div class="capsule-group">
-          <n-dropdown :options="chatModelDropdownOptions" @select="setChatModel">
+          <BaseDropdown :options="chatModelDropdownOptions" :selected-key="localChatModel" compact @select="setChatModel">
             <button class="capsule-select">{{ displayChatModel }}</button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
 
         <div class="capsule-divider" />
@@ -68,12 +68,18 @@
       <Handle type="source" :position="Position.Right" id="right" :class="['node-handle-plus', 'node-handle-plus-right', { 'node-handle-plus-visible': showHandles }]" />
       <Handle type="target" :position="Position.Left" id="left" :class="['node-handle-plus', 'node-handle-plus-left', { 'node-handle-plus-visible': showHandles }]" />
     </div>
-    <n-modal v-model:show="showErrorModal" preset="dialog" title="Text Module Error" :show-icon="false">
-      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ data.error }}</div>
-      <template #action>
-        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeErrorModal">Close</button>
+    <BaseModal
+      v-model:show="showErrorModal"
+      title="Text Module Error"
+      size="sm"
+    >
+      <p class="ui-body ui-modal-copy whitespace-pre-wrap">{{ data.error }}</p>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton @click="closeErrorModal">Close</BaseButton>
+        </div>
       </template>
-    </n-modal>
+    </BaseModal>
     <div class="binding-status-wrap">
       <div class="binding-status-row">
         <div v-if="connectedTargets.length > 0" class="binding-status-pill binding-status-pill-active">
@@ -96,11 +102,13 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NDropdown, NIcon, NModal } from 'naive-ui'
+import { NIcon } from 'naive-ui'
+import { BaseButton, BaseDropdown, BaseModal } from '@/components/ui'
 import { CloseCircleOutline, CopyOutline, RefreshOutline, TextOutline, TrashOutline } from '../../icons/coolicons'
 import { duplicateNode, edges, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useChat } from '../../hooks'
 import { chatModelOptions, DEFAULT_CHAT_MODEL } from '../../stores/models'
+import { getErrorMessage } from '@/utils'
 import createIcon from '@/assets/create-icon.svg'
 
 const props = defineProps({
@@ -310,8 +318,9 @@ const runImageAnalysis = async () => {
     })
     window.$message?.success('Image description generated')
   } catch (err) {
-    updateNode(props.id, { loading: false, error: err?.message || 'Image analysis failed' })
-    window.$message?.error(err?.message || 'Image analysis failed')
+    const message = getErrorMessage(err, 'Image analysis failed')
+    updateNode(props.id, { loading: false, error: message })
+    window.$message?.error(message)
   } finally {
     updateNode(props.id, { loading: false })
     isGenerating.value = false
@@ -343,8 +352,9 @@ const runTextGeneration = async (isRegenerate = false) => {
       throw new Error('Model returned empty text content')
     }
   } catch (err) {
-    updateNode(props.id, { loading: false, error: err?.message || 'Text generation failed' })
-    window.$message?.error(err?.message || 'Text generation failed')
+    const message = getErrorMessage(err, 'Text generation failed')
+    updateNode(props.id, { loading: false, error: message })
+    window.$message?.error(message)
   } finally {
     updateNode(props.id, { loading: false })
     isGenerating.value = false

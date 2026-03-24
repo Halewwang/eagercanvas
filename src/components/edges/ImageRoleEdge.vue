@@ -12,18 +12,19 @@
       }"
       class="nodrag nopan"
     >
-      <n-dropdown 
+      <BaseDropdown
         :options="imageRoleOptions" 
+        :selected-key="currentRole"
+        compact
         @select="handleRoleSelect"
-        size="small"
       >
         <button 
-          class="flex items-center gap-1 text-xs text-black px-2 py-1 rounded-full bg-white border border-gray-200 shadow-sm hover:shadow transition-shadow"
+          class="flex items-center gap-1 rounded-full border border-[rgba(17,17,17,0.22)] bg-white px-2 py-1 text-xs text-black shadow-sm outline-none transition-shadow hover:shadow focus-visible:outline-none focus-visible:ring-0"
         >
           {{ currentRoleLabel }}
           <n-icon :size="10"><ChevronDownOutline /></n-icon>
         </button>
-      </n-dropdown>
+      </BaseDropdown>
     </div>
   </EdgeLabelRenderer>
   <EdgeLabelRenderer>
@@ -35,7 +36,8 @@
 <script setup>
 import { computed } from 'vue'
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, useVueFlow } from '@vue-flow/core'
-import { NDropdown, NIcon } from 'naive-ui'
+import { NIcon } from 'naive-ui'
+import { BaseDropdown } from '@/components/ui'
 import { ChevronDownOutline } from '../../icons/coolicons'
 import { edges } from '../../stores/canvas'
 

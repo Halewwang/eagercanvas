@@ -21,74 +21,74 @@
         <!-- Model selector | Model选择 -->
         <div class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Model</span>
-          <n-dropdown :options="modelOptions" @select="handleModelSelect">
+          <BaseDropdown :options="modelOptions" compact @select="handleModelSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ displayModelName }}
               <n-icon :size="12"><ChevronDownOutline /></n-icon>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
 
         <!-- Aspect ratio selector | 宽高比选择 -->
         <div class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Ratio</span>
-          <n-dropdown :options="ratioOptions" @select="handleRatioSelect">
+          <BaseDropdown :options="ratioOptions" compact @select="handleRatioSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ localRatio }}
               <n-icon :size="12">
                 <ChevronForwardOutline />
               </n-icon>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
 
         <div v-if="sizeOptions.length > 0" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Size</span>
-          <n-dropdown :options="sizeOptions" @select="handleSizeSelect">
+          <BaseDropdown :options="sizeOptions" compact @select="handleSizeSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ displaySize }}
               <n-icon :size="12">
                 <ChevronForwardOutline />
               </n-icon>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
 
         <div v-if="resolutionOptions.length > 0" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Resolution</span>
-          <n-dropdown :options="resolutionOptions" @select="handleResolutionSelect">
+          <BaseDropdown :options="resolutionOptions" compact @select="handleResolutionSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ displayResolution }}
               <n-icon :size="12">
                 <ChevronForwardOutline />
               </n-icon>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
 
         <div v-if="supportsAudioToggle" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Audio</span>
-          <n-dropdown :options="audioOptions" @select="handleAudioSelect">
+          <BaseDropdown :options="audioOptions" compact @select="handleAudioSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ displayAudio }}
               <n-icon :size="12">
                 <ChevronForwardOutline />
               </n-icon>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
 
         <!-- Duration selector | Duration选择 -->
         <div class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Duration</span>
-          <n-dropdown :options="durationOptions" @select="handleDurationSelect">
+          <BaseDropdown :options="durationOptions" compact @select="handleDurationSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
               {{ localDuration }}s
               <n-icon :size="12">
                 <ChevronForwardOutline />
               </n-icon>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
 
         <!-- Connected inputs indicator | 连接输入指示 -->
@@ -155,12 +155,18 @@
       <Handle type="source" :position="Position.Right" id="right" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
     </div>
 
-    <n-modal v-model:show="showValidationModal" preset="dialog" title="Sora 2 Input Size" :show-icon="false">
-      <div class="text-sm text-[#d9dce3] whitespace-pre-wrap">{{ validationMessage }}</div>
-      <template #action>
-        <button class="flora-button-primary px-4 py-2 rounded-lg" @click="closeValidationModal">OK</button>
+    <BaseModal
+      v-model:show="showValidationModal"
+      title="Sora 2 Input Size"
+      size="sm"
+    >
+      <p class="ui-body ui-modal-copy whitespace-pre-wrap">{{ validationMessage }}</p>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton @click="closeValidationModal">OK</BaseButton>
+        </div>
       </template>
-    </n-modal>
+    </BaseModal>
 
     <!-- Hover action buttons | 悬浮操作按钮 -->
     <!-- Top right - Copy button | 右上角 - Copy按钮 -->
@@ -184,7 +190,9 @@
  */
 import { ref, computed, watch, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NIcon, NDropdown, NModal, NSpin } from 'naive-ui'
+import { NIcon, NSpin } from 'naive-ui'
+import { BaseDropdown } from '@/components/ui'
+import { BaseButton, BaseModal } from '@/components/ui'
 import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject } from '../../stores/canvas'

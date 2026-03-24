@@ -249,33 +249,41 @@
     <ApiSettings v-model:show="showApiSettings" />
 
     <!-- Rename modal | 重命名弹窗 -->
-    <n-modal v-model:show="showRenameModal" preset="dialog" title="Rename Project" :show-icon="false" class="custom-modal">
-      <template #header>
-        <div class="text-xl font-light mb-2">Rename Project</div>
-      </template>
-      <div class="py-4">
-        <input 
+    <BaseModal
+      v-model:show="showRenameModal"
+      title="Rename project"
+      description="Give this project a clearer name for your workspace."
+      size="sm"
+    >
+      <div class="py-1">
+        <BaseInput
           v-model="renameValue" 
           placeholder="Enter project name" 
-          class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-4 py-3 outline-none focus:border-[rgba(212,198,182,0.68)] focus:shadow-[0_0_0_1px_rgba(165,129,99,0.22)] transition-colors"
           @keyup.enter="confirmRename"
         />
       </div>
-      <template #action>
-        <div class="flex justify-end gap-3">
-          <button @click="showRenameModal = false" class="px-4 py-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>
-          <button @click="confirmRename" class="flora-button-primary px-6 py-2 rounded-lg transition-opacity">Save</button>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton variant="ghost" @click="showRenameModal = false">Cancel</BaseButton>
+          <BaseButton @click="confirmRename">Save</BaseButton>
         </div>
       </template>
-    </n-modal>
+    </BaseModal>
 
-    <n-modal v-model:show="showDeleteModal" preset="dialog" title="Delete Project" type="warning" class="custom-modal">
-      <p>Delete "{{ deleteTargetName }}"? This action cannot be undone.</p>
-      <template #action>
-        <button @click="showDeleteModal = false" class="px-4 py-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>
-        <button @click="confirmDeleteProject" class="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors">Delete</button>
+    <BaseModal
+      v-model:show="showDeleteModal"
+      title="Delete project"
+      description="This action permanently removes the project from your workspace."
+      size="sm"
+    >
+      <p class="ui-body ui-modal-copy">Delete "{{ deleteTargetName }}"? This action cannot be undone.</p>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton variant="ghost" @click="showDeleteModal = false">Cancel</BaseButton>
+          <BaseButton variant="danger" @click="confirmDeleteProject">Delete</BaseButton>
+        </div>
       </template>
-    </n-modal>
+    </BaseModal>
   </div>
 </template>
 
@@ -286,7 +294,7 @@
  */
 import { computed, ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NIcon, NModal } from 'naive-ui'
+import { NIcon } from 'naive-ui'
 import { 
   AddOutline, 
   AppsOutline,
@@ -307,9 +315,11 @@ import {
 } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useAvatarUpload } from '@/hooks/useAvatarUpload'
+import { BaseButton, BaseInput, BaseModal } from '@/components/ui'
 import ApiSettings from '../components/ApiSettings.vue'
 import AuthDialog from '../components/AuthDialog.vue'
 import { getErrorMessage } from '@/utils'
+import { notifier } from '@/utils/notifier'
 
 const router = useRouter()
 const route = useRoute()
@@ -328,8 +338,8 @@ const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange }
   user,
   updateProfile,
   notify: {
-    success: (message) => window.$message?.success(message),
-    error: (message) => window.$message?.error(message)
+    success: (message) => notifier.success(message),
+    error: (message) => notifier.error(message)
   }
 })
 
@@ -449,7 +459,7 @@ const handleProjectAction = async (key, project) => {
     case 'duplicate':
       const newId = await duplicateProject(project.id)
       if (newId) {
-        window.$message?.success('Project duplicated')
+        notifier.success('Project duplicated')
       }
       break
     case 'delete':
@@ -467,10 +477,10 @@ const confirmDeleteProject = async () => {
   deleteTargetId.value = null
   try {
     await deleteProject(id)
-    window.$message?.success('Project deleted')
+    notifier.success('Project deleted')
   } catch (err) {
     if (!err?.__handled) {
-      window.$message?.error(getErrorMessage(err, 'Delete failed'))
+      notifier.error(getErrorMessage(err, 'Delete failed'))
     }
   }
 }
@@ -479,7 +489,7 @@ const confirmDeleteProject = async () => {
 const confirmRename = async () => {
   if (renameTargetId.value && renameValue.value.trim()) {
     await renameProject(renameTargetId.value, renameValue.value.trim())
-    window.$message?.success('Project renamed')
+    notifier.success('Project renamed')
   }
   showRenameModal.value = false
   renameTargetId.value = null
@@ -493,7 +503,7 @@ const createNewProject = async () => {
     await router.push(`/canvas/${id}`)
   } catch (err) {
     if (!err?.__handled) {
-      window.$message?.error(getErrorMessage(err, 'Failed to create project'))
+      notifier.error(getErrorMessage(err, 'Failed to create project'))
     }
   }
 }
