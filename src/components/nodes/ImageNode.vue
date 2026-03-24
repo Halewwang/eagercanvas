@@ -535,12 +535,6 @@ const previewCanvasStyle = computed(() => ({
   width: `${Math.max(previewViewportSize.value.width, previewRenderedSize.value.width)}px`,
   height: `${Math.max(previewViewportSize.value.height, previewRenderedSize.value.height)}px`
 }))
-watch(previewRenderedSize, () => {
-  if (!showPreviewModal.value) return
-  nextTick(() => {
-    syncPreviewStageSize()
-  })
-})
 const cropStageMetrics = computed(() => {
   const frameWidth = Math.max(1, (Number.parseFloat(stageStyle.value.width) || 0) - 24)
   const frameHeight = Math.max(1, (Number.parseFloat(stageStyle.value.height) || 0) - 24)
@@ -1500,10 +1494,10 @@ const downloadPreviewImage = async () => {
 const syncPreviewStageSize = () => {
   const stage = previewStageRef.value
   if (!stage) return
-  previewStageSize.value = {
-    width: Number(stage.clientWidth) || 0,
-    height: Number(stage.clientHeight) || 0
-  }
+  const width = Number(stage.clientWidth) || 0
+  const height = Number(stage.clientHeight) || 0
+  if (previewStageSize.value.width === width && previewStageSize.value.height === height) return
+  previewStageSize.value = { width, height }
 }
 const centerPreviewViewport = () => {
   const stage = previewStageRef.value
