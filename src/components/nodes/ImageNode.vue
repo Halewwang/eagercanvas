@@ -149,7 +149,7 @@
           </div>
         </div>
         <div ref="previewStageRef" class="zoom-modal-stage">
-          <div class="zoom-stage-canvas">
+          <div class="zoom-stage-canvas" :style="previewCanvasStyle">
             <div class="zoom-image-wrap" :style="previewImageStyle">
               <img
                 :src="data.url"
@@ -282,6 +282,7 @@ const uploadInputRef = ref(null)
 const uploadInputId = `image-upload-${String(props.id || 'node')}`
 const showPreviewModal = ref(false)
 const previewStageRef = ref(null)
+const previewStageSize = ref({ width: 0, height: 0 })
 const previewZoom = ref(1)
 const previewNaturalSize = ref({ width: 0, height: 0 })
 const activeTool = ref('')
@@ -507,15 +508,19 @@ const stageStyle = computed(() => {
 const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
 const progressPercent = computed(() => Math.round(progressValue.value))
 const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
+const previewViewportSize = computed(() => ({
+  width: Math.max(0, previewStageSize.value.width - 40),
+  height: Math.max(0, previewStageSize.value.height - 40)
+}))
 const previewRenderedSize = computed(() => {
   const naturalWidth = previewNaturalSize.value.width || 1
   const naturalHeight = previewNaturalSize.value.height || 1
-  const maxWidth = Math.max(320, window.innerWidth - 180)
-  const maxHeight = Math.max(240, window.innerHeight - 220)
+  const maxWidth = Math.max(320, previewViewportSize.value.width || window.innerWidth - 180)
+  const maxHeight = Math.max(240, previewViewportSize.value.height || window.innerHeight - 220)
   const fitScale = Math.min(maxWidth / naturalWidth, maxHeight / naturalHeight, 1)
   return {
-    width: Math.max(180, Math.round(naturalWidth * fitScale * previewZoom.value)),
-    height: Math.max(180, Math.round(naturalHeight * fitScale * previewZoom.value))
+    width: Math.max(1, Math.round(naturalWidth * fitScale * previewZoom.value)),
+    height: Math.max(1, Math.round(naturalHeight * fitScale * previewZoom.value))
   }
 })
 
@@ -525,6 +530,16 @@ const previewImageStyle = computed(() => {
     width: `${width}px`,
     height: `${height}px`
   }
+})
+const previewCanvasStyle = computed(() => ({
+  width: `${Math.max(previewViewportSize.value.width, previewRenderedSize.value.width)}px`,
+  height: `${Math.max(previewViewportSize.value.height, previewRenderedSize.value.height)}px`
+}))
+watch(previewRenderedSize, () => {
+  if (!showPreviewModal.value) return
+  nextTick(() => {
+    syncPreviewStageSize()
+  })
 })
 const cropStageMetrics = computed(() => {
   const frameWidth = Math.max(1, (Number.parseFloat(stageStyle.value.width) || 0) - 24)
@@ -658,8 +673,14 @@ watch(
 watch(showPreviewModal, (visible) => {
   if (visible) {
     previewZoom.value = 1
+    window.addEventListener('resize', syncPreviewStageSize)
+    nextTick(() => {
+      syncPreviewStageSize()
+      centerPreviewViewport()
+    })
     return
   }
+  window.removeEventListener('resize', syncPreviewStageSize)
   window.removeEventListener('mousemove', onCropPointerMove)
   window.removeEventListener('mouseup', stopCropInteraction)
 })
@@ -693,6 +714,7 @@ onUnmounted(() => {
   window.removeEventListener('mousemove', onCropPointerMove)
   window.removeEventListener('mouseup', stopCropInteraction)
   window.removeEventListener('keydown', handleCropKeydown)
+  window.removeEventListener('resize', syncPreviewStageSize)
 })
 
 const pickNearestSizeKey = (ratioKey, resolutionKey) => {
@@ -1426,6 +1448,10 @@ const handlePreviewImageLoad = (event) => {
     width: Number(target.naturalWidth) || 0,
     height: Number(target.naturalHeight) || 0
   }
+  nextTick(() => {
+    syncPreviewStageSize()
+    if (showPreviewModal.value) centerPreviewViewport()
+  })
   if (activeTool.value === 'crop') {
     initializeCropRect()
   }
@@ -1471,12 +1497,31 @@ const downloadPreviewImage = async () => {
     triggerPreviewDownload(sourceUrl, filename)
   }
 }
+const syncPreviewStageSize = () => {
+  const stage = previewStageRef.value
+  if (!stage) return
+  previewStageSize.value = {
+    width: Number(stage.clientWidth) || 0,
+    height: Number(stage.clientHeight) || 0
+  }
+}
+const centerPreviewViewport = () => {
+  const stage = previewStageRef.value
+  if (!stage) return
+  const canvasWidth = Math.max(previewViewportSize.value.width, previewRenderedSize.value.width)
+  const canvasHeight = Math.max(previewViewportSize.value.height, previewRenderedSize.value.height)
+  const targetLeft = Math.max(0, canvasWidth - stage.clientWidth) / 2
+  const targetTop = Math.max(0, canvasHeight - stage.clientHeight) / 2
+  stage.scrollLeft = targetLeft
+  stage.scrollTop = targetTop
+}
 const setPreviewZoom = (nextZoom) => {
   const normalizedZoom = Math.max(PREVIEW_MIN_ZOOM, Math.min(PREVIEW_MAX_ZOOM, Number(nextZoom.toFixed(2))))
   if (normalizedZoom === previewZoom.value) return
 
   const stage = previewStageRef.value
-  const previousSize = previewRenderedSize.value
+  const previousCanvasWidth = Math.max(previewViewportSize.value.width, previewRenderedSize.value.width)
+  const previousCanvasHeight = Math.max(previewViewportSize.value.height, previewRenderedSize.value.height)
   if (!stage) {
     previewZoom.value = normalizedZoom
     return
@@ -1484,15 +1529,16 @@ const setPreviewZoom = (nextZoom) => {
 
   const viewportCenterX = stage.scrollLeft + (stage.clientWidth / 2)
   const viewportCenterY = stage.scrollTop + (stage.clientHeight / 2)
-  const focusX = previousSize.width > 0 ? viewportCenterX / previousSize.width : 0.5
-  const focusY = previousSize.height > 0 ? viewportCenterY / previousSize.height : 0.5
+  const focusX = previousCanvasWidth > 0 ? viewportCenterX / previousCanvasWidth : 0.5
+  const focusY = previousCanvasHeight > 0 ? viewportCenterY / previousCanvasHeight : 0.5
 
   previewZoom.value = normalizedZoom
 
   nextTick(() => {
-    const nextSize = previewRenderedSize.value
-    const targetLeft = (nextSize.width * focusX) - (stage.clientWidth / 2)
-    const targetTop = (nextSize.height * focusY) - (stage.clientHeight / 2)
+    const nextCanvasWidth = Math.max(previewViewportSize.value.width, previewRenderedSize.value.width)
+    const nextCanvasHeight = Math.max(previewViewportSize.value.height, previewRenderedSize.value.height)
+    const targetLeft = (nextCanvasWidth * focusX) - (stage.clientWidth / 2)
+    const targetTop = (nextCanvasHeight * focusY) - (stage.clientHeight / 2)
     stage.scrollLeft = Math.max(0, targetLeft)
     stage.scrollTop = Math.max(0, targetTop)
   })
@@ -1771,16 +1817,14 @@ const handleMultiAngleError = async (payload = {}) => {
 }
 
 .zoom-stage-canvas {
-  min-width: 100%;
-  min-height: 100%;
-  display: flex;
+  display: grid;
+  place-items: center;
 }
 
 .zoom-image-wrap {
   position: relative;
   width: max-content;
   height: max-content;
-  margin: auto;
 }
 
 .zoom-image-original {
