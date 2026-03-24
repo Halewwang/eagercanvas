@@ -7,20 +7,31 @@
       <div class="absolute left-4 top-4 z-20 flex items-center gap-2">
         <div class="flora-panel rounded-full p-1.5">
           <button
-            @click="goBack"
-            class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--bg-tertiary)] transition-colors"
-            title="Back"
+            @click="goHome"
+            class="h-9 flex items-center gap-2 px-3 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors"
+            title="Home"
           >
             <n-icon :size="18"><ChevronBackOutline /></n-icon>
+            <span class="text-sm font-medium">Home</span>
           </button>
         </div>
         <div class="flora-panel rounded-full p-1.5">
-          <n-dropdown :options="projectOptions" @select="handleProjectAction">
+          <button
+            @click="goWorkspace"
+            class="h-9 flex items-center gap-2 px-3 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors"
+            title="Workspace"
+          >
+            <n-icon :size="16"><FolderOutline /></n-icon>
+            <span class="text-sm font-medium">Workspace</span>
+          </button>
+        </div>
+        <div class="flora-panel rounded-full p-1.5">
+          <BaseDropdown :options="projectOptions" @select="handleProjectAction">
             <button class="h-9 flex items-center gap-2 px-3 rounded-full hover:bg-[var(--bg-tertiary)] transition-colors">
               <span class="text-sm font-medium">{{ projectName }}</span>
               <n-icon :size="16"><ChevronDownOutline /></n-icon>
             </button>
-          </n-dropdown>
+          </BaseDropdown>
         </div>
       </div>
 
@@ -275,122 +286,111 @@
     <ApiSettings v-model:show="showApiSettings" />
 
     <!-- Rename Modal | 重命名弹窗 -->
-    <n-modal v-model:show="showRenameModal" :mask-closable="true">
-      <div class="ec-modal canvas-modal canvas-modal-sm">
-        <div class="ec-modal-header">
-          <h2 class="ec-modal-title">Rename Project</h2>
-          <button class="ec-modal-close" @click="showRenameModal = false" aria-label="Close">
-            <n-icon :size="20"><CloseOutline /></n-icon>
-          </button>
+    <BaseModal
+      v-model:show="showRenameModal"
+      title="Rename project"
+      description="Update the project name shown in the canvas."
+      size="sm"
+    >
+      <BaseInput v-model="renameValue" placeholder="Enter project name" />
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton variant="ghost" @click="showRenameModal = false">Cancel</BaseButton>
+          <BaseButton @click="confirmRename">Save</BaseButton>
         </div>
-        <div class="ec-modal-body">
-          <section class="ec-modal-section">
-            <n-input v-model:value="renameValue" placeholder="Enter project name" />
-          </section>
-        </div>
-        <div class="ec-modal-actions">
-          <button class="ec-btn ec-btn-secondary" @click="showRenameModal = false">Cancel</button>
-          <button class="ec-btn ec-btn-primary" @click="confirmRename">Save</button>
-        </div>
-      </div>
-    </n-modal>
+      </template>
+    </BaseModal>
 
     <!-- Delete Confirm Modal | 删除确认弹窗 -->
-    <n-modal v-model:show="showDeleteModal" :mask-closable="true">
-      <div class="ec-modal canvas-modal canvas-modal-sm">
-        <div class="ec-modal-header">
-          <h2 class="ec-modal-title">Delete Project</h2>
-          <button class="ec-modal-close" @click="showDeleteModal = false" aria-label="Close">
-            <n-icon :size="20"><CloseOutline /></n-icon>
-          </button>
+    <BaseModal
+      v-model:show="showDeleteModal"
+      title="Delete project"
+      description="This action permanently removes the current canvas project."
+      size="sm"
+    >
+      <p class="ui-body ui-modal-copy">Delete "{{ projectName }}"? This action cannot be undone.</p>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton variant="ghost" @click="showDeleteModal = false">Cancel</BaseButton>
+          <BaseButton variant="danger" @click="confirmDelete">Delete</BaseButton>
         </div>
-        <div class="ec-modal-body">
-          <section class="ec-modal-section">
-            <p class="modal-copy">Delete "{{ projectName }}"? This action cannot be undone.</p>
-          </section>
-        </div>
-        <div class="ec-modal-actions">
-          <button class="ec-btn ec-btn-secondary" @click="showDeleteModal = false">Cancel</button>
-          <button class="ec-btn ec-btn-danger" @click="confirmDelete">Delete</button>
-        </div>
-      </div>
-    </n-modal>
+      </template>
+    </BaseModal>
 
-    <n-modal v-model:show="showGroupRenameModal" :mask-closable="true">
-      <div class="ec-modal canvas-modal canvas-modal-sm">
-        <div class="ec-modal-header">
-          <h2 class="ec-modal-title">Rename Group</h2>
-          <button class="ec-modal-close" @click="showGroupRenameModal = false" aria-label="Close">
-            <n-icon :size="20"><CloseOutline /></n-icon>
-          </button>
+    <BaseModal
+      v-model:show="showGroupRenameModal"
+      title="Rename group"
+      description="Update the selected group label."
+      size="sm"
+    >
+      <BaseInput v-model="groupRenameValue" placeholder="Enter group name" @keyup.enter="confirmRenameGroup" />
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton variant="ghost" @click="showGroupRenameModal = false">Cancel</BaseButton>
+          <BaseButton @click="confirmRenameGroup">Save</BaseButton>
         </div>
-        <div class="ec-modal-body">
-          <section class="ec-modal-section">
-            <n-input v-model:value="groupRenameValue" placeholder="Enter group name" @keyup.enter="confirmRenameGroup" />
-          </section>
-        </div>
-        <div class="ec-modal-actions">
-          <button class="ec-btn ec-btn-secondary" @click="showGroupRenameModal = false">Cancel</button>
-          <button class="ec-btn ec-btn-primary" @click="confirmRenameGroup">Save</button>
-        </div>
-      </div>
-    </n-modal>
+      </template>
+    </BaseModal>
 
     <!-- Workflow Panel | 工作流面板 -->
     <WorkflowPanel v-model:show="showWorkflowPanel" @add-workflow="handleAddWorkflow" />
 
-    <n-modal v-model:show="showShareModal" :mask-closable="true">
-      <div class="ec-modal canvas-modal canvas-share-modal">
-        <div class="ec-modal-header">
-          <h2 class="ec-modal-title">Share</h2>
-          <button class="ec-modal-close" @click="showShareModal = false" aria-label="Close">
-            <n-icon :size="20"><CloseOutline /></n-icon>
-          </button>
-        </div>
-        <div class="ec-modal-body share-panel">
-          <section class="ec-modal-section share-section">
+    <BaseModal
+      v-model:show="showShareModal"
+      title="Share"
+      description="Publish a read-only link or save this canvas as a reusable template."
+      size="sm"
+    >
+      <div class="share-panel">
+        <section class="share-section">
           <div class="share-row">
-            <h3>Share a Link</h3>
+            <div class="share-heading">
+              <h3>Share a Link</h3>
+              <p>Share a read-only link to your canvas.</p>
+            </div>
             <button class="toggle-btn" :class="{ on: shareLinkEnabled }" @click="shareLinkEnabled = !shareLinkEnabled">
               <span />
             </button>
           </div>
-          <p>Share a read-only link to your canvas.</p>
           <div class="share-link-box">
             <span class="share-link-text">{{ shareLinkUrl }}</span>
-            <button class="ec-btn ec-btn-secondary copy-btn" @click="copyShareLink">Copy Link</button>
+            <BaseButton variant="secondary" size="sm" class="share-copy-btn" @click="copyShareLink">Copy Link</BaseButton>
           </div>
         </section>
 
-        <section class="ec-modal-section share-section">
+        <section class="share-section">
           <div class="share-row">
-            <h3>Allow Remixing</h3>
+            <div class="share-heading">
+              <h3>Allow Remixing</h3>
+              <p>When enabled, this project is published to Featured templates.</p>
+            </div>
             <button class="toggle-btn" :class="{ on: allowRemixing }" @click="allowRemixing = !allowRemixing">
               <span />
             </button>
           </div>
-          <p>When enabled, this project is published to Featured templates.</p>
         </section>
 
-        <section class="ec-modal-section share-section">
-          <h3>Change Appearance</h3>
-          <p>Set how this shared project appears in My Templates.</p>
-          <n-input v-model:value="shareTemplateName" placeholder="Template title" />
-          <n-input
-            v-model:value="shareTemplateDescription"
-            type="textarea"
+        <section class="share-section share-form-section">
+          <div class="share-heading">
+            <h3>Change Appearance</h3>
+            <p>Set how this shared project appears in My Templates.</p>
+          </div>
+          <BaseInput v-model="shareTemplateName" placeholder="Template title" />
+          <textarea
+            v-model="shareTemplateDescription"
             placeholder="Template description"
-            :autosize="{ minRows: 3, maxRows: 5 }"
-            class="mt-2"
+            rows="4"
+            class="share-textarea ui-body"
           />
         </section>
       </div>
-      <div class="ec-modal-actions">
-        <button class="ec-btn ec-btn-secondary" @click="showShareModal = false">Cancel</button>
-        <button class="ec-btn ec-btn-primary" @click="saveSharedTemplate">Save To My Templates</button>
-      </div>
-      </div>
-    </n-modal>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton variant="ghost" @click="showShareModal = false">Cancel</BaseButton>
+          <BaseButton @click="saveSharedTemplate">Save To My Templates</BaseButton>
+        </div>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -404,7 +404,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
-import { NIcon, NDropdown, NModal, NInput } from 'naive-ui'
+import { NIcon } from 'naive-ui'
 import { 
   AppsOutline,
   ChevronBackOutline,
@@ -458,6 +458,7 @@ import { getWorkflowById } from '@/config/workflows'
 import { initProjectsStore } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkflowsStore } from '@/stores/workflows'
+import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 
 // API Settings component | API 设置组件
 import ApiSettings from '../components/ApiSettings.vue'
@@ -1166,10 +1167,15 @@ const handleGlobalKeydown = (event) => {
   removeSelectedElements()
 }
 
-// Go back to home | 返回首页
-const goBack = () => {
+// Go home | 返回首页
+const goHome = () => {
   flushSave()
   router.push('/')
+}
+
+const goWorkspace = () => {
+  flushSave()
+  router.push('/workspace')
 }
 
 // Check if mobile | 检测是否移动端
@@ -1291,64 +1297,68 @@ onUnmounted(() => {
 .share-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.canvas-modal {
-  width: min(760px, calc(100vw - 48px));
-}
-
-.canvas-modal-sm {
-  width: min(520px, calc(100vw - 48px));
-  min-height: auto;
-}
-
-.canvas-share-modal {
-  width: min(860px, calc(100vw - 48px));
+  gap: 0;
 }
 
 .share-section {
-  border-color: rgba(143, 143, 143, 0.24);
-  background: rgba(12, 12, 12, 0.96);
+  padding: 20px 0;
+}
+
+.share-section + .share-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.share-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.share-heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .share-section h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
 }
 
-.share-section p {
-  margin: 10px 0 0;
-  color: #9ca3af;
+.share-heading p {
+  margin: 0;
+  color: var(--text-muted);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .share-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
 }
 
 .toggle-btn {
-  width: 46px;
-  height: 26px;
+  width: 42px;
+  height: 24px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: #1c1c1c;
   padding: 2px;
   position: relative;
   cursor: pointer;
+  flex-shrink: 0;
   transition: background 0.18s ease, border-color 0.18s ease;
 }
 
 .toggle-btn span {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: #fff;
   transition: transform 0.18s;
@@ -1360,120 +1370,54 @@ onUnmounted(() => {
 }
 
 .toggle-btn.on span {
-  transform: translateX(20px);
+  transform: translateX(18px);
   background: #111111;
 }
 
 .share-link-box {
-  margin-top: 10px;
+  margin-top: 12px;
   border: 1px solid rgba(143, 143, 143, 0.24);
-  border-radius: 10px;
+  border-radius: 18px;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 8px 8px 8px 14px;
   background: #0e0e0e;
 }
 
 .share-link-text {
   flex: 1;
-  font-size: 12px;
-  color: var(--text-secondary);
+  font-size: 13px;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.copy-btn {
-  min-width: 102px;
-  border-radius: 10px;
-  height: 34px;
-  padding: 0 10px;
-  font-size: 12px;
-  border-color: rgba(255, 255, 255, 0.18);
-  background: #181818;
-  color: #f5f5f5;
+.share-copy-btn {
+  min-width: 108px;
 }
 
-.modal-copy {
-  margin: 0;
-  color: #d7dbe3;
-  font-size: 14px;
+.share-textarea {
+  min-height: 96px;
+  width: 100%;
+  resize: none;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 14px 16px;
+  color: var(--text);
+  outline: none;
+  transition: all 0.2s ease;
 }
 
-.canvas-modal :deep(.n-input),
-.canvas-modal :deep(.n-input-wrapper),
-.canvas-modal :deep(.n-input .n-input__textarea-el),
-.canvas-modal :deep(.n-input .n-input__input-el) {
-  color: #f2f3f5;
+.share-textarea::placeholder {
+  color: var(--text-soft);
 }
 
-.canvas-modal :deep(.n-input) {
-  background: #0f0f0f;
-  border-radius: 10px;
-  --n-color: #111214 !important;
-  --n-color-disabled: #111214 !important;
-  --n-color-hover: #111214 !important;
-  --n-border: rgba(143, 143, 143, 0.24) !important;
-  --n-border-hover: rgba(186, 190, 196, 0.34) !important;
-  --n-border-focus: rgba(212, 198, 182, 0.68) !important;
-  --n-box-shadow-focus: 0 0 0 1px rgba(165, 129, 99, 0.22) !important;
-  --n-color-focus: #111214 !important;
-  --n-color-focus-warning: #111214 !important;
-  --n-color-focus-error: #111214 !important;
-}
-
-.canvas-modal :deep(.n-input .n-input__border),
-.canvas-modal :deep(.n-input .n-input__state-border) {
-  border-color: rgba(143, 143, 143, 0.24);
-}
-
-.canvas-modal :deep(.n-input-wrapper),
-.canvas-modal :deep(.n-input__textarea),
-.canvas-modal :deep(.n-input__textarea-el),
-.canvas-modal :deep(.n-input__input-el) {
-  background: #111214 !important;
-}
-
-.canvas-share-modal :deep(.n-input-wrapper),
-.canvas-share-modal :deep(.n-input__textarea),
-.canvas-share-modal :deep(.n-input__textarea-el),
-.canvas-share-modal :deep(.n-input__input-el) {
-  background: #111214 !important;
-}
-
-.canvas-share-modal :deep(.n-input.n-input--focus),
-.canvas-share-modal :deep(.n-input.n-input--focus .n-input__state-border),
-.canvas-share-modal :deep(.n-input.n-input--focus .n-input__border) {
-  border-color: rgba(212, 198, 182, 0.68) !important;
-  box-shadow: 0 0 0 1px rgba(165, 129, 99, 0.22) !important;
-}
-
-.canvas-share-modal :deep(.n-input__input-el::placeholder),
-.canvas-share-modal :deep(.n-input__textarea-el::placeholder) {
-  color: #6b7280;
-}
-
-.canvas-share-modal .ec-btn-primary {
-  background: #f5f5f5;
-  border-color: #f5f5f5;
-  color: #111111;
-}
-
-.canvas-share-modal .ec-btn-primary:hover:not(:disabled) {
-  background: #ffffff;
-  border-color: #ffffff;
-}
-
-.canvas-share-modal .ec-btn-secondary {
-  background: #181818;
-  border-color: rgba(255, 255, 255, 0.18);
-  color: #f3f4f6;
-}
-
-.canvas-share-modal .ec-btn-secondary:hover:not(:disabled) {
-  background: #242424;
-  border-color: rgba(255, 255, 255, 0.28);
+.share-textarea:focus {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
 }
 
 .node-menu-header {

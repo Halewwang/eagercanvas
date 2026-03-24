@@ -8,7 +8,7 @@
         </div>
         <div class="flex items-center gap-2">
           <button class="flora-button-ghost px-4 py-2 rounded-xl" @click="goAdmin">Admin Console</button>
-          <button class="flora-button-ghost px-4 py-2 rounded-xl" @click="goHome">Back</button>
+          <button class="flora-button-ghost px-4 py-2 rounded-xl" @click="goHome">Home</button>
         </div>
       </div>
 

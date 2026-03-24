@@ -73,7 +73,7 @@
                 </button>
                 <button v-if="canReadUsers" class="ui-action-btn whitespace-nowrap" @click="scrollToSection('users')">用户管理</button>
                 <button v-if="showServiceSection" class="ui-action-btn whitespace-nowrap" @click="scrollToSection('service')">服务运维</button>
-                <button class="ui-action-btn whitespace-nowrap" @click="goHome">返回</button>
+                <button class="ui-action-btn whitespace-nowrap" @click="goHome">返回首页</button>
               </div>
             </div>
           </header>

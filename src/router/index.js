@@ -17,7 +17,8 @@ const routes = [
   },
   {
     path: '/',
-    redirect: '/canvas'
+    name: 'Home',
+    component: () => import('../views/Home.vue')
   },
   {
     path: '/canvas/:id?',

@@ -6,7 +6,7 @@
           <h1 class="text-3xl font-light">Usage Admin</h1>
           <p class="text-[var(--text-secondary)]">Independent admin login for Eager Service key management and user consumption view.</p>
         </div>
-        <button class="flora-button-ghost px-4 py-2 rounded-xl" @click="goHome">Back</button>
+        <button class="flora-button-ghost px-4 py-2 rounded-xl" @click="goHome">Home</button>
       </div>
 
       <div v-if="!isAdminAuthenticated" class="flora-panel rounded-2xl p-6 max-w-md mx-auto">
