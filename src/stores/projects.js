@@ -139,17 +139,41 @@ const toTs = (value) => {
   return Number.isFinite(ts) ? ts : 0
 }
 
+const hasCanvasContent = (canvasData) => {
+  const nodes = Array.isArray(canvasData?.nodes) ? canvasData.nodes.length : 0
+  const edges = Array.isArray(canvasData?.edges) ? canvasData.edges.length : 0
+  const groups = Array.isArray(canvasData?.groups) ? canvasData.groups.length : 0
+  return nodes > 0 || edges > 0 || groups > 0
+}
+
+const mergeRemoteProjectWithLocalDraft = (remote, local) => {
+  if (!local) return remote
+
+  const remoteTs = toTs(remote.updatedAt)
+  const localTs = toTs(local.updatedAt)
+  if (localTs <= remoteTs) return remote
+
+  const next = {
+    ...remote,
+    name: String(local.name || '').trim() || remote.name,
+    thumbnail: String(local.thumbnail || '').trim() || remote.thumbnail,
+    updatedAt: local.updatedAt || remote.updatedAt
+  }
+
+  // Prefer authoritative cloud canvas data.
+  // Only reuse local canvas content when cloud data is still empty.
+  if (!hasCanvasContent(remote.canvasData) && hasCanvasContent(local.canvasData)) {
+    next.canvasData = local.canvasData
+  }
+
+  return next
+}
+
 const mergeRemoteWithLocalDrafts = (remoteProjects, localProjects) => {
   const localMap = new Map((localProjects || []).map((p) => [p.id, p]))
   const merged = (remoteProjects || []).map((remote) => {
     const local = localMap.get(remote.id)
-    if (!local) return remote
-
-    const remoteTs = toTs(remote.updatedAt)
-    const localTs = toTs(local.updatedAt)
-    // Keep local draft when it is newer than cloud data.
-    if (localTs > remoteTs) return local
-    return remote
+    return mergeRemoteProjectWithLocalDraft(remote, local)
   })
 
   // Keep local-only drafts when cloud list temporarily misses them.

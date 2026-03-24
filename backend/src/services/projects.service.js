@@ -20,6 +20,13 @@ const normalizeThumbnailUrl = (value) => {
   return /^https?:\/\//i.test(raw) ? raw : null
 }
 
+const hasCanvasContent = (canvasData) => {
+  const nodes = Array.isArray(canvasData?.nodes) ? canvasData.nodes.length : 0
+  const edges = Array.isArray(canvasData?.edges) ? canvasData.edges.length : 0
+  const groups = Array.isArray(canvasData?.groups) ? canvasData.groups.length : 0
+  return nodes > 0 || edges > 0 || groups > 0
+}
+
 export const listProjects = async (userId) => {
   const { data, error } = await supabase
     .from('projects')
@@ -65,6 +72,17 @@ export const createProject = async (userId, input) => {
 
 export const updateProject = async (userId, id, input) => {
   const payload = updateSchema.parse(input)
+
+  if (payload.canvasData !== undefined && !hasCanvasContent(payload.canvasData)) {
+    const existingProject = await getProject(userId, id)
+    if (hasCanvasContent(existingProject.canvas_json)) {
+      throw new HttpError(
+        409,
+        'Blocked an empty canvas overwrite because this project already has saved content. Please refresh and try again.',
+        'EMPTY_CANVAS_OVERWRITE_BLOCKED'
+      )
+    }
+  }
 
   const patch = {
     updated_at: new Date().toISOString()

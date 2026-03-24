@@ -596,6 +596,8 @@ export const saveProject = async () => {
         // Handle conflict: Show dialog to user
         window.$message?.error('Project has been updated elsewhere. Please refresh.')
         // Ideally show a modal to chose: Overwrite or Refresh
+      } else if (error.code === 'EMPTY_CANVAS_OVERWRITE_BLOCKED') {
+        window.$message?.error('Blocked a risky empty-canvas save. Please refresh the project.')
       } else {
         console.error('Save failed:', error)
       }
