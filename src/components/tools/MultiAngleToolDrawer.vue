@@ -4,6 +4,7 @@
       <div class="multi-angle-float">
         <div class="multi-angle-shell">
           <div class="multi-angle-panel">
+            <div class="multi-angle-panel-scroll">
         <section class="multi-angle-section multi-angle-section-first">
           <div class="section-heading">
             <span class="section-title">Input Image</span>
@@ -182,6 +183,7 @@
             </div>
           </div>
         </section>
+            </div>
         </div>
         <div class="drawer-footer">
           <div class="footer-actions">
@@ -621,16 +623,17 @@ onUnmounted(() => {
   top: 88px;
   right: 24px;
   width: min(468px, calc(100vw - 48px));
-  max-height: calc(100vh - 36px);
-  overflow: auto;
+  max-height: calc(100vh - 112px);
   pointer-events: auto;
 }
 
 .multi-angle-shell {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px;
+  gap: 0;
+  max-height: 100%;
+  overflow: hidden;
+  padding: 16px 16px 14px;
   border-radius: 24px;
   border: 1px solid rgba(143, 143, 143, 0.14);
   background: rgba(12, 13, 15, 0.96);
@@ -638,10 +641,18 @@ onUnmounted(() => {
 }
 
 .multi-angle-panel {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   border-radius: 20px;
   border: 1px solid rgba(143, 143, 143, 0.12);
   background: #111214;
+}
+
+.multi-angle-panel-scroll {
+  max-height: calc(100vh - 226px);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .multi-angle-section {
@@ -981,13 +992,72 @@ onUnmounted(() => {
 }
 
 .drawer-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   justify-content: flex-end;
-  width: 100%;
-  padding-top: 2px;
+  padding-top: 14px;
+  margin-top: 14px;
+  background: linear-gradient(180deg, rgba(12, 13, 15, 0) 0%, rgba(12, 13, 15, 0.92) 22%, rgba(12, 13, 15, 0.96) 100%);
 }
 
 .footer-actions {
-  margin-left: auto;
   justify-content: flex-end;
+  width: 100%;
+}
+
+@media (max-width: 1440px) {
+  .multi-angle-float {
+    top: 84px;
+    right: 16px;
+    width: min(440px, calc(100vw - 32px));
+    max-height: calc(100vh - 104px);
+  }
+
+  .multi-angle-panel-scroll {
+    max-height: calc(100vh - 212px);
+  }
+}
+
+@media (max-width: 1180px) {
+  .multi-angle-float {
+    top: 76px;
+    right: 12px;
+    width: min(408px, calc(100vw - 24px));
+    max-height: calc(100vh - 92px);
+  }
+
+  .multi-angle-shell {
+    padding: 12px 12px 10px;
+    border-radius: 20px;
+  }
+
+  .multi-angle-panel-scroll {
+    max-height: calc(100vh - 188px);
+  }
+
+  .multi-angle-section {
+    padding: 14px 14px 16px;
+  }
+
+  .section-divider {
+    margin: 0 14px;
+  }
+
+  .drawer-footer {
+    padding-top: 12px;
+    margin-top: 12px;
+  }
+}
+
+@media (max-height: 860px) {
+  .multi-angle-float {
+    top: 72px;
+    max-height: calc(100vh - 84px);
+  }
+
+  .multi-angle-panel-scroll {
+    max-height: calc(100vh - 168px);
+  }
 }
 </style>
