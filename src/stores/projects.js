@@ -350,12 +350,15 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
     // updatedAt: new Date().toISOString() 
   }
 
+  // Always keep the latest canvas snapshot in local draft cache first.
+  // This avoids losing recent nodes on refresh when the remote save fails.
+  const localIdx = projects.value.findIndex((p) => p.id === id)
+  if (localIdx !== -1) {
+    projects.value[localIdx] = next
+    saveLocalCache()
+  }
+
   if (BYPASS_AUTH_IN_DEV) {
-    const idx = projects.value.findIndex((p) => p.id === id)
-    if (idx !== -1) {
-      projects.value[idx] = next
-      saveLocalCache()
-    }
     return next
   }
 

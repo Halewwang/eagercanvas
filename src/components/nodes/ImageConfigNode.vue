@@ -583,12 +583,19 @@ const handleGenerate = async (mode = 'auto') => {
         loading: false,
         label: 'Text to Image',
         model: localModel.value,
+        persistStatus: 'saving',
+        persistError: '',
         updatedAt: Date.now()
       })
       
       // Mark this config node as executed | 标记配置节点已执行
       updateNode(props.id, { status: 'completed', executed: true, outputNodeId: imageNodeId, error: '' })
-      await saveProject()
+      const savedOk = await saveProject()
+      updateNode(imageNodeId, {
+        persistStatus: savedOk ? 'saved' : 'error',
+        persistError: savedOk ? '' : 'Project save failed. Refresh may lose this image.',
+        updatedAt: Date.now()
+      })
     }
     window.$message?.success('Image generated')
   } catch (err) {
@@ -597,6 +604,8 @@ const handleGenerate = async (mode = 'auto') => {
     updateNode(imageNodeId, {
       loading: false,
       error: err.message || 'Generation failed',
+      persistStatus: 'error',
+      persistError: err.message || 'Generation failed',
       updatedAt: Date.now()
     })
     window.$message?.error(err.message || 'Image generation failed')
