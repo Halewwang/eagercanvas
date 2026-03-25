@@ -5,6 +5,7 @@ import { env } from '../config/env.js'
 import { randomCode, randomToken, sha256 } from '../utils/crypto.js'
 import { HttpError } from '../utils/http.js'
 import { sendVerificationCodeEmail } from './email.service.js'
+import { resolveUserProviderAccess } from './admin-usage.service.js'
 
 const CODE_PURPOSES = {
   LOGIN: 'login',
@@ -186,6 +187,23 @@ const markLogin = async ({ userId }) => {
   return data
 }
 
+const buildUserPayload = async (user, profile) => {
+  const providerAccess = await resolveUserProviderAccess(user.id)
+  const assignedApiNames = Array.isArray(providerAccess?.assignedApiNames) ? providerAccess.assignedApiNames : []
+
+  return {
+    id: user.id,
+    email: user.email,
+    displayName: profile?.display_name || null,
+    avatarUrl: profile?.avatar_url || null,
+    createdAt: user.created_at,
+    registeredAt: profile?.registered_at || null,
+    lastLoginAt: profile?.last_login_at || null,
+    assignedApiName: providerAccess?.apiName || null,
+    assignedApiNames
+  }
+}
+
 const buildAuthResult = async ({ user, ip, action }) => {
   await ensureDefaultUserRole(user.id)
 
@@ -203,15 +221,7 @@ const buildAuthResult = async ({ user, ip, action }) => {
   return {
     accessToken,
     refreshToken,
-    user: {
-      id: user.id,
-      email: user.email,
-      displayName: profile?.display_name || null,
-      avatarUrl: profile?.avatar_url || null,
-      createdAt: user.created_at,
-      registeredAt: profile?.registered_at || null,
-      lastLoginAt: profile?.last_login_at || null
-    }
+    user: await buildUserPayload(user, profile)
   }
 }
 
@@ -384,15 +394,7 @@ export const refreshAccessToken = async ({ refreshToken }) => {
 
   return {
     accessToken: signAccessToken(user, profile),
-    user: {
-      id: user.id,
-      email: user.email,
-      displayName: profile?.display_name || null,
-      avatarUrl: profile?.avatar_url || null,
-      createdAt: user.created_at,
-      registeredAt: profile?.registered_at || null,
-      lastLoginAt: profile?.last_login_at || null
-    }
+    user: await buildUserPayload(user, profile)
   }
 }
 
@@ -401,15 +403,7 @@ export const getMe = async ({ userId }) => {
   ensureUserCanAccess(user)
   const profile = await getProfileByUserId(user.id)
 
-  return {
-    id: user.id,
-    email: user.email,
-    displayName: profile?.display_name || null,
-    avatarUrl: profile?.avatar_url || null,
-    createdAt: user.created_at,
-    registeredAt: profile?.registered_at || null,
-    lastLoginAt: profile?.last_login_at || null
-  }
+  return buildUserPayload(user, profile)
 }
 
 export const updateProfile = async ({ userId, input }) => {
@@ -439,15 +433,7 @@ export const updateProfile = async ({ userId, input }) => {
 
   if (error) throw new HttpError(500, error.message, 'PROFILE_UPDATE_FAILED')
 
-  return {
-    id: user.id,
-    email: user.email,
-    displayName: data?.display_name || null,
-    avatarUrl: data?.avatar_url || null,
-    createdAt: user.created_at,
-    registeredAt: data?.registered_at || null,
-    lastLoginAt: data?.last_login_at || null
-  }
+  return buildUserPayload(user, data)
 }
 
 export const logout = async ({ refreshToken }) => {

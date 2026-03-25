@@ -115,6 +115,17 @@ export const useAuthStore = () => {
     bootstrapped.value = true
   }
 
+  const refreshUser = async () => {
+    if (!isAuthenticated.value) {
+      user.value = null
+      return null
+    }
+
+    const me = await getMe()
+    user.value = me.user
+    return user.value
+  }
+
   const loadAdminSession = async ({ force = false } = {}) => {
     if (!isAuthenticated.value) {
       adminUser.value = null
@@ -180,6 +191,7 @@ export const useAuthStore = () => {
     verifyCode,
     verifyRegister,
     bootstrapAuth,
+    refreshUser,
     loadAdminSession,
     hasPermission,
     logout,

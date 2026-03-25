@@ -19,6 +19,7 @@ import {
   getAdminUsageTimeseries,
   listAdminOperationLogs,
   listUsersForAdmin,
+  removeApiKeyAssignments,
   unassignApiKeyFromUser,
   updateUserStatus,
   updateUserRoles
@@ -199,5 +200,6 @@ adminRouter.put('/302/api-keys/:apiName', requirePermission(['admin.api_key.mana
 
 adminRouter.delete('/302/api-keys/:apiName', requirePermission(['admin.api_key.manage']), asyncHandler(async (req, res) => {
   const result = await delete302ApiKey(req.params.apiName)
+  await removeApiKeyAssignments(req.params.apiName)
   res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
 }))

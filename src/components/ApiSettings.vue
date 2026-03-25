@@ -31,6 +31,11 @@
           <span class="field-label ui-label">User UID</span>
           <BaseInput :model-value="formData.userId" readonly />
         </label>
+
+        <label class="field-block field-block-full">
+          <span class="field-label ui-label">Assigned API</span>
+          <BaseInput :model-value="formData.assignedApiLabel" readonly />
+        </label>
       </section>
     </div>
 
@@ -59,7 +64,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show', 'saved'])
 
-const { user, updateProfile } = useAuthStore()
+const { user, updateProfile, refreshUser } = useAuthStore()
 
 const showModal = ref(props.show)
 const saving = ref(false)
@@ -70,7 +75,8 @@ const hasAvatarChange = ref(false)
 const formData = reactive({
   profileId: '',
   email: '',
-  userId: ''
+  userId: '',
+  assignedApiLabel: ''
 })
 
 const avatarInitial = computed(() => (formData.profileId || formData.email || 'U').charAt(0).toUpperCase())
@@ -80,15 +86,25 @@ const syncForm = () => {
   formData.profileId = current.displayName || ''
   formData.email = current.email || ''
   formData.userId = current.id || ''
+  formData.assignedApiLabel = Array.isArray(current.assignedApiNames) && current.assignedApiNames.length
+    ? current.assignedApiNames.join(', ')
+    : 'Not assigned'
   avatarPreview.value = current.avatarUrl || ''
   hasAvatarChange.value = false
 }
 
 watch(
   () => props.show,
-  (val) => {
+  async (val) => {
     showModal.value = val
-    if (val) syncForm()
+    if (val) {
+      try {
+        await refreshUser()
+      } catch {
+        // ignore refresh failures and fall back to current store snapshot
+      }
+      syncForm()
+    }
   }
 )
 

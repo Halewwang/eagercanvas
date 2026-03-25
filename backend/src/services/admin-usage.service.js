@@ -1,6 +1,6 @@
 import { supabase } from '../config/supabase.js'
 import { invalidateUserAuthzCache } from './rbac.service.js'
-import { get302RuntimeApiKeyByName } from './dashboard302.service.js'
+import { get302ApiKeys, get302RuntimeApiKeyByName } from './dashboard302.service.js'
 import { HttpError } from '../utils/http.js'
 
 const ASSIGNMENT_TABLE = 'user_api_key_assignments'
@@ -34,6 +34,20 @@ const loadAssignments = async () => {
   return Array.isArray(data) ? data : []
 }
 
+const loadActiveApiKeyNames = async () => {
+  try {
+    const response = await get302ApiKeys()
+    const list = Array.isArray(response?.data) ? response.data : (Array.isArray(response) ? response : [])
+    return new Set(
+      list
+        .map((item) => String(item?.api_name || '').trim())
+        .filter(Boolean)
+    )
+  } catch {
+    return null
+  }
+}
+
 export const getUserAssignedApiKeys = async (userId) => {
   const safeUserId = String(userId || '').trim()
   if (!safeUserId) return []
@@ -49,7 +63,10 @@ export const getUserAssignedApiKeys = async (userId) => {
     throw new HttpError(500, error.message, 'ASSIGNMENT_QUERY_FAILED')
   }
 
-  return Array.isArray(data) ? data : []
+  const list = Array.isArray(data) ? data : []
+  const activeApiKeyNames = await loadActiveApiKeyNames()
+  if (!activeApiKeyNames) return list
+  return list.filter((item) => activeApiKeyNames.has(String(item.api_name || '').trim()))
 }
 
 export const resolveUserProviderAccess = async (userId, requestedApiName = '') => {
@@ -153,7 +170,7 @@ const toIsoDateEnd = (value) => {
 }
 
 export const listUsersForAdmin = async () => {
-  const [usersRes, profilesRes, dailyAggRes, assignments, usageEventsRes] = await Promise.all([
+  const [usersRes, profilesRes, dailyAggRes, assignments, usageEventsRes, activeApiKeyNames] = await Promise.all([
     supabase.from('users').select('*').order('created_at', { ascending: false }),
     supabase.from('user_profiles').select('user_id, display_name, registered_at, last_login_at'),
     supabase.from('usage_daily_agg').select('user_id, total_calls, total_tokens, total_images, total_video_seconds, total_cost_usd'),
@@ -161,7 +178,8 @@ export const listUsersForAdmin = async () => {
     supabase
       .from('usage_events')
       .select('user_id, api_name, cost_usd, billing_status, created_at')
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }),
+    loadActiveApiKeyNames()
   ])
 
   if (usersRes.error) throw new HttpError(500, usersRes.error.message, 'USERS_QUERY_FAILED')
@@ -193,12 +211,16 @@ export const listUsersForAdmin = async () => {
 
   const assignmentMap = new Map()
   for (const row of assignments) {
+    const apiName = String(row.api_name || '').trim()
+    if (!apiName) continue
+    if (activeApiKeyNames && !activeApiKeyNames.has(apiName)) continue
     const list = assignmentMap.get(row.user_id) || []
-    list.push({ apiName: row.api_name, createdAt: row.created_at })
+    list.push({ apiName, createdAt: row.created_at })
     assignmentMap.set(row.user_id, list)
   }
 
   const usageEventMetaMap = new Map()
+  const usageEventTotalsMap = new Map()
   for (const row of usageEventsRes.data || []) {
     const key = row.user_id
     const current = usageEventMetaMap.get(key) || {
@@ -206,12 +228,16 @@ export const listUsersForAdmin = async () => {
       pendingBillingCount: 0,
       byApiKey: new Map()
     }
+    const usageTotals = usageEventTotalsMap.get(key) || {
+      totalCostUsd: 0
+    }
 
     if (!current.lastActivityAt) current.lastActivityAt = row.created_at || null
     if (String(row.billing_status || '') === 'pending') current.pendingBillingCount += 1
+    usageTotals.totalCostUsd += Number(row.cost_usd || 0)
 
     const apiName = String(row.api_name || '').trim()
-    if (apiName) {
+    if (apiName && (!activeApiKeyNames || activeApiKeyNames.has(apiName))) {
       const item = current.byApiKey.get(apiName) || {
         apiName,
         totalCostUsd: 0,
@@ -223,6 +249,7 @@ export const listUsersForAdmin = async () => {
     }
 
     usageEventMetaMap.set(key, current)
+    usageEventTotalsMap.set(key, usageTotals)
   }
 
   return (usersRes.data || []).map((user) => {
@@ -239,12 +266,15 @@ export const listUsersForAdmin = async () => {
       displayName: profile?.display_name || '',
       registeredAt: profile?.registered_at || null,
       lastLoginAt: profile?.last_login_at || null,
-      usage: usageMap.get(user.id) || {
-        totalCalls: 0,
-        totalTokens: 0,
-        totalImages: 0,
-        totalVideoSeconds: 0,
-        totalCostUsd: 0
+      usage: {
+        ...(usageMap.get(user.id) || {
+          totalCalls: 0,
+          totalTokens: 0,
+          totalImages: 0,
+          totalVideoSeconds: 0,
+          totalCostUsd: 0
+        }),
+        totalCostUsd: Number(usageEventTotalsMap.get(user.id)?.totalCostUsd || 0)
       },
       usageMeta: {
         lastActivityAt: usageMeta?.lastActivityAt || null,
@@ -253,11 +283,23 @@ export const listUsersForAdmin = async () => {
           ? [...usageMeta.byApiKey.values()].sort((a, b) => Number(b.totalCostUsd || 0) - Number(a.totalCostUsd || 0))
           : []
       },
-      assignedApiKeys: assignmentMap.get(user.id) || []
-      ,
+      assignedApiKeys: assignmentMap.get(user.id) || [],
       roles: rolesMap.get(user.id) || ['user']
     }
   })
+}
+
+export const removeApiKeyAssignments = async (apiName) => {
+  const safeApiName = String(apiName || '').trim()
+  if (!safeApiName) return { ok: true }
+
+  const { error } = await supabase
+    .from(ASSIGNMENT_TABLE)
+    .delete()
+    .eq('api_name', safeApiName)
+
+  if (error) requireAssignmentTable(error)
+  return { ok: true }
 }
 
 const getRoleCodeMap = async () => {
@@ -653,6 +695,14 @@ export const assignApiKeyToUser = async ({ userId, apiName, operatorUserId = nul
   const safeApiName = String(apiName || '').trim()
   if (!safeUserId) throw new HttpError(400, 'userId is required', 'INVALID_USER_ID')
   if (!safeApiName) throw new HttpError(400, 'apiName is required', 'INVALID_API_NAME')
+
+  const activeApiKeyNames = await loadActiveApiKeyNames()
+  if (!activeApiKeyNames) {
+    throw new HttpError(503, 'Unable to verify API key inventory right now. Please try again later.', 'API_KEY_INVENTORY_UNAVAILABLE')
+  }
+  if (!activeApiKeyNames.has(safeApiName)) {
+    throw new HttpError(404, 'API key does not exist or has been deleted', 'API_KEY_NOT_FOUND')
+  }
 
   const { data: user, error: userError } = await supabase
     .from('users')

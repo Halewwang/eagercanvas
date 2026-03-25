@@ -14,7 +14,7 @@ import {
   get302RecordByRequestId,
   update302ApiKey
 } from '../services/dashboard302.service.js'
-import { assignApiKeyToUser, listUsersForAdmin, unassignApiKeyFromUser } from '../services/admin-usage.service.js'
+import { assignApiKeyToUser, listUsersForAdmin, removeApiKeyAssignments, unassignApiKeyFromUser } from '../services/admin-usage.service.js'
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -111,6 +111,7 @@ usageAdminRouter.put('/302/api-keys/:apiName', adminUsageRequired, asyncHandler(
 
 usageAdminRouter.delete('/302/api-keys/:apiName', adminUsageRequired, asyncHandler(async (req, res) => {
   const result = await delete302ApiKey(req.params.apiName)
+  await removeApiKeyAssignments(req.params.apiName)
   res.json({ data: result?.data ?? result, msg: result?.msg || 'success' })
 }))
 
