@@ -323,7 +323,7 @@ import { notifier } from '@/utils/notifier'
 
 const router = useRouter()
 const route = useRoute()
-const { user, logout, isAuthenticated, updateProfile } = useAuthStore()
+const { user, logout, isAuthenticated, updateProfile, bootstrapAuth } = useAuthStore()
 
 // API Settings state | API 设置状态
 const showApiSettings = ref(false)
@@ -537,6 +537,7 @@ const isVideoUrl = (url) => {
 
 // Initialize projects store on mount | 挂载时初始化项目存储
 onMounted(async () => {
+  await bootstrapAuth()
   await initProjectsStore()
   openAuthByQuery()
 })

@@ -421,8 +421,10 @@ const formatDate = (date) => {
 
 onMounted(async () => {
   await bootstrapAuth()
-  await initProjectsStore()
-  await loadWorkflowTemplates()
+  await Promise.all([
+    initProjectsStore(),
+    loadWorkflowTemplates()
+  ])
 })
 </script>
 

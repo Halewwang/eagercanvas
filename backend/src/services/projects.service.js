@@ -30,7 +30,7 @@ const hasCanvasContent = (canvasData) => {
 export const listProjects = async (userId) => {
   const { data, error } = await supabase
     .from('projects')
-    .select('*')
+    .select('id, name, thumbnail_url, created_at, updated_at')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
 

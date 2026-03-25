@@ -13,6 +13,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 
 const STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-cache'
+const TOMBSTONE_KEY_PREFIX = 'ai-canvas-projects-deleted'
 const isLocalPreviewHost = () => {
   if (typeof window === 'undefined') return false
   const host = String(window.location.hostname || '').trim().toLowerCase()
@@ -34,6 +35,13 @@ const defaultCanvasData = {
   viewport: { x: 100, y: 50, zoom: 0.8 }
 }
 
+const getUserScopedKey = (prefix) => {
+  const { user, isAuthenticated } = useAuthStore()
+  if (!isAuthenticated.value) return ''
+  const userId = user.value?.id
+  return userId ? `${prefix}:${userId}` : ''
+}
+
 const createLocalProjectRecord = (name = 'Untitled') => {
   const now = new Date().toISOString()
   return {
@@ -52,7 +60,9 @@ const mapProjectFromApi = (row) => ({
   thumbnail: row.thumbnail_url || '',
   createdAt: row.created_at,
   updatedAt: row.updated_at,
-  canvasData: row.canvas_json || { ...defaultCanvasData }
+  canvasData: Object.prototype.hasOwnProperty.call(row || {}, 'canvas_json')
+    ? (row.canvas_json || { ...defaultCanvasData })
+    : undefined
 })
 
 const mapProjectToApi = (project) => ({
@@ -108,30 +118,68 @@ const resolveProjectThumbnail = (canvasData, currentThumbnail = '') => {
 }
 
 const saveLocalCache = () => {
-  const { user, isAuthenticated } = useAuthStore()
-  if (!isAuthenticated.value) return
-  const userId = user.value?.id
-  if (!userId) return
+  const storageKey = getUserScopedKey(STORAGE_KEY_PREFIX)
+  if (!storageKey) return
   try {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}:${userId}`, JSON.stringify(projects.value))
+    localStorage.setItem(storageKey, JSON.stringify(projects.value))
   } catch {
     // ignore cache write failures
   }
 }
 
 const loadLocalCache = () => {
-  const { user, isAuthenticated } = useAuthStore()
-  if (!isAuthenticated.value) return []
-  const userId = user.value?.id
-  if (!userId) return []
+  const storageKey = getUserScopedKey(STORAGE_KEY_PREFIX)
+  if (!storageKey) return []
   try {
-    const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}:${userId}`)
+    const raw = localStorage.getItem(storageKey)
     if (!raw) return []
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed : []
   } catch {
     return []
   }
+}
+
+const loadDeleteTombstones = () => {
+  const storageKey = getUserScopedKey(TOMBSTONE_KEY_PREFIX)
+  if (!storageKey) return new Set()
+  try {
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    return new Set(Array.isArray(parsed) ? parsed.filter(Boolean) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+const saveDeleteTombstones = (tombstones) => {
+  const storageKey = getUserScopedKey(TOMBSTONE_KEY_PREFIX)
+  if (!storageKey) return
+  try {
+    const values = Array.from(tombstones || []).filter(Boolean)
+    if (values.length > 0) {
+      localStorage.setItem(storageKey, JSON.stringify(values))
+    } else {
+      localStorage.removeItem(storageKey)
+    }
+  } catch {
+    // ignore cache write failures
+  }
+}
+
+const rememberDeletedProject = (id) => {
+  if (!id) return
+  const tombstones = loadDeleteTombstones()
+  tombstones.add(id)
+  saveDeleteTombstones(tombstones)
+}
+
+const forgetDeletedProject = (id) => {
+  if (!id) return
+  const tombstones = loadDeleteTombstones()
+  if (!tombstones.delete(id)) return
+  saveDeleteTombstones(tombstones)
 }
 
 const toTs = (value) => {
@@ -151,7 +199,8 @@ const mergeRemoteProjectWithLocalDraft = (remote, local) => {
 
   const remoteTs = toTs(remote.updatedAt)
   const localTs = toTs(local.updatedAt)
-  if (localTs <= remoteTs) return remote
+  const remoteHasCanvasData = remote.canvasData !== undefined
+  if (localTs <= remoteTs && remoteHasCanvasData) return remote
 
   const next = {
     ...remote,
@@ -162,7 +211,7 @@ const mergeRemoteProjectWithLocalDraft = (remote, local) => {
 
   // Prefer authoritative cloud canvas data.
   // Only reuse local canvas content when cloud data is still empty.
-  if (!hasCanvasContent(remote.canvasData) && hasCanvasContent(local.canvasData)) {
+  if ((!remoteHasCanvasData || !hasCanvasContent(remote.canvasData)) && hasCanvasContent(local.canvasData)) {
     next.canvasData = local.canvasData
   }
 
@@ -171,18 +220,10 @@ const mergeRemoteProjectWithLocalDraft = (remote, local) => {
 
 const mergeRemoteWithLocalDrafts = (remoteProjects, localProjects) => {
   const localMap = new Map((localProjects || []).map((p) => [p.id, p]))
-  const merged = (remoteProjects || []).map((remote) => {
+  return (remoteProjects || []).map((remote) => {
     const local = localMap.get(remote.id)
     return mergeRemoteProjectWithLocalDraft(remote, local)
   })
-
-  // Keep local-only drafts when cloud list temporarily misses them.
-  const mergedIds = new Set(merged.map((p) => p.id))
-  for (const local of localProjects || []) {
-    if (!mergedIds.has(local.id)) merged.push(local)
-  }
-
-  return merged
 }
 
 export const loadProjects = async () => {
@@ -198,12 +239,20 @@ export const loadProjects = async () => {
   }
   try {
     const response = await apiListProjects()
-    const remote = (response?.data || []).map(mapProjectFromApi)
+    const tombstones = loadDeleteTombstones()
+    const remote = (response?.data || [])
+      .map(mapProjectFromApi)
+      .filter((project) => !tombstones.has(project.id))
     projects.value = mergeRemoteWithLocalDrafts(remote, localDrafts)
+    const nextTombstones = new Set(
+      Array.from(tombstones).filter((id) => !remote.some((project) => project.id === id))
+    )
+    saveDeleteTombstones(nextTombstones)
     saveLocalCache()
     return projects.value
   } catch (error) {
-    projects.value = localDrafts
+    const tombstones = loadDeleteTombstones()
+    projects.value = localDrafts.filter((project) => !tombstones.has(project.id))
     return projects.value
   }
 }
@@ -218,6 +267,7 @@ export const refreshProjectById = async (id) => {
 
   const response = await apiGetProject(id)
   const remoteProject = mapProjectFromApi(response.data)
+  forgetDeletedProject(id)
   projects.value = [
     remoteProject,
     ...projects.value.filter((project) => project.id !== id)
@@ -242,6 +292,7 @@ export const createProject = async (name = 'Untitled') => {
 
   const response = await apiCreateProject(payload)
   const project = mapProjectFromApi(response.data)
+  forgetDeletedProject(project.id)
   projects.value = [project, ...projects.value]
   saveLocalCache()
   return project.id
@@ -334,6 +385,7 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
 
 export const getProjectCanvas = (id) => {
   const project = projects.value.find((p) => p.id === id)
+  if (!project?.canvasData) return null
   // Return full project to access metadata like updatedAt
   return project ? { ...project.canvasData, _meta: project } : null
 }
@@ -345,6 +397,7 @@ export const deleteProject = async (id) => {
     return
   }
   await apiDeleteProject(id)
+  rememberDeletedProject(id)
   projects.value = projects.value.filter((p) => p.id !== id)
   saveLocalCache()
 }

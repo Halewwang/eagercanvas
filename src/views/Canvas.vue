@@ -456,7 +456,7 @@ import { useCanvasProjectActions } from '@/hooks/useCanvasProjectActions'
 import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { getWorkflowById } from '@/config/workflows'
-import { initProjectsStore, refreshProjectById } from '../stores/projects'
+import { initProjectsStore, projects, refreshProjectById } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkflowsStore } from '@/stores/workflows'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
@@ -1264,21 +1264,36 @@ onMounted(async () => {
   window.addEventListener('pagehide', handlePageHide)
   window.addEventListener('keydown', handleGlobalKeydown)
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  
-  // Initialize projects store | 初始化项目存储
-  await initProjectsStore()
-  await loadWorkflowTemplates()
 
-  if (route.params.id && route.params.id !== 'new') {
-    try {
-      await refreshProjectById(route.params.id)
-    } catch {
-      // Fall back to local cache when remote detail refresh is unavailable.
-    }
+  const routeProjectId = String(route.params.id || '')
+  const hasWarmProject = !!(
+    routeProjectId &&
+    routeProjectId !== 'new' &&
+    projects.value.some((project) => project.id === routeProjectId && project.canvasData)
+  )
+
+  // Render immediately when we already have a warm project snapshot in memory.
+  if (routeProjectId === 'new' || hasWarmProject) {
+    loadProjectById(route.params.id)
   }
-  
-  // Load project data | 加载项目数据
-  loadProjectById(route.params.id)
+
+  // Initialize supporting data in parallel.
+  await Promise.all([
+    initProjectsStore(),
+    loadWorkflowTemplates()
+  ])
+
+  // Load project data after bootstrap when no warm snapshot was available.
+  if (!hasWarmProject) {
+    loadProjectById(route.params.id)
+  }
+
+  if (routeProjectId && routeProjectId !== 'new') {
+    refreshProjectById(routeProjectId).catch(() => {
+      // Fall back to local cache when remote detail refresh is unavailable.
+    })
+  }
+
   await nextTick()
   await applyPendingWorkflowTemplate()
   scheduleOverlayRectUpdate()
