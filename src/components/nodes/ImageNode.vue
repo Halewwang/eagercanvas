@@ -80,9 +80,6 @@
               class="module-image"
               @load="handlePreviewImageLoad"
             />
-            <button class="module-reupload-btn nodrag nopan" @click.stop="triggerUpload">
-              Replace
-            </button>
             <div v-if="activeTool === 'crop'" class="crop-overlay crop-overlay-inline">
               <div class="crop-mask crop-mask-top" :style="cropMaskTopStyle"></div>
               <div class="crop-mask crop-mask-left" :style="cropMaskLeftStyle"></div>
@@ -117,7 +114,7 @@
         >
           <n-icon :size="32" class="text-[#7b818c]"><ImageOutline /></n-icon>
           <span class="text-sm text-[#7b818c]">Drop an image or click to upload</span>
-          <button class="upload-btn upload-btn-label nodrag nopan" @click.stop="triggerUpload">Upload</button>
+          <button class="upload-btn nodrag nopan" @click.stop="triggerUpload">Upload</button>
         </div>
         <input
           :id="uploadInputId"
@@ -306,7 +303,13 @@ const progressValue = ref(0)
 const showProgress = ref(false)
 const progressTimer = ref(null)
 const progressFinishTimer = ref(null)
+const localPreviewUrl = ref('')
 const toolDropdownOptions = computed(() => ([
+  {
+    label: props.data?.url ? 'Replace Image' : 'Upload Image',
+    key: 'replace-image',
+    disabled: isUploading.value
+  },
   {
     label: 'Remove Background',
     key: 'remove-background',
@@ -357,6 +360,24 @@ const isLocalPreviewHost = () => {
 }
 
 const isLocalPreviewMode = computed(() => isLocalPreviewHost())
+const isBlobUrl = (value) => String(value || '').startsWith('blob:')
+const revokeBlobUrl = (value) => {
+  if (!isBlobUrl(value)) return
+  try {
+    URL.revokeObjectURL(String(value))
+  } catch {}
+}
+const clearLocalPreviewUrl = () => {
+  if (!localPreviewUrl.value) return
+  revokeBlobUrl(localPreviewUrl.value)
+  localPreviewUrl.value = ''
+}
+const replaceLocalPreviewUrl = (nextUrl = '') => {
+  if (localPreviewUrl.value && localPreviewUrl.value !== nextUrl) {
+    revokeBlobUrl(localPreviewUrl.value)
+  }
+  localPreviewUrl.value = isBlobUrl(nextUrl) ? String(nextUrl) : ''
+}
 
 const ratioFromSizeKey = (sizeKey) => {
   const [w, h] = String(sizeKey || '').split('x').map(Number)
@@ -712,6 +733,7 @@ onUnmounted(() => {
   window.removeEventListener('mouseup', stopCropInteraction)
   window.removeEventListener('keydown', handleCropKeydown)
   window.removeEventListener('resize', syncPreviewStageSize)
+  clearLocalPreviewUrl()
 })
 
 const triggerUpload = () => {
@@ -886,14 +908,6 @@ const getImageDimensions = (file) =>
       URL.revokeObjectURL(objectUrl)
     }
     img.src = objectUrl
-  })
-
-const fileToBase64 = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = reject
-    reader.readAsDataURL(file)
   })
 
 const initializeCropRect = () => {
@@ -1174,9 +1188,8 @@ const handleFileUpload = async (event) => {
       return
     }
 
-    // Local upload should not trigger generation loading animation.
-    // Keep local preview immediately, then best-effort sync to cloud storage.
-    const base64 = await fileToBase64(file)
+    // Keep local preview light with a blob URL, then upload the original file directly.
+    const previewUrl = URL.createObjectURL(file)
     let ratio = '1:1'
     
     if (w && h) {
@@ -1194,9 +1207,10 @@ const handleFileUpload = async (event) => {
       else ratio = `${w}:${h}` // Custom ratio for non-standard sizes
     }
 
+    replaceLocalPreviewUrl(previewUrl)
     updateNode(props.id, {
-      url: base64,
-      base64,
+      url: previewUrl,
+      base64: '',
       fileName: file.name,
       fileType: file.type,
       label: 'Image',
@@ -1239,6 +1253,7 @@ const handleFileUpload = async (event) => {
       if (uploadedUrl) {
         uploadStage.value = 'saving'
         uploadProgress.value = Math.max(uploadProgress.value, 95)
+        clearLocalPreviewUrl()
         updateNode(props.id, {
           url: uploadedUrl,
           base64: '',
@@ -1283,6 +1298,7 @@ const handleFileUpload = async (event) => {
 }
 
 const handleDelete = () => {
+  clearLocalPreviewUrl()
   removeNode(props.id)
 }
 
@@ -1306,6 +1322,10 @@ const openPreviewModal = () => {
   showPreviewModal.value = true
 }
 const handleToolAction = async (key) => {
+  if (key === 'replace-image') {
+    triggerUpload()
+    return
+  }
   if (key === 'remove-background') {
     await handleRemoveBackground()
     return
@@ -1708,31 +1728,6 @@ const handleMultiAngleError = async (payload = {}) => {
   font-size: 12px;
   padding: 6px 12px;
   line-height: 1;
-}
-
-.module-reupload-btn {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 3;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(12, 12, 12, 0.62);
-  color: #eef1f5;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  padding: 7px 11px;
-  backdrop-filter: blur(10px);
-}
-
-.module-reupload-btn:hover {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(20, 20, 20, 0.78);
-}
-
-.upload-btn-label {
-  pointer-events: none;
 }
 
 .upload-hit-area {
