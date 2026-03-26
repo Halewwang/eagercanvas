@@ -66,31 +66,6 @@
       :style="moduleStyle"
     >
       <div class="module-stage" :style="stageStyle">
-        <div
-          v-if="showPersistenceBadge"
-          class="image-persistence-badge"
-          :class="persistenceBadgeClass"
-        >
-          {{ persistenceBadgeText }}
-        </div>
-        <div v-if="showPersistenceActions" class="image-persistence-actions">
-          <button
-            v-if="canRetryUpload"
-            class="image-persistence-action"
-            :disabled="retryingPersistence"
-            @click.stop="retryImageUpload"
-          >
-            Retry Upload
-          </button>
-          <button
-            v-if="canRetrySave"
-            class="image-persistence-action"
-            :disabled="retryingPersistence"
-            @click.stop="retryImageSave"
-          >
-            Retry Save
-          </button>
-        </div>
         <div v-if="showProgress" class="module-progress-shell">
           <div class="module-progress-track"></div>
           <div class="module-progress-bar" :style="progressBarStyle"></div>
@@ -658,29 +633,6 @@ const finishProgress = () => {
 }
 const isImageBusy = computed(() => !!props.data?.loading || imageGen.loading.value || !!imageActionLoading.value)
 const isToolBusy = computed(() => imageTools.loading.value || !!toolActionLoading.value)
-const persistenceStatus = computed(() => String(props.data?.persistStatus || 'saved'))
-const retryingPersistence = ref(false)
-const showPersistenceBadge = computed(() => persistenceStatus.value !== 'saved')
-const canRetryUpload = computed(() => {
-  const hasBase64 = !!String(props.data?.base64 || '').trim()
-  return persistenceStatus.value === 'error' && hasBase64 && !isLocalPreviewMode.value
-})
-const canRetrySave = computed(() => {
-  const hasStableUrl = /^https?:\/\//i.test(String(props.data?.url || '').trim())
-  return persistenceStatus.value === 'error' && (hasStableUrl || isLocalPreviewMode.value)
-})
-const showPersistenceActions = computed(() => canRetryUpload.value || canRetrySave.value)
-const persistenceBadgeText = computed(() => {
-  if (persistenceStatus.value === 'uploading') return 'Uploading'
-  if (persistenceStatus.value === 'saving') return 'Saving'
-  if (persistenceStatus.value === 'error') return 'Not saved'
-  return 'Pending save'
-})
-const persistenceBadgeClass = computed(() => {
-  if (persistenceStatus.value === 'error') return 'is-error'
-  if (persistenceStatus.value === 'uploading' || persistenceStatus.value === 'saving') return 'is-active'
-  return 'is-pending'
-})
 const uploadProgressStyle = computed(() => {
   const percent = Math.max(0, Math.min(100, uploadProgress.value))
   const color =
@@ -884,20 +836,13 @@ const runImageGeneration = async (mode = 'create') => {
       quality: localImageQuality.value,
       ratio: localImageRatio.value,
       resolution: localResolution.value,
-      persistStatus: 'saving',
-      persistError: '',
       updatedAt: Date.now()
     })
-    const savedOk = await saveProject()
-    updateNode(props.id, {
-      persistStatus: savedOk ? 'saved' : 'error',
-      persistError: savedOk ? '' : 'Project save failed. Refresh may lose this image.',
-      updatedAt: Date.now()
-    })
+    await saveProject()
     window.$message?.success(mode === 'regenerate' ? 'Image regenerated' : 'Image generated')
   } catch (err) {
     const message = getErrorMessage(err, 'Image generation failed')
-    updateNode(props.id, { loading: false, error: message, persistStatus: 'error', persistError: message })
+    updateNode(props.id, { loading: false, error: message })
     window.$message?.error(message)
   } finally {
     imageActionLoading.value = ''
@@ -1159,9 +1104,7 @@ const replaceCurrentImageNode = async (payload = {}) => {
     resolution: localResolution.value,
     fileType: payload.fileType || 'image/png',
     updatedAt: Date.now(),
-    error: '',
-    persistStatus: 'saving',
-    persistError: ''
+    error: ''
   })
 
   setTimeout(() => updateNodeInternals(props.id), 30)
@@ -1185,129 +1128,13 @@ const replaceCurrentImageNode = async (payload = {}) => {
         url: uploadedUrl,
         base64: '',
         updatedAt: Date.now(),
-        error: '',
-        persistStatus: 'saving',
-        persistError: ''
+        error: ''
       })
     }
-    const savedOk = await flushSave()
-    updateNode(props.id, {
-      persistStatus: savedOk ? 'saved' : 'error',
-      persistError: savedOk ? '' : 'Project save failed. Refresh may lose this image.',
-      updatedAt: Date.now()
-    })
+    await flushSave()
   } catch (err) {
     console.warn('Crop persistence failed:', err)
     await flushSave()
-    updateNode(props.id, {
-      persistStatus: 'error',
-      persistError: 'Image upload failed. Retry before refresh.',
-      updatedAt: Date.now()
-    })
-  }
-}
-
-const markPersistState = (status, message = '') => {
-  updateNode(props.id, {
-    persistStatus: status,
-    persistError: message,
-    updatedAt: Date.now()
-  })
-}
-
-const retryImageSave = async () => {
-  if (retryingPersistence.value) return
-  retryingPersistence.value = true
-  markPersistState('saving', '')
-  try {
-    const savedOk = await flushSave()
-    markPersistState(
-      savedOk ? 'saved' : 'error',
-      savedOk ? '' : 'Project save failed. Refresh may lose this image.'
-    )
-    if (savedOk) {
-      window.$message?.success('Project saved')
-    } else {
-      window.$message?.warning('Project save failed. Please retry.')
-    }
-  } catch (err) {
-    markPersistState('error', 'Project save failed. Refresh may lose this image.')
-    window.$message?.warning(err?.message || 'Project save failed. Please retry.')
-  } finally {
-    retryingPersistence.value = false
-  }
-}
-
-const retryImageUpload = async () => {
-  if (retryingPersistence.value) return
-  const base64 = String(props.data?.base64 || '').trim()
-  if (!base64) return
-
-  const fileName = String(props.data?.fileName || `image-${Date.now()}.png`)
-  const file = dataUrlToFile(base64, fileName)
-  if (!file) {
-    markPersistState('error', 'Image data is unavailable for upload retry.')
-    window.$message?.warning('Image data is unavailable for upload retry.')
-    return
-  }
-
-  retryingPersistence.value = true
-  try {
-    markPersistState('uploading', '')
-    const uploadedUrl = await uploadImageFile(file, {
-      onProgress: (percent) => {
-        uploadStage.value = 'uploading'
-        showUploadProgress.value = true
-        uploadProgress.value = Math.max(3, Math.min(92, percent))
-      }
-    })
-
-    if (!uploadedUrl) {
-      markPersistState('error', 'Cloud upload failed. Retry before refresh.')
-      window.$message?.warning('Cloud upload failed. Please retry.')
-      return
-    }
-
-    updateNode(props.id, {
-      url: uploadedUrl,
-      base64: '',
-      fileName,
-      fileType: file.type || props.data?.fileType || 'image/png',
-      persistStatus: 'saving',
-      persistError: '',
-      updatedAt: Date.now()
-    })
-
-    uploadStage.value = 'saving'
-    showUploadProgress.value = true
-    uploadProgress.value = Math.max(uploadProgress.value, 95)
-
-    const savedOk = await flushSave()
-    markPersistState(
-      savedOk ? 'saved' : 'error',
-      savedOk ? '' : 'Project save failed after upload. Retry save before refresh.'
-    )
-
-    if (savedOk) {
-      uploadStage.value = 'success'
-      uploadProgress.value = 100
-      window.$message?.success('Upload complete and saved')
-      resetUploadProgress(900)
-    } else {
-      uploadStage.value = 'error'
-      uploadProgress.value = 100
-      window.$message?.warning('Project save failed after upload. Please retry save.')
-      resetUploadProgress(2200)
-    }
-  } catch (err) {
-    markPersistState('error', 'Upload/save failed. Retry before refresh.')
-    uploadStage.value = 'error'
-    showUploadProgress.value = true
-    uploadProgress.value = 100
-    resetUploadProgress(2200)
-    window.$message?.warning(err?.message || 'Upload/save failed. Please retry.')
-  } finally {
-    retryingPersistence.value = false
   }
 }
 
@@ -1368,8 +1195,6 @@ const handleFileUpload = async (event) => {
       updatedAt: Date.now(),
       loading: false,
       error: '',
-      persistStatus: 'uploading',
-      persistError: '',
       ratio: ratio,
       size: w && h ? `${w}x${h}` : localImageSize.value
     })
@@ -1381,12 +1206,7 @@ const handleFileUpload = async (event) => {
     setTimeout(() => updateNodeInternals(props.id), 30)
 
     if (isLocalPreviewMode.value) {
-      const savedOk = await flushSave()
-      updateNode(props.id, {
-        persistStatus: savedOk ? 'saved' : 'error',
-        persistError: savedOk ? '' : 'Local project save failed. Refresh may lose this image.',
-        updatedAt: Date.now()
-      })
+      await flushSave()
       showUploadProgress.value = true
       uploadStage.value = 'success'
       uploadProgress.value = 100
@@ -1417,16 +1237,9 @@ const handleFileUpload = async (event) => {
           fileName: file.name,
           fileType: file.type,
           updatedAt: Date.now(),
-          error: '',
-          persistStatus: 'saving',
-          persistError: ''
+          error: ''
         })
         const savedOk = await flushSave()
-        updateNode(props.id, {
-          persistStatus: savedOk ? 'saved' : 'error',
-          persistError: savedOk ? '' : 'Project save failed after upload. Retry save before refresh.',
-          updatedAt: Date.now()
-        })
         if (savedOk) {
           uploadStage.value = 'success'
           uploadProgress.value = 100
@@ -1439,22 +1252,12 @@ const handleFileUpload = async (event) => {
           resetUploadProgress(2200)
         }
       } else {
-        updateNode(props.id, {
-          persistStatus: 'error',
-          persistError: 'Cloud upload failed. Retry before refresh.',
-          updatedAt: Date.now()
-        })
         uploadStage.value = 'error'
         uploadProgress.value = 100
         window.$message?.warning('Cloud upload failed. Please retry.')
         resetUploadProgress(2200)
       }
     } catch (err) {
-      updateNode(props.id, {
-        persistStatus: 'error',
-        persistError: 'Upload/save failed. Retry before refresh.',
-        updatedAt: Date.now()
-      })
       uploadStage.value = 'error'
       uploadProgress.value = 100
       window.$message?.warning('Upload/save failed. Please retry.')
@@ -1464,7 +1267,7 @@ const handleFileUpload = async (event) => {
     }
   } catch (err) {
     const message = getErrorMessage(err, 'Image upload failed')
-    updateNode(props.id, { loading: false, error: message, persistStatus: 'error', persistError: message })
+    updateNode(props.id, { loading: false, error: message })
     window.$message?.error(message)
   } finally {
     if (event?.target) event.target.value = ''
@@ -2131,69 +1934,6 @@ const handleMultiAngleError = async (payload = {}) => {
   height: 14px;
   flex-shrink: 0;
   filter: brightness(0) saturate(100%) invert(81%) sepia(6%) saturate(243%) hue-rotate(182deg) brightness(93%) contrast(88%);
-}
-
-.image-persistence-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 4;
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  backdrop-filter: blur(10px);
-}
-
-.image-persistence-badge.is-active {
-  background: rgba(216, 219, 224, 0.16);
-  color: #eef1f5;
-  border: 1px solid rgba(216, 219, 224, 0.24);
-}
-
-.image-persistence-badge.is-pending {
-  background: rgba(182, 154, 109, 0.18);
-  color: #f3e5c9;
-  border: 1px solid rgba(182, 154, 109, 0.28);
-}
-
-.image-persistence-badge.is-error {
-  background: rgba(196, 106, 92, 0.18);
-  color: #ffd8d2;
-  border: 1px solid rgba(196, 106, 92, 0.3);
-}
-
-.image-persistence-actions {
-  position: absolute;
-  top: 42px;
-  right: 10px;
-  z-index: 4;
-  display: flex;
-  gap: 6px;
-}
-
-.image-persistence-action {
-  padding: 5px 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(12, 12, 12, 0.68);
-  color: #eef1f5;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  backdrop-filter: blur(10px);
-  transition: border-color 0.16s ease, background-color 0.16s ease, opacity 0.16s ease;
-}
-
-.image-persistence-action:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(24, 24, 24, 0.82);
-}
-
-.image-persistence-action:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 :deep(.tool-option-icon) {
