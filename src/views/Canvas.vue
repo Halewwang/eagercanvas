@@ -1632,10 +1632,6 @@ onUnmounted(() => {
   background: #1c1c1c;
 }
 
-.canvas-flow :deep(.vue-flow__pane) {
-  background: #1c1c1c;
-}
-
 .group-overlay-layer {
   position: absolute;
   inset: 0;
@@ -1838,20 +1834,27 @@ onUnmounted(() => {
   right: 0;
 }
 
-.canvas-flow :deep(.vue-flow__node-text),
-.canvas-flow :deep(.vue-flow__node-image),
-.canvas-flow :deep(.vue-flow__node-video) {
+</style>
+
+<style>
+.canvas-flow .vue-flow__pane {
+  background: #1c1c1c;
+}
+
+.canvas-flow .vue-flow__node-text,
+.canvas-flow .vue-flow__node-image,
+.canvas-flow .vue-flow__node-video {
   box-shadow: none !important;
   border-radius: 24px !important;
 }
 
-.canvas-flow :deep(.vue-flow__edge-path) {
+.canvas-flow .vue-flow__edge-path {
   stroke: #ffffff;
   stroke-width: 1;
   stroke-dasharray: 0;
 }
 
-.canvas-flow :deep(.vue-flow__edge.selected .vue-flow__edge-path) {
+.canvas-flow .vue-flow__edge.selected .vue-flow__edge-path {
   stroke: #ffffff;
   stroke-width: 2;
   stroke-dasharray: 0;

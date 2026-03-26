@@ -2,6 +2,20 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 
+const createBuildInfo = () => {
+  const builtAt = new Date().toISOString()
+  const commitSha = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || ''
+  const shortSha = commitSha ? commitSha.slice(0, 7) : ''
+  const stamp = builtAt.replace(/[-:TZ.]/g, '').slice(0, 14)
+
+  return {
+    buildId: shortSha ? `${stamp}-${shortSha}` : stamp,
+    builtAt
+  }
+}
+
+const buildInfo = createBuildInfo()
+
 const manualChunks = (id) => {
   if (!id.includes('node_modules')) return undefined
 
@@ -12,10 +26,32 @@ const manualChunks = (id) => {
   return 'vendor'
 }
 
+const appVersionPlugin = () => ({
+  name: 'app-version-manifest',
+  configureServer(server) {
+    server.middlewares.use('/version.json', (_req, res) => {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+      res.end(JSON.stringify(buildInfo))
+    })
+  },
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: 'version.json',
+      source: JSON.stringify(buildInfo, null, 2)
+    })
+  }
+})
+
 // https://vite.dev/config/
 export default defineConfig({
   base: '/',
-  plugins: [vue()],
+  plugins: [vue(), appVersionPlugin()],
+  define: {
+    __APP_BUILD_ID__: JSON.stringify(buildInfo.buildId),
+    __APP_BUILD_TIME__: JSON.stringify(buildInfo.builtAt)
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src')

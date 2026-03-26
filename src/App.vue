@@ -2,8 +2,11 @@
 /**
  * Root App component.
  */
+import { onBeforeUnmount, onMounted } from 'vue'
 import { NConfigProvider, darkTheme } from 'naive-ui'
 import { BaseToastViewport } from './components/ui'
+import UpdatePrompt from './components/UpdatePrompt.vue'
+import { startAppVersionWatcher, stopAppVersionWatcher } from './utils/appVersion'
 
 const themeOverrides = {
   common: {
@@ -34,11 +37,20 @@ const themeOverrides = {
     heightMedium: '36px'
   }
 }
+
+onMounted(() => {
+  startAppVersionWatcher()
+})
+
+onBeforeUnmount(() => {
+  stopAppVersionWatcher()
+})
 </script>
 
 <template>
   <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides">
     <BaseToastViewport />
+    <UpdatePrompt />
     <router-view />
   </n-config-provider>
 </template>
