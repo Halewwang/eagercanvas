@@ -1,6 +1,8 @@
 import request from './request'
 
 export const isDataImageUrl = (value = '') => /^data:image\//i.test(String(value || ''))
+export const isDataUrl = (value = '') => /^data:/i.test(String(value || ''))
+export const isRemoteHttpUrl = (value = '') => /^https?:\/\//i.test(String(value || ''))
 export const SORA2_ALLOWED_REFERENCE_SIZES = ['1280x720', '720x1280', '1024x1792', '1792x1024']
 
 export const dataUrlToFile = (dataUrl, fileName = 'image.png') => {
@@ -38,13 +40,45 @@ export const uploadImageFile = async (file, options = {}) => {
   return uploadedUrl || ''
 }
 
+export const uploadRemoteAsset = async (url, fileName = '') => {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  const res = await request.post('/upload/remote', {
+    url: raw,
+    fileName: fileName || undefined
+  }, {
+    silentErrorToast: true,
+    silentNetworkErrorToast: true
+  })
+  return String(res?.url || '').trim()
+}
+
 export const persistImageUrl = async (url, fileName = 'image.png') => {
   const raw = String(url || '').trim()
   if (!raw) return ''
-  if (!isDataImageUrl(raw)) return raw
-  const file = dataUrlToFile(raw, fileName)
-  if (!file) return ''
-  return uploadImageFile(file)
+  if (isDataImageUrl(raw)) {
+    const file = dataUrlToFile(raw, fileName)
+    if (!file) return ''
+    return uploadImageFile(file)
+  }
+  if (isRemoteHttpUrl(raw)) {
+    return uploadRemoteAsset(raw, fileName)
+  }
+  return raw
+}
+
+export const persistMediaUrl = async (url, fileName = 'asset.bin') => {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  if (isDataUrl(raw)) {
+    const file = dataUrlToFile(raw, fileName)
+    if (!file) return ''
+    return uploadImageFile(file)
+  }
+  if (isRemoteHttpUrl(raw)) {
+    return uploadRemoteAsset(raw, fileName)
+  }
+  return raw
 }
 
 export const getImageDimensionsFromSource = (source) =>

@@ -197,7 +197,7 @@ import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutlin
 import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject } from '../../stores/canvas'
 import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoResolutionOptions, getModelVideoSizeOptions, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION } from '../../stores/models'
-import { getImageDimensionsFromSource, isSora2AllowedReferenceSize } from '@/utils/media'
+import { getImageDimensionsFromSource, isSora2AllowedReferenceSize, persistMediaUrl } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 
 const props = defineProps({
@@ -566,8 +566,15 @@ const handleGenerate = async () => {
 
     // Update video node with generated URL | 更新视频节点 URL
     if (result && result.url) {
+      const rawUrl = String(result.url || '')
+      const stableUrl = await persistMediaUrl(rawUrl, `generated-${Date.now()}.mp4`)
+      const finalUrl = stableUrl || rawUrl
+      if (!finalUrl) {
+        throw new Error('No video output')
+      }
+
       updateNode(videoNodeId, {
-        url: result.url,
+        url: finalUrl,
         loading: false,
         label: 'Video Gen',
         model: localModel.value,
@@ -577,12 +584,19 @@ const handleGenerate = async () => {
         generate_audio: localGenerateAudio.value,
         duration: localDuration.value,
         dur: localDuration.value,
+        persistStatus: 'saving',
+        persistError: '',
         updatedAt: Date.now()
       })
       
       // Mark this config node as executed | 标记配置节点已执行
       updateNode(props.id, { status: 'completed', executed: true, outputNodeId: videoNodeId, error: '' })
-      await saveProject()
+      const savedOk = await saveProject()
+      updateNode(videoNodeId, {
+        persistStatus: savedOk ? 'saved' : 'error',
+        persistError: savedOk ? '' : 'Project save failed. Refresh may lose this video.',
+        updatedAt: Date.now()
+      })
     }
     window.$message?.success('Video generated')
   } catch (err) {

@@ -50,6 +50,7 @@ const createLocalProjectRecord = (name = 'Untitled') => {
     thumbnail: '',
     createdAt: now,
     updatedAt: now,
+    serverUpdatedAt: null,
     canvasData: { ...defaultCanvasData }
   }
 }
@@ -60,6 +61,7 @@ const mapProjectFromApi = (row) => ({
   thumbnail: row.thumbnail_url || '',
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+  serverUpdatedAt: row.updated_at,
   canvasData: Object.prototype.hasOwnProperty.call(row || {}, 'canvas_json')
     ? (row.canvas_json || { ...defaultCanvasData })
     : undefined
@@ -206,7 +208,8 @@ const mergeRemoteProjectWithLocalDraft = (remote, local) => {
     ...remote,
     name: String(local.name || '').trim() || remote.name,
     thumbnail: String(local.thumbnail || '').trim() || remote.thumbnail,
-    updatedAt: local.updatedAt || remote.updatedAt
+    updatedAt: local.updatedAt || remote.updatedAt,
+    serverUpdatedAt: remote.serverUpdatedAt || remote.updatedAt || null
   }
 
   // Keep newer local canvas drafts when they exist.
@@ -306,7 +309,8 @@ export const updateProject = async (id, data) => {
   const nextProject = {
     ...projects.value[index],
     ...data,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    serverUpdatedAt: projects.value[index].serverUpdatedAt || null
   }
 
   projects.value[index] = nextProject
@@ -348,7 +352,8 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
       },
       project.thumbnail
     ),
-    updatedAt: localUpdatedAt
+    updatedAt: localUpdatedAt,
+    serverUpdatedAt: project.serverUpdatedAt || currentVersion || null
   }
 
   // Always keep the latest canvas snapshot in local draft cache first.

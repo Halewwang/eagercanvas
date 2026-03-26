@@ -33,6 +33,7 @@ let autoSaveEnabled = false
 let saveTimeout = null
 let saveInFlight = null
 let saveQueued = false
+let lastPersistedSnapshotKey = ''
 
 // History for undo/redo | 撤销/重做历史
 const history = ref([])
@@ -91,6 +92,16 @@ export const addNode = (type, position = { x: 100, y: 100 }, data = {}) => {
 const cloneNodes = (items) => JSON.parse(JSON.stringify(items))
 const cloneEdges = (items) => JSON.parse(JSON.stringify(items))
 
+const TRANSIENT_NODE_FIELDS = new Set([
+  'base64',
+  'persistStatus',
+  'persistError',
+  'loading',
+  'selected',
+  'openPortMenu',
+  'autoExecute'
+])
+
 const isEphemeralMediaUrl = (value) => {
   const raw = String(value || '').trim()
   return raw.startsWith('blob:') || /^data:/i.test(raw)
@@ -98,24 +109,42 @@ const isEphemeralMediaUrl = (value) => {
 
 const sanitizeNodeForPersistence = (node) => {
   const nextNode = JSON.parse(JSON.stringify(node))
+  delete nextNode.selected
+  delete nextNode.dragging
+  delete nextNode.resizing
+
   const data = nextNode?.data
-  if (!data || typeof data !== 'object') return nextNode
+  if (data && typeof data === 'object') {
+    Object.keys(data).forEach((key) => {
+      if (TRANSIENT_NODE_FIELDS.has(key)) {
+        delete data[key]
+      }
+    })
 
-  delete data.base64
-
-  if (isEphemeralMediaUrl(data.url)) {
-    delete data.url
+    if (isEphemeralMediaUrl(data.url)) {
+      delete data.url
+    }
   }
 
   return nextNode
 }
 
+const sanitizeEdgeForPersistence = (edge) => {
+  const nextEdge = JSON.parse(JSON.stringify(edge))
+  delete nextEdge.selected
+  delete nextEdge.updatable
+  delete nextEdge.focusable
+  return nextEdge
+}
+
 const createCanvasSnapshot = () => ({
   nodes: nodes.value.map(sanitizeNodeForPersistence),
-  edges: JSON.parse(JSON.stringify(edges.value)),
+  edges: edges.value.map(sanitizeEdgeForPersistence),
   groups: JSON.parse(JSON.stringify(groups.value)),
   viewport: { ...canvasViewport.value }
 })
+
+const getSnapshotKey = (snapshot) => JSON.stringify(snapshot)
 
 const getNextGroupName = () => {
   const indices = groups.value
@@ -491,6 +520,7 @@ export const resetCanvasSession = () => {
   isRestoring = true
   currentProjectId.value = null
   currentProjectVersion.value = null
+  lastPersistedSnapshotKey = ''
   saveQueued = false
   if (saveTimeout) {
     clearTimeout(saveTimeout)
@@ -512,8 +542,8 @@ export const loadProject = (projectId) => {
   
   if (canvasData) {
     // Restore project version
-    if (canvasData._meta && canvasData._meta.updatedAt) {
-      currentProjectVersion.value = canvasData._meta.updatedAt
+    if (canvasData._meta && (canvasData._meta.serverUpdatedAt || canvasData._meta.updatedAt)) {
+      currentProjectVersion.value = canvasData._meta.serverUpdatedAt || canvasData._meta.updatedAt
     } else {
       currentProjectVersion.value = null
     }
@@ -576,6 +606,7 @@ export const loadProject = (projectId) => {
     groups: JSON.parse(JSON.stringify(groups.value))
   }]
   historyIndex.value = 0
+  lastPersistedSnapshotKey = getSnapshotKey(createCanvasSnapshot())
   
   // Enable auto-save after loading | 加载后启用自动保存
   setTimeout(() => {
@@ -591,6 +622,12 @@ export const saveProject = async () => {
   if (!currentProjectId.value) return
   if (!getProjectCanvas(currentProjectId.value)) return false
 
+  const snapshot = createCanvasSnapshot()
+  const snapshotKey = getSnapshotKey(snapshot)
+  if (snapshotKey === lastPersistedSnapshotKey) {
+    return true
+  }
+
   if (saveInFlight) {
     saveQueued = true
     return saveInFlight
@@ -598,18 +635,17 @@ export const saveProject = async () => {
 
   const runSave = async () => {
     let saved = true
-    const snapshot = createCanvasSnapshot()
-
     try {
       const updatedProject = await updateProjectCanvas(
         currentProjectId.value,
         snapshot,
         currentProjectVersion.value
       )
+      lastPersistedSnapshotKey = snapshotKey
 
       // Update local version after successful save
-      if (updatedProject?.updatedAt) {
-        currentProjectVersion.value = updatedProject.updatedAt
+      if (updatedProject?.serverUpdatedAt || updatedProject?.updatedAt) {
+        currentProjectVersion.value = updatedProject.serverUpdatedAt || updatedProject.updatedAt
       }
     } catch (error) {
       saved = false
@@ -660,7 +696,7 @@ const debouncedSave = () => {
   
   saveTimeout = setTimeout(() => {
     saveProject()
-  }, 500)
+  }, 900)
 }
 
 /**

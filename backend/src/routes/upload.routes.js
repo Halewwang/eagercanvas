@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import multer from 'multer'
+import { z } from 'zod'
 import { authRequired } from '../middleware/auth.js'
-import { uploadFile } from '../services/upload.service.js'
+import { uploadFile, uploadRemoteFile } from '../services/upload.service.js'
 import { HttpError, asyncHandler } from '../utils/http.js'
 
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
@@ -31,5 +32,16 @@ uploadRouter.post('/', authRequired, (req, res, next) => {
   }
   
   const result = await uploadFile(req.file)
+  res.json(result)
+}))
+
+const remoteUploadSchema = z.object({
+  url: z.string().url(),
+  fileName: z.string().max(180).optional()
+})
+
+uploadRouter.post('/remote', authRequired, asyncHandler(async (req, res) => {
+  const payload = remoteUploadSchema.parse(req.body || {})
+  const result = await uploadRemoteFile(payload)
   res.json(result)
 }))
