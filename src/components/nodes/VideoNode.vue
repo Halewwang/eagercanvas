@@ -174,7 +174,7 @@ const progressValue = ref(0)
 const showProgress = ref(false)
 const progressTimer = ref(null)
 const progressFinishTimer = ref(null)
-const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+const MAX_UPLOAD_SIZE_BYTES = 60 * 1024 * 1024
 
 const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
 const localRatio = ref(props.data?.ratio || DEFAULT_VIDEO_RATIO)
@@ -606,7 +606,7 @@ const handleFileUpload = async (event) => {
   try {
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
       validationTitle.value = 'Upload Limit'
-      validationMessage.value = 'Video is too large. Maximum file size is 10MB.'
+      validationMessage.value = 'Video is too large. Maximum file size is 60MB.'
       showValidationModal.value = true
       return
     }

@@ -346,7 +346,7 @@ const BASE_SIZE_BY_RATIO = {
   '9:16': { w: 720, h: 1280 },
   '21:9': { w: 1680, h: 720 }
 }
-const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+const MAX_UPLOAD_SIZE_BYTES = 30 * 1024 * 1024
 const MAX_IMAGE_DIMENSION = 4096
 const PREVIEW_MIN_ZOOM = 0.75
 const PREVIEW_MAX_ZOOM = 4
@@ -1176,7 +1176,7 @@ const handleFileUpload = async (event) => {
 
   try {
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-      validationMessage.value = 'Image is too large. Maximum file size is 10MB.'
+      validationMessage.value = 'Image is too large. Maximum file size is 30MB.'
       showValidationModal.value = true
       return
     }

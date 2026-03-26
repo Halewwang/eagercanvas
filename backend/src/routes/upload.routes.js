@@ -5,7 +5,7 @@ import { authRequired } from '../middleware/auth.js'
 import { createSignedUpload, uploadFile, uploadRemoteFile } from '../services/upload.service.js'
 import { HttpError, asyncHandler } from '../utils/http.js'
 
-const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+const MAX_UPLOAD_SIZE_BYTES = 60 * 1024 * 1024
 
 const upload = multer({
   storage: multer.memoryStorage(),
