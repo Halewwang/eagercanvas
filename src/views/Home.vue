@@ -73,39 +73,23 @@
           From prompt to masterpiece in seconds.
         </p>
 
-        <!-- Creative Input -->
         <div class="w-full max-w-3xl relative group perspective-1000">
-          <!-- Glow Effect -->
-          <div class="absolute -inset-1 bg-gradient-to-r from-[var(--accent-color)] to-[var(--accent-hover)] rounded-2xl opacity-20 group-hover:opacity-40 blur-lg transition-opacity duration-500" />
-          
-          <div class="relative bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-2 transition-all duration-300 focus-within:border-[rgba(212,198,182,0.68)] focus-within:shadow-[0_0_0_1px_rgba(165,129,99,0.22)] shadow-2xl">
-            <textarea
-              v-model="inputText"
-              placeholder="Describe your next creation..."
-              class="w-full bg-transparent resize-none outline-none text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] min-h-[60px] md:min-h-[80px] text-lg md:text-xl p-4 font-light"
-              @keydown.enter.ctrl="handleCreateWithInput"
-            />
-            <div class="flex items-center justify-between px-2 pb-2">
-              <div class="flex gap-2 overflow-x-auto no-scrollbar max-w-[70%]">
-                <button
-                  v-for="tag in suggestions.slice(0, 2)"
-                  :key="tag"
-                  @click="inputText = tag"
-                  class="whitespace-nowrap px-3 py-1 text-xs rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--accent-color)] hover:text-white transition-colors duration-300"
-                >
-                  {{ tag }}
-                </button>
-              </div>
-              <button
-                @click="handleCreateWithInput"
-                class="flora-button-primary flex items-center gap-2 px-6 py-2 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg shadow-black/30"
-              >
-                <span class="text-sm font-medium">Create</span>
-                <n-icon :size="16"><SendOutline /></n-icon>
-              </button>
-            </div>
+          <div class="absolute -inset-1 bg-gradient-to-r from-white/20 to-white/5 rounded-3xl opacity-30 blur-xl transition-opacity duration-500 group-hover:opacity-50" />
+
+          <div class="relative flex flex-col md:flex-row items-center justify-center gap-4 md:gap-6 bg-[var(--bg-secondary)]/80 border border-[rgba(255,255,255,0.12)] rounded-3xl px-6 py-8 md:px-10 md:py-10 shadow-2xl backdrop-blur-sm">
+            <button
+              @click="enterCanvas"
+              class="home-entry-button"
+            >
+              Canvas
+            </button>
+            <button
+              @click="openEditorSpace"
+              class="home-entry-button"
+            >
+              Editor Space
+            </button>
           </div>
-          <div class="text-xs text-[var(--text-tertiary)] mt-3 tracking-widest uppercase opacity-60">Press Ctrl + Enter to start</div>
         </div>
       </section>
 
@@ -298,7 +282,6 @@ import { NIcon } from 'naive-ui'
 import { 
   AddOutline, 
   AppsOutline,
-  SendOutline,
   DocumentOutline,
   FolderOutline,
   CreateOutline,
@@ -410,9 +393,6 @@ const handleThumbnailHover = (project, isHovering) => {
   }
 }
 
-// Input state | 输入状态
-const inputText = ref('')
-
 // Rename modal state | 重命名弹窗状态
 const showRenameModal = ref(false)
 const renameValue = ref('')
@@ -420,14 +400,6 @@ const renameTargetId = ref(null)
 const showDeleteModal = ref(false)
 const deleteTargetId = ref(null)
 const deleteTargetName = ref('')
-
-// Suggestions tags | 建议标签
-const suggestions = [
-  'A magical forest in the rain',
-  'Street food photography in Tokyo',
-  'Waterfall splash close-up',
-  'Cinematic rainy flower field'
-]
 
 // Format date | 格式化日期
 const formatDate = (date) => {
@@ -508,24 +480,17 @@ const createNewProject = async () => {
   }
 }
 
-// Create project with input text | 使用输入文本创建项目
-const handleCreateWithInput = async () => {
-  try {
-    const name = inputText.value.trim() || 'Untitled'
-    const id = await createProject(name)
-    sessionStorage.setItem('ai-canvas-initial-prompt', inputText.value.trim())
-    inputText.value = ''
-    await router.push(`/canvas/${id}`)
-  } catch (err) {
-    if (!err?.__handled) {
-      window.$message?.error(getErrorMessage(err, 'Failed to create project'))
-    }
-  }
-}
-
 // Open existing project | 打开已有项目
 const openProject = async (project) => {
   await router.push(`/canvas/${project.id}`)
+}
+
+const enterCanvas = async () => {
+  await createNewProject()
+}
+
+const openEditorSpace = () => {
+  window.open('https://editor.enbrand.space/', '_self')
 }
 
 // Check if URL is a video | 检查 URL 是否为视频
@@ -549,17 +514,43 @@ watch(
 </script>
 
 <style scoped>
-/* Perspective for the input wrapper */
 .perspective-1000 {
   perspective: 1000px;
 }
 
-/* Hide scrollbar for suggestions */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+.home-entry-button {
+  min-width: 220px;
+  padding: 1rem 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 9999px;
+  background: transparent;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition:
+    transform 0.25s ease,
+    border-color 0.25s ease,
+    background-color 0.25s ease,
+    box-shadow 0.25s ease;
 }
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+
+.home-entry-button:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 40px rgba(255, 255, 255, 0.08);
+}
+
+.home-entry-button:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 767px) {
+  .home-entry-button {
+    width: 100%;
+    min-width: 0;
+  }
 }
 </style>
