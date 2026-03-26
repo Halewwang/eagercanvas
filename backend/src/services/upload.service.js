@@ -91,6 +91,13 @@ const uploadToBucket = async (fileName, file) => {
   return error
 }
 
+const getPublicUrl = (fileName) => {
+  const { data: { publicUrl } } = supabase.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(fileName)
+  return publicUrl
+}
+
 const uploadBufferFile = async ({ originalName, buffer, mimetype }) => {
   const fileName = buildStoredFileName(originalName)
 
@@ -117,11 +124,7 @@ const uploadBufferFile = async ({ originalName, buffer, mimetype }) => {
     throw new HttpError(500, 'File upload failed', 'UPLOAD_ERROR')
   }
 
-  const { data: { publicUrl } } = supabase.storage
-    .from(BUCKET_NAME)
-    .getPublicUrl(fileName)
-
-  return { url: publicUrl }
+  return { url: getPublicUrl(fileName) }
 }
 
 export const uploadFile = async (file) => {
@@ -163,4 +166,37 @@ export const uploadRemoteFile = async ({ url, fileName = '' }) => {
     buffer,
     mimetype: contentType
   })
+}
+
+export const createSignedUpload = async ({ originalName = '', mimetype = '' }) => {
+  const safeName = sanitizeOriginalName(
+    path.extname(originalName)
+      ? originalName
+      : `${originalName || 'asset'}${contentTypeToExtension(mimetype)}`,
+    `asset${contentTypeToExtension(mimetype)}`
+  )
+  const fileName = buildStoredFileName(safeName)
+
+  try {
+    await ensureBucket()
+  } catch (error) {
+    console.error('Supabase bucket check/create error:', error)
+    throw new HttpError(500, 'Upload initialization failed', 'UPLOAD_SIGN_INIT_FAILED')
+  }
+
+  const { data, error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .createSignedUploadUrl(fileName)
+
+  if (error || !data?.signedUrl || !data?.token || !data?.path) {
+    console.error('Supabase signed upload error:', error)
+    throw new HttpError(500, 'Upload initialization failed', 'UPLOAD_SIGN_FAILED')
+  }
+
+  return {
+    signedUrl: data.signedUrl,
+    token: data.token,
+    path: data.path,
+    url: getPublicUrl(fileName)
+  }
 }

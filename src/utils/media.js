@@ -1,5 +1,40 @@
 import request from './request'
 
+const directUploadToSignedUrl = (signedUrl, file, options = {}) =>
+  new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', signedUrl, true)
+    xhr.responseType = 'json'
+
+    if (typeof options.onProgress === 'function') {
+      xhr.upload.onprogress = (event) => {
+        const loaded = Number(event?.loaded || 0)
+        const total = Number(event?.total || 0)
+        if (!total) return
+        const percent = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)))
+        options.onProgress(percent)
+      }
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.response)
+        return
+      }
+      const message = xhr.response?.error || xhr.response?.message || xhr.statusText || 'Signed upload failed'
+      reject(new Error(message))
+    }
+
+    xhr.onerror = () => reject(new Error('Signed upload failed'))
+    xhr.ontimeout = () => reject(new Error('Upload timed out'))
+    xhr.timeout = 180000
+
+    const formData = new FormData()
+    formData.append('cacheControl', '3600')
+    formData.append('', file, file.name || 'asset')
+    xhr.send(formData)
+  })
+
 export const isDataImageUrl = (value = '') => /^data:image\//i.test(String(value || ''))
 export const isDataUrl = (value = '') => /^data:/i.test(String(value || ''))
 export const isRemoteHttpUrl = (value = '') => /^https?:\/\//i.test(String(value || ''))
@@ -21,22 +56,21 @@ export const dataUrlToFile = (dataUrl, fileName = 'image.png') => {
 
 export const uploadImageFile = async (file, options = {}) => {
   const { onProgress } = options
-  const formData = new FormData()
-  formData.append('file', file)
-  const res = await request.post('/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  const signRes = await request.post('/upload/signed', {
+    fileName: file?.name || 'asset',
+    fileType: file?.type || 'application/octet-stream'
+  }, {
     silentErrorToast: true,
-    silentNetworkErrorToast: true,
-    onUploadProgress: (event) => {
-      if (typeof onProgress !== 'function') return
-      const loaded = Number(event?.loaded || 0)
-      const total = Number(event?.total || 0)
-      if (!total) return
-      const percent = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)))
-      onProgress(percent)
-    }
+    silentNetworkErrorToast: true
   })
-  const uploadedUrl = String(res?.url || '').trim()
+
+  const signedUrl = String(signRes?.signedUrl || '').trim()
+  const uploadedUrl = String(signRes?.url || '').trim()
+  if (!signedUrl || !uploadedUrl) {
+    throw new Error('Upload initialization failed')
+  }
+
+  await directUploadToSignedUrl(signedUrl, file, { onProgress })
   return uploadedUrl || ''
 }
 
