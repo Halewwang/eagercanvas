@@ -74,9 +74,7 @@
         </p>
 
         <div class="w-full max-w-3xl relative group perspective-1000">
-          <div class="absolute -inset-1 bg-gradient-to-r from-white/20 to-white/5 rounded-3xl opacity-30 blur-xl transition-opacity duration-500 group-hover:opacity-50" />
-
-          <div class="relative flex flex-col md:flex-row items-center justify-center gap-4 md:gap-6 bg-[var(--bg-secondary)]/80 border border-[rgba(255,255,255,0.12)] rounded-3xl px-6 py-8 md:px-10 md:py-10 shadow-2xl backdrop-blur-sm">
+          <div class="relative flex flex-col md:flex-row items-center justify-center gap-4 md:gap-5">
             <button
               @click="enterCanvas"
               class="home-entry-button"
@@ -519,13 +517,13 @@ watch(
 }
 
 .home-entry-button {
-  min-width: 220px;
-  padding: 1rem 2rem;
+  min-width: 190px;
+  padding: 0.85rem 1.75rem;
   border: 1px solid rgba(255, 255, 255, 0.78);
   border-radius: 9999px;
   background: transparent;
   color: #ffffff;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -538,9 +536,9 @@ watch(
 
 .home-entry-button:hover {
   transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18px 40px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 28px rgba(255, 255, 255, 0.06);
 }
 
 .home-entry-button:active {
