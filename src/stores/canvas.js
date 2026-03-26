@@ -91,6 +91,32 @@ export const addNode = (type, position = { x: 100, y: 100 }, data = {}) => {
 const cloneNodes = (items) => JSON.parse(JSON.stringify(items))
 const cloneEdges = (items) => JSON.parse(JSON.stringify(items))
 
+const isEphemeralMediaUrl = (value) => {
+  const raw = String(value || '').trim()
+  return raw.startsWith('blob:') || /^data:/i.test(raw)
+}
+
+const sanitizeNodeForPersistence = (node) => {
+  const nextNode = JSON.parse(JSON.stringify(node))
+  const data = nextNode?.data
+  if (!data || typeof data !== 'object') return nextNode
+
+  delete data.base64
+
+  if (isEphemeralMediaUrl(data.url)) {
+    delete data.url
+  }
+
+  return nextNode
+}
+
+const createCanvasSnapshot = () => ({
+  nodes: nodes.value.map(sanitizeNodeForPersistence),
+  edges: JSON.parse(JSON.stringify(edges.value)),
+  groups: JSON.parse(JSON.stringify(groups.value)),
+  viewport: { ...canvasViewport.value }
+})
+
 const getNextGroupName = () => {
   const indices = groups.value
     .map((group) => {
@@ -572,12 +598,7 @@ export const saveProject = async () => {
 
   const runSave = async () => {
     let saved = true
-    const snapshot = {
-      nodes: JSON.parse(JSON.stringify(nodes.value)),
-      edges: JSON.parse(JSON.stringify(edges.value)),
-      groups: JSON.parse(JSON.stringify(groups.value)),
-      viewport: { ...canvasViewport.value }
-    }
+    const snapshot = createCanvasSnapshot()
 
     try {
       const updatedProject = await updateProjectCanvas(

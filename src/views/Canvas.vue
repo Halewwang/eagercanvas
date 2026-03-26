@@ -1198,6 +1198,25 @@ const loadProjectById = (projectId) => {
   }
 }
 
+const ensureProjectSnapshot = async (projectId) => {
+  const id = String(projectId || '')
+  if (!id || id === 'new') {
+    loadProjectById(id)
+    return
+  }
+
+  const existing = projects.value.find((project) => project.id === id) || null
+  if (!existing?.canvasData) {
+    try {
+      await refreshProjectById(id)
+    } catch {
+      // Fall back to any locally cached draft when detail refresh is unavailable.
+    }
+  }
+
+  loadProjectById(id)
+}
+
 const applyPendingWorkflowTemplate = async () => {
   const raw = sessionStorage.getItem('ai-canvas-workflow-template')
   if (!raw) return
@@ -1223,14 +1242,14 @@ const applyPendingWorkflowTemplate = async () => {
 // Watch for route changes | 监听路由变化
 watch(
   () => route.params.id,
-  (newId, oldId) => {
+  async (newId, oldId) => {
     if (newId && newId !== oldId) {
       // Save current project before switching | 切换前保存当前项目
       if (oldId) {
-        flushSave()
+        await flushSave()
       }
       // Load new project | 加载新项目
-      loadProjectById(newId)
+      await ensureProjectSnapshot(newId)
     }
   }
 )
@@ -1285,11 +1304,13 @@ onMounted(async () => {
 
   // Load project data after bootstrap when no warm snapshot was available.
   if (!hasWarmProject) {
-    loadProjectById(route.params.id)
-  }
-
-  if (routeProjectId && routeProjectId !== 'new') {
-    refreshProjectById(routeProjectId).catch(() => {
+    await ensureProjectSnapshot(route.params.id)
+  } else if (routeProjectId && routeProjectId !== 'new') {
+    refreshProjectById(routeProjectId).then((project) => {
+      if (String(route.params.id || '') !== routeProjectId) return
+      if (!project?.canvasData) return
+      loadProjectById(routeProjectId)
+    }).catch(() => {
       // Fall back to local cache when remote detail refresh is unavailable.
     })
   }

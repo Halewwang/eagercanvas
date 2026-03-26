@@ -209,9 +209,9 @@ const mergeRemoteProjectWithLocalDraft = (remote, local) => {
     updatedAt: local.updatedAt || remote.updatedAt
   }
 
-  // Prefer authoritative cloud canvas data.
-  // Only reuse local canvas content when cloud data is still empty.
-  if ((!remoteHasCanvasData || !hasCanvasContent(remote.canvasData)) && hasCanvasContent(local.canvasData)) {
+  // Keep newer local canvas drafts when they exist.
+  // This prevents refresh/detail fetches from discarding unsynced node edits.
+  if (hasCanvasContent(local.canvasData) && (!remoteHasCanvasData || localTs > remoteTs || !hasCanvasContent(remote.canvasData))) {
     next.canvasData = local.canvasData
   }
 
@@ -267,13 +267,14 @@ export const refreshProjectById = async (id) => {
 
   const response = await apiGetProject(id)
   const remoteProject = mapProjectFromApi(response.data)
+  const mergedProject = mergeRemoteProjectWithLocalDraft(remoteProject, localProject)
   forgetDeletedProject(id)
   projects.value = [
-    remoteProject,
+    mergedProject,
     ...projects.value.filter((project) => project.id !== id)
   ]
   saveLocalCache()
-  return remoteProject
+  return mergedProject
 }
 
 export const createProject = async (name = 'Untitled') => {
@@ -332,6 +333,7 @@ export const updateProject = async (id, data) => {
 export const updateProjectCanvas = async (id, canvasData, currentVersion = null) => {
   const project = projects.value.find((p) => p.id === id)
   if (!project) return null
+  const localUpdatedAt = new Date().toISOString()
 
   const next = {
     ...project,
@@ -346,8 +348,7 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
       },
       project.thumbnail
     ),
-    // Don't update local timestamp immediately to avoid race conditions with server
-    // updatedAt: new Date().toISOString() 
+    updatedAt: localUpdatedAt
   }
 
   // Always keep the latest canvas snapshot in local draft cache first.
