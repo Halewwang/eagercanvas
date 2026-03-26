@@ -80,6 +80,9 @@
               class="module-image"
               @load="handlePreviewImageLoad"
             />
+            <button class="module-reupload-btn nodrag nopan" @click.stop="triggerUpload">
+              Replace
+            </button>
             <div v-if="activeTool === 'crop'" class="crop-overlay crop-overlay-inline">
               <div class="crop-mask crop-mask-top" :style="cropMaskTopStyle"></div>
               <div class="crop-mask crop-mask-left" :style="cropMaskLeftStyle"></div>
@@ -114,15 +117,21 @@
         >
           <n-icon :size="32" class="text-[#7b818c]"><ImageOutline /></n-icon>
           <span class="text-sm text-[#7b818c]">Drop an image or click to upload</span>
-          <div class="upload-btn upload-btn-label nodrag nopan">Upload</div>
-          <input
-            :id="uploadInputId"
-            ref="uploadInputRef"
-            type="file"
-            accept="image/*"
-            class="upload-hit-area nodrag nopan"
-            @change="handleFileUpload"
-          />
+          <button class="upload-btn upload-btn-label nodrag nopan" @click.stop="triggerUpload">Upload</button>
+        </div>
+        <input
+          :id="uploadInputId"
+          ref="uploadInputRef"
+          type="file"
+          accept="image/*"
+          class="hidden"
+          @change="handleFileUpload"
+        />
+      </div>
+
+      <div v-if="showUploadProgress" class="upload-progress-wrap">
+        <div class="upload-progress-track">
+          <div class="upload-progress-bar" :style="uploadProgressStyle"></div>
         </div>
       </div>
 
@@ -186,12 +195,6 @@
         </div>
       </template>
     </BaseModal>
-
-    <div v-if="showUploadProgress" class="upload-progress-wrap" :style="moduleStyle">
-      <div class="upload-progress-track">
-        <div class="upload-progress-bar" :style="uploadProgressStyle"></div>
-      </div>
-    </div>
 
     <div class="binding-status-wrap">
       <div class="binding-status-row">
@@ -710,6 +713,11 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleCropKeydown)
   window.removeEventListener('resize', syncPreviewStageSize)
 })
+
+const triggerUpload = () => {
+  if (isUploading.value) return
+  uploadInputRef.value?.click()
+}
 
 const pickNearestSizeKey = (ratioKey, resolutionKey) => {
   let candidates = sizeMetaOptions.value.filter((opt) => opt.ratio === ratioKey)
@@ -1650,7 +1658,12 @@ const handleMultiAngleError = async (payload = {}) => {
   border-radius: calc(var(--module-radius) - var(--module-inset));
 }
 .upload-progress-wrap {
-  margin-top: 6px;
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  z-index: 4;
+  pointer-events: none;
 }
 .upload-progress-track {
   width: 100%;
@@ -1695,6 +1708,27 @@ const handleMultiAngleError = async (payload = {}) => {
   font-size: 12px;
   padding: 6px 12px;
   line-height: 1;
+}
+
+.module-reupload-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(12, 12, 12, 0.62);
+  color: #eef1f5;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 11px;
+  backdrop-filter: blur(10px);
+}
+
+.module-reupload-btn:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(20, 20, 20, 0.78);
 }
 
 .upload-btn-label {
