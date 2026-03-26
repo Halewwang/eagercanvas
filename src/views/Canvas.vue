@@ -1,6 +1,6 @@
 <template>
   <!-- Canvas page | 画布页面 -->
-  <div ref="canvasShellRef" class="h-screen w-screen bg-[#1C1C1C]">
+  <div ref="canvasShellRef" class="h-screen w-screen bg-[#080808]">
     <!-- Main canvas area | 主画布区域 -->
     <div class="h-full relative overflow-hidden">
       <!-- Top capsules | 顶部胶囊菜单 -->
@@ -72,8 +72,8 @@
         @viewport-change="handleViewportChange"
         @edges-change="onEdgesChange"
         class="canvas-flow"
+        :style="canvasFlowStyle"
       >
-        <Background v-if="showGrid" :gap="20" :size="1" style="opacity: 0.5" />
         <MiniMap 
           v-if="!isMobile"
           position="bottom-right"
@@ -159,7 +159,7 @@
       <aside class="flora-panel absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 p-2 rounded-[36px] z-20 w-[64px]">
         <button 
           @click="toggleToolbarNodeMenu"
-          class="ui-toolbar-button ui-toolbar-button--round ui-toolbar-button--solid"
+          class="ui-toolbar-button ui-toolbar-button--round canvas-primary-tool"
           title="Add Node"
         >
           <n-icon :size="20"><AddOutline /></n-icon>
@@ -254,15 +254,7 @@
       </div>
 
       <!-- Bottom controls | 底部控制 -->
-      <div class="flora-panel absolute bottom-4 left-4 flex items-center gap-2 rounded-full p-1.5">
-        <!-- <button 
-          @click="showGrid = !showGrid" 
-          :class="showGrid ? 'bg-[var(--accent-color)] text-white' : 'hover:bg-[var(--bg-tertiary)]'"
-          class="p-2 rounded transition-colors"
-          title="切换网格"
-        >
-          <n-icon :size="16"><GridOutline /></n-icon>
-        </button> -->
+      <div class="flora-panel absolute bottom-4 left-4 z-20 flex items-center gap-2 rounded-full p-1.5">
         <button 
           @click="fitView({ padding: 0.2 })" 
           class="ui-icon-button"
@@ -403,7 +395,6 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
-import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
 import { NIcon } from 'naive-ui'
 import { 
@@ -602,6 +593,26 @@ const nodeMenuStyle = computed(() => {
     left: '90px',
     top: '50%',
     transform: 'translateY(-50%)'
+  }
+})
+
+const canvasFlowStyle = computed(() => {
+  const zoom = Math.max(Number(viewport.value?.zoom) || 1, 0.01)
+  const baseGap = 20
+  const minGap = 12
+  const scaledGap = Math.max(baseGap * zoom, minGap)
+  const gridOpacity = Math.max(0.02, Math.min(0.05, 0.05 * Math.pow(zoom, 0.85)))
+  const rawX = Number(viewport.value?.x) || 0
+  const rawY = Number(viewport.value?.y) || 0
+  const offsetX = ((rawX % scaledGap) + scaledGap) % scaledGap
+  const offsetY = ((rawY % scaledGap) + scaledGap) % scaledGap
+
+  return {
+    '--canvas-grid-image': showGrid.value
+      ? `radial-gradient(rgba(255,255,255,${gridOpacity}) 1px, transparent 1px)`
+      : 'none',
+    '--canvas-grid-size': `${scaledGap}px ${scaledGap}px`,
+    '--canvas-grid-position': `${offsetX}px ${offsetY}px`
   }
 })
 
@@ -1340,6 +1351,11 @@ onUnmounted(() => {
 @import '@vue-flow/core/dist/theme-default.css';
 @import '@vue-flow/minimap/dist/style.css';
 
+.canvas-flow {
+  position: relative;
+  z-index: 1;
+}
+
 .share-panel {
   display: flex;
   flex-direction: column;
@@ -1629,7 +1645,17 @@ onUnmounted(() => {
 .canvas-flow {
   width: 100%;
   height: 100%;
-  background: #1c1c1c;
+  background: #080808;
+}
+
+.canvas-primary-tool {
+  background: #ededed;
+  color: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.canvas-primary-tool:hover:not(:disabled) {
+  background: #d9d9d9;
 }
 
 .group-overlay-layer {
@@ -1838,7 +1864,10 @@ onUnmounted(() => {
 
 <style>
 .canvas-flow .vue-flow__pane {
-  background: #1c1c1c;
+  background-color: #080808;
+  background-image: var(--canvas-grid-image, none);
+  background-size: var(--canvas-grid-size, 20px 20px);
+  background-position: var(--canvas-grid-position, 0 0);
 }
 
 .canvas-flow .vue-flow__node-text,
