@@ -819,10 +819,12 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
 export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
   const rawModel = String(payload.model || payload.model_name || 'hunyuan3d-pro-3.1').trim().toLowerCase()
   const is31 = rawModel.includes('3.1')
+  const providerModel = is31 ? '3.1' : '3.0'
   const prompt = String(payload.prompt || payload.Prompt || '').trim()
   const multiViewImages = Array.isArray(payload.multiViewImages) ? payload.multiViewImages : []
   const generateType = String(payload.generateType || payload.GenerateType || 'Normal').trim() || 'Normal'
   const polygonType = String(payload.polygonType || payload.PolygonType || '').trim()
+  const resultFormat = String(payload.resultFormat || payload.ResultFormat || '').trim().toUpperCase()
   const faceCount = Number(payload.faceCount ?? payload.FaceCount)
   const enablePBR = typeof payload.enablePBR === 'boolean'
     ? payload.enablePBR
@@ -833,7 +835,10 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
     throw new HttpError(400, '3D generation requires a prompt or at least one multi-view image', 'MODEL3D_INPUT_REQUIRED')
   }
 
-  const requestBody = { GenerateType: generateType }
+  const requestBody = {
+    Model: providerModel,
+    GenerateType: generateType
+  }
   const allowedSecondaryViewTypes = new Set(is31
     ? ['left', 'right', 'back', 'top', 'bottom', 'left_front', 'right_front']
     : ['left', 'right', 'back'])
@@ -850,8 +855,13 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
     requestBody.FaceCount = Math.round(faceCount)
   }
 
+  if (['FBX', 'STL', 'USDZ'].includes(resultFormat)) {
+    requestBody.ResultFormat = resultFormat
+  }
+
   let normalizedMultiViewImages = []
-  if (prompt) {
+  const allowPromptWithImage = generateType.toLowerCase() === 'sketch'
+  if (prompt && (multiViewImages.length === 0 || allowPromptWithImage)) {
     requestBody.Prompt = prompt
   }
 
@@ -898,6 +908,12 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
 
     if (normalizedMultiViewImages.length > 0) {
       requestBody.MultiViewImages = normalizedMultiViewImages
+    }
+
+    // 302 文档要求 Prompt 与 ImageUrl/ImageBase64 不能同时存在（Sketch 除外）。
+    // 多视图模式下 front 视角会映射为主输入图，因此这里优先走图生 3D 协议。
+    if (!allowPromptWithImage) {
+      delete requestBody.Prompt
     }
 
     if (primaryFrontView.ViewImageUrl) {

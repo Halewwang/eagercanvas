@@ -1,6 +1,6 @@
 <template>
   <div class="model3d-shell">
-    <div v-if="viewerUrl" class="model3d-media-shell">
+    <div v-if="viewerUrl && !loadError" class="model3d-media-shell">
       <model-viewer
         ref="modelViewerRef"
         class="model3d-viewer"
@@ -13,10 +13,11 @@
         ar-status="not-presenting"
         disable-pan
         @load="handleModelViewerLoad"
+        @error="handleModelViewerError"
       />
     </div>
 
-    <div v-else-if="canRenderObj" ref="objStageRef" class="model3d-media-shell model3d-obj-shell" />
+    <div v-else-if="canRenderObj && !loadError" ref="objStageRef" class="model3d-media-shell model3d-obj-shell" />
 
     <div v-else-if="previewImageUrl" class="module-image-shell">
       <div class="module-image-frame">
@@ -27,6 +28,10 @@
     <div v-else class="w-full h-full bg-[#0f0f0f] flex flex-col items-center justify-center gap-2 text-center px-4">
       <n-icon :size="32" class="text-[#7b818c]"><AppsOutline /></n-icon>
       <span class="text-sm text-[#7b818c]">{{ emptyLabel }}</span>
+    </div>
+
+    <div v-if="loadError" class="model3d-error-banner">
+      {{ loadError }}
     </div>
 
     <div
@@ -117,6 +122,7 @@ const zoomPercent = ref(118)
 const cameraOrbit = computed(() => `${orbitAngle.value}deg ${elevationAngle.value}deg ${zoomPercent.value}%`)
 const cubeRotationX = ref(-22)
 const cubeRotationY = ref(-30)
+const loadError = ref('')
 const cubeStyle = computed(() => ({
   transform: `rotateX(${cubeRotationX.value}deg) rotateY(${cubeRotationY.value}deg)`
 }))
@@ -139,6 +145,7 @@ const handleModelViewerLoad = async () => {
   const viewer = modelViewerRef.value
   if (!viewer) return
 
+  loadError.value = ''
   orbitAngle.value = 0
   elevationAngle.value = 72
   zoomPercent.value = 100
@@ -151,6 +158,15 @@ const handleModelViewerLoad = async () => {
   } catch (error) {
     console.warn('model-viewer framing failed', error)
   }
+}
+
+const handleModelViewerError = (event) => {
+  const detailMessage = String(event?.detail?.message || '').trim()
+  loadError.value = detailMessage || '3D model failed to load in viewer'
+  console.error('model-viewer load failed', {
+    url: viewerUrl.value,
+    event
+  })
 }
 
 const stopObjLoop = () => {
@@ -209,6 +225,7 @@ const mountObjViewer = async () => {
 
   disposeObjViewer()
   await nextTick()
+  loadError.value = ''
 
   const host = objStageRef.value
   const width = Math.max(1, host.clientWidth)
@@ -279,6 +296,7 @@ const mountObjViewer = async () => {
     undefined,
     (error) => {
       if (loadToken !== objLoadToken) return
+      loadError.value = error?.message || 'OBJ preview failed to load'
       console.error('OBJ preview load failed', error)
     }
   )
@@ -330,6 +348,7 @@ const zoomOut = () => {
 }
 
 watch(canRenderObj, async (enabled) => {
+  loadError.value = ''
   if (enabled) {
     await mountObjViewer()
     return
@@ -338,8 +357,13 @@ watch(canRenderObj, async (enabled) => {
 }, { immediate: true })
 
 watch(objUrl, async () => {
+  loadError.value = ''
   if (!canRenderObj.value) return
   await mountObjViewer()
+})
+
+watch(viewerUrl, () => {
+  loadError.value = ''
 })
 
 onMounted(async () => {
@@ -480,5 +504,21 @@ onBeforeUnmount(() => {
 
 .model3d-control-btn:active {
   transform: scale(0.96);
+}
+
+.model3d-error-banner {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  z-index: 5;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  background: rgba(63, 17, 17, 0.84);
+  color: #fecaca;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  backdrop-filter: blur(10px);
 }
 </style>
