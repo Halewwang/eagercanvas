@@ -1,6 +1,12 @@
 <template>
   <div class="model3d-shell">
-    <div v-if="activeViewerUrl && !loadError" class="model3d-media-shell">
+    <div
+      v-if="activeViewerUrl && !loadError"
+      class="model3d-media-shell nodrag nopan"
+      @pointerdown.stop
+      @mousedown.stop
+      @click.stop
+    >
       <model-viewer
         ref="modelViewerRef"
         class="model3d-viewer"
@@ -17,7 +23,14 @@
       />
     </div>
 
-    <div v-else-if="canRenderObj && !loadError" ref="objStageRef" class="model3d-media-shell model3d-obj-shell" />
+    <div
+      v-else-if="canRenderObj && !loadError"
+      ref="objStageRef"
+      class="model3d-media-shell model3d-obj-shell nodrag nopan"
+      @pointerdown.stop.prevent="handleObjPointerDown"
+      @mousedown.stop
+      @click.stop
+    />
 
     <div v-else-if="previewImageUrl" class="module-image-shell">
       <div class="module-image-frame">
@@ -143,6 +156,11 @@ let objAnimationFrame = 0
 let objLoadToken = 0
 let objTargetY = 0
 let objBaseDistance = 4
+let objDragPointerId = null
+let objDragStartX = 0
+let objDragStartY = 0
+let objStartOrbit = 0
+let objStartElevation = 72
 
 const handleModelViewerLoad = async () => {
   const viewer = modelViewerRef.value
@@ -351,6 +369,34 @@ const handleCubePointerDown = (event) => {
   window.addEventListener('pointerup', handleCubePointerUp)
 }
 
+const handleObjPointerMove = (event) => {
+  if (objDragPointerId == null || event.pointerId !== objDragPointerId) return
+  const dx = event.clientX - objDragStartX
+  const dy = event.clientY - objDragStartY
+  orbitAngle.value = objStartOrbit + dx * 0.45
+  elevationAngle.value = Math.max(8, Math.min(160, objStartElevation - dy * 0.3))
+  syncCubeToCamera()
+  syncObjCamera()
+}
+
+const handleObjPointerUp = (event) => {
+  if (objDragPointerId == null || event.pointerId !== objDragPointerId) return
+  objDragPointerId = null
+  window.removeEventListener('pointermove', handleObjPointerMove)
+  window.removeEventListener('pointerup', handleObjPointerUp)
+}
+
+const handleObjPointerDown = (event) => {
+  if (!canRenderObj.value) return
+  objDragPointerId = event.pointerId
+  objDragStartX = event.clientX
+  objDragStartY = event.clientY
+  objStartOrbit = orbitAngle.value
+  objStartElevation = elevationAngle.value
+  window.addEventListener('pointermove', handleObjPointerMove)
+  window.addEventListener('pointerup', handleObjPointerUp)
+}
+
 const zoomIn = () => {
   zoomPercent.value = Math.max(55, zoomPercent.value - 10)
   syncObjCamera()
@@ -390,6 +436,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('pointermove', handleCubePointerMove)
   window.removeEventListener('pointerup', handleCubePointerUp)
+  window.removeEventListener('pointermove', handleObjPointerMove)
+  window.removeEventListener('pointerup', handleObjPointerUp)
   disposeObjViewer()
 })
 </script>
@@ -412,7 +460,7 @@ onBeforeUnmount(() => {
   height: 100%;
   --poster-color: transparent;
   background: transparent;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .model3d-obj-shell {
@@ -423,7 +471,12 @@ onBeforeUnmount(() => {
   display: block;
   width: 100% !important;
   height: 100% !important;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.model3d-obj-shell:active :deep(canvas) {
+  cursor: grabbing;
 }
 
 .model3d-controls {
