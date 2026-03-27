@@ -5,16 +5,7 @@
       <!-- Header | 头部 -->
       <div class="panel-header">
         <div class="panel-tabs">
-          <span
-            class="tab-item" 
-            :class="{ active: activeTab === 'public' }"
-            @click="activeTab = 'public'"
-          >Featured</span>
-          <span
-            class="tab-item" 
-            :class="{ active: activeTab === 'my' }"
-            @click="activeTab = 'my'"
-          >My</span>
+          <span class="tab-item active">Featured</span>
         </div>
         <button class="expand-btn" @click="visible = false">
           <n-icon :size="16"><CloseOutline /></n-icon>
@@ -38,12 +29,6 @@
             </div>
             <div class="card-title-row">
               <div class="card-title">{{ workflow.name }}</div>
-              <div v-if="activeTab === 'my'" class="card-actions">
-                <button class="tiny-btn" @click="handleTogglePublic(workflow)">
-                  {{ workflow.visibility === 'public' ? 'Unpublish' : 'Publish' }}
-                </button>
-                <button class="tiny-btn danger" @click="handleDeleteMyTemplate(workflow.id)">Delete</button>
-              </div>
             </div>
           </div>
         </div>
@@ -64,7 +49,7 @@
  * Workflow Panel Component | 工作流面板组件
  * 显示工作流模板列表，支持一键添加到画布
  */
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { NIcon } from 'naive-ui'
 import { 
   CloseOutline,
@@ -85,9 +70,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show', 'add-workflow'])
 
-// Active tab | 当前标签
-const activeTab = ref('public')
-
 // Visible state | 显示状态
 const visible = computed({
   get: () => props.show,
@@ -95,15 +77,9 @@ const visible = computed({
 })
 
 const {
-  myWorkflows,
-  publicWorkflows,
-  loadWorkflowTemplates,
-  deleteMyWorkflowTemplate,
-  setWorkflowTemplateVisibility,
+  systemWorkflows,
   resolveWorkflowTemplate
 } = useWorkflowsStore()
-
-loadWorkflowTemplates()
 
 // Icon mapping | 图标映射
 const iconMap = {
@@ -120,17 +96,9 @@ const getIcon = (iconName) => {
   return iconMap[iconName] || GridOutline
 }
 
-const currentList = computed(() => {
-  if (activeTab.value === 'public') return publicWorkflows.value
-  if (activeTab.value === 'my') return myWorkflows.value.filter((item) => item.sourceType !== 'project')
-  return []
-})
+const currentList = computed(() => systemWorkflows.value)
 
-const emptyStateMessage = computed(() => {
-  if (activeTab.value === 'public') return 'No public workflows yet'
-  if (activeTab.value === 'my') return 'No custom workflows yet'
-  return 'No workflows found'
-})
+const emptyStateMessage = computed(() => 'No workflows found')
 
 // Handle add workflow | 处理添加工作流
 const handleAddWorkflow = (workflow) => {
@@ -138,15 +106,6 @@ const handleAddWorkflow = (workflow) => {
   if (!runtimeWorkflow) return
   emit('add-workflow', { workflow: runtimeWorkflow, options: {} })
   visible.value = false
-}
-
-const handleDeleteMyTemplate = async (id) => {
-  await deleteMyWorkflowTemplate(id)
-}
-
-const handleTogglePublic = async (workflow) => {
-  const nextVisibility = workflow.visibility === 'public' ? 'private' : 'public'
-  await setWorkflowTemplateVisibility(workflow.id, nextVisibility)
 }
 
 // Handle click outside | 点击外部关闭

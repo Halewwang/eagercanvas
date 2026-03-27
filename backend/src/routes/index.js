@@ -9,6 +9,7 @@ import { projectsRouter } from './projects.routes.js'
 import { runsRouter } from './runs.routes.js'
 import { usageRouter } from './usage.routes.js'
 import { usageAdminRouter } from './usage-admin.routes.js'
+import { workspaceRouter } from './workspace.routes.js'
 
 import { uploadRouter } from './upload.routes.js'
 
@@ -20,6 +21,7 @@ apiRouter.get('/health', (_req, res) => {
 
 apiRouter.use('/auth', authRouter)
 apiRouter.use('/projects', projectsRouter)
+apiRouter.use('/workspace', workspaceRouter)
 apiRouter.use('/runs', runsRouter)
 apiRouter.use('/usage', usageRouter)
 apiRouter.use('/admin', adminRouter)
