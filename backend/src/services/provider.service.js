@@ -547,6 +547,52 @@ const extractVideoUrl = (data = {}) => {
   )
 }
 
+const normalize3DStatus = (value = '') => {
+  const status = String(value || '').trim().toLowerCase()
+  if (!status) return 'processing'
+  if (['success', 'succeeded', 'completed', 'done', 'finished'].includes(status)) return 'completed'
+  if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) return 'failed'
+  return 'processing'
+}
+
+const normalize3DAssets = (response = {}) => {
+  const resultItems = [
+    ...(Array.isArray(response?.Response?.ResultFile3Ds) ? response.Response.ResultFile3Ds : []),
+    ...(Array.isArray(response?.data?.Response?.ResultFile3Ds) ? response.data.Response.ResultFile3Ds : []),
+    ...(Array.isArray(response?.ResultFile3Ds) ? response.ResultFile3Ds : [])
+  ]
+
+  const assets = resultItems
+    .map((item) => ({
+      type: String(item?.Type || item?.type || '').trim().toLowerCase(),
+      url: String(item?.Url || item?.url || '').trim(),
+      previewImageUrl: String(item?.PreviewImageUrl || item?.previewImageUrl || '').trim()
+    }))
+    .filter((item) => item.type && item.url)
+
+  const previewImageUrl = String(
+    response?.previewImageUrl ||
+    response?.PreviewImageUrl ||
+    response?.Response?.PreviewImageUrl ||
+    assets.find((item) => item.previewImageUrl)?.previewImageUrl ||
+    ''
+  ).trim()
+
+  return {
+    jobId: String(
+      response?.jobId ||
+      response?.JobId ||
+      response?.Response?.JobId ||
+      response?.data?.JobId ||
+      ''
+    ).trim(),
+    status: normalize3DStatus(response?.status || response?.Response?.Status || response?.data?.Response?.Status),
+    previewImageUrl,
+    assets,
+    raw: response
+  }
+}
+
 const normalizeSoraStatus = (value) => {
   const status = String(value || '').toLowerCase()
   if (['created', 'in_processing', 'in_progress', 'processing', 'pending', 'submitted', 'running', 'queued'].includes(status)) return 'processing'
@@ -749,6 +795,90 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
     throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
   }
   return normalized
+}
+
+export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
+  const model = String(payload.model || payload.model_name || 'hunyuan3d-pro-3.1').trim().toLowerCase()
+  const prompt = String(payload.prompt || payload.Prompt || '').trim()
+  const multiViewImages = Array.isArray(payload.multiViewImages) ? payload.multiViewImages : []
+  const generateType = String(payload.generateType || payload.GenerateType || 'Normal').trim() || 'Normal'
+  const resultFormat = String(payload.resultFormat || payload.ResultFormat || '').trim().toUpperCase()
+  const polygonType = String(payload.polygonType || payload.PolygonType || '').trim()
+  const faceCount = Number(payload.faceCount ?? payload.FaceCount)
+  const enablePBR = typeof payload.enablePBR === 'boolean'
+    ? payload.enablePBR
+    : typeof payload.EnablePBR === 'boolean'
+      ? payload.EnablePBR
+      : undefined
+  const shouldSendPrompt = multiViewImages.length === 0 || generateType === 'Sketch'
+
+  const requestBody = {
+    Model: model,
+    GenerateType: generateType
+  }
+
+  if (shouldSendPrompt && prompt) {
+    requestBody.Prompt = prompt
+  }
+
+  if (typeof enablePBR === 'boolean') {
+    requestBody.EnablePBR = enablePBR
+  }
+
+  if (generateType.toLowerCase() === 'lowpoly' && polygonType) {
+    requestBody.PolygonType = polygonType
+  }
+
+  if (Number.isFinite(faceCount) && faceCount > 0) {
+    requestBody.FaceCount = Math.round(faceCount)
+  }
+
+  if (resultFormat) {
+    requestBody.ResultFormat = resultFormat
+  }
+
+  if (multiViewImages.length > 0) {
+    requestBody.MultiViewImages = multiViewImages
+      .map((item) => {
+        const viewType = String(item.viewType || item.ViewType || '').trim()
+        const source = String(item.source || item.imageUrl || item.ImageUrl || item.imageBase64 || item.ImageBase64 || item.value || '').trim()
+        if (!viewType || !source) return null
+
+        const dataUrl = parseDataUrl(source)
+        if (dataUrl?.data) {
+          return {
+            ViewType: viewType,
+            ImageBase64: dataUrl.data
+          }
+        }
+
+        if (/^https?:\/\//i.test(source)) {
+          return {
+            ViewType: viewType,
+            ImageUrl: source
+          }
+        }
+
+        return {
+          ViewType: viewType,
+          ImageBase64: source
+        }
+      })
+      .filter(Boolean)
+  }
+
+  const raw = await callProvider('/tencent/hunyuan3d/pro-job', requestBody, 'POST', requestOptions)
+  return normalize3DAssets(raw)
+}
+
+export const provider3DStatus = async (jobId, requestOptions = {}) => {
+  const safeJobId = String(jobId || '').trim()
+  if (!safeJobId) {
+    throw new HttpError(400, '3D job id is required', 'MODEL3D_JOB_REQUIRED')
+  }
+
+  const raw = await callProvider(`/tencent/hunyuan3d/pro-job/${safeJobId}`, null, 'GET', requestOptions)
+  return normalize3DAssets(raw)
 }
 
 export const providerRemoveBackground = async (payload = {}) => {

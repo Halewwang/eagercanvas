@@ -7,6 +7,7 @@ import { ref, computed } from 'vue'
 import {
   IMAGE_MODELS,
   VIDEO_MODELS,
+  MODEL3D_MODELS,
   CHAT_MODELS,
   IMAGE_SIZE_OPTIONS,
   IMAGE_QUALITY_OPTIONS,
@@ -16,10 +17,12 @@ import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_VIDEO_MODEL,
   DEFAULT_CHAT_MODEL,
+  DEFAULT_MODEL3D_MODEL,
   DEFAULT_IMAGE_SIZE,
   DEFAULT_VIDEO_RATIO,
   DEFAULT_VIDEO_DURATION,
-  resolveVideoModelKey
+  resolveVideoModelKey,
+  resolve3DModelKey
 } from '@/config/models'
 import { useModelConfig } from '@/hooks/useModelConfig'
 
@@ -44,7 +47,7 @@ export const loadAllModels = async () => {
   if (modelConfig) {
     return [...modelConfig.allImageModels.value, ...modelConfig.allVideoModels.value, ...modelConfig.allChatModels.value]
   }
-  return [...IMAGE_MODELS, ...VIDEO_MODELS, ...CHAT_MODELS]
+  return [...IMAGE_MODELS, ...VIDEO_MODELS, ...CHAT_MODELS, ...MODEL3D_MODELS]
 }
 
 /**
@@ -55,9 +58,10 @@ export const getModelConfig = (modelKey) => {
   if (modelConfig) {
     return modelConfig.getImageModel(modelKey) || 
            modelConfig.getVideoModel(modelKey) || 
-           modelConfig.getChatModel(modelKey)
+           modelConfig.getChatModel(modelKey) ||
+           MODEL3D_MODELS.find((model) => model.key === modelKey)
   }
-  const allModels = [...IMAGE_MODELS, ...VIDEO_MODELS, ...CHAT_MODELS]
+  const allModels = [...IMAGE_MODELS, ...VIDEO_MODELS, ...CHAT_MODELS, ...MODEL3D_MODELS]
   return allModels.find(m => m.key === modelKey)
 }
 
@@ -153,6 +157,8 @@ export const chatModelOptions = computed(() => {
   return modelConfig ? modelConfig.allChatModels.value : CHAT_MODELS
 })
 
+export const model3dModelOptions = computed(() => MODEL3D_MODELS)
+
 // Simple select options (for n-select) | 简单选择选项
 export const imageModelSelectOptions = computed(() => 
   imageModelOptions.value.map(m => ({ label: m.label, value: m.key }))
@@ -170,16 +176,19 @@ export const chatModelSelectOptions = computed(() =>
 export const imageModels = computed(() => imageModelOptions.value)
 export const videoModels = computed(() => videoModelOptions.value)
 export const chatModels = computed(() => chatModelOptions.value)
+export const model3dModels = computed(() => model3dModelOptions.value)
 
 // Export defaults | 导出默认值
 export {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_VIDEO_MODEL,
   DEFAULT_CHAT_MODEL,
+  DEFAULT_MODEL3D_MODEL,
   DEFAULT_IMAGE_SIZE,
   DEFAULT_VIDEO_RATIO,
   DEFAULT_VIDEO_DURATION,
-  resolveVideoModelKey
+  resolveVideoModelKey,
+  resolve3DModelKey
 }
 
 // Export options | 导出选项

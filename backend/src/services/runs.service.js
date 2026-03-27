@@ -4,8 +4,10 @@ import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 import {
   providerChatCompletions,
+  providerCreate3D,
   providerCreateVideo,
   providerGenerateImage,
+  provider3DStatus,
   providerVideoStatus
 } from './provider.service.js'
 import { get302RecordByRequestId } from './dashboard302.service.js'
@@ -18,7 +20,7 @@ import {
 } from './usage-ledger.service.js'
 
 const runSchema = z.object({
-  type: z.enum(['chat', 'image', 'video']),
+  type: z.enum(['chat', 'image', 'video', 'model3d']),
   projectId: z.string().uuid().optional().nullable(),
   model: z.string().optional(),
   payload: z.any()
@@ -50,6 +52,18 @@ const extractProviderVideoUrl = (result = {}) =>
   result?.raw?.task_result?.videos?.[0]?.url ||
   ''
 
+const extractProvider3DJobId = (result = {}) => {
+  const candidates = [
+    result?.jobId,
+    result?.job_id,
+    result?.JobId,
+    result?.Response?.JobId,
+    result?.data?.JobId
+  ]
+  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+  return found ? String(found) : ''
+}
+
 const bindVideoTaskOwnership = async ({ userId, runId, taskId }) => {
   if (!taskId) return
   const { error } = await supabase.from('audit_logs').insert({
@@ -62,6 +76,21 @@ const bindVideoTaskOwnership = async ({ userId, runId, taskId }) => {
   })
   if (error) {
     console.warn('[video] bind task ownership failed', error.message)
+  }
+}
+
+const bind3DTaskOwnership = async ({ userId, runId, taskId }) => {
+  if (!taskId) return
+  const { error } = await supabase.from('audit_logs').insert({
+    user_id: userId,
+    action: 'model3d.task.created',
+    metadata: {
+      run_id: runId,
+      task_id: taskId
+    }
+  })
+  if (error) {
+    console.warn('[model3d] bind task ownership failed', error.message)
   }
 }
 
@@ -87,6 +116,24 @@ const assertVideoTaskOwnership = async ({ userId, taskId }) => {
   }
 }
 
+const assert3DTaskOwnership = async ({ userId, taskId }) => {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('action', 'model3d.task.created')
+    .contains('metadata', { task_id: String(taskId) })
+    .limit(1)
+
+  if (error) {
+    throw new HttpError(500, error.message, 'TASK_OWNERSHIP_CHECK_FAILED')
+  }
+
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new HttpError(404, '3D task not found', 'MODEL3D_TASK_NOT_FOUND')
+  }
+}
+
 const findVideoRunIdByTask = async ({ userId, taskId }) => {
   const { data, error } = await supabase
     .from('audit_logs')
@@ -99,6 +146,25 @@ const findVideoRunIdByTask = async ({ userId, taskId }) => {
 
   if (error) {
     console.warn('[video] resolve run by task failed', error.message)
+    return ''
+  }
+
+  const runId = data?.[0]?.metadata?.run_id
+  return runId ? String(runId) : ''
+}
+
+const find3DRunIdByTask = async ({ userId, taskId }) => {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('metadata')
+    .eq('user_id', userId)
+    .eq('action', 'model3d.task.created')
+    .contains('metadata', { task_id: String(taskId) })
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error) {
+    console.warn('[model3d] resolve run by task failed', error.message)
     return ''
   }
 
@@ -137,6 +203,35 @@ const syncRunStatusFromVideoTask = async ({ userId, runId, taskResult }) => {
 
   if (error) {
     console.warn('[video] sync run status failed', error.message)
+  }
+}
+
+const syncRunStatusFrom3DTask = async ({ userId, runId, taskResult }) => {
+  if (!runId || !taskResult) return
+  const status = String(taskResult?.status || '').toLowerCase()
+  const hasAsset = Array.isArray(taskResult?.assets) && taskResult.assets.length > 0
+
+  let nextStatus = 'running'
+  if (hasAsset || ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished'].includes(status)) {
+    nextStatus = 'completed'
+  } else if (['failed', 'error', 'cancelled', 'canceled', 'failure'].includes(status)) {
+    nextStatus = 'failed'
+  }
+
+  const payload = { status: nextStatus }
+  if (nextStatus === 'completed' || nextStatus === 'failed') {
+    payload.finished_at = new Date().toISOString()
+    payload.error_msg = nextStatus === 'failed' ? (taskResult?.message || '3D task failed') : null
+  }
+
+  const { error } = await supabase
+    .from('workflow_runs')
+    .update(payload)
+    .eq('id', runId)
+    .eq('user_id', userId)
+
+  if (error) {
+    console.warn('[model3d] sync run status failed', error.message)
   }
 }
 
@@ -185,8 +280,18 @@ const enrichUsageWith302Record = async (providerResponse = {}, fallbackUsage = {
 }
 
 const assertAssignedProviderAccess = (providerAccess = {}) => {
-  if (String(providerAccess.apiName || '').trim() && String(providerAccess.apiKey || '').trim()) {
+  const apiName = String(providerAccess.apiName || '').trim()
+  const apiKey = String(providerAccess.apiKey || '').trim()
+  if (apiName && apiKey) {
     return
+  }
+
+  if (apiName && !apiKey) {
+    throw new HttpError(
+      503,
+      'An API key is assigned to this account, but the runtime key could not be resolved. Please contact an administrator.',
+      'API_KEY_RESOLUTION_FAILED'
+    )
   }
 
   throw new HttpError(
@@ -223,12 +328,55 @@ export const createRun = async (userId, input) => {
       providerResponse = await providerChatCompletions(payload.payload, providerRequestOptions)
     } else if (payload.type === 'image') {
       providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
+    } else if (payload.type === 'model3d') {
+      providerResponse = await providerCreate3D(payload.payload, providerRequestOptions)
     } else {
       providerResponse = await providerCreateVideo(payload.payload, providerRequestOptions)
     }
 
     const latencyMs = Date.now() - startedAt
     const isVideoRun = payload.type === 'video'
+
+    if (payload.type === 'model3d') {
+      const providerTaskId = extractProvider3DJobId(providerResponse)
+      const hasAssets = Array.isArray(providerResponse?.assets) && providerResponse.assets.length > 0
+
+      await bind3DTaskOwnership({
+        userId,
+        runId: run.id,
+        taskId: providerTaskId
+      })
+
+      if (hasAssets) {
+        await supabase
+          .from('workflow_runs')
+          .update({ status: 'completed', finished_at: new Date().toISOString() })
+          .eq('id', run.id)
+
+        return {
+          runId: run.id,
+          status: 'completed',
+          result: {
+            ...providerResponse,
+            run_id: run.id
+          }
+        }
+      }
+
+      await supabase
+        .from('workflow_runs')
+        .update({ status: 'running', finished_at: null, error_msg: null })
+        .eq('id', run.id)
+
+      return {
+        runId: run.id,
+        status: 'running',
+        result: {
+          ...providerResponse,
+          run_id: run.id
+        }
+      }
+    }
 
     if (isVideoRun) {
       const providerTaskId = extractProviderTaskId(providerResponse)
@@ -373,6 +521,10 @@ export const createVideoGeneration = async (userId, payload) => {
   return createRun(userId, { type: 'video', payload, model: payload.model || payload.model_name })
 }
 
+export const create3DGeneration = async (userId, payload) => {
+  return createRun(userId, { type: 'model3d', payload, model: payload.model || payload.model_name })
+}
+
 export const getVideoTask = async (_userId, taskId) => {
   await assertVideoTaskOwnership({ userId: _userId, taskId })
   const providerAccess = await resolveUserProviderAccess(_userId)
@@ -396,5 +548,15 @@ export const getVideoTask = async (_userId, taskId) => {
       raw_usage: enrichedUsage.usage.rawUsage || result?.raw || null
     })
   }
+  return result
+}
+
+export const get3DTask = async (_userId, taskId) => {
+  await assert3DTaskOwnership({ userId: _userId, taskId })
+  const providerAccess = await resolveUserProviderAccess(_userId)
+  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
+  const result = await provider3DStatus(taskId, providerRequestOptions)
+  const runId = await find3DRunIdByTask({ userId: _userId, taskId })
+  await syncRunStatusFrom3DTask({ userId: _userId, runId, taskResult: result })
   return result
 }

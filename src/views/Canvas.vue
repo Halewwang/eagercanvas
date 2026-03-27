@@ -475,11 +475,14 @@ const nodesFactory = useNodesFactory({ updateNodeInternals, viewport })
 // Custom node components | 自定义节点组件
 import TextNode from '../components/nodes/TextNode.vue'
 import ImageConfigNode from '../components/nodes/ImageConfigNode.vue'
+import Model3DConfigNode from '../components/nodes/Model3DConfigNode.vue'
+import Model3DNode from '../components/nodes/Model3DNode.vue'
 import VideoNode from '../components/nodes/VideoNode.vue'
 import ImageNode from '../components/nodes/ImageNode.vue'
 import VideoConfigNode from '../components/nodes/VideoConfigNode.vue'
 import LLMConfigNode from '../components/nodes/LLMConfigNode.vue'
 import ImageRoleEdge from '../components/edges/ImageRoleEdge.vue'
+import Model3DViewEdge from '../components/edges/Model3DViewEdge.vue'
 import PromptOrderEdge from '../components/edges/PromptOrderEdge.vue'
 import ImageOrderEdge from '../components/edges/ImageOrderEdge.vue'
 import DefaultEdge from '../components/edges/DefaultEdge.vue'
@@ -503,6 +506,8 @@ const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange }
 const nodeTypes = {
   text: markRaw(TextNode),
   imageConfig: markRaw(ImageConfigNode),
+  model3dConfig: markRaw(Model3DConfigNode),
+  model3d: markRaw(Model3DNode),
   video: markRaw(VideoNode),
   image: markRaw(ImageNode),
   videoConfig: markRaw(VideoConfigNode),
@@ -513,6 +518,7 @@ const nodeTypes = {
 const edgeTypes = {
   default: markRaw(DefaultEdge),
   imageRole: markRaw(ImageRoleEdge),
+  model3dView: markRaw(Model3DViewEdge),
   promptOrder: markRaw(PromptOrderEdge),
   imageOrder: markRaw(ImageOrderEdge)
 }
@@ -579,7 +585,8 @@ const {
 const nodeTypeOptions = [
   { type: 'text', name: 'Text', icon: TextOutline, description: 'Write prompts, scripts, and supporting copy.' },
   { type: 'image', name: 'Image', icon: ImageOutline, description: 'Generate, preview, and upload still images.' },
-  { type: 'video', name: 'Video', icon: VideocamOutline, description: 'Generate videos with connected visual inputs.' }
+  { type: 'video', name: 'Video', icon: VideocamOutline, description: 'Generate videos with connected visual inputs.' },
+  { type: 'model3dConfig', name: '3D Model', icon: AppsOutline, description: 'Generate an interactive 3D model from prompt and view-tagged images.' }
 ]
 const nodeMenuTitle = computed(() =>
   nodeMenuMode.value === 'connect'

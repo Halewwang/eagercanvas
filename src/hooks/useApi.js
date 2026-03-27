@@ -7,11 +7,13 @@ import { ref, reactive, onUnmounted } from 'vue'
 import {
   generateImage,
   removeBackground,
+  create3DTask,
+  get3DTaskStatus,
   createVideoTask,
   getVideoTaskStatus,
   streamChatCompletions
 } from '@/api'
-import { DEFAULT_CHAT_MODEL, getModelByName } from '@/config/models'
+import { DEFAULT_CHAT_MODEL, getModelByName, resolve3DModelKey } from '@/config/models'
 import { useApiConfig } from './useApiConfig'
 
 const IMAGE_REQUEST_TIMEOUT_MS = 180000
@@ -280,6 +282,191 @@ export const useImageTools = () => {
   }
 
   return { loading, error, status, removeBg, reset }
+}
+
+export const useModel3DGeneration = () => {
+  const { loading, error, status, reset, setLoading, setError, setSuccess } = useApiState()
+
+  const model = ref(null)
+  const taskId = ref('')
+  const progress = reactive({
+    attempt: 0,
+    maxAttempts: 120,
+    percentage: 0
+  })
+  let pollAbortController = null
+  const cancelRequested = ref(false)
+
+  const getTaskId = (task) => {
+    const candidates = [
+      task?.jobId,
+      task?.job_id,
+      task?.JobId,
+      task?.id,
+      task?.Response?.JobId,
+      task?.Response?.job_id,
+      task?.data?.jobId,
+      task?.data?.JobId
+    ]
+    const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+    return found ? String(found) : ''
+  }
+
+  const getTaskStatus = (result) => String(
+    result?.status ||
+    result?.Response?.Status ||
+    result?.data?.status ||
+    result?.data?.Response?.Status ||
+    ''
+  ).toLowerCase()
+
+  const getAssets = (result) => {
+    const candidates = [
+      ...(Array.isArray(result?.assets) ? result.assets : []),
+      ...(Array.isArray(result?.Response?.ResultFile3Ds) ? result.Response.ResultFile3Ds : []),
+      ...(Array.isArray(result?.data?.assets) ? result.data.assets : []),
+      ...(Array.isArray(result?.data?.Response?.ResultFile3Ds) ? result.data.Response.ResultFile3Ds : [])
+    ]
+
+    const assetUrls = {}
+    let previewImageUrl = String(
+      result?.previewImageUrl ||
+      result?.PreviewImageUrl ||
+      result?.Response?.PreviewImageUrl ||
+      result?.data?.previewImageUrl ||
+      ''
+    ).trim()
+
+    candidates.forEach((item) => {
+      const type = String(item?.type || item?.Type || '').trim().toLowerCase()
+      const url = String(item?.url || item?.Url || '').trim()
+      const preview = String(item?.previewImageUrl || item?.PreviewImageUrl || '').trim()
+      if (type && url) {
+        assetUrls[type] = url
+      }
+      if (!previewImageUrl && preview) {
+        previewImageUrl = preview
+      }
+    })
+
+    const orderedTypes = ['glb', 'obj', 'fbx', 'stl', 'usdz', 'zip']
+    const primaryUrl = orderedTypes
+      .map((type) => String(assetUrls[type] || '').trim())
+      .find(Boolean) || ''
+    const viewerUrl = String(assetUrls.glb || assetUrls.obj || '').trim()
+
+    return {
+      previewImageUrl,
+      assetUrls,
+      primaryUrl,
+      viewerUrl
+    }
+  }
+
+  const doneStatuses = new Set(['completed', 'succeeded', 'success', 'done', 'finished'])
+
+  const generate = async (params) => {
+    if (loading.value) {
+      throw new Error('已有 3D 任务正在执行')
+    }
+
+    cancelRequested.value = false
+    setLoading(true)
+    model.value = null
+    taskId.value = ''
+    progress.attempt = 0
+    progress.percentage = 0
+
+    try {
+      const requestData = {
+        model: resolve3DModelKey(params.model),
+        prompt: params.prompt || '',
+        multiViewImages: Array.isArray(params.multiViewImages) ? params.multiViewImages : [],
+        generateType: params.generateType || 'Normal',
+        enablePBR: !!params.enablePBR,
+        faceCount: params.faceCount ?? '',
+        resultFormat: params.resultFormat || '',
+        polygonType: params.polygonType || ''
+      }
+
+      const task = await create3DTask(requestData)
+      const createAssets = getAssets(task)
+      const createStatus = getTaskStatus(task)
+      if (createAssets.primaryUrl && (!createStatus || doneStatuses.has(createStatus))) {
+        model.value = {
+          ...createAssets,
+          raw: task
+        }
+        setSuccess()
+        return model.value
+      }
+
+      const id = getTaskId(task)
+      if (!id) {
+        throw new Error('未获取到 3D 任务 ID')
+      }
+
+      taskId.value = id
+      status.value = 'polling'
+
+      const maxAttempts = 120
+      const interval = 5000
+
+      for (let i = 0; i < maxAttempts; i += 1) {
+        progress.attempt = i + 1
+        progress.percentage = Math.min(Math.round((i / maxAttempts) * 100), 99)
+        if (cancelRequested.value) throw new Error('3D 生成已取消')
+
+        let result
+        try {
+          pollAbortController = new AbortController()
+          result = await get3DTaskStatus(id, {
+            signal: pollAbortController.signal
+          })
+        } finally {
+          pollAbortController = null
+        }
+
+        const resultStatus = getTaskStatus(result)
+        const resultAssets = getAssets(result)
+        if (resultAssets.primaryUrl) {
+          progress.percentage = 100
+          model.value = {
+            ...resultAssets,
+            raw: result
+          }
+          setSuccess()
+          return model.value
+        }
+
+        if (['failed', 'error', 'cancelled', 'canceled'].includes(resultStatus)) {
+          throw new Error(result?.message || result?.Response?.ErrorMsg || '3D 生成失败')
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, interval))
+      }
+
+      throw new Error('3D 生成超时')
+    } catch (err) {
+      setError(err)
+      throw err
+    } finally {
+      pollAbortController = null
+      cancelRequested.value = false
+    }
+  }
+
+  const stop = () => {
+    cancelRequested.value = true
+    if (pollAbortController) {
+      pollAbortController.abort()
+      pollAbortController = null
+    }
+    loading.value = false
+    status.value = 'idle'
+  }
+
+  return { loading, error, status, model, taskId, progress, generate, stop, reset }
 }
 
 /**

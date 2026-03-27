@@ -6,11 +6,14 @@ import { nodes, edges } from '../stores/canvas'
 
 const IMAGE_TARGET_TYPES = new Set(['image', 'imageConfig'])
 const VIDEO_TARGET_TYPES = new Set(['video', 'videoConfig'])
+const MODEL3D_TARGET_TYPES = new Set(['model3d', 'model3dConfig'])
+const MODEL3D_VIEW_TYPES = new Set(['left', 'right', 'back', 'top', 'bottom', 'left_front', 'right_front'])
 
 const getNodeById = (id) => nodes.value.find((node) => node.id === id)
 
 const isImageTarget = (type) => IMAGE_TARGET_TYPES.has(type)
 const isVideoTarget = (type) => VIDEO_TARGET_TYPES.has(type)
+const isModel3DTarget = (type) => MODEL3D_TARGET_TYPES.has(type)
 
 const getNextOrderedValue = (targetId, edgeType) => {
   const sameTargetEdges = edges.value.filter((edge) => edge.target === targetId && edge.type === edgeType)
@@ -38,6 +41,14 @@ const normalizeImageRefEdgeData = (targetId) => {
   }
 }
 
+const normalize3DViewEdgeData = (viewType) => {
+  const safeViewType = MODEL3D_VIEW_TYPES.has(String(viewType || '').trim()) ? String(viewType).trim() : 'left'
+  return {
+    slot: 'multi_view',
+    viewType: safeViewType
+  }
+}
+
 const getSemanticConnection = (sourceNode, targetNode, params) => {
   if (!sourceNode || !targetNode) return params
   if (params?.type || params?.data?.slot) return params
@@ -58,11 +69,29 @@ const getSemanticConnection = (sourceNode, targetNode, params) => {
     }
   }
 
+  if (sourceNode.type === 'text' && isModel3DTarget(targetNode.type)) {
+    return {
+      ...params,
+      type: 'default',
+      data: {
+        slot: 'prompts'
+      }
+    }
+  }
+
   if (sourceNode.type === 'image' && isImageTarget(targetNode.type)) {
     return {
       ...params,
       type: 'imageOrder',
       data: normalizeImageRefEdgeData(params.target)
+    }
+  }
+
+  if (sourceNode.type === 'image' && isModel3DTarget(targetNode.type)) {
+    return {
+      ...params,
+      type: 'model3dView',
+      data: normalize3DViewEdgeData(params.data?.viewType || params.targetHandle)
     }
   }
 
@@ -85,6 +114,7 @@ export const resolveNodeInputs = (targetNodeId) => {
   let firstFrame = null
   let lastFrame = null
   const videoReferenceEntries = []
+  const multiViewImages = []
 
   incomingEdges.forEach((edge, index) => {
     const sourceNode = getNodeById(edge.source)
@@ -117,6 +147,20 @@ export const resolveNodeInputs = (targetNodeId) => {
         value: imageValue,
         imageData: imageValue,
         order: getOrderedValue(edge, 'imageOrder', imageReferenceEntries.length + 1),
+        index
+      })
+      return
+    }
+
+    if (isModel3DTarget(targetNode?.type)) {
+      const viewType = String(edge.data?.viewType || edge.targetHandle || '').trim()
+      if (!MODEL3D_VIEW_TYPES.has(viewType)) return
+      multiViewImages.push({
+        edgeId: edge.id,
+        nodeId: sourceNode.id,
+        value: imageValue,
+        image: imageValue,
+        viewType,
         index
       })
       return
@@ -160,7 +204,12 @@ export const resolveNodeInputs = (targetNodeId) => {
     referenceImages: videoReferenceEntries,
     first_frame_image: firstFrame?.value || '',
     last_frame_image: lastFrame?.value || '',
-    images: videoReferenceEntries.map((item) => item.value)
+    images: videoReferenceEntries.map((item) => item.value),
+    multiViewImages,
+    multi_view_images: multiViewImages.map((item) => ({
+      viewType: item.viewType,
+      value: item.value
+    }))
   }
 }
 
@@ -176,6 +225,12 @@ export const isConnectionValid = (params) => {
 
   if (isVideoTarget(targetNode.type)) {
     return ['text', 'image', 'videoConfig'].includes(sourceNode.type)
+  }
+
+  if (isModel3DTarget(targetNode.type)) {
+    if (sourceNode.type === 'image') return !params?.targetHandle || params.targetHandle === 'left'
+    if (sourceNode.type === 'text') return !params?.targetHandle || params.targetHandle === 'left'
+    return ['text', 'image', 'model3dConfig'].includes(sourceNode.type)
   }
 
   return true
