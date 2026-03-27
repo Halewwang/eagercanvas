@@ -149,6 +149,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
 import Model3DViewport from './Model3DViewport.vue'
+import { isDataImageUrl, isRemoteHttpUrl } from '@/utils/media'
 import { CopyOutline, TrashOutline, AppsOutline, RefreshOutline, DownloadOutline } from '../../icons/coolicons'
 import createIcon from '@/assets/create-icon.svg'
 import { useApiConfig, useModel3DGeneration } from '../../hooks'
@@ -346,6 +347,21 @@ const handleGenerate = async () => {
     viewType: item.viewType,
     source: item.value
   }))
+
+  const invalidMultiViewImage = multiViewImages.find((item) => {
+    const source = String(item?.source || '').trim()
+    if (!source) return true
+    if (source.startsWith('blob:')) return true
+    return !(isRemoteHttpUrl(source) || isDataImageUrl(source))
+  })
+
+  if (invalidMultiViewImage) {
+    updateNode(props.id, {
+      status: 'failed',
+      error: '3D multi-view images must be uploaded URLs or base64 data URLs. Local blob previews are not supported yet.'
+    })
+    return
+  }
 
   updateNode(props.id, { status: 'running', model: localModel.value })
 

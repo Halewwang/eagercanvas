@@ -1,10 +1,10 @@
 <template>
   <div class="model3d-shell">
-    <div v-if="viewerUrl && !loadError" class="model3d-media-shell">
+    <div v-if="activeViewerUrl && !loadError" class="model3d-media-shell">
       <model-viewer
         ref="modelViewerRef"
         class="model3d-viewer"
-        :src="viewerUrl"
+        :src="activeViewerUrl"
         camera-target="auto auto auto"
         :camera-orbit="cameraOrbit"
         interaction-prompt="none"
@@ -114,7 +114,9 @@ const objUrl = computed(() => {
   if (/\.obj($|\?)/i.test(directUrl)) return directUrl
   return String(props.assetUrls?.obj || '').trim()
 })
-const canRenderObj = computed(() => !!objUrl.value && !viewerUrl.value)
+const preferObjFallback = ref(false)
+const activeViewerUrl = computed(() => (preferObjFallback.value ? '' : viewerUrl.value))
+const canRenderObj = computed(() => !!objUrl.value && (!activeViewerUrl.value || preferObjFallback.value))
 
 const orbitAngle = ref(0)
 const elevationAngle = ref(72)
@@ -145,6 +147,7 @@ const handleModelViewerLoad = async () => {
   const viewer = modelViewerRef.value
   if (!viewer) return
 
+  preferObjFallback.value = false
   loadError.value = ''
   orbitAngle.value = 0
   elevationAngle.value = 72
@@ -162,6 +165,16 @@ const handleModelViewerLoad = async () => {
 
 const handleModelViewerError = (event) => {
   const detailMessage = String(event?.detail?.message || '').trim()
+  if (objUrl.value) {
+    preferObjFallback.value = true
+    loadError.value = ''
+    console.warn('model-viewer load failed, falling back to OBJ preview', {
+      viewerUrl: viewerUrl.value,
+      objUrl: objUrl.value,
+      event
+    })
+    return
+  }
   loadError.value = detailMessage || '3D model failed to load in viewer'
   console.error('model-viewer load failed', {
     url: viewerUrl.value,
@@ -363,6 +376,7 @@ watch(objUrl, async () => {
 })
 
 watch(viewerUrl, () => {
+  preferObjFallback.value = false
   loadError.value = ''
 })
 
