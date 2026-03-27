@@ -828,8 +828,6 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
     : typeof payload.EnablePBR === 'boolean'
       ? payload.EnablePBR
       : undefined
-  const shouldSendPrompt = multiViewImages.length === 0 || generateType === 'Sketch'
-
   if (!prompt && multiViewImages.length === 0) {
     throw new HttpError(400, '3D generation requires a prompt or at least one multi-view image', 'MODEL3D_INPUT_REQUIRED')
   }
@@ -837,10 +835,6 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
   const requestBody = {
     Model: model,
     GenerateType: generateType
-  }
-
-  if (shouldSendPrompt && prompt) {
-    requestBody.Prompt = prompt
   }
 
   if (typeof enablePBR === 'boolean') {
@@ -859,8 +853,9 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
     requestBody.ResultFormat = resultFormat
   }
 
+  let normalizedMultiViewImages = []
   if (multiViewImages.length > 0) {
-    const normalizedMultiViewImages = multiViewImages
+    normalizedMultiViewImages = multiViewImages
       .map((item) => {
         const viewType = String(item.viewType || item.ViewType || '').trim()
         const source = String(item.source || item.imageUrl || item.ImageUrl || item.imageBase64 || item.ImageBase64 || item.value || '').trim()
@@ -893,6 +888,19 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
     }
 
     requestBody.MultiViewImages = normalizedMultiViewImages
+  }
+
+  // 302 Hunyuan 3D Pro requires one primary input among Prompt / ImageUrl / ImageBase64.
+  // MultiViewImages is an additional parameter and cannot stand alone.
+  if (prompt) {
+    requestBody.Prompt = prompt
+  } else if (normalizedMultiViewImages.length > 0) {
+    const primaryView = normalizedMultiViewImages[0]
+    if (primaryView.ImageUrl) {
+      requestBody.ImageUrl = primaryView.ImageUrl
+    } else if (primaryView.ImageBase64) {
+      requestBody.ImageBase64 = primaryView.ImageBase64
+    }
   }
 
   const raw = await callProvider('/tencent/hunyuan3d/pro-job', requestBody, 'POST', requestOptions)
