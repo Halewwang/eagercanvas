@@ -859,6 +859,35 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
     requestBody.ResultFormat = resultFormat
   }
 
+  const normalize3DImageSource = async (source = '') => {
+    const safeSource = String(source || '').trim()
+    if (!safeSource) return null
+
+    const dataUrl = parseDataUrl(safeSource)
+    if (dataUrl?.data) {
+      return {
+        mode: 'base64',
+        value: dataUrl.data
+      }
+    }
+
+    if (/^https?:\/\//i.test(safeSource)) {
+      const fetched = await fetchImageAsBase64(safeSource)
+      if (!fetched?.data) {
+        throw new HttpError(400, 'Failed to fetch multi-view source image', 'MODEL3D_IMAGE_FETCH_FAILED')
+      }
+      return {
+        mode: 'base64',
+        value: fetched.data
+      }
+    }
+
+    return {
+      mode: 'base64',
+      value: safeSource
+    }
+  }
+
   let normalizedMultiViewImages = []
   const allowPromptWithImage = generateType.toLowerCase() === 'sketch'
   if (prompt && (multiViewImages.length === 0 || allowPromptWithImage)) {
@@ -866,33 +895,19 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
   }
 
   if (multiViewImages.length > 0) {
-    normalizedMultiViewImages = multiViewImages
-      .map((item) => {
+    normalizedMultiViewImages = (await Promise.all(multiViewImages
+      .map(async (item) => {
         const viewType = String(item.viewType || item.ViewType || '').trim()
         const source = String(item.source || item.imageUrl || item.ImageUrl || item.imageBase64 || item.ImageBase64 || item.value || '').trim()
         if (!viewType || !source) return null
 
-        const dataUrl = parseDataUrl(source)
-        if (dataUrl?.data) {
-          return {
-            ViewType: viewType,
-            ViewImageBase64: dataUrl.data
-          }
-        }
-
-        if (/^https?:\/\//i.test(source)) {
-          return {
-            ViewType: viewType,
-            ViewImageUrl: source
-          }
-        }
-
+        const normalized = await normalize3DImageSource(source)
+        if (!normalized?.value) return null
         return {
           ViewType: viewType,
-          ViewImageBase64: source
+          ViewImageBase64: normalized.value
         }
-      })
-      .filter(Boolean)
+      }))).filter(Boolean)
     const primaryFrontView = normalizedMultiViewImages.find((item) => String(item.ViewType || '').toLowerCase() === 'front')
 
     if (!primaryFrontView) {
@@ -916,9 +931,7 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
       delete requestBody.Prompt
     }
 
-    if (primaryFrontView.ViewImageUrl) {
-      requestBody.ImageUrl = primaryFrontView.ViewImageUrl
-    } else if (primaryFrontView.ViewImageBase64) {
+    if (primaryFrontView.ViewImageBase64) {
       requestBody.ImageBase64 = primaryFrontView.ViewImageBase64
     }
   }

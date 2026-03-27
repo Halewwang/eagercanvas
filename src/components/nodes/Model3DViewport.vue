@@ -115,7 +115,8 @@ const objUrl = computed(() => {
   return String(props.assetUrls?.obj || '').trim()
 })
 const preferObjFallback = ref(false)
-const activeViewerUrl = computed(() => (preferObjFallback.value ? '' : viewerUrl.value))
+const preferObjPreview = computed(() => !!objUrl.value)
+const activeViewerUrl = computed(() => ((preferObjFallback.value || preferObjPreview.value) ? '' : viewerUrl.value))
 const canRenderObj = computed(() => !!objUrl.value && (!activeViewerUrl.value || preferObjFallback.value))
 
 const orbitAngle = ref(0)
