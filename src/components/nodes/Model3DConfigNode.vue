@@ -149,7 +149,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
 import Model3DViewport from './Model3DViewport.vue'
-import { isDataImageUrl, isRemoteHttpUrl } from '@/utils/media'
+import { isDataImageUrl, isRemoteHttpUrl, persistImageUrl, persistMediaUrl } from '@/utils/media'
 import { CopyOutline, TrashOutline, AppsOutline, RefreshOutline, DownloadOutline } from '../../icons/coolicons'
 import createIcon from '@/assets/create-icon.svg'
 import { useApiConfig, useModel3DGeneration } from '../../hooks'
@@ -378,11 +378,25 @@ const handleGenerate = async () => {
       polygonType: localPolygonType.value
     })
 
+    const persistAssetEntries = await Promise.all(
+      Object.entries(result.assetUrls || {}).map(async ([type, url]) => {
+        const rawUrl = String(url || '').trim()
+        if (!rawUrl) return [type, '']
+        const persistedUrl = await persistMediaUrl(rawUrl, `model3d-${Date.now()}.${type}`)
+        return [type, persistedUrl || rawUrl]
+      })
+    )
+    const persistedAssetUrls = Object.fromEntries(persistAssetEntries.filter(([_, url]) => String(url || '').trim()))
+    const persistedPreviewImageUrl = result.previewImageUrl
+      ? (await persistImageUrl(result.previewImageUrl, `model3d-preview-${Date.now()}.png`)) || result.previewImageUrl
+      : ''
+    const persistedViewerUrl = String(persistedAssetUrls.obj || persistedAssetUrls.glb || result.viewerUrl || result.primaryUrl || '').trim()
+
     cleanupLegacyOutputNode()
     updateNode(props.id, {
-      url: result.viewerUrl || result.primaryUrl,
-      previewImageUrl: result.previewImageUrl,
-      assetUrls: result.assetUrls,
+      url: persistedViewerUrl,
+      previewImageUrl: persistedPreviewImageUrl,
+      assetUrls: persistedAssetUrls,
       model: localModel.value,
       status: 'completed'
     })
