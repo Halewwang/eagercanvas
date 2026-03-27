@@ -818,6 +818,7 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
 
 export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
   const rawModel = String(payload.model || payload.model_name || 'hunyuan3d-pro-3.1').trim().toLowerCase()
+  const is31 = rawModel.includes('3.1')
   const prompt = String(payload.prompt || payload.Prompt || '').trim()
   const multiViewImages = Array.isArray(payload.multiViewImages) ? payload.multiViewImages : []
   const generateType = String(payload.generateType || payload.GenerateType || 'Normal').trim() || 'Normal'
@@ -833,6 +834,9 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
   }
 
   const requestBody = { GenerateType: generateType }
+  const allowedSecondaryViewTypes = new Set(is31
+    ? ['left', 'right', 'back', 'top', 'bottom', 'left_front', 'right_front']
+    : ['left', 'right', 'back'])
 
   if (typeof enablePBR === 'boolean') {
     requestBody.EnablePBR = enablePBR
@@ -847,6 +851,10 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
   }
 
   let normalizedMultiViewImages = []
+  if (prompt) {
+    requestBody.Prompt = prompt
+  }
+
   if (multiViewImages.length > 0) {
     normalizedMultiViewImages = multiViewImages
       .map((item) => {
@@ -875,25 +883,27 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
         }
       })
       .filter(Boolean)
-      .filter((item) => ['left', 'right', 'back'].includes(String(item.ViewType || '').toLowerCase()))
+    const primaryFrontView = normalizedMultiViewImages.find((item) => String(item.ViewType || '').toLowerCase() === 'front')
 
-    if (normalizedMultiViewImages.length === 0) {
+    if (!primaryFrontView) {
+      throw new HttpError(400, 'Hunyuan 3D requires a Front reference image when using multi-view inputs', 'MODEL3D_FRONT_REQUIRED')
+    }
+
+    normalizedMultiViewImages = normalizedMultiViewImages
+      .filter((item) => allowedSecondaryViewTypes.has(String(item.ViewType || '').toLowerCase()))
+
+    if (!primaryFrontView && normalizedMultiViewImages.length === 0) {
       throw new HttpError(400, 'Multi-view images are present but none could be normalized into valid provider inputs', 'MODEL3D_INVALID_MULTIVIEW')
     }
 
-    requestBody.MultiViewImages = normalizedMultiViewImages
-  }
+    if (normalizedMultiViewImages.length > 0) {
+      requestBody.MultiViewImages = normalizedMultiViewImages
+    }
 
-  // 302 Hunyuan 3D Pro requires one primary input among Prompt / ImageUrl / ImageBase64.
-  // MultiViewImages is an additional parameter and cannot stand alone.
-  if (prompt) {
-    requestBody.Prompt = prompt
-  } else if (normalizedMultiViewImages.length > 0) {
-    const primaryView = normalizedMultiViewImages[0]
-    if (primaryView.ViewImageUrl) {
-      requestBody.ImageUrl = primaryView.ViewImageUrl
-    } else if (primaryView.ViewImageBase64) {
-      requestBody.ImageBase64 = primaryView.ViewImageBase64
+    if (primaryFrontView.ViewImageUrl) {
+      requestBody.ImageUrl = primaryFrontView.ViewImageUrl
+    } else if (primaryFrontView.ViewImageBase64) {
+      requestBody.ImageBase64 = primaryFrontView.ViewImageBase64
     }
   }
 

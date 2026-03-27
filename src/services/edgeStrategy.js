@@ -7,7 +7,7 @@ import { nodes, edges } from '../stores/canvas'
 const IMAGE_TARGET_TYPES = new Set(['image', 'imageConfig'])
 const VIDEO_TARGET_TYPES = new Set(['video', 'videoConfig'])
 const MODEL3D_TARGET_TYPES = new Set(['model3d', 'model3dConfig'])
-const MODEL3D_VIEW_TYPES = new Set(['left', 'right', 'back', 'top', 'bottom', 'left_front', 'right_front'])
+const MODEL3D_VIEW_TYPES = new Set(['front', 'left', 'right', 'back', 'top', 'bottom', 'left_front', 'right_front'])
 
 const getNodeById = (id) => nodes.value.find((node) => node.id === id)
 
@@ -42,7 +42,7 @@ const normalizeImageRefEdgeData = (targetId) => {
 }
 
 const normalize3DViewEdgeData = (viewType) => {
-  const safeViewType = MODEL3D_VIEW_TYPES.has(String(viewType || '').trim()) ? String(viewType).trim() : 'left'
+  const safeViewType = MODEL3D_VIEW_TYPES.has(String(viewType || '').trim()) ? String(viewType).trim() : 'front'
   return {
     slot: 'multi_view',
     viewType: safeViewType

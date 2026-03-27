@@ -5,12 +5,14 @@
         ref="modelViewerRef"
         class="model3d-viewer"
         :src="viewerUrl"
+        camera-target="auto auto auto"
         :camera-orbit="cameraOrbit"
         interaction-prompt="none"
         shadow-intensity="1"
         exposure="1"
         ar-status="not-presenting"
         disable-pan
+        @load="handleModelViewerLoad"
       />
     </div>
 
@@ -132,6 +134,24 @@ let objAnimationFrame = 0
 let objLoadToken = 0
 let objTargetY = 0
 let objBaseDistance = 4
+
+const handleModelViewerLoad = async () => {
+  const viewer = modelViewerRef.value
+  if (!viewer) return
+
+  orbitAngle.value = 0
+  elevationAngle.value = 72
+  zoomPercent.value = 100
+  syncCubeToCamera()
+
+  try {
+    await viewer.updateFraming?.()
+    viewer.cameraTarget = 'auto auto auto'
+    viewer.jumpCameraToGoal?.()
+  } catch (error) {
+    console.warn('model-viewer framing failed', error)
+  }
+}
 
 const stopObjLoop = () => {
   if (objAnimationFrame) {

@@ -70,7 +70,7 @@ export const MODEL3D_MODELS = [
     {
         label: 'Hunyuan 3D Pro 3.1',
         key: 'hunyuan3d-pro-3.1',
-        viewTypes: ['left', 'right', 'back', 'top', 'bottom', 'left_front', 'right_front'],
+        viewTypes: ['front', 'left', 'right', 'back', 'top', 'bottom', 'left_front', 'right_front'],
         generateTypes: ['Normal', 'Geometry', 'Sketch'],
         resultFormats: [
             { label: 'Default', key: '' },
@@ -92,7 +92,7 @@ export const MODEL3D_MODELS = [
     {
         label: 'Hunyuan 3D Pro 3.0',
         key: 'hunyuan3d-pro-3.0',
-        viewTypes: ['left', 'right', 'back'],
+        viewTypes: ['front', 'left', 'right', 'back'],
         generateTypes: ['Normal', 'LowPoly', 'Geometry', 'Sketch'],
         polygonTypes: [
             { label: 'Triangle', key: 'triangle' },
@@ -113,7 +113,7 @@ export const MODEL3D_MODELS = [
             resultFormat: '',
             polygonType: 'triangle'
         },
-        tips: '仅支持 left / right / back 三个视角。'
+        tips: '需要主图 front，附加视角仅支持 left / right / back。'
     }
 ]
 

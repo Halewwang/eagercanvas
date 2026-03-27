@@ -210,6 +210,8 @@ const displayPolygonType = computed(() => {
 
 const inputs = computed(() => resolveNodeInputs(props.id))
 const connectedPrompt = computed(() => !!inputs.value.prompt)
+const connectedFront = computed(() => !!connectedViewMap.value.front)
+const hasConnectedViews = computed(() => (inputs.value.multiViewImages || []).length > 0)
 const connectedViewMap = computed(() => {
   const map = {}
   ;(inputs.value.multiViewImages || []).forEach((item) => {
@@ -218,7 +220,7 @@ const connectedViewMap = computed(() => {
   return map
 })
 
-const canGenerate = computed(() => connectedPrompt.value || (inputs.value.multiViewImages || []).length > 0)
+const canGenerate = computed(() => (hasConnectedViews.value ? connectedFront.value : connectedPrompt.value))
 const progressPercent = computed(() => Math.round(progress.value?.percentage || 0))
 const pbrDisabled = computed(() => localGenerateType.value === 'Geometry')
 const pbrLabel = computed(() => (localEnablePBR.value ? 'PBR On' : 'PBR Off'))
@@ -335,6 +337,11 @@ const downloadAsset = (type) => {
 }
 
 const handleGenerate = async () => {
+  if (hasConnectedViews.value && !connectedFront.value) {
+    updateNode(props.id, { status: 'failed', error: '3D generation requires a Front reference image when view-tagged images are connected' })
+    return
+  }
+
   const multiViewImages = (inputs.value.multiViewImages || []).map((item) => ({
     viewType: item.viewType,
     source: item.value
