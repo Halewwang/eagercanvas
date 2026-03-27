@@ -77,6 +77,24 @@ const parseProviderResponse = async (response) => {
   }
 }
 
+const extractProviderErrorMessage = (data, status) => {
+  const candidates = [
+    data?.error?.message,
+    data?.message,
+    data?.msg,
+    data?.error_msg,
+    data?.errorMessage,
+    data?.ErrorMessage,
+    data?.Response?.ErrorMessage,
+    data?.Response?.ErrorMsg,
+    data?.error?.msg,
+    data?.raw
+  ]
+
+  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+  return found ? String(found).trim() : `Provider request failed: ${status}`
+}
+
 const callProviderWithBase = async (base, path, body, method = 'POST', requestOptions = {}) => {
   const controller = new AbortController()
   const timeoutMs = Number(env.providerTimeoutMs || 90000)
@@ -91,7 +109,7 @@ const callProviderWithBase = async (base, path, body, method = 'POST', requestOp
     const data = await parseProviderResponse(response)
 
     if (!response.ok) {
-      const message = data?.error?.message || data?.message || `Provider request failed: ${response.status}`
+      const message = extractProviderErrorMessage(data, response.status)
       throw new HttpError(response.status, message, 'PROVIDER_ERROR')
     }
 
@@ -115,7 +133,7 @@ const callProviderMultipartWithBase = async (base, path, formData, method = 'POS
     const data = await parseProviderResponse(response)
 
     if (!response.ok) {
-      const message = data?.error?.message || data?.message || `Provider request failed: ${response.status}`
+      const message = extractProviderErrorMessage(data, response.status)
       throw new HttpError(response.status, message, 'PROVIDER_ERROR')
     }
 
@@ -812,6 +830,10 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
       : undefined
   const shouldSendPrompt = multiViewImages.length === 0 || generateType === 'Sketch'
 
+  if (!prompt && multiViewImages.length === 0) {
+    throw new HttpError(400, '3D generation requires a prompt or at least one multi-view image', 'MODEL3D_INPUT_REQUIRED')
+  }
+
   const requestBody = {
     Model: model,
     GenerateType: generateType
@@ -838,7 +860,7 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
   }
 
   if (multiViewImages.length > 0) {
-    requestBody.MultiViewImages = multiViewImages
+    const normalizedMultiViewImages = multiViewImages
       .map((item) => {
         const viewType = String(item.viewType || item.ViewType || '').trim()
         const source = String(item.source || item.imageUrl || item.ImageUrl || item.imageBase64 || item.ImageBase64 || item.value || '').trim()
@@ -865,6 +887,12 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
         }
       })
       .filter(Boolean)
+
+    if (normalizedMultiViewImages.length === 0) {
+      throw new HttpError(400, 'Multi-view images are present but none could be normalized into valid provider inputs', 'MODEL3D_INVALID_MULTIVIEW')
+    }
+
+    requestBody.MultiViewImages = normalizedMultiViewImages
   }
 
   const raw = await callProvider('/tencent/hunyuan3d/pro-job', requestBody, 'POST', requestOptions)
