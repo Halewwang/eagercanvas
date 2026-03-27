@@ -330,43 +330,22 @@
 
     <BaseModal
       v-model:show="showShareModal"
-      title="Share"
-      description="Publish a read-only link or save this canvas as a reusable template."
+      title="Share To Workspace"
+      description="Publish this project as a reusable template so other workspace members can copy the full canvas."
       size="sm"
     >
       <div class="share-panel">
         <section class="share-section">
-          <div class="share-row">
-            <div class="share-heading">
-              <h3>Share a Link</h3>
-              <p>Share a read-only link to your canvas.</p>
-            </div>
-            <button class="toggle-btn" :class="{ on: shareLinkEnabled }" @click="shareLinkEnabled = !shareLinkEnabled">
-              <span />
-            </button>
-          </div>
-          <div class="share-link-box">
-            <span class="share-link-text">{{ shareLinkUrl }}</span>
-            <BaseButton variant="secondary" size="sm" class="share-copy-btn" @click="copyShareLink">Copy Link</BaseButton>
-          </div>
-        </section>
-
-        <section class="share-section">
-          <div class="share-row">
-            <div class="share-heading">
-              <h3>Allow Remixing</h3>
-              <p>When enabled, this project is published to Featured templates.</p>
-            </div>
-            <button class="toggle-btn" :class="{ on: allowRemixing }" @click="allowRemixing = !allowRemixing">
-              <span />
-            </button>
+          <div class="share-heading">
+            <h3>Workspace</h3>
+            <p>{{ workspaceName }}</p>
           </div>
         </section>
 
         <section class="share-section share-form-section">
           <div class="share-heading">
-            <h3>Change Appearance</h3>
-            <p>Set how this shared project appears in My Templates.</p>
+            <h3>Template Details</h3>
+            <p>Other members will see this in Featured Templates and can create their own copy from it.</p>
           </div>
           <BaseInput v-model="shareTemplateName" placeholder="Template title" />
           <textarea
@@ -376,11 +355,35 @@
             class="share-textarea ui-body"
           />
         </section>
+
+        <section class="share-section">
+          <div class="share-heading">
+            <h3>Status</h3>
+            <p v-if="shareDialogLoading">Loading current publish status...</p>
+            <p v-else-if="isTemplatePublished">
+              Published to Featured Templates<span v-if="lastPublishedAt"> · Updated {{ new Date(lastPublishedAt).toLocaleString() }}</span>
+            </p>
+            <p v-else>Not published yet.</p>
+          </div>
+        </section>
       </div>
       <template #footer>
         <div class="ui-modal-actions">
-          <BaseButton variant="ghost" @click="showShareModal = false">Cancel</BaseButton>
-          <BaseButton @click="saveSharedTemplate">Save To My Templates</BaseButton>
+          <BaseButton variant="ghost" @click="showShareModal = false">Close</BaseButton>
+          <BaseButton
+            v-if="isTemplatePublished"
+            variant="secondary"
+            :loading="shareActionLoading"
+            @click="removeSharedTemplate"
+          >
+            Unpublish
+          </BaseButton>
+          <BaseButton
+            :loading="shareActionLoading || shareDialogLoading"
+            @click="saveSharedTemplate"
+          >
+            {{ isTemplatePublished ? 'Update Template' : 'Publish Template' }}
+          </BaseButton>
         </div>
       </template>
     </BaseModal>
@@ -449,7 +452,7 @@ import { notifier } from '../utils/notifier'
 import { getWorkflowById } from '@/config/workflows'
 import { initProjectsStore, projects, refreshProjectById } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
-import { useWorkflowsStore } from '@/stores/workflows'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 
 // API Settings component | API 设置组件
@@ -484,7 +487,12 @@ import DefaultEdge from '../components/edges/DefaultEdge.vue'
 const router = useRouter()
 const route = useRoute()
 const { user, updateProfile } = useAuthStore()
-const { loadWorkflowTemplates, shareProjectAsMyTemplate } = useWorkflowsStore()
+const {
+  currentWorkspace,
+  getProjectTemplateStatus,
+  publishProjectTemplate,
+  unpublishProjectTemplate
+} = useWorkspaceStore()
 const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange } = useAvatarUpload({
   user,
   updateProfile,
@@ -538,30 +546,33 @@ const groupRenameValue = ref('')
 let groupDragState = null
 let overlayRafId = null
 const {
-  allowRemixing,
   confirmDelete,
   confirmRename,
-  copyShareLink,
-  currentProject,
   handleProjectAction,
+  isTemplatePublished,
+  lastPublishedAt,
   openShareDialog,
   projectName,
   projectOptions,
   renameValue,
+  removeSharedTemplate,
   saveSharedTemplate,
-  shareLinkEnabled,
-  shareLinkUrl,
+  shareActionLoading,
+  shareDialogLoading,
   shareTemplateDescription,
   shareTemplateName,
   showDeleteModal,
   showRenameModal,
-  showShareModal
+  showShareModal,
+  workspaceName
 } = useCanvasProjectActions({
   route,
   router,
   notifier,
-  loadWorkflowTemplates,
-  shareProjectAsMyTemplate
+  getProjectTemplateStatus,
+  publishProjectTemplate,
+  unpublishProjectTemplate,
+  currentWorkspace
 })
 
 // Node type options for menu | 节点类型菜单选项
@@ -1309,8 +1320,7 @@ onMounted(async () => {
 
   // Initialize supporting data in parallel.
   await Promise.all([
-    initProjectsStore(),
-    loadWorkflowTemplates()
+    initProjectsStore()
   ])
 
   // Load project data after bootstrap when no warm snapshot was available.

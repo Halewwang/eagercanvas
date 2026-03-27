@@ -69,8 +69,8 @@
           @click="handlePrimaryClick(item)"
         >
           <div class="card-media" :class="{ 'project-media': activeSection === 'projects' }">
-            <template v-if="item.thumbnail || item.cover">
-              <img :src="item.thumbnail || item.cover" :alt="item.name" />
+            <template v-if="item.thumbnail || item.cover || item.coverUrl">
+              <img :src="item.thumbnail || item.cover || item.coverUrl" :alt="item.title || item.name" />
             </template>
             <template v-else>
               <div class="fallback-icon">
@@ -99,24 +99,14 @@
             </template>
             <template v-else>
               <div class="title-row">
-                <h3>{{ item.name }}</h3>
+                <h3>{{ item.title || item.name }}</h3>
                 <span v-if="activeSection === 'featured'" class="badge">Public</span>
-                <span v-if="activeSection === 'my-templates'" class="badge mine">Mine</span>
               </div>
               <p>{{ describeItem(item) }}</p>
             </template>
 
             <div v-if="activeSection !== 'projects'" class="card-actions" @click.stop>
-              <template v-if="activeSection === 'my-templates'">
-                <BaseButton variant="secondary" size="sm" @click="toggleTemplateVisibility(item)">
-                  {{ item.visibility === 'public' ? 'Unpublish' : 'Publish' }}
-                </BaseButton>
-                <BaseButton variant="ghost" size="sm" @click="deleteTemplate(item.id)">Delete</BaseButton>
-              </template>
-              <template v-else>
-                <BaseButton variant="secondary" size="sm" @click="saveAsMyTemplate(item)">Save to My</BaseButton>
-                <BaseButton size="sm" @click="useTemplate(item)">Use</BaseButton>
-              </template>
+              <BaseButton size="sm" @click="useTemplate(item)">Use</BaseButton>
             </div>
           </div>
         </article>
@@ -166,7 +156,6 @@ import { NIcon } from 'naive-ui'
 import {
   AddOutline,
   FolderOpenOutline,
-  BookmarkOutline,
   SparklesOutline,
   GridOutline,
   SearchOutline,
@@ -178,17 +167,16 @@ import {
   createProject,
   renameProject,
   duplicateProject,
-  deleteProject,
-  updateProject
+  deleteProject
 } from '@/stores/projects'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 import { getErrorMessage } from '@/utils'
-import { useWorkflowsStore } from '@/stores/workflows'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { useAuthStore } from '@/stores/auth'
 import { notifier } from '@/utils/notifier'
 
 const router = useRouter()
-const { user, bootstrapAuth } = useAuthStore()
+const { bootstrapAuth } = useAuthStore()
 
 const activeSection = ref('projects')
 const keyword = ref('')
@@ -202,64 +190,51 @@ const deleteTargetName = ref('')
 
 const navItems = [
   { key: 'projects', label: 'Recent Projects', icon: FolderOpenOutline },
-  { key: 'my-templates', label: 'My Templates', icon: BookmarkOutline },
   { key: 'featured', label: 'Featured Templates', icon: SparklesOutline }
 ]
 
 const {
-  myWorkflows,
-  publicWorkflows,
-  loadWorkflowTemplates,
-  createMyWorkflowTemplate,
-  deleteMyWorkflowTemplate,
-  setWorkflowTemplateVisibility,
-  resolveWorkflowTemplate
-} = useWorkflowsStore()
+  currentWorkspace,
+  featuredTemplates,
+  loadCurrentWorkspace,
+  loadFeaturedTemplates,
+  useSharedTemplate
+} = useWorkspaceStore()
 
 const workspaceBrand = computed(() => {
-  const raw = String(
-    user.value?.displayName ||
-    user.value?.id ||
-    user.value?.email?.split('@')?.[0] ||
-    'User'
-  )
-  const normalized = raw.split(/[\s_-]/).filter(Boolean)[0] || 'User'
-  const label = normalized.charAt(0).toUpperCase() + normalized.slice(1)
-  return `${label} WorkSpace`
+  return currentWorkspace.value?.name || 'Shared Workspace'
 })
 
 const sectionTitle = computed(() => {
-  if (activeSection.value === 'my-templates') return 'My Templates'
-  if (activeSection.value === 'featured') return 'Featured Workflows'
+  if (activeSection.value === 'featured') return 'Featured Templates'
   return 'Recent Projects'
 })
 
 const sectionDescription = computed(() => {
-  if (activeSection.value === 'my-templates') {
-    return 'Manage templates shared from your own projects and system presets.'
-  }
   if (activeSection.value === 'featured') {
-    return 'Public templates published by users.'
+    return 'Templates published by workspace members. Using one creates a full copy in your own projects.'
   }
   return 'Project cover is shown as 16:9. Manage project actions from the menu.'
 })
 
 const sectionItems = computed(() => {
-  if (activeSection.value === 'my-templates') return myWorkflows.value
-  if (activeSection.value === 'featured') return publicWorkflows.value
+  if (activeSection.value === 'featured') return featuredTemplates.value
   return projects.value
 })
 
 const filteredItems = computed(() => {
   const text = keyword.value.toLowerCase()
   if (!text) return sectionItems.value
-  return sectionItems.value.filter((item) => String(item?.name || '').toLowerCase().includes(text))
+  return sectionItems.value.filter((item) => String(item?.title || item?.name || '').toLowerCase().includes(text))
 })
 
 const describeItem = (item) => {
   if (activeSection.value === 'projects') return `Updated ${formatDate(item.updatedAt)}`
-  if (activeSection.value === 'my-templates') return item.visibility === 'public' ? 'Published to Featured' : 'Private template'
-  return item.description || 'Template'
+  const owner = String(item?.ownerDisplayName || '').trim()
+  const detail = String(item?.description || '').trim()
+  if (owner && detail) return `${owner} · ${detail}`
+  if (owner) return owner
+  return detail || 'Template'
 }
 
 const resolveCardIcon = (item) => {
@@ -324,52 +299,17 @@ const handlePrimaryClick = async (item) => {
 }
 
 const useTemplate = async (item) => {
-  if (item.sourceType === 'project' && item.canvasData) {
-    try {
-      const id = await createProject(item.name || 'Untitled')
-      await updateProject(id, {
-        canvasData: JSON.parse(JSON.stringify(item.canvasData)),
-        thumbnail: item.cover || ''
-      })
-      await router.push(`/canvas/${id}`)
-    } catch (error) {
-      notifier.error(getErrorMessage(error, 'Failed to create project from template'))
-    }
-    return
-  }
-
-  const workflow = resolveWorkflowTemplate(item)
-  if (!workflow) {
-    notifier.warning('Template unavailable')
-    return
-  }
   try {
-    const id = await createProject(workflow.name || item.name || 'Untitled')
-    sessionStorage.setItem(
-      'ai-canvas-workflow-template',
-      JSON.stringify({ workflowId: workflow.id })
-    )
-    await router.push(`/canvas/${id}`)
+    const project = await useSharedTemplate(item.id)
+    if (!project?.id) {
+      notifier.warning('Template unavailable')
+      return
+    }
+    await initProjectsStore()
+    await router.push(`/canvas/${project.id}`)
   } catch (error) {
     notifier.error(getErrorMessage(error, 'Failed to create project from template'))
   }
-}
-
-const saveAsMyTemplate = async (item) => {
-  await createMyWorkflowTemplate({ baseWorkflowId: item.baseWorkflowId || item.id })
-  activeSection.value = 'my-templates'
-  notifier.success('Saved to My Templates')
-}
-
-const toggleTemplateVisibility = async (item) => {
-  const nextVisibility = item.visibility === 'public' ? 'private' : 'public'
-  await setWorkflowTemplateVisibility(item.id, nextVisibility)
-  notifier.success(nextVisibility === 'public' ? 'Template published' : 'Template unpublished')
-}
-
-const deleteTemplate = async (id) => {
-  await deleteMyWorkflowTemplate(id)
-  notifier.success('Template deleted')
 }
 
 const openRename = (project) => {
@@ -421,10 +361,9 @@ const formatDate = (date) => {
 
 onMounted(async () => {
   await bootstrapAuth()
-  await Promise.all([
-    initProjectsStore(),
-    loadWorkflowTemplates()
-  ])
+  await initProjectsStore()
+  await loadCurrentWorkspace()
+  await loadFeaturedTemplates()
 })
 </script>
 
