@@ -323,6 +323,12 @@ const toolDropdownOptions = computed(() => ([
     renderIcon: () => h('img', { src: cropIcon, alt: '', class: 'tool-option-icon' })
   },
   {
+    label: 'Enhance to 4K',
+    key: 'enhance-4k',
+    disabled: !props.data?.url || isToolBusy.value,
+    description: 'Reuse original model and inputs, increase resolution only'
+  },
+  {
     label: 'Multi-Angle',
     key: 'multi-angle',
     disabled: !props.data?.url || isToolBusy.value,
@@ -752,6 +758,14 @@ const pickNearestSizeKey = (ratioKey, resolutionKey) => {
   return picked.key
 }
 
+const findNearestSizeKey = (ratioKey, resolutionKey) => {
+  let candidates = sizeMetaOptions.value.filter((opt) => opt.ratio === ratioKey)
+  if (candidates.length === 0) candidates = sizeMetaOptions.value
+  if (candidates.length === 0) return DEFAULT_IMAGE_SIZE
+  const exact = candidates.find((opt) => opt.resolutionKey === resolutionKey)
+  return (exact || [...candidates].sort((a, b) => a.pixels - b.pixels)[0]).key
+}
+
 const setImageModel = (key) => {
   localImageModel.value = key
   const config = getModelConfig(key)
@@ -1048,16 +1062,19 @@ const createLinkedImageNode = (payload = {}) => {
   }
 
   const newNodeId = addNode('image', nextPosition, {
-    model: localImageModel.value,
-    quality: localImageQuality.value,
+    model: payload.model || localImageModel.value,
+    quality: payload.quality || localImageQuality.value,
     size: payload.size || localImageSize.value,
     ratio: payload.ratio || localImageRatio.value,
     resolution: payload.resolution || localResolution.value,
     url: payload.url || '',
     base64: payload.base64 || '',
     fileType: payload.fileType || 'image/png',
-    label: 'Image',
+    label: payload.label || 'Image',
     loading: !!payload.loading,
+    sourceConfigId: payload.sourceConfigId || '',
+    sourcePrompt: payload.sourcePrompt || '',
+    sourceRefImages: Array.isArray(payload.sourceRefImages) ? payload.sourceRefImages : [],
     error: '',
     updatedAt: Date.now()
   })
@@ -1088,9 +1105,9 @@ const createLinkedImageNode = (payload = {}) => {
 
 const updateLinkedImageNode = async (nodeId, payload = {}) => {
   if (!nodeId) return
-  updateNode(nodeId, {
-    model: localImageModel.value,
-    quality: localImageQuality.value,
+  const patch = {
+    model: payload.model || localImageModel.value,
+    quality: payload.quality || localImageQuality.value,
     size: payload.size || localImageSize.value,
     ratio: payload.ratio || localImageRatio.value,
     resolution: payload.resolution || localResolution.value,
@@ -1098,9 +1115,14 @@ const updateLinkedImageNode = async (nodeId, payload = {}) => {
     base64: payload.base64 || '',
     fileType: payload.fileType || 'image/png',
     loading: !!payload.loading,
+    sourceConfigId: payload.sourceConfigId || '',
+    sourcePrompt: payload.sourcePrompt || '',
+    sourceRefImages: Array.isArray(payload.sourceRefImages) ? payload.sourceRefImages : [],
     error: payload.error || '',
     updatedAt: Date.now()
-  })
+  }
+  if (payload.label) patch.label = payload.label
+  updateNode(nodeId, patch)
   setTimeout(() => updateNodeInternals(nodeId), 40)
   if (!payload.loading) {
     await flushSave()
@@ -1334,8 +1356,171 @@ const handleToolAction = async (key) => {
     await startCropMode()
     return
   }
+  if (key === 'enhance-4k') {
+    await handleEnhanceTo4k()
+    return
+  }
   if (key === 'multi-angle') {
     showMultiAngleDrawer.value = true
+  }
+}
+
+const getNodeById = (nodeId) => nodes.value.find((node) => node.id === nodeId)
+
+const findNearestSourceConfig = (startNodeId, visited = new Set()) => {
+  const safeId = String(startNodeId || '').trim()
+  if (!safeId || visited.has(safeId)) return null
+  visited.add(safeId)
+
+  const directConfig = getNodeById(safeId)?.data?.sourceConfigId
+  if (directConfig) {
+    const sourceNode = getNodeById(directConfig)
+    if (sourceNode?.type === 'imageConfig') return sourceNode
+  }
+
+  const incomingEdges = edges.value.filter((edge) => edge.target === safeId)
+  for (const edge of incomingEdges) {
+    const sourceNode = getNodeById(edge.source)
+    if (!sourceNode) continue
+    if (sourceNode.type === 'imageConfig') return sourceNode
+    if (sourceNode.type === 'image') {
+      const nested = findNearestSourceConfig(sourceNode.id, visited)
+      if (nested) return nested
+    }
+  }
+
+  return null
+}
+
+const buildEnhancementRequest = () => {
+  const sourceConfig = findNearestSourceConfig(props.id)
+  const inheritedPrompt = String(props.data?.sourcePrompt || '').trim()
+  const inheritedRefs = Array.isArray(props.data?.sourceRefImages)
+    ? props.data.sourceRefImages.filter(Boolean)
+    : []
+
+  let prompt = inheritedPrompt
+  let refImages = inheritedRefs
+
+  if (sourceConfig?.id) {
+    const resolved = resolveNodeInputs(sourceConfig.id)
+    prompt = String(resolved.prompt || inheritedPrompt).trim()
+    refImages = Array.isArray(resolved.refImages) && resolved.refImages.length > 0
+      ? resolved.refImages.filter(Boolean)
+      : inheritedRefs
+  }
+
+  if (!prompt && refImages.length === 0) {
+    return null
+  }
+
+  const ratio = String(
+    sourceConfig?.data?.ratio ||
+    props.data?.ratio ||
+    localImageRatio.value ||
+    ratioFromSizeKey(localImageSize.value) ||
+    '1:1'
+  ).trim()
+
+  const baseSize = String(
+    sourceConfig?.data?.size ||
+    props.data?.size ||
+    localImageSize.value ||
+    DEFAULT_IMAGE_SIZE
+  ).trim()
+
+  const nextSize = findNearestSizeKey(ratio, '4k')
+
+  return {
+    model: String(
+      sourceConfig?.data?.model ||
+      props.data?.model ||
+      localImageModel.value ||
+      DEFAULT_IMAGE_MODEL
+    ).trim(),
+    prompt,
+    size: nextSize || baseSize,
+    quality: String(
+      sourceConfig?.data?.quality ||
+      props.data?.quality ||
+      localImageQuality.value ||
+      'standard'
+    ).trim(),
+    ratio,
+    aspect_ratio: ratio,
+    resolution: '4k',
+    image: refImages,
+    sourceConfigId: sourceConfig?.id || props.data?.sourceConfigId || '',
+    sourcePrompt: prompt,
+    sourceRefImages: refImages
+  }
+}
+
+const handleEnhanceTo4k = async () => {
+  const request = buildEnhancementRequest()
+  if (!request) {
+    window.$message?.warning('No reusable prompt or reference chain found for 4K enhancement')
+    return
+  }
+
+  toolActionLoading.value = 'enhance-4k'
+  const newNodeId = createLinkedImageNode({
+    loading: true,
+    label: '4K Enhanced Image',
+    model: request.model,
+    size: request.size,
+    quality: request.quality,
+    ratio: request.ratio,
+    resolution: request.resolution,
+    sourceConfigId: request.sourceConfigId,
+    sourcePrompt: request.sourcePrompt,
+    sourceRefImages: request.sourceRefImages
+  })
+  if (!newNodeId) {
+    toolActionLoading.value = ''
+    window.$message?.error('Failed to create output node')
+    return
+  }
+
+  try {
+    const result = await imageGen.generate(request)
+    const rawUrl = String(result?.[0]?.url || '').trim()
+    const stableUrl = await persistImageUrl(rawUrl, `enhanced-4k-${Date.now()}.png`)
+    const finalUrl = stableUrl || rawUrl
+    if (!finalUrl) throw new Error('No image output')
+    if (!stableUrl && rawUrl.startsWith('data:image/')) {
+      throw new Error('Enhanced image persistence failed. Please retry.')
+    }
+
+    await updateLinkedImageNode(newNodeId, {
+      url: finalUrl,
+      base64: '',
+      loading: false,
+      fileType: 'image/png',
+      size: request.size,
+      ratio: request.ratio,
+      resolution: request.resolution,
+      sourceConfigId: request.sourceConfigId,
+      sourcePrompt: request.sourcePrompt,
+      sourceRefImages: request.sourceRefImages
+    })
+
+    window.$message?.success('4K enhanced image created')
+  } catch (err) {
+    const message = getErrorMessage(err, '4K enhancement failed')
+    await updateLinkedImageNode(newNodeId, {
+      loading: false,
+      error: message,
+      size: request.size,
+      ratio: request.ratio,
+      resolution: request.resolution,
+      sourceConfigId: request.sourceConfigId,
+      sourcePrompt: request.sourcePrompt,
+      sourceRefImages: request.sourceRefImages
+    })
+    window.$message?.error(message)
+  } finally {
+    toolActionLoading.value = ''
   }
 }
 const handleRemoveBackground = async () => {

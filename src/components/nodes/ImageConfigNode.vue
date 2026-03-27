@@ -541,10 +541,13 @@ const handleGenerate = async (mode = 'auto') => {
   }, 50)
 
   try {
+    const sourcePrompt = String(prompt || '').trim()
+    const sourceRefImages = Array.isArray(refImages) ? [...refImages] : []
+
     // Build request params | 构建请求参数
     const params = {
       model: localModel.value,
-      prompt: prompt,
+      prompt: sourcePrompt,
       n: 1,
       ratio: localRatio.value || ratioFromSizeKey(localSize.value),
       aspect_ratio: localRatio.value || ratioFromSizeKey(localSize.value),
@@ -583,6 +586,13 @@ const handleGenerate = async (mode = 'auto') => {
         loading: false,
         label: 'Text to Image',
         model: localModel.value,
+        size: localSize.value,
+        quality: localQuality.value,
+        ratio: localRatio.value || ratioFromSizeKey(localSize.value),
+        resolution: localResolution.value || resolutionFromSizeKey(localSize.value),
+        sourceConfigId: props.id,
+        sourcePrompt,
+        sourceRefImages,
         persistStatus: 'saving',
         persistError: '',
         updatedAt: Date.now()
