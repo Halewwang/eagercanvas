@@ -439,8 +439,8 @@ export const useModel3DGeneration = () => {
           return model.value
         }
 
-        if (['failed', 'error', 'cancelled', 'canceled'].includes(resultStatus)) {
-          throw new Error(result?.message || result?.Response?.ErrorMsg || '3D 生成失败')
+        if (['fail', 'failed', 'error', 'cancelled', 'canceled'].includes(resultStatus)) {
+          throw new Error(result?.message || result?.Response?.ErrorMessage || result?.Response?.ErrorMsg || '3D 生成失败')
         }
 
         await new Promise((resolve) => setTimeout(resolve, interval))

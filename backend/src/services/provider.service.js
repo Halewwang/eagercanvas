@@ -569,7 +569,8 @@ const normalize3DStatus = (value = '') => {
   const status = String(value || '').trim().toLowerCase()
   if (!status) return 'processing'
   if (['success', 'succeeded', 'completed', 'done', 'finished'].includes(status)) return 'completed'
-  if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) return 'failed'
+  if (['wait', 'waiting', 'run', 'running', 'processing', 'pending'].includes(status)) return 'processing'
+  if (['fail', 'failed', 'error', 'cancelled', 'canceled'].includes(status)) return 'failed'
   return 'processing'
 }
 
@@ -816,7 +817,8 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
 }
 
 export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
-  const model = String(payload.model || payload.model_name || 'hunyuan3d-pro-3.1').trim().toLowerCase()
+  const rawModel = String(payload.model || payload.model_name || 'hunyuan3d-pro-3.1').trim().toLowerCase()
+  const model = rawModel.includes('3.0') ? '3.0' : '3.1'
   const prompt = String(payload.prompt || payload.Prompt || '').trim()
   const multiViewImages = Array.isArray(payload.multiViewImages) ? payload.multiViewImages : []
   const generateType = String(payload.generateType || payload.GenerateType || 'Normal').trim() || 'Normal'
@@ -865,20 +867,20 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
         if (dataUrl?.data) {
           return {
             ViewType: viewType,
-            ImageBase64: dataUrl.data
+            ViewImageBase64: dataUrl.data
           }
         }
 
         if (/^https?:\/\//i.test(source)) {
           return {
             ViewType: viewType,
-            ImageUrl: source
+            ViewImageUrl: source
           }
         }
 
         return {
           ViewType: viewType,
-          ImageBase64: source
+          ViewImageBase64: source
         }
       })
       .filter(Boolean)
@@ -896,10 +898,10 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
     requestBody.Prompt = prompt
   } else if (normalizedMultiViewImages.length > 0) {
     const primaryView = normalizedMultiViewImages[0]
-    if (primaryView.ImageUrl) {
-      requestBody.ImageUrl = primaryView.ImageUrl
-    } else if (primaryView.ImageBase64) {
-      requestBody.ImageBase64 = primaryView.ImageBase64
+    if (primaryView.ViewImageUrl) {
+      requestBody.ImageUrl = primaryView.ViewImageUrl
+    } else if (primaryView.ViewImageBase64) {
+      requestBody.ImageBase64 = primaryView.ViewImageBase64
     }
   }
 
