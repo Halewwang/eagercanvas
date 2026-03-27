@@ -38,8 +38,6 @@ const directUploadToSignedUrl = (signedUrl, file, options = {}) =>
 export const isDataImageUrl = (value = '') => /^data:image\//i.test(String(value || ''))
 export const isDataUrl = (value = '') => /^data:/i.test(String(value || ''))
 export const isRemoteHttpUrl = (value = '') => /^https?:\/\//i.test(String(value || ''))
-export const SORA2_ALLOWED_REFERENCE_SIZES = ['1280x720', '720x1280', '1024x1792', '1792x1024']
-
 export const dataUrlToFile = (dataUrl, fileName = 'image.png') => {
   const value = String(dataUrl || '')
   const match = value.match(/^data:(.+?);base64,(.+)$/)
@@ -135,6 +133,3 @@ export const getImageDimensionsFromSource = (source) =>
     }
     img.src = raw
   })
-
-export const isSora2AllowedReferenceSize = (width, height) =>
-  SORA2_ALLOWED_REFERENCE_SIZES.includes(`${Number(width) || 0}x${Number(height) || 0}`)

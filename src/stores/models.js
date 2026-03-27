@@ -18,7 +18,8 @@ import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_IMAGE_SIZE,
   DEFAULT_VIDEO_RATIO,
-  DEFAULT_VIDEO_DURATION
+  DEFAULT_VIDEO_DURATION,
+  resolveVideoModelKey
 } from '@/config/models'
 import { useModelConfig } from '@/hooks/useModelConfig'
 
@@ -177,7 +178,8 @@ export {
   DEFAULT_CHAT_MODEL,
   DEFAULT_IMAGE_SIZE,
   DEFAULT_VIDEO_RATIO,
-  DEFAULT_VIDEO_DURATION
+  DEFAULT_VIDEO_DURATION,
+  resolveVideoModelKey
 }
 
 // Export options | 导出选项

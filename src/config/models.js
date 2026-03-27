@@ -22,13 +22,6 @@ const GEMINI_RESOLUTION_LEVELS = [
     { key: '4k', scale: 4 }
 ]
 
-const SORA2_SIZE_OPTIONS = [
-    { label: '720x1280', key: '720x1280', ratio: '9:16' },
-    { label: '1280x720', key: '1280x720', ratio: '16:9' },
-    { label: '1024x1792', key: '1024x1792', ratio: '4:7' },
-    { label: '1792x1024', key: '1792x1024', ratio: '7:4' }
-]
-
 // Gemini image size options | Gemini 图片尺寸选项
 export const GEMINI_IMAGE_SIZE_OPTIONS = GEMINI_BASE_SIZES.flatMap((base) =>
     GEMINI_RESOLUTION_LEVELS.map((level) => ({
@@ -102,14 +95,6 @@ export const VIDEO_MODELS = [
         ],
         durs: [{ label: '4 秒', key: 4 }, { label: '6 秒', key: 6 }, { label: '8 秒', key: 8 }],
         defaultParams: { ratio: '16:9', duration: 8, resolution: '1080p', generate_audio: false }
-    },
-    {
-        label: 'OpenAI Sora 2',
-        key: 'sora-2',
-        ratios: ['16:9', '9:16', '7:4', '4:7'],
-        sizes: SORA2_SIZE_OPTIONS,
-        durs: [{ label: '4 秒', key: 4 }, { label: '8 秒', key: 8 }, { label: '12 秒', key: 12 }],
-        defaultParams: { ratio: '16:9', size: '1280x720', duration: 4 }
     }
 ]
 
@@ -151,6 +136,8 @@ export const DEFAULT_CHAT_MODEL = 'gemini-2.5-flash'
 export const DEFAULT_IMAGE_SIZE = '1024x1024'
 export const DEFAULT_VIDEO_RATIO = '16:9'
 export const DEFAULT_VIDEO_DURATION = 8
+export const hasVideoModel = (key) => VIDEO_MODELS.some((model) => model.key === key)
+export const resolveVideoModelKey = (key) => (hasVideoModel(key) ? key : DEFAULT_VIDEO_MODEL)
 
 // Get model by key | 根据 key 获取模型
 export const getModelByName = (key) => {
