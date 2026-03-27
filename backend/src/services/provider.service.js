@@ -818,11 +818,9 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
 
 export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
   const rawModel = String(payload.model || payload.model_name || 'hunyuan3d-pro-3.1').trim().toLowerCase()
-  const model = rawModel.includes('3.0') ? '3.0' : '3.1'
   const prompt = String(payload.prompt || payload.Prompt || '').trim()
   const multiViewImages = Array.isArray(payload.multiViewImages) ? payload.multiViewImages : []
   const generateType = String(payload.generateType || payload.GenerateType || 'Normal').trim() || 'Normal'
-  const resultFormat = String(payload.resultFormat || payload.ResultFormat || '').trim().toUpperCase()
   const polygonType = String(payload.polygonType || payload.PolygonType || '').trim()
   const faceCount = Number(payload.faceCount ?? payload.FaceCount)
   const enablePBR = typeof payload.enablePBR === 'boolean'
@@ -834,10 +832,7 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
     throw new HttpError(400, '3D generation requires a prompt or at least one multi-view image', 'MODEL3D_INPUT_REQUIRED')
   }
 
-  const requestBody = {
-    Model: model,
-    GenerateType: generateType
-  }
+  const requestBody = { GenerateType: generateType }
 
   if (typeof enablePBR === 'boolean') {
     requestBody.EnablePBR = enablePBR
@@ -849,10 +844,6 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
 
   if (Number.isFinite(faceCount) && faceCount > 0) {
     requestBody.FaceCount = Math.round(faceCount)
-  }
-
-  if (resultFormat) {
-    requestBody.ResultFormat = resultFormat
   }
 
   let normalizedMultiViewImages = []
@@ -884,6 +875,7 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
         }
       })
       .filter(Boolean)
+      .filter((item) => ['left', 'right', 'back'].includes(String(item.ViewType || '').toLowerCase()))
 
     if (normalizedMultiViewImages.length === 0) {
       throw new HttpError(400, 'Multi-view images are present but none could be normalized into valid provider inputs', 'MODEL3D_INVALID_MULTIVIEW')
