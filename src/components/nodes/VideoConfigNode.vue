@@ -111,10 +111,6 @@
             Reference {{ imagesByRole.referenceImages.length > 0 ? `✓ ${imagesByRole.referenceImages.length}` : '○' }}
           </span>
         </div>
-        <div v-if="soraInputWarning" class="text-[11px] leading-[1.35] text-[#c8a06a]">
-          {{ soraInputWarning }}
-        </div>
-
         <!-- Progress bar | 进度条 -->
         <!-- <div v-if="status === 'polling'" class="space-y-1">
         <div class="flex justify-between text-xs text-[var(--text-secondary)]">
@@ -155,19 +151,6 @@
       <Handle type="source" :position="Position.Right" id="right" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
     </div>
 
-    <BaseModal
-      v-model:show="showValidationModal"
-      title="Sora 2 Input Size"
-      size="sm"
-    >
-      <p class="ui-body ui-modal-copy whitespace-pre-wrap">{{ validationMessage }}</p>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton @click="closeValidationModal">OK</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-
     <!-- Hover action buttons | 悬浮操作按钮 -->
     <!-- Top right - Copy button | 右上角 - Copy按钮 -->
     <div v-show="showActions" class="absolute -top-5 right-0 z-[1000]">
@@ -192,12 +175,11 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
-import { BaseButton, BaseModal } from '@/components/ui'
 import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject } from '../../stores/canvas'
-import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoResolutionOptions, getModelVideoSizeOptions, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION } from '../../stores/models'
-import { getImageDimensionsFromSource, isSora2AllowedReferenceSize, persistMediaUrl } from '@/utils/media'
+import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoResolutionOptions, getModelVideoSizeOptions, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '../../stores/models'
+import { persistMediaUrl } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 
 const props = defineProps({
@@ -216,16 +198,13 @@ const { loading, error, status, video: generatedVideo, progress, generate } = us
 
 // Hover state | 悬浮状态
 const showActions = ref(false)
-const showValidationModal = ref(false)
-const validationMessage = ref('')
-const soraInputWarning = ref('')
 
 // Local state | 本地状态
-const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
+const localModel = ref(resolveVideoModelKey(props.data?.model || DEFAULT_VIDEO_MODEL))
 const localRatio = ref(props.data?.ratio || '16:9')
 const localSize = ref(props.data?.size || '')
-const localResolution = ref(props.data?.resolution || getModelConfig(props.data?.model || DEFAULT_VIDEO_MODEL)?.defaultParams?.resolution || '')
-const localGenerateAudio = ref(Boolean(props.data?.generate_audio ?? getModelConfig(props.data?.model || DEFAULT_VIDEO_MODEL)?.defaultParams?.generate_audio ?? false))
+const localResolution = ref(props.data?.resolution || getModelConfig(resolveVideoModelKey(props.data?.model || DEFAULT_VIDEO_MODEL))?.defaultParams?.resolution || '')
+const localGenerateAudio = ref(Boolean(props.data?.generate_audio ?? getModelConfig(resolveVideoModelKey(props.data?.model || DEFAULT_VIDEO_MODEL))?.defaultParams?.generate_audio ?? false))
 const getDurationFromData = (data) => {
   const raw = data?.duration ?? data?.dur
   const parsed = Number(raw)
@@ -269,7 +248,6 @@ const imagesByRole = computed(() => {
 
 // Get current model config | 获取当前Model配置
 const currentModelConfig = computed(() => getModelConfig(localModel.value))
-const isSora2Model = (model) => String(model || '').trim().toLowerCase().startsWith('sora-2')
 const isVeo31Model = (model) => String(model || '').trim().toLowerCase().startsWith('veo-3.1')
 const ratioFromSize = (size) => {
   const [w, h] = String(size || '').split('x').map(Number)
@@ -296,12 +274,7 @@ const displayModelName = computed(() => {
 const ratioOptions = computed(() => {
   return getModelRatioOptions(localModel.value)
 })
-const sizeOptions = computed(() => {
-  if (isSora2Model(localModel.value)) {
-    return getModelVideoSizeOptions(localModel.value)
-  }
-  return getModelVideoSizeOptions(localModel.value, localRatio.value)
-})
+const sizeOptions = computed(() => getModelVideoSizeOptions(localModel.value, localRatio.value))
 const resolutionOptions = computed(() => getModelVideoResolutionOptions(localModel.value))
 const supportsAudioToggle = computed(() => isVeo31Model(localModel.value))
 const displaySize = computed(() => String(localSize.value || '').trim() || 'Select size')
@@ -357,7 +330,7 @@ const handleRatioSelect = (key) => {
   const option = sizeOptions.value.find((item) => item.ratio === key)
   if (option?.key) {
     localSize.value = option.key
-  } else if (!isSora2Model(localModel.value)) {
+  } else {
     localSize.value = ''
   }
   updateNode(props.id, { ratio: key, size: localSize.value })
@@ -398,61 +371,6 @@ const getConnectedInputs = () => {
   }
 }
 
-const getConnectedImageInputs = () => {
-  const resolved = resolveNodeInputs(props.id)
-  const inputs = []
-  if (resolved.firstFrame) {
-    inputs.push({ role: resolved.firstFrame.role, image: resolved.firstFrame.value })
-  }
-  if (resolved.lastFrame) {
-    inputs.push({ role: resolved.lastFrame.role, image: resolved.lastFrame.value })
-  }
-  resolved.referenceImages.forEach((item) => {
-    inputs.push({ role: item.role, image: item.value })
-  })
-  return inputs
-}
-
-const refreshSoraInputWarning = async () => {
-  if (!isSora2Model(localModel.value)) {
-    soraInputWarning.value = ''
-    return
-  }
-
-  const connectedImages = getConnectedImageInputs()
-  if (!connectedImages.length) {
-    soraInputWarning.value = ''
-    return
-  }
-
-  for (const item of connectedImages) {
-    const { width, height } = await getImageDimensionsFromSource(item.image)
-    if (isSora2AllowedReferenceSize(width, height)) continue
-    soraInputWarning.value = `Sora 2 参考图尺寸不支持：当前为 ${width || 0}x${height || 0}`
-    return
-  }
-
-  soraInputWarning.value = ''
-}
-
-const validateSora2Inputs = async () => {
-  if (!isSora2Model(localModel.value)) return true
-
-  const connectedImages = getConnectedImageInputs()
-  if (!connectedImages.length) return true
-
-  for (const item of connectedImages) {
-    const { width, height } = await getImageDimensionsFromSource(item.image)
-    if (isSora2AllowedReferenceSize(width, height)) continue
-
-    validationMessage.value = `Sora 2 图生视频仅支持以下参考图尺寸：1280x720、720x1280、1024x1792、1792x1024。\n当前上游参考图尺寸为 ${width || 0}x${height || 0}，请先调整图片比例后再生成。`
-    showValidationModal.value = true
-    return false
-  }
-
-  return true
-}
-
 // Computed connected prompt | 计算连接的Prompt
 const connectedPrompt = computed(() => {
   return getConnectedInputs().prompt
@@ -473,10 +391,6 @@ const handleGenerate = async () => {
 
   if (!isConfigured.value) {
     window.$message?.warning('Please sign in first')
-    return
-  }
-
-  if (!(await validateSora2Inputs())) {
     return
   }
 
@@ -619,21 +533,28 @@ const handleDelete = () => {
 
 // Initialize on mount | 挂载时初始化
 onMounted(() => {
-  if (!localModel.value) {
-    localModel.value = DEFAULT_VIDEO_MODEL
+  const resolvedModel = resolveVideoModelKey(localModel.value || DEFAULT_VIDEO_MODEL)
+  if (resolvedModel !== localModel.value) {
+    localModel.value = resolvedModel
     updateNode(props.id, { model: localModel.value })
   }
 })
 
 // Watch for model changes from props | 监听 props 中Model变化
 watch(() => props.data?.model, (newModel) => {
-  if (newModel && newModel !== localModel.value) {
-    localModel.value = newModel
+  const resolvedModel = resolveVideoModelKey(newModel || DEFAULT_VIDEO_MODEL)
+  if (resolvedModel !== localModel.value) {
+    localModel.value = resolvedModel
+  }
+  if (newModel && resolvedModel !== newModel) {
+    updateNode(props.id, { model: resolvedModel })
   }
 })
 
 watch(() => props.data, (val) => {
   if (!val) return
+  const resolvedModel = resolveVideoModelKey(val.model || DEFAULT_VIDEO_MODEL)
+  if (resolvedModel !== localModel.value) localModel.value = resolvedModel
   if (val.ratio && val.ratio !== localRatio.value) localRatio.value = val.ratio
   if ((val.size || '') !== localSize.value) localSize.value = val.size || ''
   if ((val.resolution || '') !== localResolution.value) localResolution.value = val.resolution || ''
@@ -645,17 +566,6 @@ watch(() => props.data, (val) => {
     localDuration.value = nextDuration
   }
 }, { deep: true })
-
-watch(
-  () => [
-    localModel.value,
-    ...getConnectedImageInputs().map((item) => `${item.role}:${item.image}`)
-  ],
-  () => {
-    refreshSoraInputWarning()
-  },
-  { immediate: true }
-)
 
 // Watch for auto-execute flag | 监听自动执行标志
 watch(
@@ -673,10 +583,6 @@ watch(
   { immediate: true }
 )
 
-const closeValidationModal = () => {
-  showValidationModal.value = false
-  validationMessage.value = ''
-}
 </script>
 
 <style scoped>

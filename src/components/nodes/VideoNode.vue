@@ -130,7 +130,6 @@
           {{ item.label }}
         </div>
       </div>
-      <div v-if="soraInputWarning" class="binding-warning-text">{{ soraInputWarning }}</div>
     </div>
   </div>
 </template>
@@ -143,8 +142,8 @@ import { BaseButton, BaseDropdown, BaseModal } from '@/components/ui'
 import { CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
 import { duplicateNode, edges, flushSave, nodes, removeNode, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
-import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, videoModelOptions } from '../../stores/models'
-import { getImageDimensionsFromSource, isSora2AllowedReferenceSize, uploadImageFile } from '@/utils/media'
+import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
+import { uploadImageFile } from '@/utils/media'
 import { resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 
@@ -164,7 +163,6 @@ const showErrorModal = ref(false)
 const showValidationModal = ref(false)
 const validationTitle = ref('Upload Limit')
 const validationMessage = ref('')
-const soraInputWarning = ref('')
 const videoActionLoading = ref('')
 const isUploading = ref(false)
 const showUploadProgress = ref(false)
@@ -176,11 +174,11 @@ const progressTimer = ref(null)
 const progressFinishTimer = ref(null)
 const MAX_UPLOAD_SIZE_BYTES = 60 * 1024 * 1024
 
-const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
+const localModel = ref(resolveVideoModelKey(props.data?.model || DEFAULT_VIDEO_MODEL))
 const localRatio = ref(props.data?.ratio || DEFAULT_VIDEO_RATIO)
 const localSize = ref(props.data?.size || '')
 const localResolution = ref('')
-const localGenerateAudio = ref(Boolean(props.data?.generate_audio ?? getModelConfig(props.data?.model || DEFAULT_VIDEO_MODEL)?.defaultParams?.generate_audio ?? false))
+const localGenerateAudio = ref(Boolean(props.data?.generate_audio ?? getModelConfig(resolveVideoModelKey(props.data?.model || DEFAULT_VIDEO_MODEL))?.defaultParams?.generate_audio ?? false))
 const getDurationFromData = (data) => {
   const raw = data?.duration ?? data?.dur
   const parsed = Number(raw)
@@ -194,7 +192,6 @@ const imageRoleStatusMap = {
   last_frame_image: 'Second Frame',
   input_reference: 'Reference Picture'
 }
-const isSora2Model = (model) => String(model || '').trim().toLowerCase().startsWith('sora-2')
 const isVeo31Model = (model) => String(model || '').trim().toLowerCase().startsWith('veo-3.1')
 const audioOptions = [
   { key: 'off', label: 'Audio Off' },
@@ -203,13 +200,7 @@ const audioOptions = [
 
 const modelOptions = computed(() => videoModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const ratioOptions = computed(() => getModelRatioOptions(localModel.value))
-const sizeOptions = computed(() => {
-  // Sora-2 size must strictly follow documented enum and should not be filtered by ratio.
-  if (isSora2Model(localModel.value)) {
-    return getModelVideoSizeOptions(localModel.value)
-  }
-  return getModelVideoSizeOptions(localModel.value, localRatio.value)
-})
+const sizeOptions = computed(() => getModelVideoSizeOptions(localModel.value, localRatio.value))
 const resolutionOptions = computed(() => getModelVideoResolutionOptions(localModel.value))
 const durationOptions = computed(() => getModelDurationOptions(localModel.value))
 const supportsAudioToggle = computed(() => isVeo31Model(localModel.value))
@@ -457,62 +448,6 @@ const getConnectedInputs = () => {
   }
 }
 
-const getConnectedImageInputs = () => {
-  const resolved = resolveNodeInputs(props.id)
-  const connected = []
-  if (resolved.firstFrame) {
-    connected.push({ role: resolved.firstFrame.role, image: resolved.firstFrame.value })
-  }
-  if (resolved.lastFrame) {
-    connected.push({ role: resolved.lastFrame.role, image: resolved.lastFrame.value })
-  }
-  resolved.referenceImages.forEach((item) => {
-    connected.push({ role: item.role, image: item.value })
-  })
-  return connected
-}
-
-const refreshSoraInputWarning = async () => {
-  if (!isSora2Model(localModel.value)) {
-    soraInputWarning.value = ''
-    return
-  }
-
-  const connectedImages = getConnectedImageInputs()
-  if (!connectedImages.length) {
-    soraInputWarning.value = ''
-    return
-  }
-
-  for (const item of connectedImages) {
-    const { width, height } = await getImageDimensionsFromSource(item.image)
-    if (isSora2AllowedReferenceSize(width, height)) continue
-    soraInputWarning.value = `Sora 2 参考图尺寸不支持：当前为 ${width || 0}x${height || 0}`
-    return
-  }
-
-  soraInputWarning.value = ''
-}
-
-const validateSora2Inputs = async () => {
-  if (!isSora2Model(localModel.value)) return true
-
-  const connectedImages = getConnectedImageInputs()
-  if (!connectedImages.length) return true
-
-  for (const item of connectedImages) {
-    const { width, height } = await getImageDimensionsFromSource(item.image)
-    if (isSora2AllowedReferenceSize(width, height)) continue
-
-    validationTitle.value = 'Sora 2 Input Size'
-    validationMessage.value = `Sora 2 图生视频仅支持以下参考图尺寸：1280x720、720x1280、1024x1792、1792x1024。\n当前上游参考图尺寸为 ${width || 0}x${height || 0}，请先调整图片比例后再生成。`
-    showValidationModal.value = true
-    return false
-  }
-
-  return true
-}
-
 const runVideoGeneration = async (mode = 'create') => {
   if (!isConfigured.value) {
     window.$message?.warning('Please sign in first')
@@ -523,10 +458,6 @@ const runVideoGeneration = async (mode = 'create') => {
   const hasInput = prompt || first_frame_image || last_frame_image || images.length > 0
   if (!hasInput) {
     window.$message?.warning('Connect a text or image node first')
-    return
-  }
-
-  if (!(await validateSora2Inputs())) {
     return
   }
 
@@ -695,7 +626,8 @@ watch(
   () => props.data,
   (val) => {
     if (!val) return
-    if (val.model && val.model !== localModel.value) localModel.value = val.model
+    const resolvedModel = resolveVideoModelKey(val.model || DEFAULT_VIDEO_MODEL)
+    if (resolvedModel !== localModel.value) localModel.value = resolvedModel
     if (val.ratio && val.ratio !== localRatio.value) localRatio.value = val.ratio
     if ((val.size || '') !== localSize.value) localSize.value = val.size || ''
     if ((val.resolution || '') !== localResolution.value) localResolution.value = val.resolution || ''
@@ -717,12 +649,12 @@ watch(
 )
 
 watch(
-  () => [
-    localModel.value,
-    ...getConnectedImageInputs().map((item) => `${item.role}:${item.image}`)
-  ],
-  () => {
-    refreshSoraInputWarning()
+  () => props.data?.model,
+  (model) => {
+    const resolvedModel = resolveVideoModelKey(model || DEFAULT_VIDEO_MODEL)
+    if (model && resolvedModel !== model) {
+      updateNode(props.id, { model: resolvedModel })
+    }
   },
   { immediate: true }
 )
