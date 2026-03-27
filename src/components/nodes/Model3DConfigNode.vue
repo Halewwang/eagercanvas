@@ -27,18 +27,9 @@
             <button class="capsule-select">{{ displayResultFormat }}</button>
           </BaseDropdown>
           <button class="capsule-select" :disabled="pbrDisabled" @click="toggleEnablePBR">{{ pbrLabel }}</button>
-          <label class="capsule-input-wrap" title="Face Count">
-            <span class="capsule-input-prefix">Face</span>
-            <input
-              v-model="localFaceCount"
-              class="capsule-input"
-              type="text"
-              inputmode="numeric"
-              placeholder="Auto"
-              @blur="commitFaceCount"
-              @keydown.enter.prevent="commitFaceCount"
-            />
-          </label>
+          <BaseDropdown :options="faceCountOptions" :selected-key="localFaceCount" compact @select="handleFaceCountSelect">
+            <button class="capsule-select">{{ displayFaceCount }}</button>
+          </BaseDropdown>
         </div>
 
         <div class="capsule-divider" />
@@ -167,12 +158,15 @@ const { viewport } = useVueFlow()
 const { isConfigured } = useApiConfig()
 const { loading, error, status, progress, generate } = useModel3DGeneration()
 
+const DEFAULT_FACE_COUNT = '500000'
+const DEFAULT_RESULT_FORMAT = 'GLB'
+
 const showCapsule = ref(false)
 const localModel = ref(resolve3DModelKey(props.data?.model || DEFAULT_MODEL3D_MODEL))
 const localGenerateType = ref(props.data?.generateType || 'Normal')
 const localEnablePBR = ref(!!props.data?.enablePBR)
-const localFaceCount = ref(String(props.data?.faceCount || ''))
-const localResultFormat = ref(String(props.data?.resultFormat || '').toUpperCase())
+const localFaceCount = ref(String(props.data?.faceCount || DEFAULT_FACE_COUNT))
+const localResultFormat = ref(String(props.data?.resultFormat || DEFAULT_RESULT_FORMAT).toUpperCase())
 const localPolygonType = ref(String(props.data?.polygonType || ''))
 
 const modelOptions = computed(() => model3dModelOptions.value.map((item) => ({
@@ -181,6 +175,10 @@ const modelOptions = computed(() => model3dModelOptions.value.map((item) => ({
 })))
 const generateTypeOptions = computed(() => (currentModelConfig.value?.generateTypes || []).map((item) => ({ key: item, label: item })))
 const polygonTypeOptions = computed(() => (currentModelConfig.value?.polygonTypes || []).map((item) => ({
+  key: item.key,
+  label: item.label
+})))
+const faceCountOptions = computed(() => (currentModelConfig.value?.faceCounts || []).map((item) => ({
   key: item.key,
   label: item.label
 })))
@@ -202,7 +200,11 @@ const displayModelName = computed(() => {
 })
 const displayResultFormat = computed(() => {
   const item = resultFormatOptions.value.find((option) => option.key === localResultFormat.value)
-  return item?.label || 'Default'
+  return item?.label || DEFAULT_RESULT_FORMAT
+})
+const displayFaceCount = computed(() => {
+  const item = faceCountOptions.value.find((option) => option.key === localFaceCount.value)
+  return item?.label || '500k'
 })
 const displayPolygonType = computed(() => {
   const item = polygonTypeOptions.value.find((option) => option.key === localPolygonType.value)
@@ -256,12 +258,16 @@ const setModel = (nextModel) => {
   localModel.value = resolve3DModelKey(nextModel)
   const nextConfig = getModelConfig(localModel.value)
   const nextGenerateTypes = nextConfig?.generateTypes || ['Normal']
+  const nextFaceCounts = (nextConfig?.faceCounts || []).map((item) => item.key)
   const nextFormats = (nextConfig?.resultFormats || []).map((item) => item.key)
   if (!nextGenerateTypes.includes(localGenerateType.value)) {
     localGenerateType.value = nextGenerateTypes[0]
   }
+  if (!nextFaceCounts.includes(localFaceCount.value)) {
+    localFaceCount.value = nextConfig?.defaultParams?.faceCount || DEFAULT_FACE_COUNT
+  }
   if (!nextFormats.includes(localResultFormat.value)) {
-    localResultFormat.value = ''
+    localResultFormat.value = nextConfig?.defaultParams?.resultFormat || DEFAULT_RESULT_FORMAT
   }
   if (!nextConfig?.polygonTypes?.some((item) => item.key === localPolygonType.value)) {
     localPolygonType.value = nextConfig?.defaultParams?.polygonType || ''
@@ -269,6 +275,7 @@ const setModel = (nextModel) => {
   updateNode(props.id, {
     model: localModel.value,
     generateType: localGenerateType.value,
+    faceCount: localFaceCount.value,
     resultFormat: localResultFormat.value,
     polygonType: localPolygonType.value
   })
@@ -297,6 +304,10 @@ const handleResultFormatSelect = (value) => {
   localResultFormat.value = String(value || '').toUpperCase()
   updateNode(props.id, { resultFormat: localResultFormat.value })
 }
+const handleFaceCountSelect = (value) => {
+  localFaceCount.value = String(value || DEFAULT_FACE_COUNT)
+  updateNode(props.id, { faceCount: localFaceCount.value })
+}
 const toggleEnablePBR = () => {
   if (pbrDisabled.value) return
   localEnablePBR.value = !localEnablePBR.value
@@ -306,12 +317,6 @@ const handlePolygonTypeSelect = (value) => {
   localPolygonType.value = String(value || '')
   updateNode(props.id, { polygonType: localPolygonType.value })
 }
-const commitFaceCount = () => {
-  const normalized = String(localFaceCount.value || '').replace(/[^\d]/g, '')
-  localFaceCount.value = normalized
-  updateNode(props.id, { faceCount: normalized })
-}
-
 const cleanupLegacyOutputNode = () => {
   const downstreamEdges = edges.value.filter((edge) => edge.source === props.id)
   downstreamEdges.forEach((edge) => {
@@ -390,7 +395,13 @@ const handleGenerate = async () => {
     const persistedPreviewImageUrl = result.previewImageUrl
       ? (await persistImageUrl(result.previewImageUrl, `model3d-preview-${Date.now()}.png`)) || result.previewImageUrl
       : ''
-    const persistedViewerUrl = String(persistedAssetUrls.obj || persistedAssetUrls.glb || result.viewerUrl || result.primaryUrl || '').trim()
+    const persistedViewerUrl = String(
+      persistedAssetUrls.glb ||
+      persistedAssetUrls.obj ||
+      result.viewerUrl ||
+      result.primaryUrl ||
+      ''
+    ).trim()
 
     cleanupLegacyOutputNode()
     updateNode(props.id, {
@@ -422,10 +433,10 @@ watch(() => props.data?.enablePBR, (value) => {
   localEnablePBR.value = !!value
 })
 watch(() => props.data?.faceCount, (value) => {
-  localFaceCount.value = String(value || '')
+  localFaceCount.value = String(value || currentModelConfig.value?.defaultParams?.faceCount || DEFAULT_FACE_COUNT)
 })
 watch(() => props.data?.resultFormat, (value) => {
-  localResultFormat.value = String(value || '').toUpperCase()
+  localResultFormat.value = String(value || currentModelConfig.value?.defaultParams?.resultFormat || DEFAULT_RESULT_FORMAT).toUpperCase()
 })
 watch(() => props.data?.polygonType, (value) => {
   localPolygonType.value = String(value || '')
@@ -493,38 +504,6 @@ watch(() => props.data?.polygonType, (value) => {
   background: #0f0f0f;
   border-radius: inherit;
   overflow: hidden;
-}
-
-.capsule-input-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.02);
-  color: #e7e8eb;
-}
-
-.capsule-input-prefix {
-  font-size: 12px;
-  line-height: 1;
-  color: #cfd3dc;
-}
-
-.capsule-input {
-  width: 52px;
-  background: transparent;
-  border: 0;
-  outline: none;
-  color: #f3f4f6;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.capsule-input::placeholder {
-  color: #818793;
 }
 
 .view-pill {

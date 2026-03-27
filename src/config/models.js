@@ -72,19 +72,21 @@ export const MODEL3D_MODELS = [
         key: 'hunyuan3d-pro-3.1',
         viewTypes: ['front', 'left', 'right', 'back', 'top', 'bottom', 'left_front', 'right_front'],
         generateTypes: ['Normal', 'Geometry', 'Sketch'],
+        faceCounts: [
+            { label: '1.5m', key: '1500000' },
+            { label: '1m', key: '1000000' },
+            { label: '500k', key: '500000' }
+        ],
         resultFormats: [
-            { label: 'Default', key: '' },
-            { label: 'FBX', key: 'FBX' },
-            { label: 'STL', key: 'STL' },
-            { label: 'USDZ', key: 'USDZ' }
+            { label: 'GLB', key: 'GLB' }
         ],
         defaultParams: {
             prompt: '',
             allowTextOnly: true,
             generateType: 'Normal',
             enablePBR: false,
-            faceCount: '',
-            resultFormat: '',
+            faceCount: '500000',
+            resultFormat: 'GLB',
             polygonType: ''
         },
         tips: '支持多视角图像输入，每个视角仅允许 1 张图片。'
@@ -94,23 +96,25 @@ export const MODEL3D_MODELS = [
         key: 'hunyuan3d-pro-3.0',
         viewTypes: ['front', 'left', 'right', 'back'],
         generateTypes: ['Normal', 'LowPoly', 'Geometry', 'Sketch'],
+        faceCounts: [
+            { label: '1.5m', key: '1500000' },
+            { label: '1m', key: '1000000' },
+            { label: '500k', key: '500000' }
+        ],
         polygonTypes: [
             { label: 'Triangle', key: 'triangle' },
             { label: 'Quadrilateral', key: 'quadrilateral' }
         ],
         resultFormats: [
-            { label: 'Default', key: '' },
-            { label: 'FBX', key: 'FBX' },
-            { label: 'STL', key: 'STL' },
-            { label: 'USDZ', key: 'USDZ' }
+            { label: 'GLB', key: 'GLB' }
         ],
         defaultParams: {
             prompt: '',
             allowTextOnly: true,
             generateType: 'Normal',
             enablePBR: false,
-            faceCount: '',
-            resultFormat: '',
+            faceCount: '500000',
+            resultFormat: 'GLB',
             polygonType: 'triangle'
         },
         tips: '需要主图 front，附加视角仅支持 left / right / back。'

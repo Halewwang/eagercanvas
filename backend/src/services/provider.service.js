@@ -855,7 +855,8 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
     requestBody.FaceCount = Math.round(faceCount)
   }
 
-  if (['FBX', 'STL', 'USDZ'].includes(resultFormat)) {
+  // 302 的 ResultFormat 不支持 GLB；默认返回里本身就包含 glb。
+  if (resultFormat && resultFormat !== 'GLB' && ['FBX', 'STL', 'USDZ'].includes(resultFormat)) {
     requestBody.ResultFormat = resultFormat
   }
 
