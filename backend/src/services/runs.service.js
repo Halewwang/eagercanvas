@@ -10,6 +10,7 @@ import {
   provider3DStatus,
   providerVideoStatus
 } from './provider.service.js'
+import { uploadRemoteFile } from './upload.service.js'
 import { get302RecordByRequestId } from './dashboard302.service.js'
 import { resolveUserProviderAccess } from './admin-usage.service.js'
 import {
@@ -62,6 +63,53 @@ const extractProvider3DJobId = (result = {}) => {
   ]
   const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
   return found ? String(found) : ''
+}
+
+const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
+
+const persistRemoteUrlIfNeeded = async (url, fileName) => {
+  const raw = String(url || '').trim()
+  if (!raw || isPersistedUploadUrl(raw)) return raw
+  return uploadRemoteFile({ url: raw, fileName }).then((result) => String(result?.url || '').trim() || raw)
+}
+
+const persist3DResultAssets = async (result = {}) => {
+  const nextAssets = Array.isArray(result?.assets) ? [...result.assets] : []
+  if (!nextAssets.length && !String(result?.previewImageUrl || '').trim()) {
+    return result
+  }
+
+  const persistedAssets = await Promise.all(
+    nextAssets.map(async (asset, index) => {
+      const type = String(asset?.type || '').trim().toLowerCase()
+      const persistedUrl = await persistRemoteUrlIfNeeded(
+        asset?.url,
+        `model3d-${Date.now()}-${index}.${type || 'bin'}`
+      ).catch(() => String(asset?.url || '').trim())
+
+      const persistedPreviewImageUrl = await persistRemoteUrlIfNeeded(
+        asset?.previewImageUrl,
+        `model3d-preview-${Date.now()}-${index}.png`
+      ).catch(() => String(asset?.previewImageUrl || '').trim())
+
+      return {
+        ...asset,
+        url: persistedUrl,
+        previewImageUrl: persistedPreviewImageUrl
+      }
+    })
+  )
+
+  const previewImageUrl = await persistRemoteUrlIfNeeded(
+    result?.previewImageUrl,
+    `model3d-preview-${Date.now()}.png`
+  ).catch(() => String(result?.previewImageUrl || '').trim())
+
+  return {
+    ...result,
+    assets: persistedAssets,
+    previewImageUrl
+  }
 }
 
 const bindVideoTaskOwnership = async ({ userId, runId, taskId }) => {
@@ -330,6 +378,7 @@ export const createRun = async (userId, input) => {
       providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
     } else if (payload.type === 'model3d') {
       providerResponse = await providerCreate3D(payload.payload, providerRequestOptions)
+      providerResponse = await persist3DResultAssets(providerResponse)
     } else {
       providerResponse = await providerCreateVideo(payload.payload, providerRequestOptions)
     }
@@ -555,7 +604,8 @@ export const get3DTask = async (_userId, taskId) => {
   await assert3DTaskOwnership({ userId: _userId, taskId })
   const providerAccess = await resolveUserProviderAccess(_userId)
   const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
-  const result = await provider3DStatus(taskId, providerRequestOptions)
+  const rawResult = await provider3DStatus(taskId, providerRequestOptions)
+  const result = await persist3DResultAssets(rawResult)
   const runId = await find3DRunIdByTask({ userId: _userId, taskId })
   await syncRunStatusFrom3DTask({ userId: _userId, runId, taskResult: result })
   return result
