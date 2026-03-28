@@ -176,6 +176,30 @@ export const uploadRemoteFile = async ({ url, fileName = '' }) => {
   })
 }
 
+export const fetchRemoteAsset = async ({ url }) => {
+  const parsed = assertAllowedRemoteUrl(url)
+  const response = await fetch(parsed.toString())
+  if (!response.ok) {
+    throw new HttpError(response.status || 502, 'Remote asset fetch failed', 'UPLOAD_REMOTE_FETCH_FAILED')
+  }
+
+  const contentLength = Number(response.headers.get('content-length') || 0)
+  if (contentLength > REMOTE_FETCH_MAX_BYTES) {
+    throw new HttpError(400, 'Remote asset is too large', 'UPLOAD_REMOTE_TOO_LARGE')
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer())
+  if (buffer.byteLength > REMOTE_FETCH_MAX_BYTES) {
+    throw new HttpError(400, 'Remote asset is too large', 'UPLOAD_REMOTE_TOO_LARGE')
+  }
+
+  return {
+    buffer,
+    contentType: String(response.headers.get('content-type') || 'application/octet-stream').trim(),
+    contentLength: buffer.byteLength
+  }
+}
+
 export const createSignedUpload = async ({ originalName = '', mimetype = '' }) => {
   const safeName = sanitizeOriginalName(
     path.extname(originalName)

@@ -2,7 +2,7 @@ import { Router } from 'express'
 import multer from 'multer'
 import { z } from 'zod'
 import { authRequired } from '../middleware/auth.js'
-import { createSignedUpload, uploadFile, uploadRemoteFile } from '../services/upload.service.js'
+import { createSignedUpload, fetchRemoteAsset, uploadFile, uploadRemoteFile } from '../services/upload.service.js'
 import { HttpError, asyncHandler } from '../utils/http.js'
 
 const MAX_UPLOAD_SIZE_BYTES = 150 * 1024 * 1024
@@ -15,6 +15,14 @@ const upload = multer({
 })
 
 export const uploadRouter = Router()
+
+const authRequiredWithQueryToken = (req, res, next) => {
+  const queryToken = String(req.query?.access_token || '').trim()
+  if (!req.headers.authorization && queryToken) {
+    req.headers.authorization = `Bearer ${queryToken}`
+  }
+  return authRequired(req, res, next)
+}
 
 uploadRouter.post('/', authRequired, (req, res, next) => {
   upload.single('file')(req, res, (err) => {
@@ -40,6 +48,11 @@ const remoteUploadSchema = z.object({
   fileName: z.string().max(180).optional()
 })
 
+const remoteProxySchema = z.object({
+  url: z.string().url(),
+  access_token: z.string().min(1).optional()
+})
+
 const signedUploadSchema = z.object({
   fileName: z.string().min(1).max(180),
   fileType: z.string().min(1).max(180).optional()
@@ -49,6 +62,15 @@ uploadRouter.post('/remote', authRequired, asyncHandler(async (req, res) => {
   const payload = remoteUploadSchema.parse(req.body || {})
   const result = await uploadRemoteFile(payload)
   res.json(result)
+}))
+
+uploadRouter.get('/proxy', authRequiredWithQueryToken, asyncHandler(async (req, res) => {
+  const payload = remoteProxySchema.parse(req.query || {})
+  const asset = await fetchRemoteAsset({ url: payload.url })
+  res.setHeader('Content-Type', asset.contentType || 'application/octet-stream')
+  res.setHeader('Content-Length', String(asset.contentLength || asset.buffer?.byteLength || 0))
+  res.setHeader('Cache-Control', 'private, max-age=3600')
+  res.send(asset.buffer)
 }))
 
 uploadRouter.post('/signed', authRequired, asyncHandler(async (req, res) => {

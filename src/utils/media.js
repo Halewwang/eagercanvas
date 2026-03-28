@@ -1,4 +1,5 @@
 import request from './request'
+import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from './constants'
 
 const directUploadToSignedUrl = (signedUrl, file, options = {}) =>
   new Promise((resolve, reject) => {
@@ -83,6 +84,23 @@ export const uploadRemoteAsset = async (url, fileName = '') => {
     silentNetworkErrorToast: true
   })
   return String(res?.url || '').trim()
+}
+
+export const createAuthenticatedMediaProxyUrl = (url = '') => {
+  const raw = String(url || '').trim()
+  if (!raw || !isRemoteHttpUrl(raw) || typeof window === 'undefined') return raw
+
+  const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
+  if (!accessToken) return raw
+
+  const normalizedBaseUrl = /^https?:\/\//i.test(DEFAULT_API_BASE_URL)
+    ? DEFAULT_API_BASE_URL
+    : `${window.location.origin}${DEFAULT_API_BASE_URL.startsWith('/') ? DEFAULT_API_BASE_URL : `/${DEFAULT_API_BASE_URL}`}`
+
+  const proxyUrl = new URL(`${normalizedBaseUrl.replace(/\/$/, '')}/upload/proxy`)
+  proxyUrl.searchParams.set('url', raw)
+  proxyUrl.searchParams.set('access_token', accessToken)
+  return proxyUrl.toString()
 }
 
 export const persistImageUrl = async (url, fileName = 'image.png') => {

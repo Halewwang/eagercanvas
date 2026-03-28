@@ -72,6 +72,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { AddOutline, AppsOutline, RemoveOutline } from '../../icons/coolicons'
+import { createAuthenticatedMediaProxyUrl } from '@/utils/media'
 
 const props = defineProps({
   url: { type: String, default: '' },
@@ -95,13 +96,13 @@ const VIEW_PRESETS = {
 
 const viewerUrl = computed(() => {
   const directUrl = String(props.url || '').trim()
-  if (/\.glb($|\?)/i.test(directUrl)) return directUrl
-  return String(props.assetUrls?.glb || '').trim()
+  if (/\.glb($|\?)/i.test(directUrl)) return createAuthenticatedMediaProxyUrl(directUrl)
+  return createAuthenticatedMediaProxyUrl(String(props.assetUrls?.glb || '').trim())
 })
 const objUrl = computed(() => {
   const directUrl = String(props.url || '').trim()
-  if (/\.obj($|\?)/i.test(directUrl)) return directUrl
-  return String(props.assetUrls?.obj || '').trim()
+  if (/\.obj($|\?)/i.test(directUrl)) return createAuthenticatedMediaProxyUrl(directUrl)
+  return createAuthenticatedMediaProxyUrl(String(props.assetUrls?.obj || '').trim())
 })
 const preferObjFallback = ref(false)
 const activeModelType = computed(() => {
