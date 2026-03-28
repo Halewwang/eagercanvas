@@ -237,6 +237,66 @@ const loadStageObject = (type, url) =>
     new OBJLoader().load(url, resolve, undefined, reject)
   })
 
+const computeRenderableBounds = (object) => {
+  if (!object) return null
+
+  object.updateMatrixWorld(true)
+  const meshBounds = new THREE.Box3()
+  let hasMeshBounds = false
+
+  object.traverse((child) => {
+    if (!child?.isMesh || !child.geometry) return
+
+    const geometry = child.geometry
+    if (!geometry.boundingBox) {
+      geometry.computeBoundingBox()
+    }
+
+    const localBox = geometry.boundingBox
+    if (!localBox || localBox.isEmpty()) return
+
+    const worldBox = localBox.clone().applyMatrix4(child.matrixWorld)
+    const values = [
+      worldBox.min.x,
+      worldBox.min.y,
+      worldBox.min.z,
+      worldBox.max.x,
+      worldBox.max.y,
+      worldBox.max.z
+    ]
+
+    if (!values.every((value) => Number.isFinite(value))) return
+
+    if (!hasMeshBounds) {
+      meshBounds.copy(worldBox)
+      hasMeshBounds = true
+      return
+    }
+
+    meshBounds.union(worldBox)
+  })
+
+  if (hasMeshBounds && !meshBounds.isEmpty()) {
+    return meshBounds
+  }
+
+  const fallbackBox = new THREE.Box3().setFromObject(object)
+  const fallbackValues = [
+    fallbackBox.min.x,
+    fallbackBox.min.y,
+    fallbackBox.min.z,
+    fallbackBox.max.x,
+    fallbackBox.max.y,
+    fallbackBox.max.z
+  ]
+
+  if (fallbackBox.isEmpty() || !fallbackValues.every((value) => Number.isFinite(value))) {
+    return null
+  }
+
+  return fallbackBox
+}
+
 const mountSceneViewer = async () => {
   if (!activeModelUrl.value || !stageRef.value) return
 
@@ -298,22 +358,30 @@ const mountSceneViewer = async () => {
     }
 
     nextObject.updateMatrixWorld(true)
-    const box = new THREE.Box3().setFromObject(nextObject)
-    const size = box.getSize(new THREE.Vector3())
-    const center = box.getCenter(new THREE.Vector3())
+    sceneRoot.add(nextObject)
+    const box = computeRenderableBounds(nextObject)
 
-    if (!Number.isFinite(size.x + size.y + size.z) || box.isEmpty()) {
-      throw new Error('3D model bounds are invalid')
+    if (box) {
+      const size = box.getSize(new THREE.Vector3())
+      const center = box.getCenter(new THREE.Vector3())
+      nextObject.position.sub(center)
+
+      const maxDim = Math.max(size.x, size.y, size.z, 1)
+      sceneBaseDistance = maxDim * 1.55
+      sceneTargetY = 0
+      sceneCamera.near = Math.max(0.01, maxDim / 200)
+      sceneCamera.far = Math.max(1000, maxDim * 24)
+    } else {
+      console.warn('3D preview bounds fallback engaged', {
+        type: activeModelType.value,
+        url: activeModelUrl.value
+      })
+      sceneBaseDistance = 4
+      sceneTargetY = 0
+      sceneCamera.near = 0.01
+      sceneCamera.far = 5000
     }
 
-    nextObject.position.sub(center)
-    sceneRoot.add(nextObject)
-
-    const maxDim = Math.max(size.x, size.y, size.z, 1)
-    sceneBaseDistance = maxDim * 1.55
-    sceneTargetY = 0
-    sceneCamera.near = Math.max(0.01, maxDim / 200)
-    sceneCamera.far = Math.max(1000, maxDim * 24)
     resetView()
     syncSceneCamera()
     renderScene()
