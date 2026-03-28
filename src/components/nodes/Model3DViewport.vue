@@ -48,7 +48,7 @@
     </div>
 
     <div
-      v-if="showControls"
+      v-if="showInteractiveControls"
       class="model3d-controls model3d-controls-left nodrag nopan"
       @mousedown.stop
       @pointerdown.stop
@@ -63,7 +63,7 @@
     </div>
 
     <div
-      v-if="showControls"
+      v-if="showInteractiveControls"
       class="model3d-controls model3d-controls-right nodrag nopan"
       @mousedown.stop
       @pointerdown.stop
@@ -130,6 +130,7 @@ const objUrl = computed(() => {
 const preferObjFallback = ref(false)
 const activeViewerUrl = computed(() => (preferObjFallback.value ? '' : viewerUrl.value))
 const canRenderObj = computed(() => !!objUrl.value && (!activeViewerUrl.value || preferObjFallback.value))
+const showInteractiveControls = computed(() => props.showControls && (!!activeViewerUrl.value || canRenderObj.value))
 
 const orbitAngle = ref(0)
 const elevationAngle = ref(72)

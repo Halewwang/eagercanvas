@@ -342,6 +342,56 @@ const downloadAsset = (type) => {
   document.body.removeChild(link)
 }
 
+const persist3DAssets = async (result) => {
+  const rawAssetUrls = Object.fromEntries(
+    Object.entries(result?.assetUrls || {})
+      .filter(([_, url]) => String(url || '').trim())
+  )
+
+  const persistedAssetEntries = await Promise.allSettled(
+    Object.entries(rawAssetUrls).map(async ([type, url]) => {
+      const rawUrl = String(url || '').trim()
+      if (!rawUrl) return [type, '']
+      const persistedUrl = await persistMediaUrl(rawUrl, `model3d-${Date.now()}.${type}`)
+      return [type, persistedUrl || rawUrl]
+    })
+  )
+
+  const persistedAssetUrls = { ...rawAssetUrls }
+  persistedAssetEntries.forEach((entry) => {
+    if (entry.status !== 'fulfilled') return
+    const [type, url] = entry.value || []
+    if (!type || !String(url || '').trim()) return
+    persistedAssetUrls[type] = url
+  })
+
+  let persistedPreviewImageUrl = String(result?.previewImageUrl || '').trim()
+  if (persistedPreviewImageUrl) {
+    try {
+      persistedPreviewImageUrl = (await persistImageUrl(
+        persistedPreviewImageUrl,
+        `model3d-preview-${Date.now()}.png`
+      )) || persistedPreviewImageUrl
+    } catch (persistError) {
+      console.warn('3D preview image persistence failed', persistError)
+    }
+  }
+
+  const persistedViewerUrl = String(
+    persistedAssetUrls.glb ||
+    persistedAssetUrls.obj ||
+    result?.viewerUrl ||
+    result?.primaryUrl ||
+    ''
+  ).trim()
+
+  return {
+    persistedAssetUrls,
+    persistedPreviewImageUrl,
+    persistedViewerUrl
+  }
+}
+
 const handleGenerate = async () => {
   if (hasConnectedViews.value && !connectedFront.value) {
     updateNode(props.id, { status: 'failed', error: '3D generation requires a Front reference image when view-tagged images are connected' })
@@ -383,21 +433,14 @@ const handleGenerate = async () => {
       polygonType: localPolygonType.value
     })
 
-    const persistAssetEntries = await Promise.all(
-      Object.entries(result.assetUrls || {}).map(async ([type, url]) => {
-        const rawUrl = String(url || '').trim()
-        if (!rawUrl) return [type, '']
-        const persistedUrl = await persistMediaUrl(rawUrl, `model3d-${Date.now()}.${type}`)
-        return [type, persistedUrl || rawUrl]
-      })
+    const rawAssetUrls = Object.fromEntries(
+      Object.entries(result.assetUrls || {})
+        .filter(([_, url]) => String(url || '').trim())
     )
-    const persistedAssetUrls = Object.fromEntries(persistAssetEntries.filter(([_, url]) => String(url || '').trim()))
-    const persistedPreviewImageUrl = result.previewImageUrl
-      ? (await persistImageUrl(result.previewImageUrl, `model3d-preview-${Date.now()}.png`)) || result.previewImageUrl
-      : ''
-    const persistedViewerUrl = String(
-      persistedAssetUrls.glb ||
-      persistedAssetUrls.obj ||
+    const rawPreviewImageUrl = String(result.previewImageUrl || '').trim()
+    const rawViewerUrl = String(
+      rawAssetUrls.glb ||
+      rawAssetUrls.obj ||
       result.viewerUrl ||
       result.primaryUrl ||
       ''
@@ -405,13 +448,38 @@ const handleGenerate = async () => {
 
     cleanupLegacyOutputNode()
     updateNode(props.id, {
-      url: persistedViewerUrl,
-      previewImageUrl: persistedPreviewImageUrl,
-      assetUrls: persistedAssetUrls,
+      url: rawViewerUrl,
+      previewImageUrl: rawPreviewImageUrl,
+      assetUrls: rawAssetUrls,
       model: localModel.value,
       status: 'completed'
     })
     await saveProject()
+
+    void persist3DAssets(result)
+      .then(async ({ persistedAssetUrls, persistedPreviewImageUrl, persistedViewerUrl }) => {
+        const nextAssetUrls = Object.keys(persistedAssetUrls || {}).length ? persistedAssetUrls : rawAssetUrls
+        const nextPreviewImageUrl = persistedPreviewImageUrl || rawPreviewImageUrl
+        const nextViewerUrl = persistedViewerUrl || rawViewerUrl
+
+        if (
+          JSON.stringify(nextAssetUrls) === JSON.stringify(props.data?.assetUrls || {}) &&
+          nextPreviewImageUrl === String(props.data?.previewImageUrl || '').trim() &&
+          nextViewerUrl === String(props.data?.url || '').trim()
+        ) {
+          return
+        }
+
+        updateNode(props.id, {
+          url: nextViewerUrl,
+          previewImageUrl: nextPreviewImageUrl,
+          assetUrls: nextAssetUrls
+        })
+        await saveProject()
+      })
+      .catch((persistError) => {
+        console.warn('3D asset persistence failed; keeping raw provider URLs for preview', persistError)
+      })
   } catch (err) {
     updateNode(props.id, { status: 'failed', error: err.message || '3D generation failed' })
   }
