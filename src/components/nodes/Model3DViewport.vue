@@ -1,33 +1,10 @@
 <template>
   <div class="model3d-shell">
     <div
-      v-if="activeViewerUrl && !loadError"
-      class="model3d-media-shell nodrag nopan"
-      @pointerdown.stop
-      @mousedown.stop
-      @click.stop
-    >
-      <model-viewer
-        ref="modelViewerRef"
-        class="model3d-viewer"
-        :src="activeViewerUrl"
-        camera-target="auto auto auto"
-        :camera-orbit="cameraOrbit"
-        interaction-prompt="none"
-        shadow-intensity="1"
-        exposure="1"
-        ar-status="not-presenting"
-        disable-pan
-        @load="handleModelViewerLoad"
-        @error="handleModelViewerError"
-      />
-    </div>
-
-    <div
-      v-else-if="canRenderObj && !loadError"
-      ref="objStageRef"
+      v-if="activeModelUrl && !loadError"
+      ref="stageRef"
       class="model3d-media-shell model3d-obj-shell nodrag nopan"
-      @pointerdown.stop.prevent="handleObjPointerDown"
+      @pointerdown.stop.prevent="handleStagePointerDown"
       @mousedown.stop
       @click.stop
     />
@@ -89,10 +66,10 @@
 </template>
 
 <script setup>
-import '@google/model-viewer'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { NIcon } from 'naive-ui'
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { AddOutline, AppsOutline, RemoveOutline } from '../../icons/coolicons'
 
@@ -105,8 +82,7 @@ const props = defineProps({
   showControls: { type: Boolean, default: true }
 })
 
-const modelViewerRef = ref(null)
-const objStageRef = ref(null)
+const stageRef = ref(null)
 const cubeRef = ref(null)
 const VIEW_PRESETS = {
   front: { azimuth: 0, elevation: 72 },
@@ -128,14 +104,22 @@ const objUrl = computed(() => {
   return String(props.assetUrls?.obj || '').trim()
 })
 const preferObjFallback = ref(false)
-const activeViewerUrl = computed(() => (preferObjFallback.value ? '' : viewerUrl.value))
-const canRenderObj = computed(() => !!objUrl.value && (!activeViewerUrl.value || preferObjFallback.value))
-const showInteractiveControls = computed(() => props.showControls && (!!activeViewerUrl.value || canRenderObj.value))
+const activeModelType = computed(() => {
+  if (!preferObjFallback.value && viewerUrl.value) return 'glb'
+  if (objUrl.value) return 'obj'
+  if (viewerUrl.value) return 'glb'
+  return ''
+})
+const activeModelUrl = computed(() => {
+  if (activeModelType.value === 'glb') return viewerUrl.value
+  if (activeModelType.value === 'obj') return objUrl.value
+  return ''
+})
+const showInteractiveControls = computed(() => props.showControls && !!activeModelUrl.value && !loadError.value)
 
 const orbitAngle = ref(0)
 const elevationAngle = ref(72)
-const zoomPercent = ref(118)
-const cameraOrbit = computed(() => `${orbitAngle.value}deg ${elevationAngle.value}deg ${zoomPercent.value}%`)
+const zoomPercent = ref(100)
 const cubeRotationX = ref(-22)
 const cubeRotationY = ref(-30)
 const loadError = ref('')
@@ -149,155 +133,160 @@ let cubeDragStartY = 0
 let cubeStartRotationX = 0
 let cubeStartRotationY = 0
 
-let objRenderer = null
-let objScene = null
-let objCamera = null
-let objAnimationFrame = 0
-let objLoadToken = 0
-let objTargetY = 0
-let objBaseDistance = 4
-let objDragPointerId = null
-let objDragStartX = 0
-let objDragStartY = 0
-let objStartOrbit = 0
-let objStartElevation = 72
-
-const handleModelViewerLoad = async () => {
-  const viewer = modelViewerRef.value
-  if (!viewer) return
-
-  preferObjFallback.value = false
-  loadError.value = ''
-  orbitAngle.value = 0
-  elevationAngle.value = 72
-  zoomPercent.value = 100
-  syncCubeToCamera()
-
-  try {
-    await viewer.updateFraming?.()
-    viewer.cameraTarget = 'auto auto auto'
-    viewer.jumpCameraToGoal?.()
-  } catch (error) {
-    console.warn('model-viewer framing failed', error)
-  }
-}
-
-const handleModelViewerError = (event) => {
-  const detailMessage = String(event?.detail?.message || '').trim()
-  if (objUrl.value) {
-    preferObjFallback.value = true
-    loadError.value = ''
-    console.warn('model-viewer load failed, falling back to OBJ preview', {
-      viewerUrl: viewerUrl.value,
-      objUrl: objUrl.value,
-      event
-    })
-    return
-  }
-  loadError.value = detailMessage || '3D model failed to load in viewer'
-  console.error('model-viewer load failed', {
-    url: viewerUrl.value,
-    event
-  })
-}
-
-const stopObjLoop = () => {
-  if (objAnimationFrame) {
-    cancelAnimationFrame(objAnimationFrame)
-    objAnimationFrame = 0
-  }
-}
-
-const renderObjScene = () => {
-  if (!objRenderer || !objScene || !objCamera) return
-  objAnimationFrame = requestAnimationFrame(renderObjScene)
-  objRenderer.render(objScene, objCamera)
-}
-
-const syncObjCamera = () => {
-  if (!objCamera) return
-  const radius = objBaseDistance * (zoomPercent.value / 100)
-  const radians = (orbitAngle.value * Math.PI) / 180
-  const verticalRadians = (elevationAngle.value * Math.PI) / 180
-  const y = Math.cos(verticalRadians) * radius
-  const planar = Math.sin(verticalRadians) * radius
-  objCamera.position.set(Math.sin(radians) * planar, y, Math.cos(radians) * planar)
-  objCamera.lookAt(0, objTargetY, 0)
-  objCamera.updateProjectionMatrix()
-  objRenderer?.render(objScene, objCamera)
-}
+let sceneRenderer = null
+let sceneRoot = null
+let sceneCamera = null
+let sceneAnimationFrame = 0
+let sceneLoadToken = 0
+let sceneTargetY = 0
+let sceneBaseDistance = 4
+let stageDragPointerId = null
+let stageDragStartX = 0
+let stageDragStartY = 0
+let stageStartOrbit = 0
+let stageStartElevation = 72
 
 const syncCubeToCamera = () => {
   cubeRotationY.value = orbitAngle.value - 30
   cubeRotationX.value = Math.max(-88, Math.min(88, 68 - elevationAngle.value))
 }
 
+const syncSceneCamera = () => {
+  if (!sceneCamera) return
+  const radius = sceneBaseDistance * (zoomPercent.value / 100)
+  const radians = (orbitAngle.value * Math.PI) / 180
+  const verticalRadians = (elevationAngle.value * Math.PI) / 180
+  const y = Math.cos(verticalRadians) * radius
+  const planar = Math.sin(verticalRadians) * radius
+  sceneCamera.position.set(Math.sin(radians) * planar, y, Math.cos(radians) * planar)
+  sceneCamera.lookAt(0, sceneTargetY, 0)
+  sceneCamera.updateProjectionMatrix()
+  sceneRenderer?.render(sceneRoot, sceneCamera)
+}
+
+const resetView = () => {
+  orbitAngle.value = 0
+  elevationAngle.value = 72
+  zoomPercent.value = 100
+  syncCubeToCamera()
+}
+
 const syncCameraToCube = () => {
   orbitAngle.value = cubeRotationY.value + 30
   elevationAngle.value = Math.max(8, Math.min(160, 68 - cubeRotationX.value))
-  syncObjCamera()
+  syncSceneCamera()
 }
 
-const disposeObjViewer = () => {
-  objLoadToken += 1
-  stopObjLoop()
-  if (objRenderer) {
-    objRenderer.dispose()
-    objRenderer.domElement?.remove()
-    objRenderer = null
+const stopSceneLoop = () => {
+  if (sceneAnimationFrame) {
+    cancelAnimationFrame(sceneAnimationFrame)
+    sceneAnimationFrame = 0
   }
-  objScene = null
-  objCamera = null
-  objTargetY = 0
-  objBaseDistance = 4
 }
 
-const mountObjViewer = async () => {
-  if (!canRenderObj.value || !objStageRef.value) return
+const renderScene = () => {
+  if (!sceneRenderer || !sceneRoot || !sceneCamera) return
+  sceneAnimationFrame = requestAnimationFrame(renderScene)
+  sceneRenderer.render(sceneRoot, sceneCamera)
+}
 
-  disposeObjViewer()
+const disposeThreeAsset = (object) => {
+  object?.traverse?.((child) => {
+    if (child?.geometry?.dispose) {
+      child.geometry.dispose()
+    }
+    const materials = Array.isArray(child?.material) ? child.material : [child?.material]
+    materials.filter(Boolean).forEach((material) => {
+      Object.values(material).forEach((value) => {
+        if (value?.isTexture && value.dispose) value.dispose()
+      })
+      if (material.dispose) material.dispose()
+    })
+  })
+}
+
+const disposeSceneViewer = () => {
+  sceneLoadToken += 1
+  stopSceneLoop()
+  if (sceneRoot) {
+    disposeThreeAsset(sceneRoot)
+    sceneRoot = null
+  }
+  if (sceneRenderer) {
+    sceneRenderer.dispose()
+    sceneRenderer.domElement?.remove()
+    sceneRenderer = null
+  }
+  sceneCamera = null
+  sceneTargetY = 0
+  sceneBaseDistance = 4
+}
+
+const loadStageObject = (type, url) =>
+  new Promise((resolve, reject) => {
+    if (type === 'glb') {
+      new GLTFLoader().load(
+        url,
+        (gltf) => resolve(gltf?.scene || gltf?.scenes?.[0] || null),
+        undefined,
+        reject
+      )
+      return
+    }
+
+    new OBJLoader().load(url, resolve, undefined, reject)
+  })
+
+const mountSceneViewer = async () => {
+  if (!activeModelUrl.value || !stageRef.value) return
+
+  disposeSceneViewer()
   await nextTick()
   loadError.value = ''
 
-  const host = objStageRef.value
+  const host = stageRef.value
   const width = Math.max(1, host.clientWidth)
   const height = Math.max(1, host.clientHeight)
-  const loadToken = objLoadToken + 1
-  objLoadToken = loadToken
+  const loadToken = sceneLoadToken + 1
+  sceneLoadToken = loadToken
 
-  objScene = new THREE.Scene()
-  objScene.background = new THREE.Color('#0f0f0f')
+  sceneRoot = new THREE.Scene()
+  sceneRoot.background = new THREE.Color('#0f0f0f')
 
-  objCamera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000)
-  objRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-  objRenderer.setPixelRatio(window.devicePixelRatio || 1)
-  objRenderer.setSize(width, height)
+  sceneCamera = new THREE.PerspectiveCamera(42, width / height, 0.1, 5000)
+  sceneRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  sceneRenderer.setPixelRatio(window.devicePixelRatio || 1)
+  sceneRenderer.setSize(width, height)
+  sceneRenderer.outputColorSpace = THREE.SRGBColorSpace
+  sceneRenderer.toneMapping = THREE.ACESFilmicToneMapping
+  sceneRenderer.toneMappingExposure = 1
   host.innerHTML = ''
-  host.appendChild(objRenderer.domElement)
+  host.appendChild(sceneRenderer.domElement)
 
-  objScene.add(new THREE.AmbientLight(0xffffff, 1.5))
+  sceneRoot.add(new THREE.AmbientLight(0xffffff, 1.8))
+  sceneRoot.add(new THREE.HemisphereLight(0xf4f5f7, 0x1d2128, 1.2))
 
-  const keyLight = new THREE.DirectionalLight(0xffffff, 2)
+  const keyLight = new THREE.DirectionalLight(0xffffff, 2.4)
   keyLight.position.set(4, 6, 5)
-  objScene.add(keyLight)
+  sceneRoot.add(keyLight)
 
-  const rimLight = new THREE.DirectionalLight(0xf1f3f6, 0.5)
+  const fillLight = new THREE.DirectionalLight(0xe8edf6, 1.1)
+  fillLight.position.set(-5, 3, 4)
+  sceneRoot.add(fillLight)
+
+  const rimLight = new THREE.DirectionalLight(0xf1f3f6, 0.65)
   rimLight.position.set(-5, 2, -4)
-  objScene.add(rimLight)
+  sceneRoot.add(rimLight)
 
-  const ground = new THREE.GridHelper(8, 8, 0x2a2d33, 0x181a1f)
-  ground.position.y = -1.2
-  objScene.add(ground)
+  try {
+    const nextObject = await loadStageObject(activeModelType.value, activeModelUrl.value)
+    if (loadToken !== sceneLoadToken || !sceneRoot || !sceneCamera) return
+    if (!nextObject) {
+      throw new Error('No 3D scene returned by loader')
+    }
 
-  const scene = objScene
-  const camera = objCamera
-
-  new OBJLoader().load(
-    objUrl.value,
-    (object) => {
-      if (loadToken !== objLoadToken || !scene || !camera) return
-
-      object.traverse((child) => {
+    if (activeModelType.value === 'obj') {
+      nextObject.traverse((child) => {
         if (child.isMesh) {
           child.material = new THREE.MeshStandardMaterial({
             color: '#d7dbe3',
@@ -306,32 +295,43 @@ const mountObjViewer = async () => {
           })
         }
       })
-
-      const box = new THREE.Box3().setFromObject(object)
-      const size = box.getSize(new THREE.Vector3())
-      const center = box.getCenter(new THREE.Vector3())
-      object.position.sub(center)
-      scene.add(object)
-
-      const maxDim = Math.max(size.x, size.y, size.z, 1)
-      objBaseDistance = maxDim * 1.45
-      objTargetY = 0
-      camera.near = Math.max(0.1, maxDim / 100)
-      camera.far = Math.max(1000, maxDim * 20)
-      orbitAngle.value = 0
-      elevationAngle.value = 72
-      zoomPercent.value = 100
-      syncCubeToCamera()
-      syncObjCamera()
-      renderObjScene()
-    },
-    undefined,
-    (error) => {
-      if (loadToken !== objLoadToken) return
-      loadError.value = error?.message || 'OBJ preview failed to load'
-      console.error('OBJ preview load failed', error)
     }
-  )
+
+    nextObject.updateMatrixWorld(true)
+    const box = new THREE.Box3().setFromObject(nextObject)
+    const size = box.getSize(new THREE.Vector3())
+    const center = box.getCenter(new THREE.Vector3())
+
+    if (!Number.isFinite(size.x + size.y + size.z) || box.isEmpty()) {
+      throw new Error('3D model bounds are invalid')
+    }
+
+    nextObject.position.sub(center)
+    sceneRoot.add(nextObject)
+
+    const maxDim = Math.max(size.x, size.y, size.z, 1)
+    sceneBaseDistance = maxDim * 1.55
+    sceneTargetY = 0
+    sceneCamera.near = Math.max(0.01, maxDim / 200)
+    sceneCamera.far = Math.max(1000, maxDim * 24)
+    resetView()
+    syncSceneCamera()
+    renderScene()
+  } catch (error) {
+    if (loadToken !== sceneLoadToken) return
+    if (activeModelType.value === 'glb' && objUrl.value && !preferObjFallback.value) {
+      preferObjFallback.value = true
+      loadError.value = ''
+      console.warn('GLB preview failed, falling back to OBJ preview', error)
+      return
+    }
+    loadError.value = error?.message || `${String(activeModelType.value || '3D').toUpperCase()} preview failed to load`
+    console.error('3D preview load failed', {
+      type: activeModelType.value,
+      url: activeModelUrl.value,
+      error
+    })
+  }
 }
 
 const setViewPreset = (viewKey) => {
@@ -340,7 +340,7 @@ const setViewPreset = (viewKey) => {
   orbitAngle.value = preset.azimuth
   elevationAngle.value = preset.elevation
   syncCubeToCamera()
-  syncObjCamera()
+  syncSceneCamera()
 }
 
 const handleCubePointerMove = (event) => {
@@ -369,76 +369,76 @@ const handleCubePointerDown = (event) => {
   window.addEventListener('pointerup', handleCubePointerUp)
 }
 
-const handleObjPointerMove = (event) => {
-  if (objDragPointerId == null || event.pointerId !== objDragPointerId) return
-  const dx = event.clientX - objDragStartX
-  const dy = event.clientY - objDragStartY
-  orbitAngle.value = objStartOrbit + dx * 0.45
-  elevationAngle.value = Math.max(8, Math.min(160, objStartElevation - dy * 0.3))
+const handleStagePointerMove = (event) => {
+  if (stageDragPointerId == null || event.pointerId !== stageDragPointerId) return
+  const dx = event.clientX - stageDragStartX
+  const dy = event.clientY - stageDragStartY
+  orbitAngle.value = stageStartOrbit + dx * 0.45
+  elevationAngle.value = Math.max(8, Math.min(160, stageStartElevation - dy * 0.3))
   syncCubeToCamera()
-  syncObjCamera()
+  syncSceneCamera()
 }
 
-const handleObjPointerUp = (event) => {
-  if (objDragPointerId == null || event.pointerId !== objDragPointerId) return
-  objDragPointerId = null
-  window.removeEventListener('pointermove', handleObjPointerMove)
-  window.removeEventListener('pointerup', handleObjPointerUp)
+const handleStagePointerUp = (event) => {
+  if (stageDragPointerId == null || event.pointerId !== stageDragPointerId) return
+  stageDragPointerId = null
+  window.removeEventListener('pointermove', handleStagePointerMove)
+  window.removeEventListener('pointerup', handleStagePointerUp)
 }
 
-const handleObjPointerDown = (event) => {
-  if (!canRenderObj.value) return
-  objDragPointerId = event.pointerId
-  objDragStartX = event.clientX
-  objDragStartY = event.clientY
-  objStartOrbit = orbitAngle.value
-  objStartElevation = elevationAngle.value
-  window.addEventListener('pointermove', handleObjPointerMove)
-  window.addEventListener('pointerup', handleObjPointerUp)
+const handleStagePointerDown = (event) => {
+  if (!activeModelUrl.value) return
+  stageDragPointerId = event.pointerId
+  stageDragStartX = event.clientX
+  stageDragStartY = event.clientY
+  stageStartOrbit = orbitAngle.value
+  stageStartElevation = elevationAngle.value
+  window.addEventListener('pointermove', handleStagePointerMove)
+  window.addEventListener('pointerup', handleStagePointerUp)
 }
 
 const zoomIn = () => {
   zoomPercent.value = Math.max(55, zoomPercent.value - 10)
-  syncObjCamera()
+  syncSceneCamera()
 }
 
 const zoomOut = () => {
   zoomPercent.value = Math.min(180, zoomPercent.value + 10)
-  syncObjCamera()
+  syncSceneCamera()
 }
 
-watch(canRenderObj, async (enabled) => {
+watch(activeModelUrl, async (nextUrl) => {
   loadError.value = ''
-  if (enabled) {
-    await mountObjViewer()
+  if (nextUrl) {
+    await mountSceneViewer()
     return
   }
-  disposeObjViewer()
+  disposeSceneViewer()
 }, { immediate: true })
 
-watch(objUrl, async () => {
+watch(activeModelType, async () => {
   loadError.value = ''
-  if (!canRenderObj.value) return
-  await mountObjViewer()
+  if (!activeModelUrl.value) return
+  await mountSceneViewer()
 })
 
-watch(viewerUrl, () => {
+watch([viewerUrl, objUrl], () => {
   preferObjFallback.value = false
   loadError.value = ''
 })
 
 onMounted(async () => {
   syncCubeToCamera()
-  if (!canRenderObj.value) return
-  await mountObjViewer()
+  if (!activeModelUrl.value) return
+  await mountSceneViewer()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('pointermove', handleCubePointerMove)
   window.removeEventListener('pointerup', handleCubePointerUp)
-  window.removeEventListener('pointermove', handleObjPointerMove)
-  window.removeEventListener('pointerup', handleObjPointerUp)
-  disposeObjViewer()
+  window.removeEventListener('pointermove', handleStagePointerMove)
+  window.removeEventListener('pointerup', handleStagePointerUp)
+  disposeSceneViewer()
 })
 </script>
 
