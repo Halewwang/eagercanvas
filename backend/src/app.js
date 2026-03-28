@@ -12,6 +12,12 @@ export const app = express()
 
 const buildAllowedOrigins = () => {
   const allowList = new Set(env.frontendOrigins || [env.frontendOrigin])
+  if (env.nodeEnv !== 'production') {
+    allowList.add('http://localhost:5173')
+    allowList.add('http://127.0.0.1:5173')
+    allowList.add('http://localhost:5174')
+    allowList.add('http://127.0.0.1:5174')
+  }
   for (const origin of [...allowList]) {
     try {
       const url = new URL(origin)
@@ -37,7 +43,8 @@ app.use(cors({
     // Allow server-to-server and same-origin requests without Origin header.
     if (!origin) return callback(null, true)
     const isVercelPreview = /\.vercel\.app$/i.test(origin)
-    if (allowedOrigins.has(origin) || isVercelPreview) {
+    const isLocalDevOrigin = env.nodeEnv !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1):\d+$/i.test(origin)
+    if (allowedOrigins.has(origin) || isVercelPreview || isLocalDevOrigin) {
       return callback(null, true)
     }
     return callback(new Error(`CORS blocked for origin: ${origin}`))

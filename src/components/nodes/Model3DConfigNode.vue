@@ -401,6 +401,14 @@ const recoverPersistedAssetsIfNeeded = async () => {
     Object.entries(props.data?.assetUrls || {})
       .filter(([_, url]) => String(url || '').trim())
   )
+  const directUrl = String(props.data?.url || '').trim()
+  if (directUrl) {
+    if (/\.glb($|\?)/i.test(directUrl) && !currentAssetUrls.glb) {
+      currentAssetUrls.glb = directUrl
+    } else if (/\.obj($|\?)/i.test(directUrl) && !currentAssetUrls.obj) {
+      currentAssetUrls.obj = directUrl
+    }
+  }
   const currentPreviewImageUrl = String(props.data?.previewImageUrl || '').trim()
   const currentViewerUrl = String(props.data?.url || '').trim()
 
@@ -574,6 +582,18 @@ watch(() => props.data?.polygonType, (value) => {
 onMounted(() => {
   void recoverPersistedAssetsIfNeeded()
 })
+
+watch(
+  () => [
+    props.data?.status,
+    props.data?.url,
+    JSON.stringify(props.data?.assetUrls || {}),
+    props.data?.previewImageUrl
+  ],
+  () => {
+    void recoverPersistedAssetsIfNeeded()
+  }
+)
 </script>
 
 <style scoped>
