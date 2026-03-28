@@ -237,6 +237,39 @@ const loadStageObject = (type, url) =>
     new OBJLoader().load(url, resolve, undefined, reject)
   })
 
+const computeBoundsFromPositionAttribute = (mesh) => {
+  const positionAttribute = mesh?.geometry?.attributes?.position
+  if (!positionAttribute || typeof positionAttribute.count !== 'number' || positionAttribute.count <= 0) {
+    return null
+  }
+
+  const worldBox = new THREE.Box3()
+  const point = new THREE.Vector3()
+  let hasPoint = false
+
+  for (let index = 0; index < positionAttribute.count; index += 1) {
+    const x = positionAttribute.getX(index)
+    const y = positionAttribute.getY(index)
+    const z = positionAttribute.getZ(index)
+
+    if (![x, y, z].every((value) => Number.isFinite(value))) continue
+
+    point.set(x, y, z).applyMatrix4(mesh.matrixWorld)
+    if (![point.x, point.y, point.z].every((value) => Number.isFinite(value))) continue
+
+    if (!hasPoint) {
+      worldBox.min.copy(point)
+      worldBox.max.copy(point)
+      hasPoint = true
+      continue
+    }
+
+    worldBox.expandByPoint(point)
+  }
+
+  return hasPoint && !worldBox.isEmpty() ? worldBox : null
+}
+
 const computeRenderableBounds = (object) => {
   if (!object) return null
 
@@ -253,19 +286,29 @@ const computeRenderableBounds = (object) => {
     }
 
     const localBox = geometry.boundingBox
-    if (!localBox || localBox.isEmpty()) return
+    let worldBox = null
 
-    const worldBox = localBox.clone().applyMatrix4(child.matrixWorld)
-    const values = [
-      worldBox.min.x,
-      worldBox.min.y,
-      worldBox.min.z,
-      worldBox.max.x,
-      worldBox.max.y,
-      worldBox.max.z
-    ]
+    if (localBox && !localBox.isEmpty()) {
+      const candidate = localBox.clone().applyMatrix4(child.matrixWorld)
+      const values = [
+        candidate.min.x,
+        candidate.min.y,
+        candidate.min.z,
+        candidate.max.x,
+        candidate.max.y,
+        candidate.max.z
+      ]
 
-    if (!values.every((value) => Number.isFinite(value))) return
+      if (values.every((value) => Number.isFinite(value))) {
+        worldBox = candidate
+      }
+    }
+
+    if (!worldBox) {
+      worldBox = computeBoundsFromPositionAttribute(child)
+    }
+
+    if (!worldBox) return
 
     if (!hasMeshBounds) {
       meshBounds.copy(worldBox)
