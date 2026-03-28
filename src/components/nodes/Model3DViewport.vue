@@ -270,6 +270,25 @@ const computeBoundsFromPositionAttribute = (mesh) => {
   return hasPoint && !worldBox.isEmpty() ? worldBox : null
 }
 
+const prepareRenderableObject = (object, type) => {
+  object?.traverse?.((child) => {
+    if (!child?.isMesh) return
+
+    // Some provider-generated GLBs contain invalid bounds metadata.
+    // Disabling frustum culling keeps them renderable even when Three.js
+    // would otherwise cull the mesh before the first visible frame.
+    child.frustumCulled = false
+
+    if (type === 'obj') {
+      child.material = new THREE.MeshStandardMaterial({
+        color: '#d7dbe3',
+        metalness: 0.28,
+        roughness: 0.58
+      })
+    }
+  })
+}
+
 const computeRenderableBounds = (object) => {
   if (!object) return null
 
@@ -388,17 +407,7 @@ const mountSceneViewer = async () => {
       throw new Error('No 3D scene returned by loader')
     }
 
-    if (activeModelType.value === 'obj') {
-      nextObject.traverse((child) => {
-        if (child.isMesh) {
-          child.material = new THREE.MeshStandardMaterial({
-            color: '#d7dbe3',
-            metalness: 0.28,
-            roughness: 0.58
-          })
-        }
-      })
-    }
+    prepareRenderableObject(nextObject, activeModelType.value)
 
     nextObject.updateMatrixWorld(true)
     sceneRoot.add(nextObject)
