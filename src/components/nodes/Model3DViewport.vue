@@ -246,6 +246,11 @@ const computeBoundsFromPositionAttribute = (mesh) => {
   const worldBox = new THREE.Box3()
   const point = new THREE.Vector3()
   let hasPoint = false
+  const sampleLimit = 4096
+  const sampleStep = Math.max(1, Math.floor(positionAttribute.count / sampleLimit))
+  const sampledX = []
+  const sampledY = []
+  const sampledZ = []
 
   for (let index = 0; index < positionAttribute.count; index += 1) {
     const x = positionAttribute.getX(index)
@@ -261,13 +266,55 @@ const computeBoundsFromPositionAttribute = (mesh) => {
       worldBox.min.copy(point)
       worldBox.max.copy(point)
       hasPoint = true
-      continue
+    } else {
+      worldBox.expandByPoint(point)
     }
 
-    worldBox.expandByPoint(point)
+    if (index % sampleStep === 0) {
+      sampledX.push(point.x)
+      sampledY.push(point.y)
+      sampledZ.push(point.z)
+    }
   }
 
-  return hasPoint && !worldBox.isEmpty() ? worldBox : null
+  if (!hasPoint || worldBox.isEmpty()) return null
+
+  if (sampledX.length < 64) {
+    return worldBox
+  }
+
+  sampledX.sort((a, b) => a - b)
+  sampledY.sort((a, b) => a - b)
+  sampledZ.sort((a, b) => a - b)
+
+  const lowerIndex = Math.max(0, Math.floor(sampledX.length * 0.02))
+  const upperIndex = Math.min(sampledX.length - 1, Math.ceil(sampledX.length * 0.98) - 1)
+  const trimmedMin = new THREE.Vector3(
+    sampledX[lowerIndex],
+    sampledY[lowerIndex],
+    sampledZ[lowerIndex]
+  )
+  const trimmedMax = new THREE.Vector3(
+    sampledX[upperIndex],
+    sampledY[upperIndex],
+    sampledZ[upperIndex]
+  )
+  const trimmedBox = new THREE.Box3(trimmedMin, trimmedMax)
+
+  if (trimmedBox.isEmpty()) {
+    return worldBox
+  }
+
+  const rawSize = worldBox.getSize(new THREE.Vector3())
+  const trimmedSize = trimmedBox.getSize(new THREE.Vector3())
+  const rawMaxDim = Math.max(rawSize.x, rawSize.y, rawSize.z, 0)
+  const trimmedMaxDim = Math.max(trimmedSize.x, trimmedSize.y, trimmedSize.z, 0)
+
+  if (!Number.isFinite(rawMaxDim) || !Number.isFinite(trimmedMaxDim) || trimmedMaxDim <= 0) {
+    return worldBox
+  }
+
+  return rawMaxDim > trimmedMaxDim * 25 ? trimmedBox : worldBox
 }
 
 const prepareRenderableObject = (object, type) => {
