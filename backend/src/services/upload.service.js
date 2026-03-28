@@ -6,7 +6,8 @@ import { HttpError } from '../utils/http.js'
 const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey)
 const BUCKET_NAME = 'uploads'
 let bucketReady = false
-const REMOTE_FETCH_MAX_BYTES = 50 * 1024 * 1024
+const UPLOAD_FILE_SIZE_LIMIT_BYTES = 150 * 1024 * 1024
+const REMOTE_FETCH_MAX_BYTES = UPLOAD_FILE_SIZE_LIMIT_BYTES
 
 const contentTypeToExtension = (contentType = '') => {
   const safe = String(contentType || '').split(';')[0].trim().toLowerCase()
@@ -66,13 +67,20 @@ const ensureBucket = async () => {
 
   const { data: bucket, error: getErr } = await supabase.storage.getBucket(BUCKET_NAME)
   if (!getErr && bucket) {
+    const { error: updateErr } = await supabase.storage.updateBucket(BUCKET_NAME, {
+      public: true,
+      fileSizeLimit: UPLOAD_FILE_SIZE_LIMIT_BYTES
+    })
+    if (updateErr) {
+      throw updateErr
+    }
     bucketReady = true
     return
   }
 
   const { error: createErr } = await supabase.storage.createBucket(BUCKET_NAME, {
     public: true,
-    fileSizeLimit: '50MB'
+    fileSizeLimit: UPLOAD_FILE_SIZE_LIMIT_BYTES
   })
 
   if (createErr && !/already exists/i.test(createErr.message || '')) {

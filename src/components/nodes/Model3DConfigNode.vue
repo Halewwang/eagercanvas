@@ -135,7 +135,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
@@ -227,6 +227,7 @@ const canGenerate = computed(() => (hasConnectedViews.value ? connectedFront.val
 const progressPercent = computed(() => Math.round(progress.value?.percentage || 0))
 const pbrDisabled = computed(() => localGenerateType.value === 'Geometry')
 const pbrLabel = computed(() => (localEnablePBR.value ? 'PBR On' : 'PBR Off'))
+const persistenceRecoveryKey = ref('')
 const downloadOptions = computed(() => {
   const assetUrls = props.data?.assetUrls || {}
   const directUrl = String(props.data?.url || '').trim()
@@ -242,6 +243,7 @@ const downloadOptions = computed(() => {
 })
 
 const formatViewType = (value) => String(value || '').replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
 
 const capsuleStyle = computed(() => {
   const zoom = viewport.value?.zoom || 1
@@ -392,6 +394,65 @@ const persist3DAssets = async (result) => {
   }
 }
 
+const recoverPersistedAssetsIfNeeded = async () => {
+  if (String(props.data?.status || '').toLowerCase() !== 'completed') return
+
+  const currentAssetUrls = Object.fromEntries(
+    Object.entries(props.data?.assetUrls || {})
+      .filter(([_, url]) => String(url || '').trim())
+  )
+  const currentPreviewImageUrl = String(props.data?.previewImageUrl || '').trim()
+  const currentViewerUrl = String(props.data?.url || '').trim()
+
+  const needsPersistence = [
+    ...Object.values(currentAssetUrls),
+    currentPreviewImageUrl
+  ].some((value) => {
+    const raw = String(value || '').trim()
+    return raw && isRemoteHttpUrl(raw) && !isPersistedUploadUrl(raw)
+  })
+
+  if (!needsPersistence) return
+
+  const fingerprint = JSON.stringify({
+    assetUrls: currentAssetUrls,
+    previewImageUrl: currentPreviewImageUrl,
+    url: currentViewerUrl
+  })
+  if (!fingerprint || persistenceRecoveryKey.value === fingerprint) return
+  persistenceRecoveryKey.value = fingerprint
+
+  try {
+    const { persistedAssetUrls, persistedPreviewImageUrl, persistedViewerUrl } = await persist3DAssets({
+      assetUrls: currentAssetUrls,
+      previewImageUrl: currentPreviewImageUrl,
+      viewerUrl: currentViewerUrl,
+      primaryUrl: currentViewerUrl
+    })
+
+    const nextAssetUrls = Object.keys(persistedAssetUrls || {}).length ? persistedAssetUrls : currentAssetUrls
+    const nextPreviewImageUrl = persistedPreviewImageUrl || currentPreviewImageUrl
+    const nextViewerUrl = persistedViewerUrl || currentViewerUrl
+
+    if (
+      JSON.stringify(nextAssetUrls) === JSON.stringify(props.data?.assetUrls || {}) &&
+      nextPreviewImageUrl === String(props.data?.previewImageUrl || '').trim() &&
+      nextViewerUrl === String(props.data?.url || '').trim()
+    ) {
+      return
+    }
+
+    updateNode(props.id, {
+      url: nextViewerUrl,
+      previewImageUrl: nextPreviewImageUrl,
+      assetUrls: nextAssetUrls
+    })
+    await saveProject()
+  } catch (persistError) {
+    console.warn('3D asset persistence recovery failed', persistError)
+  }
+}
+
 const handleGenerate = async () => {
   if (hasConnectedViews.value && !connectedFront.value) {
     updateNode(props.id, { status: 'failed', error: '3D generation requires a Front reference image when view-tagged images are connected' })
@@ -508,6 +569,10 @@ watch(() => props.data?.resultFormat, (value) => {
 })
 watch(() => props.data?.polygonType, (value) => {
   localPolygonType.value = String(value || '')
+})
+
+onMounted(() => {
+  void recoverPersistedAssetsIfNeeded()
 })
 </script>
 
