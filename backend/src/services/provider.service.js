@@ -1,5 +1,6 @@
 import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
+import sharp from 'sharp'
 
 const parseProviderBases = () => {
   const rawList = String(env.providerApiBaseUrls || '')
@@ -345,6 +346,34 @@ const fetchBinaryFromSource = async (source = '') => {
   } catch (error) {
     if (error instanceof HttpError) throw error
     throw new HttpError(400, 'Failed to load source image', 'IMAGE_FETCH_FAILED')
+  }
+}
+
+const MODEL3D_REFERENCE_MAX_DIM = 1536
+const MODEL3D_REFERENCE_JPEG_QUALITY = 82
+const MODEL3D_REFERENCE_MAX_BASE64_BYTES = 6 * 1024 * 1024
+
+const normalize3DReferenceImage = async (source = '') => {
+  const { buffer } = await fetchBinaryFromSource(source)
+  const normalizedBuffer = await sharp(buffer, { failOn: 'none' })
+    .rotate()
+    .resize({
+      width: MODEL3D_REFERENCE_MAX_DIM,
+      height: MODEL3D_REFERENCE_MAX_DIM,
+      fit: 'inside',
+      withoutEnlargement: true
+    })
+    .flatten({ background: '#ffffff' })
+    .jpeg({
+      quality: MODEL3D_REFERENCE_JPEG_QUALITY,
+      mozjpeg: true
+    })
+    .toBuffer()
+
+  return {
+    mimeType: 'image/jpeg',
+    buffer: normalizedBuffer,
+    base64: normalizedBuffer.toString('base64')
   }
 }
 
@@ -863,25 +892,11 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
   const normalize3DImageSource = async (source = '') => {
     const safeSource = String(source || '').trim()
     if (!safeSource) return null
-
-    const dataUrl = parseDataUrl(safeSource)
-    if (dataUrl?.data) {
-      return {
-        mode: 'base64',
-        value: dataUrl.data
-      }
-    }
-
-    if (/^https?:\/\//i.test(safeSource)) {
-      return {
-        mode: 'url',
-        value: safeSource
-      }
-    }
-
+    const normalizedImage = await normalize3DReferenceImage(safeSource)
     return {
       mode: 'base64',
-      value: safeSource
+      value: normalizedImage.base64,
+      bytes: Buffer.byteLength(normalizedImage.base64, 'utf8')
     }
   }
 
@@ -892,6 +907,7 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
   }
 
   if (multiViewImages.length > 0) {
+    let totalEncodedBytes = 0
     normalizedMultiViewImages = (await Promise.all(multiViewImages
       .map(async (item) => {
         const viewType = String(item.viewType || item.ViewType || '').trim()
@@ -900,11 +916,10 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
 
         const normalized = await normalize3DImageSource(source)
         if (!normalized?.value) return null
+        totalEncodedBytes += Number(normalized.bytes || 0)
         return {
           ViewType: viewType,
-          ...(normalized.mode === 'url'
-            ? { ViewImageUrl: normalized.value }
-            : { ViewImageBase64: normalized.value })
+          ViewImageBase64: normalized.value
         }
       }))).filter(Boolean)
     const primaryFrontView = normalizedMultiViewImages.find((item) => String(item.ViewType || '').toLowerCase() === 'front')
@@ -915,6 +930,14 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
 
     normalizedMultiViewImages = normalizedMultiViewImages
       .filter((item) => allowedSecondaryViewTypes.has(String(item.ViewType || '').toLowerCase()))
+
+    if (totalEncodedBytes > MODEL3D_REFERENCE_MAX_BASE64_BYTES) {
+      throw new HttpError(
+        400,
+        '3D multi-view images are too large after normalization. Please reduce image count or source resolution.',
+        'MODEL3D_MULTIVIEW_TOO_LARGE'
+      )
+    }
 
     if (!primaryFrontView && normalizedMultiViewImages.length === 0) {
       throw new HttpError(400, 'Multi-view images are present but none could be normalized into valid provider inputs', 'MODEL3D_INVALID_MULTIVIEW')
@@ -930,12 +953,23 @@ export const providerCreate3D = async (payload = {}, requestOptions = {}) => {
       delete requestBody.Prompt
     }
 
-    if (primaryFrontView.ViewImageUrl) {
-      requestBody.ImageUrl = primaryFrontView.ViewImageUrl
-    } else if (primaryFrontView.ViewImageBase64) {
+    if (primaryFrontView.ViewImageBase64) {
       requestBody.ImageBase64 = primaryFrontView.ViewImageBase64
     }
   }
+
+  console.info('[providerCreate3D] request summary', {
+    model: requestBody.Model,
+    generateType: requestBody.GenerateType,
+    hasPrompt: Boolean(requestBody.Prompt),
+    hasImageBase64: Boolean(requestBody.ImageBase64),
+    multiViewTypes: Array.isArray(requestBody.MultiViewImages)
+      ? requestBody.MultiViewImages.map((item) => item.ViewType)
+      : [],
+    faceCount: requestBody.FaceCount || null,
+    enablePBR: requestBody.EnablePBR ?? null,
+    resultFormat: requestBody.ResultFormat || null
+  })
 
   const raw = await callProvider('/tencent/hunyuan3d/pro-job', requestBody, 'POST', requestOptions)
   return normalize3DAssets(raw)
