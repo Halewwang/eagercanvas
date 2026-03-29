@@ -50,19 +50,6 @@
         </div>
       </section>
 
-      <section class="home-cta-panel">
-        <div class="home-cta-copy">
-          <h2>Sign in to open your workspace</h2>
-          <p>Create projects, continue recent work, and manage templates from one place.</p>
-        </div>
-        <button
-          @click="handleGetStarted"
-          class="home-entry-button home-entry-button-solid"
-        >
-          Open Workspace
-        </button>
-      </section>
-
       <footer class="mt-16 md:mt-20 pb-4 text-center">
         <p class="text-xs md:text-sm tracking-[0.16em] uppercase text-[var(--text-tertiary)]">
           Developed by Eager Design
@@ -173,8 +160,7 @@ watch(
   color: #ffffff;
   font-size: 0.95rem;
   font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   transition:
     transform 0.25s ease,
     border-color 0.25s ease,
@@ -189,59 +175,24 @@ watch(
   box-shadow: 0 12px 28px rgba(255, 255, 255, 0.06);
 }
 
-.home-entry-button:active {
-  transform: translateY(0);
-}
-
-.home-entry-button-solid {
-  background: rgba(255, 255, 255, 0.92);
-  color: #0d0e10;
-}
-
-.home-entry-button-solid:hover {
+.home-entry-button:first-child {
   background: #ffffff;
   color: #0d0e10;
 }
 
-.home-cta-panel {
-  margin: 0 auto;
-  max-width: 920px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 28px 30px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(14px);
+.home-entry-button:first-child:hover {
+  background: #ffffff;
+  color: #0d0e10;
 }
 
-.home-cta-copy h2 {
-  margin: 0;
-  font-size: 1.45rem;
-  font-weight: 400;
-  letter-spacing: -0.02em;
-}
-
-.home-cta-copy p {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-  line-height: 1.6;
+.home-entry-button:active {
+  transform: translateY(0);
 }
 
 @media (max-width: 767px) {
   .home-entry-button {
     width: 100%;
     min-width: 0;
-  }
-
-  .home-cta-panel {
-    flex-direction: column;
-    align-items: stretch;
-    text-align: center;
-    padding: 24px 20px;
   }
 }
 </style>

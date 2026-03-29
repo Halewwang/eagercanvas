@@ -6,11 +6,6 @@
         <div class="brand-text">{{ workspaceBrand }}</div>
       </div>
 
-      <div class="search-box">
-        <n-icon :size="16"><SearchOutline /></n-icon>
-        <input v-model.trim="keyword" placeholder="Search projects and templates" />
-      </div>
-
       <section class="sidebar-group">
         <div class="sidebar-group-title">Workspace</div>
         <nav class="nav-menu">
@@ -93,7 +88,7 @@
         </article>
 
         <article
-          v-for="item in filteredItems"
+          v-for="item in sectionItems"
           :key="item.id"
           class="project-card"
           @click="handlePrimaryClick(item)"
@@ -188,7 +183,6 @@ import {
   FolderOpenOutline,
   SparklesOutline,
   GridOutline,
-  SearchOutline,
   EllipsisHorizontalOutline
 } from '../icons/coolicons'
 import {
@@ -210,7 +204,6 @@ const router = useRouter()
 const { bootstrapAuth, isAuthenticated, user, logout, updateProfile } = useAuthStore()
 
 const activeSection = ref('projects')
-const keyword = ref('')
 
 const showRenameModal = ref(false)
 const renameTargetId = ref('')
@@ -260,12 +253,6 @@ const sectionDescription = computed(() => {
 const sectionItems = computed(() => {
   if (activeSection.value === 'featured') return featuredTemplates.value
   return projects.value
-})
-
-const filteredItems = computed(() => {
-  const text = keyword.value.toLowerCase()
-  if (!text) return sectionItems.value
-  return sectionItems.value.filter((item) => String(item?.title || item?.name || '').toLowerCase().includes(text))
 })
 
 const describeItem = (item) => {
@@ -451,25 +438,6 @@ onMounted(async () => {
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.01em;
-}
-
-.search-box {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.search-box input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #f0f1f3;
-  font-size: 14px;
 }
 
 .nav-menu {
