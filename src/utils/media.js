@@ -39,6 +39,72 @@ const directUploadToSignedUrl = (signedUrl, file, options = {}) =>
 export const isDataImageUrl = (value = '') => /^data:image\//i.test(String(value || ''))
 export const isDataUrl = (value = '') => /^data:/i.test(String(value || ''))
 export const isRemoteHttpUrl = (value = '') => /^https?:\/\//i.test(String(value || ''))
+export const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
+
+const parseDateValue = (value = '') => {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+
+  if (/^\d+$/.test(raw)) {
+    const numeric = Number(raw)
+    if (!Number.isFinite(numeric) || numeric <= 0) return null
+    return numeric > 1e12 ? numeric : numeric * 1000
+  }
+
+  if (/^\d{8}T\d{6}Z$/i.test(raw)) {
+    const normalized = raw.replace(
+      /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/i,
+      '$1-$2-$3T$4:$5:$6Z'
+    )
+    const ts = Date.parse(normalized)
+    return Number.isFinite(ts) ? ts : null
+  }
+
+  const ts = Date.parse(raw)
+  return Number.isFinite(ts) ? ts : null
+}
+
+const getRemoteUrlExpiryMs = (value = '') => {
+  const raw = String(value || '').trim()
+  if (!isRemoteHttpUrl(raw)) return null
+
+  let parsed
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return null
+  }
+
+  const qSignTime = String(parsed.searchParams.get('q-sign-time') || '').trim()
+  if (qSignTime.includes(';')) {
+    const [, end] = qSignTime.split(';')
+    const ts = parseDateValue(end)
+    if (ts) return ts
+  }
+
+  const expiresAt = parseDateValue(
+    parsed.searchParams.get('Expires')
+    || parsed.searchParams.get('expires')
+    || parsed.searchParams.get('se')
+    || ''
+  )
+  if (expiresAt) return expiresAt
+
+  const amzDate = parseDateValue(parsed.searchParams.get('X-Amz-Date') || '')
+  const amzExpiresSeconds = Number(parsed.searchParams.get('X-Amz-Expires') || 0)
+  if (amzDate && Number.isFinite(amzExpiresSeconds) && amzExpiresSeconds > 0) {
+    return amzDate + amzExpiresSeconds * 1000
+  }
+
+  return null
+}
+
+export const isExpiredRemoteUrl = (value = '', now = Date.now()) => {
+  if (!isRemoteHttpUrl(value) || isPersistedUploadUrl(value)) return false
+  const expiryMs = getRemoteUrlExpiryMs(value)
+  if (!expiryMs) return false
+  return expiryMs <= now
+}
 export const dataUrlToFile = (dataUrl, fileName = 'image.png') => {
   const value = String(dataUrl || '')
   const match = value.match(/^data:(.+?);base64,(.+)$/)
@@ -89,6 +155,8 @@ export const uploadRemoteAsset = async (url, fileName = '') => {
 export const createAuthenticatedMediaProxyUrl = (url = '') => {
   const raw = String(url || '').trim()
   if (!raw || !isRemoteHttpUrl(raw) || typeof window === 'undefined') return raw
+  if (isPersistedUploadUrl(raw)) return raw
+  if (isExpiredRemoteUrl(raw)) return ''
 
   const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
   if (!accessToken) return raw

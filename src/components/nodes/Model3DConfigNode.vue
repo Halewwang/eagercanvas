@@ -140,7 +140,14 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
 import Model3DViewport from './Model3DViewport.vue'
-import { isDataImageUrl, isRemoteHttpUrl, persistImageUrl, persistMediaUrl } from '@/utils/media'
+import {
+  isDataImageUrl,
+  isExpiredRemoteUrl,
+  isPersistedUploadUrl,
+  isRemoteHttpUrl,
+  persistImageUrl,
+  persistMediaUrl
+} from '@/utils/media'
 import { CopyOutline, TrashOutline, AppsOutline, RefreshOutline, DownloadOutline } from '../../icons/coolicons'
 import createIcon from '@/assets/create-icon.svg'
 import { useApiConfig, useModel3DGeneration } from '../../hooks'
@@ -160,6 +167,7 @@ const { loading, error, status, progress, generate } = useModel3DGeneration()
 
 const DEFAULT_FACE_COUNT = '500000'
 const DEFAULT_RESULT_FORMAT = 'GLB'
+const MODEL_VIEWER_TYPES = ['glb', 'obj']
 
 const showCapsule = ref(false)
 const localModel = ref(resolve3DModelKey(props.data?.model || DEFAULT_MODEL3D_MODEL))
@@ -168,6 +176,27 @@ const localEnablePBR = ref(!!props.data?.enablePBR)
 const localFaceCount = ref(String(props.data?.faceCount || DEFAULT_FACE_COUNT))
 const localResultFormat = ref(String(props.data?.resultFormat || DEFAULT_RESULT_FORMAT).toUpperCase())
 const localPolygonType = ref(String(props.data?.polygonType || ''))
+
+const resolveModelViewerUrl = (assetUrls = {}, fallbackUrl = '') => {
+  const directUrl = String(fallbackUrl || '').trim()
+  if (/\.glb($|\?)/i.test(directUrl) || /\.obj($|\?)/i.test(directUrl)) {
+    return directUrl
+  }
+
+  return MODEL_VIEWER_TYPES
+    .map((type) => String(assetUrls?.[type] || '').trim())
+    .find(Boolean) || ''
+}
+
+const sanitizeModelAssetUrls = (assetUrls = {}) => Object.fromEntries(
+  Object.entries(assetUrls || {}).filter(([_, url]) => {
+    const raw = String(url || '').trim()
+    if (!raw) return false
+    if (!isRemoteHttpUrl(raw)) return true
+    if (isPersistedUploadUrl(raw)) return true
+    return !isExpiredRemoteUrl(raw)
+  })
+)
 
 const modelOptions = computed(() => model3dModelOptions.value.map((item) => ({
   key: item.key,
@@ -243,7 +272,6 @@ const downloadOptions = computed(() => {
 })
 
 const formatViewType = (value) => String(value || '').replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
 
 const capsuleStyle = computed(() => {
   const zoom = viewport.value?.zoom || 1
@@ -380,11 +408,7 @@ const persist3DAssets = async (result) => {
   }
 
   const persistedViewerUrl = String(
-    persistedAssetUrls.glb ||
-    persistedAssetUrls.obj ||
-    result?.viewerUrl ||
-    result?.primaryUrl ||
-    ''
+    resolveModelViewerUrl(persistedAssetUrls, result?.viewerUrl || result?.primaryUrl || '')
   ).trim()
 
   return {
@@ -397,20 +421,30 @@ const persist3DAssets = async (result) => {
 const recoverPersistedAssetsIfNeeded = async () => {
   if (String(props.data?.status || '').toLowerCase() !== 'completed') return
 
-  const currentAssetUrls = Object.fromEntries(
+  const currentAssetUrls = sanitizeModelAssetUrls(Object.fromEntries(
     Object.entries(props.data?.assetUrls || {})
       .filter(([_, url]) => String(url || '').trim())
-  )
+  ))
   const directUrl = String(props.data?.url || '').trim()
-  if (directUrl) {
+  const canUseDirectUrl = directUrl
+    && (!isRemoteHttpUrl(directUrl) || isPersistedUploadUrl(directUrl) || !isExpiredRemoteUrl(directUrl))
+  if (canUseDirectUrl) {
     if (/\.glb($|\?)/i.test(directUrl) && !currentAssetUrls.glb) {
       currentAssetUrls.glb = directUrl
     } else if (/\.obj($|\?)/i.test(directUrl) && !currentAssetUrls.obj) {
       currentAssetUrls.obj = directUrl
     }
   }
-  const currentPreviewImageUrl = String(props.data?.previewImageUrl || '').trim()
-  const currentViewerUrl = String(props.data?.url || '').trim()
+  const rawPreviewImageUrl = String(props.data?.previewImageUrl || '').trim()
+  const currentPreviewImageUrl = (
+    rawPreviewImageUrl
+    && isRemoteHttpUrl(rawPreviewImageUrl)
+    && !isPersistedUploadUrl(rawPreviewImageUrl)
+    && isExpiredRemoteUrl(rawPreviewImageUrl)
+  )
+    ? ''
+    : rawPreviewImageUrl
+  const currentViewerUrl = resolveModelViewerUrl(currentAssetUrls, canUseDirectUrl ? directUrl : '')
 
   const needsPersistence = [
     ...Object.values(currentAssetUrls),
@@ -420,7 +454,22 @@ const recoverPersistedAssetsIfNeeded = async () => {
     return raw && isRemoteHttpUrl(raw) && !isPersistedUploadUrl(raw)
   })
 
-  if (!needsPersistence) return
+  const hasSanitizedChange = (
+    JSON.stringify(currentAssetUrls) !== JSON.stringify(props.data?.assetUrls || {})
+    || currentPreviewImageUrl !== rawPreviewImageUrl
+    || currentViewerUrl !== directUrl
+  )
+
+  if (!needsPersistence) {
+    if (!hasSanitizedChange) return
+    updateNode(props.id, {
+      url: currentViewerUrl,
+      previewImageUrl: currentPreviewImageUrl,
+      assetUrls: currentAssetUrls
+    })
+    await saveProject()
+    return
+  }
 
   const fingerprint = JSON.stringify({
     assetUrls: currentAssetUrls,
@@ -438,7 +487,9 @@ const recoverPersistedAssetsIfNeeded = async () => {
       primaryUrl: currentViewerUrl
     })
 
-    const nextAssetUrls = Object.keys(persistedAssetUrls || {}).length ? persistedAssetUrls : currentAssetUrls
+    const nextAssetUrls = sanitizeModelAssetUrls(
+      Object.keys(persistedAssetUrls || {}).length ? persistedAssetUrls : currentAssetUrls
+    )
     const nextPreviewImageUrl = persistedPreviewImageUrl || currentPreviewImageUrl
     const nextViewerUrl = persistedViewerUrl || currentViewerUrl
 
@@ -502,18 +553,12 @@ const handleGenerate = async () => {
       polygonType: localPolygonType.value
     })
 
-    const rawAssetUrls = Object.fromEntries(
+    const rawAssetUrls = sanitizeModelAssetUrls(Object.fromEntries(
       Object.entries(result.assetUrls || {})
         .filter(([_, url]) => String(url || '').trim())
-    )
+    ))
     const rawPreviewImageUrl = String(result.previewImageUrl || '').trim()
-    const rawViewerUrl = String(
-      rawAssetUrls.glb ||
-      rawAssetUrls.obj ||
-      result.viewerUrl ||
-      result.primaryUrl ||
-      ''
-    ).trim()
+    const rawViewerUrl = resolveModelViewerUrl(rawAssetUrls, result.viewerUrl || result.primaryUrl || '')
 
     cleanupLegacyOutputNode()
     updateNode(props.id, {
@@ -527,7 +572,9 @@ const handleGenerate = async () => {
 
     void persist3DAssets(result)
       .then(async ({ persistedAssetUrls, persistedPreviewImageUrl, persistedViewerUrl }) => {
-        const nextAssetUrls = Object.keys(persistedAssetUrls || {}).length ? persistedAssetUrls : rawAssetUrls
+        const nextAssetUrls = sanitizeModelAssetUrls(
+          Object.keys(persistedAssetUrls || {}).length ? persistedAssetUrls : rawAssetUrls
+        )
         const nextPreviewImageUrl = persistedPreviewImageUrl || rawPreviewImageUrl
         const nextViewerUrl = persistedViewerUrl || rawViewerUrl
 

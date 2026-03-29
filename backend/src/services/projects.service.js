@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
+import { cleanupCanvas3DAssets } from './canvas3d-cleanup.service.js'
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -27,6 +28,18 @@ const hasCanvasContent = (canvasData) => {
   return nodes > 0 || edges > 0 || groups > 0
 }
 
+const normalizeCanvasForStorage = async (canvasData) => {
+  if (canvasData === undefined) return undefined
+  const { canvasData: nextCanvasData } = await cleanupCanvas3DAssets(canvasData || {}, { persistRemote: true })
+  return nextCanvasData
+}
+
+const normalizeCanvasForRead = async (canvasData) => {
+  if (canvasData === undefined) return undefined
+  const { canvasData: nextCanvasData } = await cleanupCanvas3DAssets(canvasData || {}, { persistRemote: false })
+  return nextCanvasData
+}
+
 export const listProjects = async (userId) => {
   const { data, error } = await supabase
     .from('projects')
@@ -49,18 +62,22 @@ export const getProject = async (userId, id) => {
   if (error) throw new HttpError(500, error.message, 'PROJECT_GET_FAILED')
   if (!data) throw new HttpError(404, 'Project not found', 'PROJECT_NOT_FOUND')
 
-  return data
+  return {
+    ...data,
+    canvas_json: await normalizeCanvasForRead(data.canvas_json)
+  }
 }
 
 export const createProject = async (userId, input) => {
   const payload = createSchema.parse(input)
+  const normalizedCanvasData = await normalizeCanvasForStorage(payload.canvasData)
 
   const { data, error } = await supabase
     .from('projects')
     .insert({
       user_id: userId,
       name: payload.name,
-      canvas_json: payload.canvasData,
+      canvas_json: normalizedCanvasData,
       thumbnail_url: normalizeThumbnailUrl(payload.thumbnailUrl)
     })
     .select('*')
@@ -72,8 +89,11 @@ export const createProject = async (userId, input) => {
 
 export const updateProject = async (userId, id, input) => {
   const payload = updateSchema.parse(input)
+  const normalizedCanvasData = payload.canvasData !== undefined
+    ? await normalizeCanvasForStorage(payload.canvasData)
+    : undefined
 
-  if (payload.canvasData !== undefined && !hasCanvasContent(payload.canvasData)) {
+  if (normalizedCanvasData !== undefined && !hasCanvasContent(normalizedCanvasData)) {
     const existingProject = await getProject(userId, id)
     if (hasCanvasContent(existingProject.canvas_json)) {
       throw new HttpError(
@@ -89,7 +109,7 @@ export const updateProject = async (userId, id, input) => {
   }
 
   if (payload.name !== undefined) patch.name = payload.name
-  if (payload.canvasData !== undefined) patch.canvas_json = payload.canvasData
+  if (normalizedCanvasData !== undefined) patch.canvas_json = normalizedCanvasData
   if (payload.thumbnailUrl !== undefined) patch.thumbnail_url = normalizeThumbnailUrl(payload.thumbnailUrl)
 
   // Optimistic locking: If client provided updatedAt, check it matches
@@ -119,7 +139,10 @@ export const updateProject = async (userId, id, input) => {
     throw new HttpError(404, 'Project not found', 'PROJECT_NOT_FOUND')
   }
 
-  return data
+  return {
+    ...data,
+    canvas_json: await normalizeCanvasForRead(data.canvas_json)
+  }
 }
 
 export const removeProject = async (userId, id) => {

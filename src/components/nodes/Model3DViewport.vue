@@ -105,6 +105,7 @@ const objUrl = computed(() => {
   return createAuthenticatedMediaProxyUrl(String(props.assetUrls?.obj || '').trim())
 })
 const preferObjFallback = ref(false)
+const disableInteractivePreview = ref(false)
 const activeModelType = computed(() => {
   if (!preferObjFallback.value && viewerUrl.value) return 'glb'
   if (objUrl.value) return 'obj'
@@ -112,10 +113,12 @@ const activeModelType = computed(() => {
   return ''
 })
 const activeModelUrl = computed(() => {
+  if (disableInteractivePreview.value) return ''
   if (activeModelType.value === 'glb') return viewerUrl.value
   if (activeModelType.value === 'obj') return objUrl.value
   return ''
 })
+const hasStaticPreview = computed(() => !!String(props.previewImageUrl || '').trim())
 const showInteractiveControls = computed(() => props.showControls && !!activeModelUrl.value && !loadError.value)
 
 const orbitAngle = ref(0)
@@ -146,6 +149,15 @@ let stageDragStartX = 0
 let stageDragStartY = 0
 let stageStartOrbit = 0
 let stageStartElevation = 72
+
+const shouldFallbackToStaticPreview = (error) => {
+  const message = String(error?.message || '').toLowerCase()
+  return message.includes('403')
+    || message.includes('401')
+    || message.includes('forbidden')
+    || message.includes('expired')
+    || message.includes('signature')
+}
 
 const syncCubeToCamera = () => {
   cubeRotationY.value = orbitAngle.value - 30
@@ -493,6 +505,17 @@ const mountSceneViewer = async () => {
       console.warn('GLB preview failed, falling back to OBJ preview', error)
       return
     }
+    if (hasStaticPreview.value && shouldFallbackToStaticPreview(error)) {
+      disableInteractivePreview.value = true
+      loadError.value = ''
+      disposeSceneViewer()
+      console.warn('3D preview URL is no longer valid, falling back to static preview', {
+        type: activeModelType.value,
+        url: activeModelUrl.value,
+        error
+      })
+      return
+    }
     loadError.value = error?.message || `${String(activeModelType.value || '3D').toUpperCase()} preview failed to load`
     console.error('3D preview load failed', {
       type: activeModelType.value,
@@ -592,6 +615,7 @@ watch(activeModelType, async () => {
 
 watch([viewerUrl, objUrl], () => {
   preferObjFallback.value = false
+  disableInteractivePreview.value = false
   loadError.value = ''
 })
 
