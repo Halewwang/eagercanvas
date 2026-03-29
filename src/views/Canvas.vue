@@ -7,12 +7,12 @@
       <div class="absolute left-4 top-4 z-20 flex items-center gap-2">
         <div class="flora-panel rounded-full p-1.5">
           <button
-            @click="goHome"
+            @click="goWorkspace"
             class="ui-pill-button"
-            title="Home"
+            title="Workspace"
           >
             <n-icon :size="18"><ChevronBackOutline /></n-icon>
-            <span class="text-sm font-medium">Home</span>
+            <span class="text-sm font-medium">Workspace</span>
           </button>
         </div>
         <div class="flora-panel rounded-full p-1.5">
@@ -1192,12 +1192,6 @@ const handleGlobalKeydown = (event) => {
     return
   }
   removeSelectedElements()
-}
-
-// Go home | 返回首页
-const goHome = () => {
-  flushSave()
-  router.push('/')
 }
 
 const goWorkspace = () => {
