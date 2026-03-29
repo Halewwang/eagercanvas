@@ -1,8 +1,8 @@
 <template>
   <!-- Home page | 首页 -->
-  <div class="home-shell h-screen overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] selection:bg-[var(--accent-color)] selection:text-white font-['fieldwork']">
+  <div class="home-shell overflow-x-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] selection:bg-[var(--accent-color)] selection:text-white font-['fieldwork']">
     <!-- Background Elements -->
-    <div class="fixed inset-0 pointer-events-none overflow-hidden">
+    <div class="home-hero-media pointer-events-none overflow-hidden">
       <video
         class="home-bg-video"
         autoplay
@@ -17,15 +17,15 @@
       <div class="home-bg-bottom-shadow" />
       <div class="absolute top-[-20%] right-[-10%] w-[800px] h-[800px] rounded-full bg-[var(--accent-color)] opacity-[0.03] blur-[120px]" />
       <div class="absolute bottom-[-20%] left-[-10%] w-[800px] h-[800px] rounded-full bg-[var(--accent-color)] opacity-[0.02] blur-[150px]" />
-      <!-- Subtle Grid -->
-      <div class="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.18)_1px,transparent_1px)] [background-size:20px_20px] opacity-35" />
     </div>
+    <div class="home-secondary-transition pointer-events-none" />
+    <div class="home-secondary-grid pointer-events-none" />
 
     <!-- Main content -->
-    <main class="relative z-10 max-w-[1400px] mx-auto px-6 pt-16 pb-8 md:pt-24 md:pb-12">
+    <main class="relative z-10 max-w-[1400px] mx-auto px-6 pb-10 md:pb-16">
 
       <!-- Hero Section -->
-      <section class="flex flex-col items-center text-center mb-32 md:mb-48 relative">
+      <section class="home-hero flex flex-col items-center text-center relative">
         <div class="home-logo-ring mb-8">
           <img src="/project-logo.svg" alt="Eager Canvas logo" class="w-24 h-24 md:w-28 md:h-28 rounded-full" />
         </div>
@@ -62,7 +62,7 @@
         </div>
       </section>
 
-      <footer class="mt-16 md:mt-20 pb-4 text-center">
+      <footer class="home-footer text-center">
         <p class="text-xs md:text-sm tracking-[0.16em] uppercase text-[var(--text-tertiary)]">
           Developed by Eager Design
         </p>
@@ -159,8 +159,59 @@ watch(
 </script>
 
 <style scoped>
+.home-shell {
+  --home-hero-height: 100svh;
+  position: relative;
+  min-height: calc(var(--home-hero-height) + 240px);
+}
+
 .perspective-1000 {
   perspective: 1000px;
+}
+
+.home-hero-media {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: var(--home-hero-height);
+}
+
+.home-secondary-grid {
+  position: absolute;
+  inset-inline: 0;
+  top: var(--home-hero-height);
+  bottom: 0;
+  background-color: rgba(13, 14, 16, 1);
+  background-image: radial-gradient(rgba(255,255,255,0.14) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: center top;
+}
+
+.home-secondary-transition {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(var(--home-hero-height) - 180px);
+  height: 260px;
+  background: linear-gradient(
+    180deg,
+    rgba(13, 14, 16, 0) 0%,
+    rgba(13, 14, 16, 0.32) 24%,
+    rgba(13, 14, 16, 0.72) 52%,
+    rgba(13, 14, 16, 0.95) 78%,
+    rgba(13, 14, 16, 1) 100%
+  );
+}
+
+.home-hero {
+  min-height: var(--home-hero-height);
+  justify-content: center;
+  padding-top: 4.5rem;
+  padding-bottom: 8rem;
+}
+
+.home-footer {
+  margin-top: 3rem;
+  padding-bottom: 1.5rem;
 }
 
 .home-bg-video {
@@ -183,13 +234,13 @@ watch(
   left: 0;
   right: 0;
   bottom: 0;
-  height: 42vh;
+  height: 56vh;
   background: linear-gradient(
     180deg,
     rgba(13, 14, 16, 0) 0%,
-    rgba(13, 14, 16, 0.18) 22%,
-    rgba(13, 14, 16, 0.48) 52%,
-    rgba(13, 14, 16, 0.82) 76%,
+    rgba(13, 14, 16, 0.22) 16%,
+    rgba(13, 14, 16, 0.6) 42%,
+    rgba(13, 14, 16, 0.9) 68%,
     rgba(13, 14, 16, 1) 100%
   );
 }
@@ -236,6 +287,25 @@ watch(
   .home-entry-button {
     width: 100%;
     min-width: 0;
+  }
+
+  .home-shell {
+    --home-hero-height: 100svh;
+    min-height: calc(var(--home-hero-height) + 200px);
+  }
+
+  .home-hero {
+    padding-top: 5.5rem;
+    padding-bottom: 6rem;
+  }
+
+  .home-secondary-grid {
+    top: var(--home-hero-height);
+  }
+
+  .home-secondary-transition {
+    top: calc(var(--home-hero-height) - 144px);
+    height: 220px;
   }
 }
 </style>
