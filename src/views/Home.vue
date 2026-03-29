@@ -3,10 +3,22 @@
   <div class="home-shell h-screen overflow-y-auto overflow-x-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] selection:bg-[var(--accent-color)] selection:text-white font-['fieldwork']">
     <!-- Background Elements -->
     <div class="fixed inset-0 pointer-events-none overflow-hidden">
+      <video
+        class="home-bg-video"
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="metadata"
+      >
+        <source src="/home-bg-loop.mp4" type="video/mp4" />
+      </video>
+      <div class="home-bg-tint" />
+      <div class="home-bg-bottom-shadow" />
       <div class="absolute top-[-20%] right-[-10%] w-[800px] h-[800px] rounded-full bg-[var(--accent-color)] opacity-[0.03] blur-[120px]" />
       <div class="absolute bottom-[-20%] left-[-10%] w-[800px] h-[800px] rounded-full bg-[var(--accent-color)] opacity-[0.02] blur-[150px]" />
       <!-- Subtle Grid -->
-      <div class="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.2)_1px,transparent_1px)] [background-size:20px_20px] opacity-50" />
+      <div class="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.18)_1px,transparent_1px)] [background-size:20px_20px] opacity-35" />
     </div>
 
     <!-- Main content -->
@@ -149,6 +161,37 @@ watch(
 <style scoped>
 .perspective-1000 {
   perspective: 1000px;
+}
+
+.home-bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.home-bg-tint {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(7, 8, 10, 0.18) 0%, rgba(7, 8, 10, 0.3) 38%, rgba(7, 8, 10, 0.52) 100%);
+}
+
+.home-bg-bottom-shadow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 42vh;
+  background: linear-gradient(
+    180deg,
+    rgba(13, 14, 16, 0) 0%,
+    rgba(13, 14, 16, 0.18) 22%,
+    rgba(13, 14, 16, 0.48) 52%,
+    rgba(13, 14, 16, 0.82) 76%,
+    rgba(13, 14, 16, 1) 100%
+  );
 }
 
 .home-entry-button {
