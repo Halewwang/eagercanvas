@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "cleanup:model3d": "node src/scripts/cleanup-3d-assets.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

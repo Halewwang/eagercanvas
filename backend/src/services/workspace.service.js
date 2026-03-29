@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
 import { getProject } from './projects.service.js'
+import { cleanupCanvas3DAssets } from './canvas3d-cleanup.service.js'
 
 const DEFAULT_WORKSPACE_SLUG = 'shared-workspace'
 
@@ -31,6 +32,21 @@ const mapTemplate = (row) => ({
   publishedAt: row.published_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at
+})
+
+const normalizeCanvasForStorage = async (canvasData) => {
+  const { canvasData: nextCanvasData } = await cleanupCanvas3DAssets(canvasData || {}, { persistRemote: true })
+  return nextCanvasData
+}
+
+const normalizeCanvasForRead = async (canvasData) => {
+  const { canvasData: nextCanvasData } = await cleanupCanvas3DAssets(canvasData || {}, { persistRemote: false })
+  return nextCanvasData
+}
+
+const mapTemplateForRead = async (row) => mapTemplate({
+  ...row,
+  canvas_json: await normalizeCanvasForRead(row.canvas_json || {})
 })
 
 const ensureDefaultWorkspace = async () => {
@@ -98,7 +114,7 @@ export const listFeaturedTemplates = async (userId) => {
 
   return {
     workspace,
-    templates: (data || []).map(mapTemplate)
+    templates: await Promise.all((data || []).map(mapTemplateForRead))
   }
 }
 
@@ -118,7 +134,7 @@ export const getProjectTemplateStatus = async (userId, projectId) => {
 
   return {
     workspace,
-    template: data ? mapTemplate(data) : null
+    template: data ? await mapTemplateForRead(data) : null
   }
 }
 
@@ -128,6 +144,7 @@ export const publishProjectTemplate = async (userId, projectId, input) => {
   const payload = publishTemplateSchema.parse(input || {})
   const ownerDisplayName = await getUserDisplayName(userId)
   const now = new Date().toISOString()
+  const normalizedCanvasData = await normalizeCanvasForStorage(project.canvas_json || {})
 
   const { data, error } = await supabase
     .from('shared_project_templates')
@@ -140,7 +157,7 @@ export const publishProjectTemplate = async (userId, projectId, input) => {
         title: payload.title,
         description: payload.description,
         cover_url: project.thumbnail_url || null,
-        canvas_json: project.canvas_json || {},
+        canvas_json: normalizedCanvasData,
         is_published: true,
         published_at: now
       },
@@ -163,7 +180,7 @@ export const publishProjectTemplate = async (userId, projectId, input) => {
 
   return {
     workspace,
-    template: mapTemplate(data)
+    template: await mapTemplateForRead(data)
   }
 }
 
@@ -197,7 +214,7 @@ export const unpublishProjectTemplate = async (userId, projectId) => {
 
   return {
     workspace,
-    template: mapTemplate(data)
+    template: await mapTemplateForRead(data)
   }
 }
 
@@ -213,13 +230,14 @@ export const createProjectFromTemplate = async (userId, templateId) => {
 
   if (templateError) throw new HttpError(500, templateError.message, 'TEMPLATE_GET_FAILED')
   if (!template) throw new HttpError(404, 'Shared template not found', 'TEMPLATE_NOT_FOUND')
+  const normalizedCanvasData = await normalizeCanvasForStorage(template.canvas_json || {})
 
   const { data: project, error: createError } = await supabase
     .from('projects')
     .insert({
       user_id: userId,
       name: template.title,
-      canvas_json: template.canvas_json || {},
+      canvas_json: normalizedCanvasData,
       thumbnail_url: template.cover_url || null
     })
     .select('*')
