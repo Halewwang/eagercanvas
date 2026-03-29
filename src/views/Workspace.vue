@@ -6,11 +6,6 @@
         <div class="brand-text">{{ workspaceBrand }}</div>
       </div>
 
-      <div class="search-box">
-        <n-icon :size="16"><SearchOutline /></n-icon>
-        <input v-model.trim="keyword" placeholder="Search projects and templates" />
-      </div>
-
       <section class="sidebar-group">
         <div class="sidebar-group-title">Workspace</div>
         <nav class="nav-menu">
@@ -26,6 +21,36 @@
           </button>
         </nav>
       </section>
+
+      <div class="sidebar-account">
+        <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
+        <template v-if="isAuthenticated">
+          <button
+            class="account-profile"
+            @click="triggerAvatarUpload"
+            title="Upload avatar"
+          >
+            <div class="account-avatar">
+              <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" />
+              <span v-else>{{ avatarInitial }}</span>
+            </div>
+            <div class="account-meta">
+              <strong>{{ user?.displayName || 'Workspace Member' }}</strong>
+              <span>{{ user?.email }}</span>
+            </div>
+          </button>
+          <div class="account-actions">
+            <button class="account-action-btn" @click="router.push('/usage')">Usage</button>
+            <button class="account-action-btn" @click="handleLogout">Logout</button>
+          </div>
+        </template>
+        <template v-else>
+          <div class="account-actions">
+            <button class="account-action-btn" @click="router.push({ path: '/', query: { auth: 'login', redirect: '/workspace' } })">Login</button>
+            <button class="account-action-btn account-action-btn-primary" @click="router.push({ path: '/', query: { auth: 'register', redirect: '/workspace' } })">Register</button>
+          </div>
+        </template>
+      </div>
 
     </aside>
 
@@ -63,7 +88,7 @@
         </article>
 
         <article
-          v-for="item in filteredItems"
+          v-for="item in sectionItems"
           :key="item.id"
           class="project-card"
           @click="handlePrimaryClick(item)"
@@ -158,7 +183,6 @@ import {
   FolderOpenOutline,
   SparklesOutline,
   GridOutline,
-  SearchOutline,
   EllipsisHorizontalOutline
 } from '../icons/coolicons'
 import {
@@ -174,12 +198,12 @@ import { getErrorMessage } from '@/utils'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useAuthStore } from '@/stores/auth'
 import { notifier } from '@/utils/notifier'
+import { useAvatarUpload } from '@/hooks/useAvatarUpload'
 
 const router = useRouter()
-const { bootstrapAuth } = useAuthStore()
+const { bootstrapAuth, isAuthenticated, user, logout, updateProfile } = useAuthStore()
 
 const activeSection = ref('projects')
-const keyword = ref('')
 
 const showRenameModal = ref(false)
 const renameTargetId = ref('')
@@ -192,6 +216,15 @@ const navItems = [
   { key: 'projects', label: 'Recent Projects', icon: FolderOpenOutline },
   { key: 'featured', label: 'Featured Templates', icon: SparklesOutline }
 ]
+
+const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange } = useAvatarUpload({
+  user,
+  updateProfile,
+  notify: {
+    success: (message) => notifier.success(message),
+    error: (message) => notifier.error(message)
+  }
+})
 
 const {
   currentWorkspace,
@@ -220,12 +253,6 @@ const sectionDescription = computed(() => {
 const sectionItems = computed(() => {
   if (activeSection.value === 'featured') return featuredTemplates.value
   return projects.value
-})
-
-const filteredItems = computed(() => {
-  const text = keyword.value.toLowerCase()
-  if (!text) return sectionItems.value
-  return sectionItems.value.filter((item) => String(item?.title || item?.name || '').toLowerCase().includes(text))
 })
 
 const describeItem = (item) => {
@@ -279,6 +306,11 @@ const handleProjectMenuSelect = async (key, project) => {
   if (key === 'delete') {
     openDelete(project)
   }
+}
+
+const handleLogout = async () => {
+  await logout()
+  await router.push('/')
 }
 
 const createBlankProject = async () => {
@@ -408,25 +440,6 @@ onMounted(async () => {
   letter-spacing: -0.01em;
 }
 
-.search-box {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.search-box input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #f0f1f3;
-  font-size: 14px;
-}
-
 .nav-menu {
   display: flex;
   flex-direction: column;
@@ -465,6 +478,104 @@ onMounted(async () => {
 .nav-item.active {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
+}
+
+.sidebar-account {
+  margin-top: auto;
+  padding: 14px 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.account-profile {
+  width: 100%;
+  border: none;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 18px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.account-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.account-meta strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.account-meta span {
+  font-size: 12px;
+  color: rgba(236, 238, 244, 0.58);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.account-action-btn {
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(236, 238, 244, 0.85);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.account-action-btn:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.account-action-btn-primary {
+  background: rgba(255, 255, 255, 0.9);
+  color: #0d0e10;
+}
+
+.account-action-btn-primary:hover {
+  background: #fff;
+  color: #0d0e10;
 }
 
 .workspace-main {
