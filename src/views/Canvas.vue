@@ -395,7 +395,7 @@
  * Canvas view component | 画布视图组件
  * Main infinite canvas with Vue Flow integration
  */
-import { ref, computed, onMounted, onUnmounted, watch, nextTick, markRaw } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, markRaw, defineAsyncComponent } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { MiniMap } from '@vue-flow/minimap'
@@ -450,7 +450,7 @@ import { useCanvasProjectActions } from '@/hooks/useCanvasProjectActions'
 import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { getWorkflowById } from '@/config/workflows'
-import { initProjectsStore, projects, refreshProjectById } from '../stores/projects'
+import { getProjectCanvas, initProjectsStore, projects, refreshProjectById } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
@@ -475,14 +475,11 @@ const nodesFactory = useNodesFactory({ updateNodeInternals, viewport })
 // Custom node components | 自定义节点组件
 import TextNode from '../components/nodes/TextNode.vue'
 import ImageConfigNode from '../components/nodes/ImageConfigNode.vue'
-import Model3DConfigNode from '../components/nodes/Model3DConfigNode.vue'
-import Model3DNode from '../components/nodes/Model3DNode.vue'
 import VideoNode from '../components/nodes/VideoNode.vue'
 import ImageNode from '../components/nodes/ImageNode.vue'
 import VideoConfigNode from '../components/nodes/VideoConfigNode.vue'
 import LLMConfigNode from '../components/nodes/LLMConfigNode.vue'
 import ImageRoleEdge from '../components/edges/ImageRoleEdge.vue'
-import Model3DViewEdge from '../components/edges/Model3DViewEdge.vue'
 import PromptOrderEdge from '../components/edges/PromptOrderEdge.vue'
 import ImageOrderEdge from '../components/edges/ImageOrderEdge.vue'
 import DefaultEdge from '../components/edges/DefaultEdge.vue'
@@ -506,8 +503,8 @@ const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange }
 const nodeTypes = {
   text: markRaw(TextNode),
   imageConfig: markRaw(ImageConfigNode),
-  model3dConfig: markRaw(Model3DConfigNode),
-  model3d: markRaw(Model3DNode),
+  model3dConfig: markRaw(defineAsyncComponent(() => import('../components/nodes/Model3DConfigNode.vue'))),
+  model3d: markRaw(defineAsyncComponent(() => import('../components/nodes/Model3DNode.vue'))),
   video: markRaw(VideoNode),
   image: markRaw(ImageNode),
   videoConfig: markRaw(VideoConfigNode),
@@ -518,7 +515,7 @@ const nodeTypes = {
 const edgeTypes = {
   default: markRaw(DefaultEdge),
   imageRole: markRaw(ImageRoleEdge),
-  model3dView: markRaw(Model3DViewEdge),
+  model3dView: markRaw(defineAsyncComponent(() => import('../components/edges/Model3DViewEdge.vue'))),
   promptOrder: markRaw(PromptOrderEdge),
   imageOrder: markRaw(ImageOrderEdge)
 }
@@ -1234,8 +1231,7 @@ const ensureProjectSnapshot = async (projectId) => {
     return
   }
 
-  const existing = projects.value.find((project) => project.id === id) || null
-  if (!existing?.canvasData) {
+  if (!getProjectCanvas(id)) {
     try {
       await refreshProjectById(id)
     } catch {
@@ -1317,7 +1313,7 @@ onMounted(async () => {
   const hasWarmProject = !!(
     routeProjectId &&
     routeProjectId !== 'new' &&
-    projects.value.some((project) => project.id === routeProjectId && project.canvasData)
+    getProjectCanvas(routeProjectId)
   )
 
   // Render immediately when we already have a warm project snapshot in memory.
