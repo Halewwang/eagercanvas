@@ -9,47 +9,6 @@
       <div class="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.2)_1px,transparent_1px)] [background-size:20px_20px] opacity-50" />
     </div>
 
-    <div class="relative z-20 max-w-[1400px] mx-auto px-6 pt-6 flex justify-end items-center gap-3">
-      <template v-if="isAuthenticated">
-      <button
-        @click="triggerAvatarUpload"
-        class="w-9 h-9 rounded-full overflow-hidden border border-[var(--border-color)] bg-[var(--bg-tertiary)] flex items-center justify-center"
-        title="Upload avatar"
-      >
-        <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" class="w-full h-full object-cover" />
-        <span v-else class="text-xs">{{ avatarInitial }}</span>
-      </button>
-      <span class="text-xs text-[var(--text-secondary)] max-w-[220px] truncate">{{ user?.email }}</span>
-      <button
-        @click="router.push('/usage')"
-        class="flora-button-ghost px-4 py-2 rounded-xl text-sm"
-      >
-        Usage
-      </button>
-      <button
-        @click="handleLogout"
-        class="flora-button-ghost px-4 py-2 rounded-xl text-sm"
-      >
-        Logout
-      </button>
-      </template>
-      <template v-else>
-        <button
-          @click="openLogin"
-          class="flora-button-ghost px-4 py-2 rounded-xl text-sm"
-        >
-          Login
-        </button>
-        <button
-          @click="openRegister"
-          class="flora-button-primary px-4 py-2 rounded-xl text-sm"
-        >
-          Register
-        </button>
-      </template>
-    </div>
-    <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
-
     <!-- Main content -->
     <main class="relative z-10 max-w-[1400px] mx-auto px-6 pt-16 pb-8 md:pt-24 md:pb-12">
 
@@ -76,10 +35,10 @@
         <div class="w-full max-w-3xl relative group perspective-1000">
           <div class="relative flex flex-col md:flex-row items-center justify-center gap-4 md:gap-5">
             <button
-              @click="enterCanvas"
+              @click="handleGetStarted"
               class="home-entry-button"
             >
-              Canvas
+              Get Started
             </button>
             <button
               @click="openEditorSpace"
@@ -91,126 +50,17 @@
         </div>
       </section>
 
-      <!-- Projects Section -->
-      <section class="relative">
-        <div class="flex items-end justify-between mb-12 border-b border-[var(--border-color)] pb-6">
-          <div>
-            <h2 class="text-2xl md:text-3xl font-light mb-2">Recent Projects</h2>
-            <p class="text-[var(--text-tertiary)] text-sm">Continue where you left off</p>
-          </div>
-          <div class="hidden md:flex items-center gap-3">
-            <button
-              @click="router.push('/workspace')"
-              class="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] transition-all duration-300 group"
-            >
-              <n-icon :size="18"><AppsOutline /></n-icon>
-              <span>Project Workspace</span>
-            </button>
-            <button 
-              @click="createNewProject"
-              class="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] transition-all duration-300 group"
-            >
-              <n-icon :size="18"><AddOutline /></n-icon>
-              <span>New Project</span>
-            </button>
-          </div>
+      <section class="home-cta-panel">
+        <div class="home-cta-copy">
+          <h2>Sign in to open your workspace</h2>
+          <p>Create projects, continue recent work, and manage templates from one place.</p>
         </div>
-        
-        <!-- Empty state -->
-        <div v-if="projects.length === 0" class="flex flex-col items-center justify-center py-32 border border-dashed border-[var(--border-color)] rounded-3xl bg-[var(--bg-secondary)]/30">
-          <div class="w-20 h-20 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center mb-6 text-[var(--text-tertiary)]">
-            <n-icon :size="32"><FolderOutline /></n-icon>
-          </div>
-          <p class="text-[var(--text-secondary)] mb-6 text-lg font-light">Your canvas is waiting.</p>
-          <button 
-            @click="createNewProject"
-            class="flora-button-primary px-8 py-3 rounded-full font-medium"
-          >
-            Create First Project
-          </button>
-        </div>
-        
-        <!-- Projects Grid -->
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
-          <div 
-            v-for="project in projects" 
-            :key="project.id"
-            class="group relative aspect-[4/3] bg-[var(--bg-secondary)] rounded-2xl overflow-hidden cursor-pointer border border-[var(--border-color)] hover:border-[var(--accent-color)]/50 transition-all duration-500 hover:shadow-2xl hover:shadow-[var(--accent-color)]/10"
-            @click="openProject(project)"
-            @mouseenter="handleThumbnailHover(project, true)"
-            @mouseleave="handleThumbnailHover(project, false)"
-          >
-            <!-- Thumbnail -->
-            <div class="absolute inset-0 transition-transform duration-700 group-hover:scale-105">
-               <template v-if="project.thumbnail">
-                  <video 
-                    v-if="isVideoUrl(project.thumbnail)"
-                    :ref="el => setVideoRef(project.id, el)"
-                    :src="project.thumbnail"
-                    class="w-full h-full object-cover"
-                    muted
-                    loop
-                    playsinline
-                  />
-                  <img 
-                    v-else
-                    :src="project.thumbnail" 
-                    :alt="project.name"
-                    class="w-full h-full object-cover"
-                  />
-                </template>
-                <div v-else class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-tertiary)]">
-                  <n-icon :size="40" class="text-[var(--text-tertiary)] opacity-20 mb-4"><DocumentOutline /></n-icon>
-                </div>
-            </div>
-
-            <!-- Overlay Gradient -->
-            <div class="absolute inset-0 bg-gradient-to-t from-[var(--bg-primary)] via-transparent to-transparent opacity-60 md:opacity-0 group-hover:opacity-80 transition-opacity duration-300" />
-
-            <!-- Content -->
-            <div class="absolute bottom-0 left-0 right-0 p-6 transform translate-y-2 md:translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
-              <h3 class="text-lg font-medium text-white mb-1 truncate">{{ project.name }}</h3>
-              <div class="flex items-center justify-between text-xs text-gray-300 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">
-                <span>{{ formatDate(project.updatedAt) }}</span>
-                <div class="flex gap-2">
-                   <button 
-                      @click.stop="handleProjectAction('duplicate', project)"
-                      class="p-1.5 hover:bg-white/20 rounded-lg backdrop-blur-sm transition-colors"
-                      title="Duplicate"
-                    >
-                      <n-icon :size="14"><CopyOutline /></n-icon>
-                    </button>
-                    <button 
-                      @click.stop="handleProjectAction('delete', project)"
-                      class="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded-lg backdrop-blur-sm transition-colors"
-                      title="Delete"
-                    >
-                      <n-icon :size="14"><TrashOutline /></n-icon>
-                    </button>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Rename Action (Top Right) -->
-            <button 
-              @click.stop="handleProjectAction('rename', project)"
-              class="absolute top-3 right-3 p-2 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full text-white opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-[-10px] group-hover:translate-y-0"
-            >
-               <n-icon :size="14"><CreateOutline /></n-icon>
-            </button>
-          </div>
-          
-          <!-- New Project Card (Grid Item) -->
-          <div 
-            @click="createNewProject"
-            class="group flex flex-col items-center justify-center aspect-[4/3] rounded-2xl border border-dashed border-[var(--border-color)] hover:border-[var(--accent-color)] hover:bg-[var(--accent-color)]/5 cursor-pointer transition-all duration-300"
-          >
-             <div class="w-16 h-16 rounded-full bg-[var(--bg-secondary)] group-hover:bg-[var(--accent-color)] group-hover:text-white flex items-center justify-center transition-all duration-300 mb-4 shadow-lg">
-                <n-icon :size="24"><AddOutline /></n-icon>
-             </div>
-             <span class="text-sm font-medium text-[var(--text-secondary)] group-hover:text-[var(--accent-color)] transition-colors">Create New</span>
-          </div>
-        </div>
+        <button
+          @click="handleGetStarted"
+          class="home-entry-button home-entry-button-solid"
+        >
+          Open Workspace
+        </button>
       </section>
 
       <footer class="mt-16 md:mt-20 pb-4 text-center">
@@ -226,103 +76,22 @@
       @close="closeAuthModal"
       @success="handleAuthSuccess"
     />
-
-    <!-- API Settings Modal | API 设置弹窗 -->
-    <ApiSettings v-model:show="showApiSettings" />
-
-    <!-- Rename modal | 重命名弹窗 -->
-    <BaseModal
-      v-model:show="showRenameModal"
-      title="Rename project"
-      description="Give this project a clearer name for your workspace."
-      size="sm"
-    >
-      <div class="py-1">
-        <BaseInput
-          v-model="renameValue" 
-          placeholder="Enter project name" 
-          @keyup.enter="confirmRename"
-        />
-      </div>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton variant="ghost" @click="showRenameModal = false">Cancel</BaseButton>
-          <BaseButton @click="confirmRename">Save</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-
-    <BaseModal
-      v-model:show="showDeleteModal"
-      title="Delete project"
-      description="This action permanently removes the project from your workspace."
-      size="sm"
-    >
-      <p class="ui-body ui-modal-copy">Delete "{{ deleteTargetName }}"? This action cannot be undone.</p>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton variant="ghost" @click="showDeleteModal = false">Cancel</BaseButton>
-          <BaseButton variant="danger" @click="confirmDeleteProject">Delete</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
   </div>
 </template>
 
 <script setup>
 /**
  * Home view component | 首页视图组件
- * Entry point with project list and creation input
+ * Landing page only. Project browsing lives in Workspace.
  */
-import { computed, ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NIcon } from 'naive-ui'
-import { 
-  AddOutline, 
-  AppsOutline,
-  DocumentOutline,
-  FolderOutline,
-  CreateOutline,
-  CopyOutline,
-  TrashOutline
-} from '../icons/coolicons'
-import { 
-  projects, 
-  initProjectsStore, 
-  createProject, 
-  deleteProject, 
-  duplicateProject, 
-  renameProject 
-} from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
-import { useAvatarUpload } from '@/hooks/useAvatarUpload'
-import { BaseButton, BaseInput, BaseModal } from '@/components/ui'
-import ApiSettings from '../components/ApiSettings.vue'
 import AuthDialog from '../components/AuthDialog.vue'
-import { getErrorMessage } from '@/utils'
-import { notifier } from '@/utils/notifier'
 
 const router = useRouter()
 const route = useRoute()
-const { user, logout, isAuthenticated, updateProfile, bootstrapAuth } = useAuthStore()
-
-// API Settings state | API 设置状态
-const showApiSettings = ref(false)
-
-const handleLogout = async () => {
-  await logout()
-  await initProjectsStore()
-  router.push('/')
-}
-
-const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange } = useAvatarUpload({
-  user,
-  updateProfile,
-  notify: {
-    success: (message) => notifier.success(message),
-    error: (message) => notifier.error(message)
-  }
-})
+const { isAuthenticated, bootstrapAuth } = useAuthStore()
 
 const openLogin = () => {
   authMode.value = 'login'
@@ -342,9 +111,14 @@ const closeAuthModal = () => {
   clearAuthQuery()
 }
 
-const handleAuthSuccess = () => {
-  clearAuthQuery()
-  router.replace('/')
+const handleAuthSuccess = async () => {
+  const redirect =
+    typeof route.query.redirect === 'string' && route.query.redirect
+      ? route.query.redirect
+      : '/workspace'
+
+  authModalVisible.value = false
+  await router.replace(redirect)
 }
 
 const openAuthByQuery = () => {
@@ -362,146 +136,20 @@ const clearAuthQuery = () => {
   router.replace({ path: route.path, query })
 }
 
-// Video refs for hover play | 视频引用用于悬停播放
-const videoRefs = new Map()
-
-// Set video ref | 设置视频引用
-const setVideoRef = (projectId, el) => {
-  if (el) {
-    videoRefs.set(projectId, el)
-  } else {
-    videoRefs.delete(projectId)
+const handleGetStarted = async () => {
+  if (isAuthenticated.value) {
+    await router.push('/workspace')
+    return
   }
-}
-
-// Handle thumbnail hover | 处理缩略图悬停
-const handleThumbnailHover = (project, isHovering) => {
-  if (!isVideoUrl(project.thumbnail)) return
-  
-  const video = videoRefs.get(project.id)
-  if (!video) return
-  
-  if (isHovering) {
-    video.play().catch(() => {
-      // Ignore play errors (e.g., autoplay policy)
-    })
-  } else {
-    video.pause()
-    video.currentTime = 0 // Reset to start
-  }
-}
-
-// Rename modal state | 重命名弹窗状态
-const showRenameModal = ref(false)
-const renameValue = ref('')
-const renameTargetId = ref(null)
-const showDeleteModal = ref(false)
-const deleteTargetId = ref(null)
-const deleteTargetName = ref('')
-
-// Format date | 格式化日期
-const formatDate = (date) => {
-  if (!date) return ''
-  const d = new Date(date)
-  const now = new Date()
-  const diff = now - d
-  
-  // Less than 1 minute | 小于1分钟
-  if (diff < 60000) return 'Just now'
-  // Less than 1 hour | 小于1小时
-  if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`
-  // Less than 1 day | 小于1天
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)} h ago`
-  // Less than 7 days | 小于7天
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)} d ago`
-  // Format as date | 格式化为日期
-  return `${d.getMonth() + 1}/${d.getDate()}`
-}
-
-// Handle project action | 处理项目操作
-const handleProjectAction = async (key, project) => {
-  switch (key) {
-    case 'rename':
-      renameTargetId.value = project.id
-      renameValue.value = project.name
-      showRenameModal.value = true
-      break
-    case 'duplicate':
-      const newId = await duplicateProject(project.id)
-      if (newId) {
-        notifier.success('Project duplicated')
-      }
-      break
-    case 'delete':
-      deleteTargetId.value = project.id
-      deleteTargetName.value = project.name
-      showDeleteModal.value = true
-      break
-  }
-}
-
-const confirmDeleteProject = async () => {
-  if (!deleteTargetId.value) return
-  const id = deleteTargetId.value
-  showDeleteModal.value = false
-  deleteTargetId.value = null
-  try {
-    await deleteProject(id)
-    notifier.success('Project deleted')
-  } catch (err) {
-    if (!err?.__handled) {
-      notifier.error(getErrorMessage(err, 'Delete failed'))
-    }
-  }
-}
-
-// Confirm rename | 确认重命名
-const confirmRename = async () => {
-  if (renameTargetId.value && renameValue.value.trim()) {
-    await renameProject(renameTargetId.value, renameValue.value.trim())
-    notifier.success('Project renamed')
-  }
-  showRenameModal.value = false
-  renameTargetId.value = null
-  renameValue.value = ''
-}
-
-// Create new project | 创建新项目
-const createNewProject = async () => {
-  try {
-    const id = await createProject('Untitled')
-    await router.push(`/canvas/${id}`)
-  } catch (err) {
-    if (!err?.__handled) {
-      notifier.error(getErrorMessage(err, 'Failed to create project'))
-    }
-  }
-}
-
-// Open existing project | 打开已有项目
-const openProject = async (project) => {
-  await router.push(`/canvas/${project.id}`)
-}
-
-const enterCanvas = async () => {
-  await createNewProject()
+  openLogin()
 }
 
 const openEditorSpace = () => {
   window.open('https://editor.enbrand.space/', '_self')
 }
 
-// Check if URL is a video | 检查 URL 是否为视频
-const isVideoUrl = (url) => {
-  if (!url || typeof url !== 'string') return false
-  const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv']
-  return videoExtensions.some(ext => url.toLowerCase().includes(ext))
-}
-
-// Initialize projects store on mount | 挂载时初始化项目存储
 onMounted(async () => {
   await bootstrapAuth()
-  await initProjectsStore()
   openAuthByQuery()
 })
 
@@ -545,10 +193,55 @@ watch(
   transform: translateY(0);
 }
 
+.home-entry-button-solid {
+  background: rgba(255, 255, 255, 0.92);
+  color: #0d0e10;
+}
+
+.home-entry-button-solid:hover {
+  background: #ffffff;
+  color: #0d0e10;
+}
+
+.home-cta-panel {
+  margin: 0 auto;
+  max-width: 920px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 30px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(14px);
+}
+
+.home-cta-copy h2 {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.home-cta-copy p {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
 @media (max-width: 767px) {
   .home-entry-button {
     width: 100%;
     min-width: 0;
+  }
+
+  .home-cta-panel {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    padding: 24px 20px;
   }
 }
 </style>
