@@ -116,4 +116,9 @@ router.beforeEach(async (to) => {
   }
 })
 
+router.afterEach((to) => {
+  const isDashboard = to.path.startsWith('/admin') || to.path.startsWith('/usage-admin')
+  document.title = isDashboard ? 'Aion Dashboard' : 'Aion Craft｜Canvas'
+})
+
 export default router
