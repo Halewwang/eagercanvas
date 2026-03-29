@@ -18,7 +18,17 @@
             <img :src="aioncraftWordmark" alt="AionCraft" class="home-brand-image" />
           </button>
 
-          <div class="home-topbar-actions">
+          <div v-if="isAuthenticated" class="home-topbar-actions home-topbar-actions-authenticated">
+            <div class="home-topbar-avatar" aria-hidden="true">
+              <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="" class="home-topbar-avatar-image" />
+              <span v-else class="home-topbar-avatar-fallback">{{ avatarInitial }}</span>
+            </div>
+            <button type="button" class="home-topbar-button home-topbar-button-logout" @click="handleLogout">
+              <img :src="logoutIcon" alt="" class="home-inline-icon" />
+              <span>Logout</span>
+            </button>
+          </div>
+          <div v-else class="home-topbar-actions">
             <button type="button" class="home-topbar-button home-topbar-button-register" @click="openRegister">
               <svg viewBox="0 0 14.75 14" fill="none" aria-hidden="true" class="home-inline-icon">
                 <path fill-rule="evenodd" clip-rule="evenodd" d="M7 5.5C8.10457 5.5 9 4.60457 9 3.5C9 2.39543 8.10457 1.5 7 1.5C5.89543 1.5 5 2.39543 5 3.5C5 4.60457 5.89543 5.5 7 5.5ZM7 7C8.933 7 10.5 5.433 10.5 3.5C10.5 1.567 8.933 0 7 0C5.067 0 3.5 1.567 3.5 3.5C3.5 5.433 5.067 7 7 7ZM8 8.22517C8 7.84009 7.70631 7.5158 7.32139 7.50465C7.21485 7.50156 7.1077 7.5 7 7.5C3.15 7.5 0 9.5 0 11.5C0 12.8807 1.11929 14 2.5 14H11.25C11.6642 14 12 13.6642 12 13.25C12 12.8358 11.6642 12.5 11.25 12.5H2.5C1.94772 12.5 1.5 12.0523 1.5 11.5C1.5 11.2955 1.72027 10.6911 2.81956 10.0413C3.83752 9.43951 5.31979 9 7 9C7.05845 9 7.11666 9.00053 7.17462 9.00158C7.61664 9.00961 8 8.66727 8 8.22517ZM12.75 7C12.75 6.58579 12.4142 6.25 12 6.25C11.5858 6.25 11.25 6.58579 11.25 7V8.25H10C9.58579 8.25 9.25 8.58579 9.25 9C9.25 9.41421 9.58579 9.75 10 9.75H11.25V11C11.25 11.4142 11.5858 11.75 12 11.75C12.4142 11.75 12.75 11.4142 12.75 11V9.75H14C14.4142 9.75 14.75 9.41421 14.75 9C14.75 8.58579 14.4142 8.25 14 8.25H12.75V7Z" fill="currentColor"/>
@@ -271,7 +281,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import AuthDialog from '../components/AuthDialog.vue'
@@ -298,6 +308,7 @@ import row12 from '@/assets/home-figma/row-12.svg'
 import row13 from '@/assets/home-figma/row-13.svg'
 import row14 from '@/assets/home-figma/row-14.svg'
 
+const logoutIcon = 'https://www.figma.com/api/mcp/asset/54af2767-9ac3-4688-b583-1819ab30af11'
 const figmaStripMask = 'https://www.figma.com/api/mcp/asset/c2e7515e-9970-4973-8b0b-7c5992cf1824'
 const figmaStripFill = 'https://www.figma.com/api/mcp/asset/4a14f4c9-dd6b-4ca1-9749-4467b4a42855'
 const moduleIconMask = 'https://www.figma.com/api/mcp/asset/64008624-09d3-4dc9-8baa-d5c702fdd0b4'
@@ -360,10 +371,11 @@ const stripIcons = [
 
 const router = useRouter()
 const route = useRoute()
-const { isAuthenticated, bootstrapAuth } = useAuthStore()
+const { isAuthenticated, user, bootstrapAuth, logout } = useAuthStore()
 
 const authModalVisible = ref(false)
 const authMode = ref('login')
+const avatarInitial = computed(() => (user.value?.displayName || user.value?.email || 'A').charAt(0).toUpperCase())
 
 const openLogin = () => {
   authMode.value = 'login'
@@ -415,6 +427,11 @@ const handleGetStarted = async () => {
 
 const openEditorSpace = () => {
   window.open('https://editor.enbrand.space/', '_self')
+}
+
+const handleLogout = async () => {
+  await logout()
+  await router.replace('/')
 }
 
 const scrollToTop = () => {
@@ -555,6 +572,37 @@ watch(
   gap: 10px;
 }
 
+.home-topbar-actions-authenticated {
+  gap: 14px;
+}
+
+.home-topbar-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.home-topbar-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.home-topbar-avatar-fallback {
+  color: #ffffff;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+}
+
 .home-topbar-button {
   display: inline-flex;
   align-items: center;
@@ -577,6 +625,11 @@ watch(
 }
 
 .home-topbar-button-login {
+  background: #000000;
+  color: #fcfcfc;
+}
+
+.home-topbar-button-logout {
   background: #000000;
   color: #fcfcfc;
 }
