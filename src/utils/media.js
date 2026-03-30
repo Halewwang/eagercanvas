@@ -71,6 +71,9 @@ export const isExpiredRemoteUrl = (value = '', now = Date.now()) => {
   if (!expiryMs) return false
   return expiryMs <= now
 }
+
+const LEGACY_UPLOAD_FALLBACK_MAX_BYTES = 10 * 1024 * 1024
+
 export const dataUrlToFile = (dataUrl, fileName = 'image.png') => {
   const value = String(dataUrl || '')
   const match = value.match(/^data:(.+?);base64,(.+)$/)
@@ -85,8 +88,109 @@ export const dataUrlToFile = (dataUrl, fileName = 'image.png') => {
   return new File([bytes], fileName, { type: mimeType })
 }
 
+const uploadFileToSignedUrl = (signedUrl, file, onProgress) =>
+  new Promise((resolve, reject) => {
+    const rawSignedUrl = String(signedUrl || '').trim()
+    if (!rawSignedUrl) {
+      reject(new Error('Upload failed'))
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('cacheControl', '3600')
+    formData.append('', file, file?.name || 'asset')
+
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', rawSignedUrl, true)
+    xhr.setRequestHeader('x-upsert', 'false')
+
+    xhr.upload.onprogress = (event) => {
+      if (typeof onProgress !== 'function') return
+      const loaded = Number(event?.loaded || 0)
+      const total = Number(event?.total || 0)
+      if (!total) return
+      const percent = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)))
+      onProgress(percent)
+    }
+
+    xhr.onerror = () => reject(new Error('Upload failed'))
+    xhr.onabort = () => reject(new Error('Upload failed'))
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve()
+        return
+      }
+      reject(new Error('Upload failed'))
+    }
+
+    xhr.send(formData)
+  })
+
+const createSignedUpload = async (file) => {
+  const response = await request.post('/upload/signed', {
+    fileName: file?.name || 'asset',
+    fileType: file?.type || 'application/octet-stream'
+  }, {
+    silentErrorToast: true,
+    silentNetworkErrorToast: true
+  })
+
+  return {
+    signedUrl: String(response?.signedUrl || '').trim(),
+    url: String(response?.url || '').trim()
+  }
+}
+
+const completeSignedUpload = async ({ url, file, projectId = '', source = '', sourceNodeId = '' }) => {
+  const rawUrl = String(url || '').trim()
+  if (!rawUrl) return ''
+
+  try {
+    await request.post('/upload/complete', {
+      url: rawUrl,
+      fileName: file?.name || 'asset',
+      fileType: file?.type || 'application/octet-stream',
+      sizeBytes: Number(file?.size || 0),
+      projectId: projectId || undefined,
+      source: source || undefined,
+      sourceNodeId: sourceNodeId || undefined
+    }, {
+      silentErrorToast: true,
+      silentNetworkErrorToast: true
+    })
+  } catch (error) {
+    console.warn('Signed upload record failed:', error)
+  }
+
+  return rawUrl
+}
+
 export const uploadImageFile = async (file, options = {}) => {
   const { onProgress, projectId = '', source = '', sourceNodeId = '' } = options
+  try {
+    if (typeof onProgress === 'function') onProgress(2)
+    const { signedUrl, url } = await createSignedUpload(file)
+    if (typeof onProgress === 'function') onProgress(5)
+    await uploadFileToSignedUrl(signedUrl, file, (percent) => {
+      if (typeof onProgress !== 'function') return
+      onProgress(Math.max(5, Math.min(98, percent)))
+    })
+    const uploadedUrl = await completeSignedUpload({
+      url,
+      file,
+      projectId,
+      source,
+      sourceNodeId
+    })
+    if (typeof onProgress === 'function') onProgress(100)
+    if (uploadedUrl) return uploadedUrl
+  } catch (error) {
+    console.warn('Signed upload failed, falling back to legacy upload:', error)
+    if (Number(file?.size || 0) > LEGACY_UPLOAD_FALLBACK_MAX_BYTES) {
+      throw error
+    }
+  }
+
   const formData = new FormData()
   formData.append('file', file, file?.name || 'asset')
   if (projectId) formData.append('projectId', projectId)

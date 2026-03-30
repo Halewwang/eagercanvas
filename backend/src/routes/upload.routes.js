@@ -80,6 +80,16 @@ const signedUploadSchema = z.object({
   fileType: z.string().min(1).max(180).optional()
 })
 
+const completeUploadSchema = z.object({
+  url: z.string().url(),
+  fileName: z.string().max(180).optional(),
+  fileType: z.string().max(180).optional(),
+  sizeBytes: z.coerce.number().int().nonnegative().optional(),
+  projectId: z.string().uuid().optional(),
+  source: z.string().max(120).optional(),
+  sourceNodeId: z.string().max(120).optional()
+})
+
 uploadRouter.post('/remote', authRequired, asyncHandler(async (req, res) => {
   const payload = remoteUploadSchema.parse(req.body || {})
   const result = await uploadRemoteFile(payload)
@@ -111,4 +121,23 @@ uploadRouter.post('/signed', authRequired, asyncHandler(async (req, res) => {
     mimetype: payload.fileType || 'application/octet-stream'
   })
   res.json(result)
+}))
+
+uploadRouter.post('/complete', authRequired, asyncHandler(async (req, res) => {
+  const payload = completeUploadSchema.parse(req.body || {})
+  if (!String(payload.url || '').includes('/storage/v1/object/public/uploads/')) {
+    throw new HttpError(400, 'Upload completion URL is invalid', 'UPLOAD_COMPLETE_INVALID_URL')
+  }
+  await recordUploadedMediaAsset({
+    userId: req.user.id,
+    projectId: payload.projectId,
+    url: payload.url,
+    fileName: payload.fileName,
+    fileType: payload.fileType,
+    sizeBytes: payload.sizeBytes,
+    origin: 'upload',
+    source: payload.source,
+    sourceNodeId: payload.sourceNodeId
+  })
+  res.json({ url: payload.url })
 }))
