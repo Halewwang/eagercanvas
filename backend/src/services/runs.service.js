@@ -520,7 +520,6 @@ export const createRun = async (userId, input) => {
       providerResponse = await providerChatCompletions(payload.payload, providerRequestOptions)
     } else if (payload.type === 'image') {
       providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
-      providerResponse = await persistImageResultAssets(providerResponse)
     } else if (payload.type === 'model3d') {
       providerResponse = await providerCreate3D(payload.payload, providerRequestOptions)
       providerResponse = await persist3DResultAssets(providerResponse)
