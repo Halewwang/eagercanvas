@@ -90,7 +90,6 @@ export const uploadImageFile = async (file, options = {}) => {
   formData.append('file', file, file?.name || 'asset')
 
   const uploadRes = await request.post('/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: (event) => {
       if (typeof onProgress !== 'function') return
       const loaded = Number(event?.loaded || 0)
