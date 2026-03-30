@@ -163,7 +163,7 @@ import { NIcon, NSpin } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
 import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline, RefreshOutline, AddOutline } from '../../icons/coolicons'
 import { useImageGeneration, useApiConfig } from '../../hooks'
-import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject, projectSaveState } from '../../stores/canvas'
+import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject, projectSaveState, currentProjectId } from '../../stores/canvas'
 import { imageModelOptions, getModelSizeOptions, getModelQualityOptions, getModelConfig, DEFAULT_IMAGE_MODEL } from '../../stores/models'
 import { persistImageUrl } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
@@ -462,7 +462,11 @@ const resolveImagePersistence = async (rawValue, fileName, persistenceFailureMes
   }
 
   try {
-    const stableUrl = await persistImageUrl(rawUrl, fileName)
+    const stableUrl = await persistImageUrl(rawUrl, fileName, {
+      projectId: currentProjectId.value,
+      source: 'image_generation',
+      sourceNodeId: props.id
+    })
     if (stableUrl) {
       return {
         persistedUrl: stableUrl,
@@ -588,6 +592,7 @@ const handleGenerate = async (mode = 'auto') => {
     const params = {
       model: localModel.value,
       prompt: sourcePrompt,
+      projectId: currentProjectId.value,
       n: 1,
       ratio: localRatio.value || ratioFromSizeKey(localSize.value),
       aspect_ratio: localRatio.value || ratioFromSizeKey(localSize.value),

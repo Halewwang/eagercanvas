@@ -151,7 +151,7 @@ import {
 import { CopyOutline, TrashOutline, AppsOutline, RefreshOutline, DownloadOutline } from '../../icons/coolicons'
 import createIcon from '@/assets/create-icon.svg'
 import { useApiConfig, useModel3DGeneration } from '../../hooks'
-import { duplicateNode, edges, nodes, removeNode, saveProject, updateNode } from '../../stores/canvas'
+import { duplicateNode, edges, nodes, removeNode, saveProject, updateNode, currentProjectId } from '../../stores/canvas'
 import { DEFAULT_MODEL3D_MODEL, getModelConfig, model3dModelOptions, resolve3DModelKey } from '../../stores/models'
 import { resolveNodeInputs } from '../../services/edgeStrategy'
 
@@ -382,7 +382,11 @@ const persist3DAssets = async (result) => {
     Object.entries(rawAssetUrls).map(async ([type, url]) => {
       const rawUrl = String(url || '').trim()
       if (!rawUrl) return [type, '']
-      const persistedUrl = await persistMediaUrl(rawUrl, `model3d-${Date.now()}.${type}`)
+      const persistedUrl = await persistMediaUrl(rawUrl, `model3d-${Date.now()}.${type}`, {
+        projectId: currentProjectId.value,
+        source: 'model3d_generation',
+        sourceNodeId: props.id
+      })
       return [type, persistedUrl || rawUrl]
     })
   )
@@ -400,7 +404,12 @@ const persist3DAssets = async (result) => {
     try {
       persistedPreviewImageUrl = (await persistImageUrl(
         persistedPreviewImageUrl,
-        `model3d-preview-${Date.now()}.png`
+        `model3d-preview-${Date.now()}.png`,
+        {
+          projectId: currentProjectId.value,
+          source: 'model3d_generation',
+          sourceNodeId: props.id
+        }
       )) || persistedPreviewImageUrl
     } catch (persistError) {
       console.warn('3D preview image persistence failed', persistError)
@@ -544,6 +553,7 @@ const handleGenerate = async () => {
     updateNode(props.id, { error: '' })
     const result = await generate({
       model: localModel.value,
+      projectId: currentProjectId.value,
       prompt: inputs.value.prompt,
       multiViewImages,
       generateType: localGenerateType.value,

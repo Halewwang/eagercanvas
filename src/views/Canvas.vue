@@ -162,6 +162,13 @@
           <n-icon :size="20"><FolderOutline /></n-icon>
         </button>
         <button
+          @click="showMediaLibraryPanel = true"
+          class="ui-toolbar-button"
+          title="Asset Library"
+        >
+          <n-icon :size="20"><ImageOutline /></n-icon>
+        </button>
+        <button
           @click="undo"
           :disabled="!canUndo()"
           class="ui-toolbar-button"
@@ -317,6 +324,11 @@
 
     <!-- Workflow Panel | 工作流面板 -->
     <WorkflowPanel v-model:show="showWorkflowPanel" @add-workflow="handleAddWorkflow" />
+    <MediaLibraryPanel
+      v-model:show="showMediaLibraryPanel"
+      :project-id="currentCanvasProjectId"
+      @insert-asset="handleInsertLibraryAsset"
+    />
 
     <BaseModal
       v-model:show="showShareModal"
@@ -447,6 +459,7 @@ import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 
 // API Settings component | API 设置组件
 import ApiSettings from '../components/ApiSettings.vue'
+import MediaLibraryPanel from '../components/MediaLibraryPanel.vue'
 import WorkflowPanel from '../components/WorkflowPanel.vue'
 
 // Initialize models on page load | 页面加载时初始化模型
@@ -524,6 +537,7 @@ const suppressPaneClickUntil = ref(0)
 // Flow key for forcing re-render on project switch | 项目切换时强制重新渲染的 key
 const flowKey = ref(Date.now())
 const showWorkflowPanel = ref(false)
+const showMediaLibraryPanel = ref(false)
 const showLocalInjectButton = computed(() => {
   if (typeof window === 'undefined') return false
   const host = String(window.location.hostname || '').trim().toLowerCase()
@@ -1002,6 +1016,85 @@ const handleLocalImageInject = async (event) => {
 // Handle add workflow from panel | 处理从面板添加工作流
 const handleAddWorkflow = async ({ workflow, options }) => {
   await nodesFactory.createFromWorkflow(workflow, options)
+}
+
+const currentCanvasProjectId = computed(() => {
+  const value = String(route.params.id || '').trim()
+  return value && value !== 'new' ? value : ''
+})
+
+const buildModel3DAssetUrls = (asset = {}) => {
+  const safeUrl = String(asset?.url || '').trim()
+  if (!safeUrl) return {}
+  if (/\.glb($|\?)/i.test(safeUrl)) return { glb: safeUrl, ...(asset?.assetUrls || {}) }
+  if (/\.obj($|\?)/i.test(safeUrl)) return { obj: safeUrl, ...(asset?.assetUrls || {}) }
+  if (/\.fbx($|\?)/i.test(safeUrl)) return { fbx: safeUrl, ...(asset?.assetUrls || {}) }
+  if (/\.stl($|\?)/i.test(safeUrl)) return { stl: safeUrl, ...(asset?.assetUrls || {}) }
+  if (/\.usdz($|\?)/i.test(safeUrl)) return { usdz: safeUrl, ...(asset?.assetUrls || {}) }
+  return asset?.assetUrls || {}
+}
+
+const getLibraryInsertPosition = () => {
+  const shell = canvasShellRef.value
+  const fallbackWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
+  const fallbackHeight = typeof window === 'undefined' ? 900 : window.innerHeight
+  const width = Number(shell?.clientWidth || fallbackWidth)
+  const height = Number(shell?.clientHeight || fallbackHeight)
+  const flowPoint = screenPointToFlowPoint({
+    x: Math.round(width * 0.56),
+    y: Math.round(height * 0.42)
+  })
+  const offsetX = (nodes.value.length % 3) * 34
+  const offsetY = (nodes.value.length % 4) * 28
+  return {
+    x: flowPoint.x - 140 + offsetX,
+    y: flowPoint.y - 100 + offsetY
+  }
+}
+
+const handleInsertLibraryAsset = async (asset = {}) => {
+  const safeUrl = String(asset?.url || '').trim()
+  const kind = String(asset?.kind || '').trim().toLowerCase()
+  if (!safeUrl) return
+
+  const position = getLibraryInsertPosition()
+  let nodeId = ''
+
+  if (kind === 'video') {
+    nodeId = addNode('video', position, {
+      url: safeUrl,
+      label: 'Video',
+      fileName: asset.fileName || 'Video Asset',
+      fileType: asset.fileType || 'video/mp4',
+      error: ''
+    })
+  } else if (kind === 'model3d') {
+    const assetUrls = buildModel3DAssetUrls(asset)
+    nodeId = addNode('model3d', position, {
+      url: safeUrl,
+      previewImageUrl: asset.previewUrl || '',
+      assetUrls,
+      status: 'completed',
+      label: '3D Model'
+    })
+  } else {
+    nodeId = addNode('image', position, {
+      url: safeUrl,
+      previewUrl: '',
+      fileName: asset.fileName || 'Image Asset',
+      fileType: asset.fileType || 'image/png',
+      label: 'Image',
+      persistStatus: 'saved',
+      persistError: '',
+      error: ''
+    })
+  }
+
+  await nextTick()
+  if (nodeId) {
+    updateNodeInternals(nodeId)
+    notifier.success('素材已加入画布')
+  }
 }
 
 // Handle connection | 处理连接
