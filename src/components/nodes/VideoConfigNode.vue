@@ -177,7 +177,7 @@ import { NIcon, NSpin } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
 import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
-import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject } from '../../stores/canvas'
+import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject, currentProjectId } from '../../stores/canvas'
 import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoResolutionOptions, getModelVideoSizeOptions, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '../../stores/models'
 import { persistMediaUrl } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
@@ -481,14 +481,12 @@ const handleGenerate = async () => {
     // Update video node with generated URL | 更新视频节点 URL
     if (result && result.url) {
       const rawUrl = String(result.url || '')
-      const stableUrl = await persistMediaUrl(rawUrl, `generated-${Date.now()}.mp4`)
-      const finalUrl = stableUrl || rawUrl
-      if (!finalUrl) {
+      if (!rawUrl) {
         throw new Error('No video output')
       }
 
       updateNode(videoNodeId, {
-        url: finalUrl,
+        url: rawUrl,
         loading: false,
         label: 'Video Gen',
         model: localModel.value,
@@ -510,6 +508,29 @@ const handleGenerate = async () => {
         persistStatus: savedOk ? 'saved' : 'error',
         persistError: savedOk ? '' : 'Project save failed. Refresh may lose this video.',
         updatedAt: Date.now()
+      })
+
+      void persistMediaUrl(rawUrl, `generated-${Date.now()}.mp4`, {
+        projectId: currentProjectId.value,
+        source: 'video_generation',
+        sourceNodeId: videoNodeId
+      }).then(async (stableUrl) => {
+        const finalUrl = String(stableUrl || '').trim()
+        if (!finalUrl || finalUrl === rawUrl) return
+        updateNode(videoNodeId, {
+          url: finalUrl,
+          persistStatus: 'saving',
+          persistError: '',
+          updatedAt: Date.now()
+        })
+        const persistedOk = await saveProject()
+        updateNode(videoNodeId, {
+          persistStatus: persistedOk ? 'saved' : 'error',
+          persistError: persistedOk ? '' : 'Project save failed. Refresh may lose this video.',
+          updatedAt: Date.now()
+        })
+      }).catch((persistError) => {
+        console.warn('Video persistence skipped after preview became available:', persistError)
       })
     }
     window.$message?.success('Video generated')
