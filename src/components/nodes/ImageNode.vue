@@ -354,8 +354,7 @@ const BASE_SIZE_BY_RATIO = {
   '9:16': { w: 720, h: 1280 },
   '21:9': { w: 1680, h: 720 }
 }
-const MAX_UPLOAD_SIZE_BYTES = 30 * 1024 * 1024
-const MAX_IMAGE_DIMENSION = 6144
+const MAX_UPLOAD_SIZE_BYTES = 150 * 1024 * 1024
 const PREVIEW_MIN_ZOOM = 0.75
 const PREVIEW_MAX_ZOOM = 4
 const PREVIEW_ZOOM_STEP = 0.25
@@ -1361,17 +1360,12 @@ const handleFileUpload = async (event) => {
 
   try {
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-      validationMessage.value = 'Image is too large. Maximum file size is 30MB.'
+      validationMessage.value = 'Image is too large. Maximum file size is 150MB.'
       showValidationModal.value = true
       return
     }
 
     const { width: w, height: h } = await getImageDimensions(file)
-    if (w > MAX_IMAGE_DIMENSION || h > MAX_IMAGE_DIMENSION) {
-      validationMessage.value = `Image resolution is too high (${w}x${h}). Maximum supported resolution is 6144x6144.`
-      showValidationModal.value = true
-      return
-    }
 
     // Keep local preview light with a blob URL, then upload the original file directly.
     const previewUrl = URL.createObjectURL(file)

@@ -442,6 +442,7 @@ import { useCanvasProjectActions } from '@/hooks/useCanvasProjectActions'
 import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { getWorkflowById } from '@/config/workflows'
+import { getMediaAssets } from '@/api'
 import { getProjectCanvas, initProjectsStore, projects, refreshProjectById } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -1270,13 +1271,90 @@ const checkMobile = () => {
   isMobile.value = window.innerWidth < 768
 }
 
+const recoverBlankMediaNodes = async (projectId) => {
+  const id = String(projectId || '').trim()
+  if (!id || id === 'new') return
+
+  const response = await getMediaAssets({ projectId: id, limit: 100 })
+  const items = Array.isArray(response?.items) ? response.items : []
+  if (items.length === 0) return
+
+  const assetsBySourceNodeId = new Map()
+  items.forEach((item) => {
+    const sourceNodeId = String(item?.sourceNodeId || '').trim()
+    const url = String(item?.url || '').trim()
+    if (!sourceNodeId || !url) return
+    const list = assetsBySourceNodeId.get(sourceNodeId) || []
+    list.push(item)
+    assetsBySourceNodeId.set(sourceNodeId, list)
+  })
+
+  let restoredCount = 0
+  const restoredNodeIds = []
+  const nextNodes = nodes.value.map((node) => {
+    if (node?.type !== 'image' && node?.type !== 'video') return node
+
+    const currentUrl = String(node?.data?.url || '').trim()
+    const currentPreviewUrl = String(node?.data?.previewUrl || '').trim()
+    const currentBase64 = String(node?.data?.base64 || '').trim()
+    if (currentUrl || currentPreviewUrl || currentBase64) return node
+
+    const expectedKind = node.type === 'video' ? 'video' : 'image'
+    const candidateIds = Array.from(new Set([
+      String(node.id || '').trim(),
+      String(node?.data?.sourceConfigId || '').trim(),
+      ...edges.value
+        .filter((edge) => edge.target === node.id)
+        .map((edge) => String(edge.source || '').trim())
+    ].filter(Boolean)))
+
+    let matchedAsset = null
+    for (const candidateId of candidateIds) {
+      const candidates = assetsBySourceNodeId.get(candidateId) || []
+      matchedAsset = candidates.find((item) => String(item?.kind || '').trim() === expectedKind && String(item?.url || '').trim())
+      if (matchedAsset) break
+    }
+
+    if (!matchedAsset) return node
+
+    restoredCount += 1
+    restoredNodeIds.push(node.id)
+    return {
+      ...node,
+      data: {
+        ...(node.data || {}),
+        url: matchedAsset.url,
+        previewUrl: '',
+        base64: '',
+        loading: false,
+        error: '',
+        persistStatus: 'saved',
+        persistError: '',
+        updatedAt: Date.now()
+      }
+    }
+  })
+
+  if (restoredCount === 0) return
+
+  nodes.value = nextNodes
+  await nextTick()
+  restoredNodeIds.forEach((nodeId) => updateNodeInternals(nodeId))
+  await flushSave()
+}
+
 // Load project by ID | 根据ID加载项目
-const loadProjectById = (projectId) => {
+const loadProjectById = async (projectId) => {
   // Update flow key to force VueFlow re-render | 更新 key 强制 VueFlow 重新渲染
   flowKey.value = Date.now()
   
   if (projectId && projectId !== 'new') {
     loadProject(projectId)
+    try {
+      await recoverBlankMediaNodes(projectId)
+    } catch (error) {
+      console.warn('Blank media recovery skipped:', error?.message || error)
+    }
   } else {
     // New project - detach from the previous project before clearing canvas.
     // 新建/空白画布先解绑旧项目，避免后续 flushSave 把空画布写回旧项目。
@@ -1287,7 +1365,7 @@ const loadProjectById = (projectId) => {
 const ensureProjectSnapshot = async (projectId) => {
   const id = String(projectId || '')
   if (!id || id === 'new') {
-    loadProjectById(id)
+    await loadProjectById(id)
     return
   }
 
@@ -1299,7 +1377,7 @@ const ensureProjectSnapshot = async (projectId) => {
     }
   }
 
-  loadProjectById(id)
+  await loadProjectById(id)
 }
 
 const applyPendingWorkflowTemplate = async () => {
