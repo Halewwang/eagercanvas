@@ -455,7 +455,7 @@ const hasConnectedImageWithContent = computed(() => {
   return false
 })
 
-const resolveImagePersistence = async (rawValue, fileName, persistenceFailureMessage) => {
+const resolveImagePersistence = async (rawValue, fileName, persistenceFailureMessage, sourceNodeId = props.id) => {
   const rawUrl = String(rawValue || '').trim()
   if (!rawUrl) {
     throw new Error('No image output')
@@ -465,7 +465,7 @@ const resolveImagePersistence = async (rawValue, fileName, persistenceFailureMes
     const stableUrl = await persistImageUrl(rawUrl, fileName, {
       projectId: currentProjectId.value,
       source: 'image_generation',
-      sourceNodeId: props.id
+      sourceNodeId
     })
     if (stableUrl) {
       return {
@@ -666,7 +666,8 @@ const handleGenerate = async (mode = 'auto') => {
       const persistence = await resolveImagePersistence(
         rawUrl,
         `generated-${Date.now()}.png`,
-        'Generated image persistence failed. Please retry.'
+        'Generated image persistence failed. Please retry.',
+        imageNodeId
       )
 
       updateNode(imageNodeId, {

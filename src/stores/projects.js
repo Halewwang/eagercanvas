@@ -45,6 +45,7 @@ const defaultCanvasData = {
 }
 
 const cloneCanvasData = (canvasData) => JSON.parse(JSON.stringify(canvasData || defaultCanvasData))
+const getCanvasDataKey = (canvasData) => JSON.stringify(canvasData || defaultCanvasData)
 
 const createCanvasDraftRecord = (canvasData, options = {}) => ({
   version: 2,
@@ -585,6 +586,25 @@ export const updateProject = async (id, data) => {
   return true
 }
 
+const normalizeCanvasUpdatePayload = (value) => {
+  if (value && typeof value === 'object' && (Object.prototype.hasOwnProperty.call(value, 'localCanvasData') || Object.prototype.hasOwnProperty.call(value, 'remoteCanvasData'))) {
+    const localCanvasData = cloneCanvasData(value.localCanvasData || value.remoteCanvasData || defaultCanvasData)
+    const remoteCanvasData = cloneCanvasData(value.remoteCanvasData || value.localCanvasData || defaultCanvasData)
+    return {
+      localCanvasData,
+      remoteCanvasData,
+      hasTransientMedia: value.hasTransientMedia === true
+    }
+  }
+
+  const nextCanvasData = cloneCanvasData(value || defaultCanvasData)
+  return {
+    localCanvasData: nextCanvasData,
+    remoteCanvasData: nextCanvasData,
+    hasTransientMedia: false
+  }
+}
+
 export const updateProjectCanvas = async (id, canvasData, currentVersion = null) => {
   const project = projects.value.find((p) => p.id === id)
   if (!project) {
@@ -595,20 +615,30 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
       status: 'missing'
     }
   }
+
+  const {
+    localCanvasData,
+    remoteCanvasData,
+    hasTransientMedia
+  } = normalizeCanvasUpdatePayload(canvasData)
+
   const localUpdatedAt = new Date().toISOString()
   const currentCanvasData = project.canvasData || loadProjectCanvasDraft(id) || cloneCanvasData(defaultCanvasData)
+  const nextLocalCanvasData = {
+    ...currentCanvasData,
+    ...localCanvasData
+  }
+  const nextRemoteCanvasData = {
+    ...currentCanvasData,
+    ...remoteCanvasData
+  }
+  const keepLocalDraftAfterRemoteSave = hasTransientMedia || getCanvasDataKey(nextLocalCanvasData) !== getCanvasDataKey(nextRemoteCanvasData)
 
   const next = {
     ...project,
-    canvasData: {
-      ...currentCanvasData,
-      ...canvasData
-    },
+    canvasData: nextLocalCanvasData,
     thumbnail: resolveProjectThumbnail(
-      {
-        ...currentCanvasData,
-        ...canvasData
-      },
+      nextLocalCanvasData,
       project.thumbnail
     ),
     updatedAt: localUpdatedAt,
@@ -639,7 +669,11 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
   }
 
   try {
-    const payload = mapProjectToApi(next)
+    const payload = mapProjectToApi({
+      ...next,
+      canvasData: nextRemoteCanvasData,
+      thumbnail: resolveProjectThumbnail(nextRemoteCanvasData, next.thumbnail)
+    })
     // Pass currentVersion to API if provided
     if (currentVersion) {
       payload.currentUpdatedAt = currentVersion
@@ -654,7 +688,35 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
         remoteSynced: true
       })
     }
-    
+
+    if (keepLocalDraftAfterRemoteSave) {
+      const mergedProject = {
+        ...updatedProject,
+        canvasData: next.canvasData,
+        thumbnail: next.thumbnail || updatedProject.thumbnail,
+        updatedAt: localUpdatedAt,
+        serverUpdatedAt: getProjectBaseVersion(updatedProject),
+        readState: 'local-draft'
+      }
+      const idx = projects.value.findIndex((p) => p.id === id)
+      if (idx !== -1) {
+        projects.value[idx] = mergedProject
+      }
+      saveProjectCanvasDraft(id, next.canvasData, {
+        draftUpdatedAt: localUpdatedAt,
+        baseVersion: getProjectBaseVersion(updatedProject),
+        remoteSynced: false
+      })
+      saveLocalCache()
+
+      return {
+        project: mergedProject,
+        localSaved: true,
+        remoteSynced: false,
+        status: 'local-only'
+      }
+    }
+
     // Update local store with server response
     const idx = projects.value.findIndex((p) => p.id === id)
     if (idx !== -1) {
@@ -687,10 +749,15 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
 export const getProjectCanvas = (id) => {
   const project = projects.value.find((p) => p.id === id) || null
   const draftRecord = loadProjectCanvasDraftRecord(id)
-  const canvasData = project?.canvasData || draftRecord?.canvasData || null
+  const preferDraftCanvas = draftRecord?.canvasData && project?.readState === 'local-draft'
+  const canvasData = preferDraftCanvas
+    ? draftRecord?.canvasData
+    : (project?.canvasData || draftRecord?.canvasData || null)
   if (!canvasData) return null
 
-  const loadSource = project?.canvasData
+  const loadSource = preferDraftCanvas
+    ? 'local-draft'
+    : project?.canvasData
     ? (project.readState || 'remote')
     : (projectsLoadState.value.source === 'local-fallback' ? 'local-fallback' : 'local-draft')
 

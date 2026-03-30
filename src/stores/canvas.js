@@ -144,7 +144,8 @@ const hasUnpersistedMedia = () => nodes.value.some((node) => {
   return isTransientRemoteMediaUrl(url)
 })
 
-const sanitizeNodeForPersistence = (node) => {
+const sanitizeNodeForPersistence = (node, options = {}) => {
+  const { preserveTransientMedia = false } = options
   const nextNode = JSON.parse(JSON.stringify(node))
   delete nextNode.selected
   delete nextNode.dragging
@@ -158,7 +159,7 @@ const sanitizeNodeForPersistence = (node) => {
       }
     })
 
-    if (isEphemeralMediaUrl(data.url) || isTransientRemoteMediaUrl(data.url)) {
+    if (!preserveTransientMedia && (isEphemeralMediaUrl(data.url) || isTransientRemoteMediaUrl(data.url))) {
       delete data.url
     }
   }
@@ -174,8 +175,8 @@ const sanitizeEdgeForPersistence = (edge) => {
   return nextEdge
 }
 
-const createCanvasSnapshot = () => ({
-  nodes: nodes.value.map(sanitizeNodeForPersistence),
+const createCanvasSnapshot = (options = {}) => ({
+  nodes: nodes.value.map((node) => sanitizeNodeForPersistence(node, options)),
   edges: edges.value.map(sanitizeEdgeForPersistence),
   groups: JSON.parse(JSON.stringify(groups.value)),
   viewport: { ...canvasViewport.value }
@@ -710,7 +711,7 @@ export const loadProject = (projectId) => {
     groups: JSON.parse(JSON.stringify(groups.value))
   }]
   historyIndex.value = 0
-  lastPersistedSnapshotKey = getSnapshotKey(createCanvasSnapshot())
+  lastPersistedSnapshotKey = getSnapshotKey(createCanvasSnapshot({ preserveTransientMedia: true }))
   
   // Enable auto-save after loading | 加载后启用自动保存
   setTimeout(() => {
@@ -727,9 +728,10 @@ export const saveProject = async () => {
   if (!getProjectCanvas(currentProjectId.value)) return false
 
   const containsTransientMedia = hasUnpersistedMedia()
-  const snapshot = createCanvasSnapshot()
-  const snapshotKey = getSnapshotKey(snapshot)
-  if (snapshotKey === lastPersistedSnapshotKey) {
+  const localSnapshot = createCanvasSnapshot({ preserveTransientMedia: true })
+  const remoteSnapshot = createCanvasSnapshot()
+  const localSnapshotKey = getSnapshotKey(localSnapshot)
+  if (localSnapshotKey === lastPersistedSnapshotKey) {
     return !!lastSaveResult.localSaved
   }
 
@@ -743,7 +745,11 @@ export const saveProject = async () => {
     try {
       const result = await updateProjectCanvas(
         currentProjectId.value,
-        snapshot,
+        {
+          localCanvasData: localSnapshot,
+          remoteCanvasData: remoteSnapshot,
+          hasTransientMedia: containsTransientMedia
+        },
         currentProjectVersion.value
       )
       const remoteSynced = !!result?.remoteSynced
@@ -761,7 +767,7 @@ export const saveProject = async () => {
       projectSaveState.value = { ...lastSaveResult }
 
       if (localSaved) {
-        lastPersistedSnapshotKey = snapshotKey
+        lastPersistedSnapshotKey = localSnapshotKey
       }
 
       // Update local version after successful save
