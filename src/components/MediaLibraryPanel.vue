@@ -51,7 +51,11 @@
             :key="asset.id"
             class="asset-card"
           >
-            <div class="asset-preview">
+            <button
+              class="asset-preview asset-preview-button"
+              type="button"
+              @click="emitInsertAsset(asset)"
+            >
               <video v-if="asset.kind === 'video'" :src="asset.previewUrl || asset.url" class="asset-media" muted playsinline />
               <img v-else-if="asset.previewUrl" :src="asset.previewUrl" :alt="asset.fileName" class="asset-media" />
               <div v-else class="asset-fallback">
@@ -59,16 +63,14 @@
                   <component :is="iconByKind(asset.kind)" />
                 </n-icon>
               </div>
-            </div>
+            </button>
             <div class="asset-meta">
               <div class="asset-meta-row">
                 <span class="asset-kind">{{ kindLabel(asset.kind) }}</span>
                 <span class="asset-origin">{{ originLabel(asset.sourceType) }}</span>
               </div>
-              <div class="asset-name" :title="asset.fileName">{{ asset.fileName }}</div>
               <div class="asset-time">{{ formatTimestamp(asset.createdAt) }}</div>
             </div>
-            <button class="asset-action" @click="emitInsertAsset(asset)">Use In Canvas</button>
           </article>
         </div>
 
@@ -443,6 +445,18 @@ const vClickOutside = {
   background: #0b0b0b;
 }
 
+.asset-preview-button {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  display: block;
+}
+
+.asset-preview-button:hover {
+  opacity: 0.92;
+}
+
 .asset-media {
   width: 100%;
   height: 100%;
@@ -484,7 +498,6 @@ const vClickOutside = {
   color: var(--text-secondary);
 }
 
-.asset-name,
 .history-model {
   font-size: 13px;
   color: var(--text-primary);

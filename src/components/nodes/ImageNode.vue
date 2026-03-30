@@ -869,6 +869,49 @@ const buildImagePersistencePatch = (result, extra = {}) => ({
   ...extra
 })
 
+const getCanvasSaveSnapshot = () => {
+  const state = projectSaveState.value || {}
+  return {
+    localSaved: !!state.localSaved,
+    remoteSynced: !!state.remoteSynced,
+    hasTransientMedia: !!state.hasTransientMedia
+  }
+}
+
+const resolveImageSaveFeedback = (savedOk) => {
+  const snapshot = getCanvasSaveSnapshot()
+
+  if (savedOk || snapshot.remoteSynced) {
+    return {
+      persistStatus: 'saved',
+      persistError: '',
+      mode: 'synced'
+    }
+  }
+
+  if (snapshot.localSaved && !snapshot.hasTransientMedia) {
+    return {
+      persistStatus: 'saved',
+      persistError: '',
+      mode: 'local-only'
+    }
+  }
+
+  if (snapshot.hasTransientMedia) {
+    return {
+      persistStatus: 'error',
+      persistError: 'Image uses a temporary address and was not fully saved.',
+      mode: 'temporary'
+    }
+  }
+
+  return {
+    persistStatus: 'error',
+    persistError: 'Project save failed. Refresh may lose this image.',
+    mode: 'failed'
+  }
+}
+
 const runImageGeneration = async (mode = 'create') => {
   if (!isConfigured.value) {
     window.$message?.warning('Please sign in first')
@@ -927,16 +970,19 @@ const runImageGeneration = async (mode = 'create') => {
 
     const savedOk = await saveProject()
     const saveState = projectSaveState.value || {}
+    const saveFeedback = resolveImageSaveFeedback(savedOk)
     updateNode(props.id, {
-      persistStatus: savedOk ? 'saved' : 'error',
-      persistError: savedOk
-        ? ''
-        : (saveState.hasTransientMedia
-          ? 'Image uses a temporary address and was not fully saved.'
-          : 'Project save failed. Refresh may lose this image.'),
+      persistStatus: saveFeedback.persistStatus,
+      persistError: saveFeedback.persistError,
       updatedAt: Date.now()
     })
-    if (!savedOk) {
+    if (saveFeedback.mode === 'temporary') {
+      window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
+    } else if (saveFeedback.mode === 'failed') {
+      window.$message?.warning('Image generated and uploaded, but project save failed. Please retry save.')
+    } else if (saveFeedback.mode === 'local-only') {
+      window.$message?.success(mode === 'regenerate' ? 'Image regenerated in the current project' : 'Image generated and saved in the current project')
+    } else if (!savedOk) {
       if (saveState.hasTransientMedia) {
         window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
       } else {
@@ -1266,19 +1312,18 @@ const replaceCurrentImageNode = async (payload = {}) => {
     }
     const savedOk = await flushSave()
     const saveState = projectSaveState.value || {}
+    const saveFeedback = resolveImageSaveFeedback(savedOk)
     updateNode(props.id, {
-      persistStatus: savedOk ? 'saved' : 'error',
-      persistError: savedOk
-        ? ''
-        : (saveState.hasTransientMedia
-          ? 'Image uses a temporary address and was not fully saved.'
-          : 'Project save failed. Refresh may lose this image.'),
+      persistStatus: saveFeedback.persistStatus,
+      persistError: saveFeedback.persistError,
       updatedAt: Date.now()
     })
-    if (!savedOk) {
-      window.$message?.warning(saveState.hasTransientMedia
-        ? 'The new image is only shown temporarily. Refresh may lose it.'
-        : 'Project save failed after image replacement.')
+    if (saveFeedback.mode === 'temporary') {
+      window.$message?.warning('The new image is only shown temporarily. Refresh may lose it.')
+    } else if (saveFeedback.mode === 'failed') {
+      window.$message?.warning('Project save failed after image replacement.')
+    } else if (saveFeedback.mode === 'local-only') {
+      window.$message?.success('Image replacement saved in the current project')
     }
   } catch (err) {
     console.warn('Crop persistence failed:', err)
@@ -1412,20 +1457,32 @@ const handleFileUpload = async (event) => {
         })
         const savedOk = await flushSave()
         const saveState = projectSaveState.value || {}
+        const saveFeedback = resolveImageSaveFeedback(savedOk)
         updateNode(props.id, {
-          persistStatus: savedOk ? 'saved' : 'error',
-          persistError: savedOk
-            ? ''
-            : (saveState.hasTransientMedia
-              ? 'Image uses a temporary address and was not fully saved.'
-              : 'Project save failed. Please retry save.'),
+          persistStatus: saveFeedback.persistStatus,
+          persistError: saveFeedback.persistError,
           updatedAt: Date.now()
         })
-        if (savedOk) {
+        if (saveFeedback.mode === 'synced') {
           uploadStage.value = 'success'
           uploadProgress.value = 100
           window.$message?.success('Upload complete and saved')
           resetUploadProgress(900)
+        } else if (saveFeedback.mode === 'local-only') {
+          uploadStage.value = 'success'
+          uploadProgress.value = 100
+          window.$message?.success('Upload complete and saved in the current project')
+          resetUploadProgress(900)
+        } else if (saveFeedback.mode === 'temporary') {
+          uploadStage.value = 'error'
+          uploadProgress.value = 100
+          window.$message?.warning('Upload succeeded, but the image is still temporary. Refresh may lose it.')
+          resetUploadProgress(2200)
+        } else if (saveFeedback.mode === 'failed') {
+          uploadStage.value = 'error'
+          uploadProgress.value = 100
+          window.$message?.warning('Upload succeeded, but project save failed. Please retry save.')
+          resetUploadProgress(2200)
         } else {
           uploadStage.value = 'error'
           uploadProgress.value = 100
@@ -1656,9 +1713,12 @@ const handleEnhanceTo4k = async () => {
     })
 
     const saveState = projectSaveState.value || {}
-    if (savedOk) {
+    const saveFeedback = resolveImageSaveFeedback(savedOk)
+    if (saveFeedback.mode === 'synced') {
       window.$message?.success('4K enhanced image created')
-    } else if (saveState.hasTransientMedia || !persistence.persisted) {
+    } else if (saveFeedback.mode === 'local-only') {
+      window.$message?.success('4K enhanced image saved in the current project')
+    } else if (saveState.hasTransientMedia || !persistence.persisted || saveFeedback.mode === 'temporary') {
       window.$message?.warning('4K result is only shown temporarily. Please retry until it is saved.')
     } else {
       window.$message?.warning('Project save failed after 4K enhancement. Please retry save.')
@@ -1713,14 +1773,19 @@ const handleRemoveBackground = async () => {
     }
     const savedOk = await flushSave()
     const saveState = projectSaveState.value || {}
-    if (!savedOk) {
+    const saveFeedback = resolveImageSaveFeedback(savedOk)
+    if (saveFeedback.mode === 'synced') {
+      window.$message?.success('Background removed and linked')
+    } else if (saveFeedback.mode === 'local-only') {
+      window.$message?.success('Background removed and saved in the current project')
+    } else if (saveFeedback.mode === 'temporary') {
+      window.$message?.warning('Background removed, but the result is only shown temporarily. Please retry.')
+    } else if (!savedOk) {
       if (saveState.hasTransientMedia) {
         window.$message?.warning('Background removed, but the result is only shown temporarily. Please retry.')
       } else {
         window.$message?.warning('Background removed, but project save failed. Please retry save.')
       }
-    } else {
-      window.$message?.success('Background removed and linked')
     }
   } catch (err) {
     window.$message?.error(err?.message || 'Background removal failed')
@@ -1974,18 +2039,17 @@ const handleMultiAngleApply = async (payload = {}) => {
 
       const savedOk = await flushSave()
       const saveState = projectSaveState.value || {}
+      const saveFeedback = resolveImageSaveFeedback(savedOk)
       updateNode(props.id, {
-        persistStatus: savedOk ? 'saved' : 'error',
-        persistError: savedOk
-          ? ''
-          : (saveState.hasTransientMedia
-            ? 'Image uses a temporary address and was not fully saved.'
-            : 'Project save failed. Refresh may lose this image.'),
+        persistStatus: saveFeedback.persistStatus,
+        persistError: saveFeedback.persistError,
         updatedAt: Date.now()
       })
-      if (savedOk) {
+      if (saveFeedback.mode === 'synced') {
         window.$message?.success('Multi-angle result applied')
-      } else if (saveState.hasTransientMedia || !persistence.persisted) {
+      } else if (saveFeedback.mode === 'local-only') {
+        window.$message?.success('Multi-angle result saved in the current project')
+      } else if (saveState.hasTransientMedia || !persistence.persisted || saveFeedback.mode === 'temporary') {
         window.$message?.warning('Multi-angle result is only shown temporarily. Please retry until it is saved.')
       } else {
         window.$message?.warning('Image uploaded, but project save failed. Please retry save.')
@@ -2015,9 +2079,12 @@ const handleMultiAngleApply = async (payload = {}) => {
         savedOk = await flushSave()
       }
       const saveState = projectSaveState.value || {}
-      if (savedOk) {
+      const saveFeedback = resolveImageSaveFeedback(savedOk)
+      if (saveFeedback.mode === 'synced') {
         window.$message?.success('Multi-angle result created')
-      } else if (saveState.hasTransientMedia || !persistence.persisted) {
+      } else if (saveFeedback.mode === 'local-only') {
+        window.$message?.success('Multi-angle result saved in the current project')
+      } else if (saveState.hasTransientMedia || !persistence.persisted || saveFeedback.mode === 'temporary') {
         window.$message?.warning('Multi-angle result is only shown temporarily. Please retry until it is saved.')
       } else {
         window.$message?.warning('Project save failed after multi-angle generation. Please retry save.')
