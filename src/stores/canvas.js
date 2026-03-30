@@ -727,23 +727,10 @@ export const saveProject = async () => {
   if (!getProjectCanvas(currentProjectId.value)) return false
 
   const containsTransientMedia = hasUnpersistedMedia()
-  if (containsTransientMedia) {
-    lastSaveResult = {
-      status: 'transient-media',
-      localSaved: false,
-      remoteSynced: false,
-      hasTransientMedia: true,
-      reason: 'transient-media',
-      error: null
-    }
-    projectSaveState.value = { ...lastSaveResult }
-    return false
-  }
-
   const snapshot = createCanvasSnapshot()
   const snapshotKey = getSnapshotKey(snapshot)
   if (snapshotKey === lastPersistedSnapshotKey) {
-    return !!lastSaveResult.remoteSynced && !lastSaveResult.hasTransientMedia
+    return !!lastSaveResult.localSaved
   }
 
   if (saveInFlight) {
@@ -766,12 +753,14 @@ export const saveProject = async () => {
         localSaved,
         remoteSynced,
         hasTransientMedia: containsTransientMedia,
-        reason: containsTransientMedia ? 'transient-media' : (remoteSynced ? 'synced' : 'remote-failed'),
+        reason: containsTransientMedia
+          ? (remoteSynced ? 'transient-media' : 'transient-media-local')
+          : (remoteSynced ? 'synced' : 'remote-failed'),
         error: result?.error || null
       }
       projectSaveState.value = { ...lastSaveResult }
 
-      if (remoteSynced || containsTransientMedia) {
+      if (localSaved) {
         lastPersistedSnapshotKey = snapshotKey
       }
 
@@ -779,11 +768,7 @@ export const saveProject = async () => {
       if (result?.project?.serverUpdatedAt || result?.project?.updatedAt) {
         currentProjectVersion.value = result.project.serverUpdatedAt || result.project.updatedAt
       }
-      if (containsTransientMedia && !BYPASS_AUTH_IN_DEV) {
-        saved = false
-      } else {
-        saved = remoteSynced
-      }
+      saved = localSaved
     } catch (error) {
       saved = false
       lastSaveResult = {

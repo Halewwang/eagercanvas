@@ -154,13 +154,6 @@
         >
           <n-icon :size="20"><AddOutline /></n-icon>
         </button>
-        <button 
-          @click="showWorkflowPanel = true"
-          class="ui-toolbar-button"
-          title="Workflow Templates"
-        >
-          <n-icon :size="20"><FolderOutline /></n-icon>
-        </button>
         <button
           @click="showMediaLibraryPanel = true"
           class="ui-toolbar-button"
@@ -322,8 +315,6 @@
       </template>
     </BaseModal>
 
-    <!-- Workflow Panel | 工作流面板 -->
-    <WorkflowPanel v-model:show="showWorkflowPanel" @add-workflow="handleAddWorkflow" />
     <MediaLibraryPanel
       v-model:show="showMediaLibraryPanel"
       :project-id="currentCanvasProjectId"
@@ -418,8 +409,7 @@ import {
   ArrowUndoOutline,
   ArrowRedoOutline,
   LocateOutline,
-  RemoveOutline,
-  FolderOutline
+  RemoveOutline
 } from '../icons/coolicons'
 import {
   nodes,
@@ -460,7 +450,6 @@ import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 // API Settings component | API 设置组件
 import ApiSettings from '../components/ApiSettings.vue'
 import MediaLibraryPanel from '../components/MediaLibraryPanel.vue'
-import WorkflowPanel from '../components/WorkflowPanel.vue'
 
 // Initialize models on page load | 页面加载时初始化模型
 onMounted(() => {
@@ -536,7 +525,6 @@ const suppressPaneClickUntil = ref(0)
 
 // Flow key for forcing re-render on project switch | 项目切换时强制重新渲染的 key
 const flowKey = ref(Date.now())
-const showWorkflowPanel = ref(false)
 const showMediaLibraryPanel = ref(false)
 const showLocalInjectButton = computed(() => {
   if (typeof window === 'undefined') return false
@@ -1011,11 +999,6 @@ const handleLocalImageInject = async (event) => {
   } finally {
     if (event?.target) event.target.value = ''
   }
-}
-
-// Handle add workflow from panel | 处理从面板添加工作流
-const handleAddWorkflow = async ({ workflow, options }) => {
-  await nodesFactory.createFromWorkflow(workflow, options)
 }
 
 const currentCanvasProjectId = computed(() => {

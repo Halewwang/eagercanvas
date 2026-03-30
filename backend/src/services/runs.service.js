@@ -526,7 +526,6 @@ export const createRun = async (userId, input) => {
       providerResponse = await persist3DResultAssets(providerResponse)
     } else {
       providerResponse = await providerCreateVideo(payload.payload, providerRequestOptions)
-      providerResponse = await persistVideoResultAsset(providerResponse)
     }
 
     const latencyMs = Date.now() - startedAt
@@ -766,8 +765,7 @@ export const getVideoTask = async (_userId, taskId) => {
   await assertVideoTaskOwnership({ userId: _userId, taskId })
   const providerAccess = await resolveUserProviderAccess(_userId)
   const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
-  const providerResult = await providerVideoStatus(taskId, providerRequestOptions)
-  const result = await persistVideoResultAsset(providerResult)
+  const result = await providerVideoStatus(taskId, providerRequestOptions)
   const runId = await findVideoRunIdByTask({ userId: _userId, taskId })
   await syncRunStatusFromVideoTask({ userId: _userId, runId, taskResult: result })
   const status = String(result?.status || '').toLowerCase()
