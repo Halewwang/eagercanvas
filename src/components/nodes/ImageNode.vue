@@ -75,7 +75,7 @@
         <div v-else-if="data.url" class="module-image-shell">
           <div class="module-image-frame">
             <img
-              :src="data.url"
+              :src="displayImageUrl"
               :alt="data.label || 'Image'"
               class="module-image"
               @load="handlePreviewImageLoad"
@@ -158,7 +158,7 @@
           <div class="zoom-stage-canvas" :style="previewCanvasStyle">
             <div class="zoom-image-wrap" :style="previewImageStyle">
               <img
-                :src="data.url"
+                :src="displayImageUrl"
                 alt="Preview"
                 class="zoom-image-original"
                 @load="handlePreviewImageLoad"
@@ -247,7 +247,7 @@ import {
 } from '../../stores/models'
 import { useApiConfig, useImageGeneration } from '../../hooks'
 import { getErrorMessage } from '@/utils'
-import { dataUrlToFile, persistImageUrl, uploadImageFile } from '@/utils/media'
+import { createAuthenticatedMediaProxyUrl, dataUrlToFile, persistImageUrl, uploadImageFile } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 import { useImageTools } from '../../hooks/useApi'
@@ -538,6 +538,7 @@ const stageStyle = computed(() => {
 const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
 const progressPercent = computed(() => Math.round(progressValue.value))
 const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
+const displayImageUrl = computed(() => createAuthenticatedMediaProxyUrl(props.data?.url || ''))
 const previewViewportSize = computed(() => ({
   width: Math.max(0, previewStageSize.value.width - 40),
   height: Math.max(0, previewStageSize.value.height - 40)
@@ -826,6 +827,30 @@ const imageInputStatusList = computed(() => ([
   { key: 'reference', label: imageInputStatusMap.reference, active: activeImageInputSet.value.has('reference') }
 ]))
 
+const resolveImageOutputUrl = async (rawValue, fileName, persistenceFailureMessage) => {
+  const rawUrl = String(rawValue || '').trim()
+  if (!rawUrl) {
+    throw new Error('No image output')
+  }
+
+  try {
+    const stableUrl = await persistImageUrl(rawUrl, fileName)
+    if (stableUrl) return stableUrl
+  } catch (error) {
+    if (!rawUrl.startsWith('data:image/') && /^https?:\/\//i.test(rawUrl)) {
+      console.warn('Image persistence failed, using remote URL fallback:', error)
+      return rawUrl
+    }
+    throw error
+  }
+
+  if (rawUrl.startsWith('data:image/')) {
+    throw new Error(persistenceFailureMessage)
+  }
+
+  return rawUrl
+}
+
 const runImageGeneration = async (mode = 'create') => {
   if (!isConfigured.value) {
     window.$message?.warning('Please sign in first')
@@ -860,16 +885,11 @@ const runImageGeneration = async (mode = 'create') => {
       throw new Error('No image output')
     }
 
-    const rawUrl = String(result[0].url || '')
-    const stableUrl = await persistImageUrl(rawUrl, `generated-${Date.now()}.png`)
-    const finalUrl = stableUrl || rawUrl
-    if (!finalUrl) {
-      throw new Error('No image output')
-    }
-
-    if (!stableUrl && rawUrl.startsWith('data:image/')) {
-      throw new Error('Generated image persistence failed. Please retry.')
-    }
+    const finalUrl = await resolveImageOutputUrl(
+      result[0].url,
+      `generated-${Date.now()}.png`,
+      'Generated image persistence failed. Please retry.'
+    )
 
     updateNode(props.id, {
       url: finalUrl,
@@ -882,7 +902,10 @@ const runImageGeneration = async (mode = 'create') => {
       resolution: localResolution.value,
       updatedAt: Date.now()
     })
-    await saveProject()
+    const savedOk = await saveProject()
+    if (!savedOk) {
+      window.$message?.warning('Image generated, but project save failed. Refresh may lose this image.')
+    }
     window.$message?.success(mode === 'regenerate' ? 'Image regenerated' : 'Image generated')
   } catch (err) {
     const message = getErrorMessage(err, 'Image generation failed')
@@ -1484,13 +1507,11 @@ const handleEnhanceTo4k = async () => {
 
   try {
     const result = await imageGen.generate(request)
-    const rawUrl = String(result?.[0]?.url || '').trim()
-    const stableUrl = await persistImageUrl(rawUrl, `enhanced-4k-${Date.now()}.png`)
-    const finalUrl = stableUrl || rawUrl
-    if (!finalUrl) throw new Error('No image output')
-    if (!stableUrl && rawUrl.startsWith('data:image/')) {
-      throw new Error('Enhanced image persistence failed. Please retry.')
-    }
+    const finalUrl = await resolveImageOutputUrl(
+      result?.[0]?.url,
+      `enhanced-4k-${Date.now()}.png`,
+      'Enhanced image persistence failed. Please retry.'
+    )
 
     await updateLinkedImageNode(newNodeId, {
       url: finalUrl,
@@ -1537,10 +1558,11 @@ const handleRemoveBackground = async () => {
       crop: false,
       despill: false
     })
-    const rawUrl = String(result?.url || '')
-    const stableUrl = await persistImageUrl(rawUrl, `remove-bg-${Date.now()}.png`)
-    const finalUrl = stableUrl || rawUrl
-    if (!finalUrl) throw new Error('No image output')
+    const finalUrl = await resolveImageOutputUrl(
+      result?.url,
+      `remove-bg-${Date.now()}.png`,
+      'Background removal persistence failed. Please retry.'
+    )
 
     createLinkedImageNode({
       url: finalUrl,
@@ -1567,7 +1589,7 @@ const loadImageElement = async (source) => {
 
   if (!resolvedSource.startsWith('data:image/')) {
     try {
-      const response = await fetch(resolvedSource)
+      const response = await fetch(createAuthenticatedMediaProxyUrl(resolvedSource) || resolvedSource)
       const blob = await response.blob()
       objectUrl = URL.createObjectURL(blob)
       img.src = objectUrl
@@ -1689,7 +1711,7 @@ const triggerPreviewDownload = (href, filename) => {
   document.body.removeChild(link)
 }
 const downloadPreviewImage = async () => {
-  const sourceUrl = String(props.data?.url || '').trim()
+  const sourceUrl = displayImageUrl.value
   if (!sourceUrl) return
 
   const filename = getPreviewDownloadFilename()
