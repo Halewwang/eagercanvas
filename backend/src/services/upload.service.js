@@ -67,19 +67,6 @@ const assertAllowedRemoteUrl = (rawUrl) => {
 const ensureBucket = async () => {
   if (bucketReady) return
 
-  const { data: bucket, error: getErr } = await supabase.storage.getBucket(BUCKET_NAME)
-  if (!getErr && bucket) {
-    const { error: updateErr } = await supabase.storage.updateBucket(BUCKET_NAME, {
-      public: true,
-      fileSizeLimit: UPLOAD_FILE_SIZE_LIMIT_BYTES
-    })
-    if (updateErr) {
-      throw updateErr
-    }
-    bucketReady = true
-    return
-  }
-
   const { error: createErr } = await supabase.storage.createBucket(BUCKET_NAME, {
     public: true,
     fileSizeLimit: UPLOAD_FILE_SIZE_LIMIT_BYTES

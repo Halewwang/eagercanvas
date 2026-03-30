@@ -88,7 +88,7 @@ export const useAuthStore = () => {
     if (bootstrapped.value) return
 
     if (BYPASS_AUTH_IN_DEV) {
-      accessToken.value = 'dev-bypass-token'
+      persistToken('dev-bypass-token')
       user.value = { ...BYPASS_USER }
       bootstrapped.value = true
       return
