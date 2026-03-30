@@ -497,6 +497,49 @@ const resolveImagePersistence = async (rawValue, fileName, persistenceFailureMes
   }
 }
 
+const getCanvasSaveSnapshot = () => {
+  const state = projectSaveState.value || {}
+  return {
+    localSaved: !!state.localSaved,
+    remoteSynced: !!state.remoteSynced,
+    hasTransientMedia: !!state.hasTransientMedia
+  }
+}
+
+const resolveImageSaveFeedback = (savedOk) => {
+  const snapshot = getCanvasSaveSnapshot()
+
+  if (savedOk || snapshot.remoteSynced) {
+    return {
+      persistStatus: 'saved',
+      persistError: '',
+      mode: 'synced'
+    }
+  }
+
+  if (snapshot.localSaved && !snapshot.hasTransientMedia) {
+    return {
+      persistStatus: 'saved',
+      persistError: '',
+      mode: 'local-only'
+    }
+  }
+
+  if (snapshot.hasTransientMedia) {
+    return {
+      persistStatus: 'error',
+      persistError: 'Image uses a temporary address and was not fully saved.',
+      mode: 'temporary'
+    }
+  }
+
+  return {
+    persistStatus: 'error',
+    persistError: 'Project save failed. Refresh may lose this image.',
+    mode: 'failed'
+  }
+}
+
 // Handle generate action | 处理生成操作
 // mode: 'auto' = 自动判断, 'replace' = Replace现有, 'new' = 新建节点
 const handleGenerate = async (mode = 'auto') => {
@@ -652,17 +695,26 @@ const handleGenerate = async (mode = 'auto') => {
         return
       }
       const savedOk = await saveProject()
-      const saveState = projectSaveState.value || {}
+      const saveFeedback = resolveImageSaveFeedback(savedOk)
       updateNode(imageNodeId, {
-        persistStatus: savedOk ? 'saved' : 'error',
-        persistError: savedOk
-          ? ''
-          : (saveState.hasTransientMedia
-            ? 'Image uses a temporary address and was not fully saved.'
-            : 'Project save failed. Refresh may lose this image.'),
+        persistStatus: saveFeedback.persistStatus,
+        persistError: saveFeedback.persistError,
         updatedAt: Date.now()
       })
+      if (saveFeedback.mode === 'temporary') {
+        window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
+        return
+      }
+      if (saveFeedback.mode === 'failed') {
+        window.$message?.warning('Image generated, but project save failed. Please retry save.')
+        return
+      }
+      if (saveFeedback.mode === 'local-only') {
+        window.$message?.success('Image generated and saved in the current project')
+        return
+      }
       if (!savedOk) {
+        const saveState = projectSaveState.value || {}
         if (saveState.hasTransientMedia) {
           window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
         } else {
