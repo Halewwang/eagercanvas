@@ -75,11 +75,10 @@
         <div v-else-if="data.url" class="module-image-shell">
           <div class="module-image-frame">
             <img
-              :src="displayImageUrl"
+              :src="data.url"
               :alt="data.label || 'Image'"
               class="module-image"
               @load="handlePreviewImageLoad"
-              @error="handleDisplayImageError"
             />
             <div v-if="activeTool === 'crop'" class="crop-overlay crop-overlay-inline">
               <div class="crop-mask crop-mask-top" :style="cropMaskTopStyle"></div>
@@ -159,11 +158,10 @@
           <div class="zoom-stage-canvas" :style="previewCanvasStyle">
             <div class="zoom-image-wrap" :style="previewImageStyle">
               <img
-                :src="displayImageUrl"
+                :src="data.url"
                 alt="Preview"
                 class="zoom-image-original"
                 @load="handlePreviewImageLoad"
-                @error="handleDisplayImageError"
               />
             </div>
           </div>
@@ -306,7 +304,6 @@ const showProgress = ref(false)
 const progressTimer = ref(null)
 const progressFinishTimer = ref(null)
 const localPreviewUrl = ref('')
-const displayImageUrl = ref('')
 const toolDropdownOptions = computed(() => ([
   {
     label: props.data?.url ? 'Replace Image' : 'Upload Image',
@@ -437,14 +434,6 @@ watch(
     showErrorModal.value = !!newVal
   }
 )
-watch(
-  rawImageUrl,
-  (value) => {
-    displayImageUrl.value = value
-  },
-  { immediate: true }
-)
-
 const imageModelDropdownOptions = computed(() => imageModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const imageSizeOptions = computed(() => getModelSizeOptions(localImageModel.value, localImageQuality.value))
 const sizeMetaOptions = computed(() =>
@@ -548,8 +537,6 @@ const stageStyle = computed(() => {
 const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
 const progressPercent = computed(() => Math.round(progressValue.value))
 const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
-const rawImageUrl = computed(() => String(props.data?.url || '').trim())
-const proxiedImageUrl = computed(() => createAuthenticatedMediaProxyUrl(rawImageUrl.value))
 const previewViewportSize = computed(() => ({
   width: Math.max(0, previewStageSize.value.width - 40),
   height: Math.max(0, previewStageSize.value.height - 40)
@@ -860,13 +847,6 @@ const resolveImageOutputUrl = async (rawValue, fileName, persistenceFailureMessa
   }
 
   return rawUrl
-}
-
-const handleDisplayImageError = () => {
-  const fallbackUrl = String(proxiedImageUrl.value || '').trim()
-  if (!fallbackUrl) return
-  if (displayImageUrl.value === fallbackUrl) return
-  displayImageUrl.value = fallbackUrl
 }
 
 const runImageGeneration = async (mode = 'create') => {
