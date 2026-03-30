@@ -31,6 +31,8 @@ const sanitizeOriginalName = (value = '', fallbackName = 'asset') => {
 
 const buildStoredFileName = (originalName = '') => `${Date.now()}-${sanitizeOriginalName(originalName)}`
 
+const isBucketSetupError = (error) => /bucket/i.test(String(error?.message || ''))
+
 const isPrivateIpv4 = (host) => {
   const parts = String(host || '').split('.').map(Number)
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false
@@ -109,20 +111,14 @@ const getPublicUrl = (fileName) => {
 const uploadBufferFile = async ({ originalName, buffer, mimetype }) => {
   const fileName = buildStoredFileName(originalName)
 
-  try {
-    await ensureBucket()
-  } catch (error) {
-    console.error('Supabase bucket check/create error:', error)
-    throw new HttpError(500, 'File upload failed', 'UPLOAD_ERROR')
-  }
-
   let error = await uploadToBucket(fileName, { buffer, mimetype })
-  if (error && /bucket/i.test(error.message || '')) {
+  if (error && isBucketSetupError(error)) {
     try {
       bucketReady = false
       await ensureBucket()
       error = await uploadToBucket(fileName, { buffer, mimetype })
     } catch (retryErr) {
+      console.error('Supabase bucket check/create error:', retryErr)
       error = retryErr
     }
   }
@@ -209,16 +205,24 @@ export const createSignedUpload = async ({ originalName = '', mimetype = '' }) =
   )
   const fileName = buildStoredFileName(safeName)
 
-  try {
-    await ensureBucket()
-  } catch (error) {
-    console.error('Supabase bucket check/create error:', error)
-    throw new HttpError(500, 'Upload initialization failed', 'UPLOAD_SIGN_INIT_FAILED')
-  }
-
-  const { data, error } = await supabase.storage
+  let { data, error } = await supabase.storage
     .from(BUCKET_NAME)
     .createSignedUploadUrl(fileName)
+
+  if ((error || !data?.signedUrl || !data?.token || !data?.path) && isBucketSetupError(error)) {
+    try {
+      bucketReady = false
+      await ensureBucket()
+      const retryResult = await supabase.storage
+        .from(BUCKET_NAME)
+        .createSignedUploadUrl(fileName)
+      data = retryResult.data
+      error = retryResult.error
+    } catch (retryErr) {
+      console.error('Supabase bucket check/create error:', retryErr)
+      error = retryErr
+    }
+  }
 
   if (error || !data?.signedUrl || !data?.token || !data?.path) {
     console.error('Supabase signed upload error:', error)
