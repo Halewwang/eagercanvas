@@ -140,7 +140,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NModal } from 'naive-ui'
 import { BaseButton, BaseDropdown, BaseModal } from '@/components/ui'
 import { CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
-import { duplicateNode, edges, flushSave, nodes, removeNode, updateNode } from '../../stores/canvas'
+import { duplicateNode, edges, flushSave, nodes, removeNode, updateNode, currentProjectId } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
 import { uploadImageFile } from '@/utils/media'
@@ -466,6 +466,7 @@ const runVideoGeneration = async (mode = 'create') => {
   try {
     const result = await videoGen.generate({
       model: localModel.value,
+      projectId: currentProjectId.value,
       prompt,
       first_frame_image,
       last_frame_image,
@@ -549,6 +550,9 @@ const handleFileUpload = async (event) => {
     uploadProgress.value = 3
 
     const url = await uploadImageFile(file, {
+      projectId: currentProjectId.value,
+      source: 'video_upload',
+      sourceNodeId: props.id,
       onProgress: (percent) => {
         uploadStage.value = 'uploading'
         uploadProgress.value = Math.max(uploadProgress.value, Math.min(92, percent))

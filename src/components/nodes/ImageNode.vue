@@ -237,7 +237,7 @@ import {
   RefreshOutline,
   TrashOutline
 } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode, projectSaveState } from '../../stores/canvas'
+import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode, projectSaveState, currentProjectId } from '../../stores/canvas'
 import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_IMAGE_SIZE,
@@ -834,7 +834,11 @@ const resolveImagePersistence = async (rawValue, fileName, persistenceFailureMes
   }
 
   try {
-    const stableUrl = await persistImageUrl(rawUrl, fileName)
+    const stableUrl = await persistImageUrl(rawUrl, fileName, {
+      projectId: currentProjectId.value,
+      source: 'image_node',
+      sourceNodeId: props.id
+    })
     if (stableUrl) {
       return {
         persistedUrl: stableUrl,
@@ -886,6 +890,7 @@ const runImageGeneration = async (mode = 'create') => {
   try {
     const result = await imageGen.generate({
       model: localImageModel.value,
+      projectId: currentProjectId.value,
       prompt: prompt || 'Generate a polished visual based on this reference.',
       size: localImageSize.value,
       quality: localImageQuality.value,
@@ -1243,7 +1248,11 @@ const replaceCurrentImageNode = async (payload = {}) => {
   }
 
   try {
-    const uploadedUrl = await uploadImageFile(file)
+    const uploadedUrl = await uploadImageFile(file, {
+      projectId: currentProjectId.value,
+      source: 'image_replace',
+      sourceNodeId: props.id
+    })
     if (uploadedUrl) {
       updateNode(props.id, {
         url: uploadedUrl,
@@ -1378,6 +1387,9 @@ const handleFileUpload = async (event) => {
     uploadProgress.value = 3
     try {
       const uploadedUrl = await uploadImageFile(file, {
+        projectId: currentProjectId.value,
+        source: 'image_upload',
+        sourceNodeId: props.id,
         onProgress: (percent) => {
           uploadStage.value = 'uploading'
           uploadProgress.value = Math.max(uploadProgress.value, Math.min(92, percent))
@@ -1577,6 +1589,7 @@ const buildEnhancementRequest = () => {
       localImageModel.value ||
       DEFAULT_IMAGE_MODEL
     ).trim(),
+    projectId: currentProjectId.value,
     prompt,
     size: nextSize || baseSize,
     quality: String(

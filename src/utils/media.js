@@ -86,9 +86,12 @@ export const dataUrlToFile = (dataUrl, fileName = 'image.png') => {
 }
 
 export const uploadImageFile = async (file, options = {}) => {
-  const { onProgress } = options
+  const { onProgress, projectId = '', source = '', sourceNodeId = '' } = options
   const formData = new FormData()
   formData.append('file', file, file?.name || 'asset')
+  if (projectId) formData.append('projectId', projectId)
+  if (source) formData.append('source', source)
+  if (sourceNodeId) formData.append('sourceNodeId', sourceNodeId)
 
   const uploadRes = await request.post('/upload', formData, {
     onUploadProgress: (event) => {
@@ -110,12 +113,16 @@ export const uploadImageFile = async (file, options = {}) => {
   return uploadedUrl
 }
 
-export const uploadRemoteAsset = async (url, fileName = '') => {
+export const uploadRemoteAsset = async (url, fileName = '', options = {}) => {
+  const { projectId = '', source = '', sourceNodeId = '' } = options
   const raw = String(url || '').trim()
   if (!raw) return ''
   const res = await request.post('/upload/remote', {
     url: raw,
-    fileName: fileName || undefined
+    fileName: fileName || undefined,
+    projectId: projectId || undefined,
+    source: source || undefined,
+    sourceNodeId: sourceNodeId || undefined
   }, {
     silentErrorToast: true,
     silentNetworkErrorToast: true
@@ -142,30 +149,32 @@ export const createAuthenticatedMediaProxyUrl = (url = '') => {
   return proxyUrl.toString()
 }
 
-export const persistImageUrl = async (url, fileName = 'image.png') => {
+export const persistImageUrl = async (url, fileName = 'image.png', options = {}) => {
   const raw = String(url || '').trim()
   if (!raw) return ''
+  if (isPersistedUploadUrl(raw)) return raw
   if (isDataImageUrl(raw)) {
     const file = dataUrlToFile(raw, fileName)
     if (!file) return ''
-    return uploadImageFile(file)
+    return uploadImageFile(file, options)
   }
   if (isRemoteHttpUrl(raw)) {
-    return uploadRemoteAsset(raw, fileName)
+    return uploadRemoteAsset(raw, fileName, options)
   }
   return raw
 }
 
-export const persistMediaUrl = async (url, fileName = 'asset.bin') => {
+export const persistMediaUrl = async (url, fileName = 'asset.bin', options = {}) => {
   const raw = String(url || '').trim()
   if (!raw) return ''
+  if (isPersistedUploadUrl(raw)) return raw
   if (isDataUrl(raw)) {
     const file = dataUrlToFile(raw, fileName)
     if (!file) return ''
-    return uploadImageFile(file)
+    return uploadImageFile(file, options)
   }
   if (isRemoteHttpUrl(raw)) {
-    return uploadRemoteAsset(raw, fileName)
+    return uploadRemoteAsset(raw, fileName, options)
   }
   return raw
 }

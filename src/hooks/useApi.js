@@ -193,6 +193,7 @@ export const useImageGeneration = () => {
         model_name: params.model,
         prompt: params.prompt
       }
+      if (params.projectId) requestData.projectId = params.projectId
 
       requestData.size = params.size || modelConfig?.defaultParams?.size || '1024x1024'
       requestData.quality = params.quality || modelConfig?.defaultParams?.quality || 'standard'
@@ -388,6 +389,7 @@ export const useModel3DGeneration = () => {
         resultFormat: params.resultFormat || '',
         polygonType: params.polygonType || ''
       }
+      if (params.projectId) requestData.projectId = params.projectId
 
       const task = await create3DTask(requestData)
       const createAssets = getAssets(task)
@@ -570,6 +572,7 @@ export const useVideoGeneration = () => {
         model_name: params.model,
         prompt: params.prompt || ''
       }
+      if (params.projectId) requestData.projectId = params.projectId
       // Add optional params | 添加可选参数
       if (params.first_frame_image) requestData.first_frame_image = params.first_frame_image
       if (params.last_frame_image) requestData.last_frame_image = params.last_frame_image
