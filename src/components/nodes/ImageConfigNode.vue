@@ -570,14 +570,24 @@ const handleGenerate = async (mode = 'auto') => {
 
     // Update image node with generated URL | 更新图片节点 URL
     if (result && result.length > 0) {
-      const rawUrl = String(result[0].url || '')
-      const stableUrl = await persistImageUrl(rawUrl, `generated-${Date.now()}.png`)
-      const finalUrl = stableUrl || rawUrl
-      if (!finalUrl) {
+      const rawUrl = String(result[0].url || '').trim()
+      if (!rawUrl) {
         throw new Error('No image output')
       }
-      if (!stableUrl && rawUrl.startsWith('data:image/')) {
-        throw new Error('Generated image persistence failed. Please retry.')
+
+      let finalUrl = rawUrl
+      try {
+        const stableUrl = await persistImageUrl(rawUrl, `generated-${Date.now()}.png`)
+        if (stableUrl) {
+          finalUrl = stableUrl
+        } else if (rawUrl.startsWith('data:image/')) {
+          throw new Error('Generated image persistence failed. Please retry.')
+        }
+      } catch (error) {
+        if (rawUrl.startsWith('data:image/')) {
+          throw error
+        }
+        console.warn('Image config persistence failed, using remote URL fallback:', error)
       }
 
       updateNode(imageNodeId, {

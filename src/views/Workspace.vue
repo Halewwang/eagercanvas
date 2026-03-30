@@ -111,15 +111,17 @@
                   <h3>{{ item.name }}</h3>
                   <p>{{ describeItem(item) }}</p>
                 </div>
-                <BaseDropdown
-                  placement="bottom-end"
-                  :options="projectMenuOptions(item)"
-                  @select="(key) => handleProjectMenuSelect(key, item)"
-                >
-                  <button class="menu-btn project-menu-btn" @click.stop>
-                    <n-icon :size="16"><EllipsisHorizontalOutline /></n-icon>
-                  </button>
-                </BaseDropdown>
+                <div @click.stop>
+                  <BaseDropdown
+                    placement="bottom-end"
+                    :options="projectMenuOptions(item)"
+                    @select="(key) => handleProjectMenuSelect(key, item)"
+                  >
+                    <button class="menu-btn project-menu-btn" type="button">
+                      <n-icon :size="16"><EllipsisHorizontalOutline /></n-icon>
+                    </button>
+                  </BaseDropdown>
+                </div>
               </div>
             </template>
             <template v-else>
