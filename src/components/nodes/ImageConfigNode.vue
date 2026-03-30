@@ -163,7 +163,7 @@ import { NIcon, NSpin } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
 import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline, RefreshOutline, AddOutline } from '../../icons/coolicons'
 import { useImageGeneration, useApiConfig } from '../../hooks'
-import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject } from '../../stores/canvas'
+import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject, projectSaveState } from '../../stores/canvas'
 import { imageModelOptions, getModelSizeOptions, getModelQualityOptions, getModelConfig, DEFAULT_IMAGE_MODEL } from '../../stores/models'
 import { persistImageUrl } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
@@ -426,9 +426,10 @@ const findConnectedOutputImageNode = (onlyEmpty = true) => {
   for (const edge of outputEdges) {
     const targetNode = nodes.value.find(n => n.id === edge.target)
     if (targetNode?.type === 'image') {
+      const targetUrl = String(targetNode?.data?.previewUrl || targetNode?.data?.url || '').trim()
       if (onlyEmpty) {
         // Check if target is an image node with empty or no url | 检查目标是否为空白图片节点
-        if (!targetNode.data?.url || targetNode.data?.url === '') {
+        if (!targetUrl) {
           return targetNode.id
         }
       } else {
@@ -446,12 +447,51 @@ const hasConnectedImageWithContent = computed(() => {
   
   for (const edge of outputEdges) {
     const targetNode = nodes.value.find(n => n.id === edge.target)
-    if (targetNode?.type === 'image' && targetNode.data?.url && targetNode.data.url !== '') {
+    const targetUrl = String(targetNode?.data?.previewUrl || targetNode?.data?.url || '').trim()
+    if (targetNode?.type === 'image' && targetUrl) {
       return true
     }
   }
   return false
 })
+
+const resolveImagePersistence = async (rawValue, fileName, persistenceFailureMessage) => {
+  const rawUrl = String(rawValue || '').trim()
+  if (!rawUrl) {
+    throw new Error('No image output')
+  }
+
+  try {
+    const stableUrl = await persistImageUrl(rawUrl, fileName)
+    if (stableUrl) {
+      return {
+        persistedUrl: stableUrl,
+        displayUrl: stableUrl,
+        persisted: true
+      }
+    }
+  } catch (error) {
+    if (!rawUrl.startsWith('data:image/') && /^https?:\/\//i.test(rawUrl)) {
+      console.warn('Image config persistence failed, keeping preview only:', error)
+      return {
+        persistedUrl: '',
+        displayUrl: rawUrl,
+        persisted: false
+      }
+    }
+    throw error
+  }
+
+  if (rawUrl.startsWith('data:image/')) {
+    throw new Error(persistenceFailureMessage)
+  }
+
+  return {
+    persistedUrl: '',
+    displayUrl: rawUrl,
+    persisted: false
+  }
+}
 
 // Handle generate action | 处理生成操作
 // mode: 'auto' = 自动判断, 'replace' = Replace现有, 'new' = 新建节点
@@ -575,23 +615,15 @@ const handleGenerate = async (mode = 'auto') => {
         throw new Error('No image output')
       }
 
-      let finalUrl = rawUrl
-      try {
-        const stableUrl = await persistImageUrl(rawUrl, `generated-${Date.now()}.png`)
-        if (stableUrl) {
-          finalUrl = stableUrl
-        } else if (rawUrl.startsWith('data:image/')) {
-          throw new Error('Generated image persistence failed. Please retry.')
-        }
-      } catch (error) {
-        if (rawUrl.startsWith('data:image/')) {
-          throw error
-        }
-        console.warn('Image config persistence failed, using remote URL fallback:', error)
-      }
+      const persistence = await resolveImagePersistence(
+        rawUrl,
+        `generated-${Date.now()}.png`,
+        'Generated image persistence failed. Please retry.'
+      )
 
       updateNode(imageNodeId, {
-        url: finalUrl,
+        url: persistence.persistedUrl,
+        previewUrl: persistence.persisted ? '' : persistence.displayUrl,
         base64: '',
         loading: false,
         label: 'Text to Image',
@@ -603,19 +635,36 @@ const handleGenerate = async (mode = 'auto') => {
         sourceConfigId: props.id,
         sourcePrompt,
         sourceRefImages,
-        persistStatus: 'saving',
-        persistError: '',
+        persistStatus: persistence.persisted ? 'saving' : 'pending',
+        persistError: persistence.persisted ? '' : 'Image uses a temporary address until it is fully saved.',
         updatedAt: Date.now()
       })
       
       // Mark this config node as executed | 标记配置节点已执行
       updateNode(props.id, { status: 'completed', executed: true, outputNodeId: imageNodeId, error: '' })
+      if (!persistence.persisted) {
+        window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
+        return
+      }
       const savedOk = await saveProject()
+      const saveState = projectSaveState.value || {}
       updateNode(imageNodeId, {
         persistStatus: savedOk ? 'saved' : 'error',
-        persistError: savedOk ? '' : 'Project save failed. Refresh may lose this image.',
+        persistError: savedOk
+          ? ''
+          : (saveState.hasTransientMedia
+            ? 'Image uses a temporary address and was not fully saved.'
+            : 'Project save failed. Refresh may lose this image.'),
         updatedAt: Date.now()
       })
+      if (!savedOk) {
+        if (saveState.hasTransientMedia) {
+          window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
+        } else {
+          window.$message?.warning('Image generated, but project save failed. Please retry save.')
+        }
+        return
+      }
     }
     window.$message?.success('Image generated')
   } catch (err) {

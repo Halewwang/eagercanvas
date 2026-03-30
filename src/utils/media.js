@@ -5,6 +5,7 @@ export const isDataImageUrl = (value = '') => /^data:image\//i.test(String(value
 export const isDataUrl = (value = '') => /^data:/i.test(String(value || ''))
 export const isRemoteHttpUrl = (value = '') => /^https?:\/\//i.test(String(value || ''))
 export const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
+export const isTransientRemoteMediaUrl = (value = '') => isRemoteHttpUrl(value) && !isPersistedUploadUrl(value)
 
 const parseDateValue = (value = '') => {
   const raw = String(value || '').trim()

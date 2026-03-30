@@ -35,7 +35,8 @@ const mapTemplate = (row) => ({
 })
 
 const normalizeCanvasForStorage = async (canvasData) => {
-  const { canvasData: nextCanvasData } = await cleanupCanvas3DAssets(canvasData || {}, { persistRemote: true })
+  // Save path should only sanitize the canvas, not wait for remote 3D assets to be republished.
+  const { canvasData: nextCanvasData } = await cleanupCanvas3DAssets(canvasData || {}, { persistRemote: false })
   return nextCanvasData
 }
 
