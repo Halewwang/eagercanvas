@@ -25,12 +25,12 @@
 
         <div class="capsule-group">
           <BaseDropdown :options="toolDropdownOptions" compact @select="handleToolAction">
-            <button class="capsule-select capsule-tool-trigger" :disabled="!data.url || isToolBusy">
+            <button class="capsule-select capsule-tool-trigger" :disabled="!hasDisplayImage || isToolBusy">
               <img :src="toolsIcon" alt="" class="capsule-tool-icon" />
               <span>Tools</span>
             </button>
           </BaseDropdown>
-          <button class="capsule-icon" :disabled="!data.url" @click="openPreviewModal" title="Preview">
+          <button class="capsule-icon" :disabled="!hasDisplayImage" @click="openPreviewModal" title="Preview">
             <n-icon :size="14"><ExpandOutline /></n-icon>
           </button>
           <button class="capsule-icon" @click="handleDuplicate" title="Duplicate">
@@ -72,10 +72,10 @@
           <div class="module-progress-label">Generating image... {{ progressPercent }}%</div>
         </div>
 
-        <div v-else-if="data.url" class="module-image-shell">
+        <div v-else-if="hasDisplayImage" class="module-image-shell">
           <div class="module-image-frame">
             <img
-              :src="data.url"
+              :src="displayImageUrl"
               :alt="data.label || 'Image'"
               class="module-image"
               @load="handlePreviewImageLoad"
@@ -158,7 +158,7 @@
           <div class="zoom-stage-canvas" :style="previewCanvasStyle">
             <div class="zoom-image-wrap" :style="previewImageStyle">
               <img
-                :src="data.url"
+                :src="displayImageUrl"
                 alt="Preview"
                 class="zoom-image-original"
                 @load="handlePreviewImageLoad"
@@ -208,7 +208,7 @@
 
     <MultiAngleToolDrawer
       v-model:show="showMultiAngleDrawer"
-      :image-url="data.url || data.base64 || ''"
+      :image-url="displayImageUrl"
       :model="localImageModel"
       :ratio="localImageRatio"
       :size="localImageSize"
@@ -237,7 +237,7 @@ import {
   RefreshOutline,
   TrashOutline
 } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode } from '../../stores/canvas'
+import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode, projectSaveState } from '../../stores/canvas'
 import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_IMAGE_SIZE,
@@ -304,34 +304,36 @@ const showProgress = ref(false)
 const progressTimer = ref(null)
 const progressFinishTimer = ref(null)
 const localPreviewUrl = ref('')
+const displayImageUrl = computed(() => String(props.data?.previewUrl || props.data?.url || props.data?.base64 || '').trim())
+const hasDisplayImage = computed(() => !!displayImageUrl.value)
 const toolDropdownOptions = computed(() => ([
   {
-    label: props.data?.url ? 'Replace Image' : 'Upload Image',
+    label: hasDisplayImage.value ? 'Replace Image' : 'Upload Image',
     key: 'replace-image',
     disabled: isUploading.value
   },
   {
     label: 'Remove Background',
     key: 'remove-background',
-    disabled: !props.data?.url || isToolBusy.value,
+    disabled: !hasDisplayImage.value || isToolBusy.value,
     renderIcon: () => h('img', { src: removeBgIcon, alt: '', class: 'tool-option-icon' })
   },
   {
     label: 'Crop',
     key: 'crop',
-    disabled: !props.data?.url || isToolBusy.value,
+    disabled: !hasDisplayImage.value || isToolBusy.value,
     renderIcon: () => h('img', { src: cropIcon, alt: '', class: 'tool-option-icon' })
   },
   {
     label: 'Enhance to 4K',
     key: 'enhance-4k',
-    disabled: !props.data?.url || isToolBusy.value,
+    disabled: !hasDisplayImage.value || isToolBusy.value,
     description: 'Reuse original model and inputs, increase resolution only'
   },
   {
     label: 'Multi-Angle',
     key: 'multi-angle',
-    disabled: !props.data?.url || isToolBusy.value,
+    disabled: !hasDisplayImage.value || isToolBusy.value,
     renderIcon: () => h('img', { src: cameraOrbitIcon, alt: '', class: 'tool-option-icon' })
   }
 ]))
@@ -815,7 +817,7 @@ const activeImageInputSet = computed(() => {
     const source = nodes.value.find((node) => node.id === edge.source)
     if (!source) continue
     if (source.type === 'text' && String(source.data?.content || '').trim()) activeKeys.push('prompt')
-    if (source.type === 'image' && String(source.data?.url || source.data?.base64 || '').trim()) activeKeys.push('reference')
+    if (source.type === 'image' && String(source.data?.previewUrl || source.data?.url || source.data?.base64 || '').trim()) activeKeys.push('reference')
   }
 
   return new Set(activeKeys)
@@ -825,7 +827,7 @@ const imageInputStatusList = computed(() => ([
   { key: 'reference', label: imageInputStatusMap.reference, active: activeImageInputSet.value.has('reference') }
 ]))
 
-const resolveImageOutputUrl = async (rawValue, fileName, persistenceFailureMessage) => {
+const resolveImagePersistence = async (rawValue, fileName, persistenceFailureMessage) => {
   const rawUrl = String(rawValue || '').trim()
   if (!rawUrl) {
     throw new Error('No image output')
@@ -833,21 +835,35 @@ const resolveImageOutputUrl = async (rawValue, fileName, persistenceFailureMessa
 
   try {
     const stableUrl = await persistImageUrl(rawUrl, fileName)
-    if (stableUrl) return stableUrl
-  } catch (error) {
-    if (!rawUrl.startsWith('data:image/') && /^https?:\/\//i.test(rawUrl)) {
-      console.warn('Image persistence failed, using remote URL fallback:', error)
-      return rawUrl
+    if (stableUrl) {
+      return {
+        persistedUrl: stableUrl,
+        displayUrl: stableUrl,
+        persisted: true,
+        persistError: ''
+      }
     }
-    throw error
+  } catch (error) {
+    console.warn('Image persistence failed, keeping preview only:', error)
   }
 
-  if (rawUrl.startsWith('data:image/')) {
-    throw new Error(persistenceFailureMessage)
+  return {
+    persistedUrl: '',
+    displayUrl: rawUrl,
+    persisted: false,
+    persistError: persistenceFailureMessage
   }
-
-  return rawUrl
 }
+
+const buildImagePersistencePatch = (result, extra = {}) => ({
+  url: result?.persistedUrl || '',
+  previewUrl: result?.persisted ? '' : (result?.displayUrl || ''),
+  base64: '',
+  persistStatus: result?.persisted ? 'saved' : 'pending',
+  persistError: result?.persisted ? '' : (result?.persistError || ''),
+  updatedAt: Date.now(),
+  ...extra
+})
 
 const runImageGeneration = async (mode = 'create') => {
   if (!isConfigured.value) {
@@ -856,7 +872,7 @@ const runImageGeneration = async (mode = 'create') => {
   }
 
   const { prompt, refImages } = getConnectedInputs()
-  const selfImage = props.data?.base64 || props.data?.url
+  const selfImage = displayImageUrl.value
   const mergedRefs = [...refImages]
   if (selfImage) mergedRefs.unshift(selfImage)
 
@@ -883,28 +899,47 @@ const runImageGeneration = async (mode = 'create') => {
       throw new Error('No image output')
     }
 
-    const finalUrl = await resolveImageOutputUrl(
+    const persistence = await resolveImagePersistence(
       result[0].url,
       `generated-${Date.now()}.png`,
       'Generated image persistence failed. Please retry.'
     )
 
-    updateNode(props.id, {
-      url: finalUrl,
-      base64: '',
+    updateNode(props.id, buildImagePersistencePatch(persistence, {
       loading: false,
       model: localImageModel.value,
       size: localImageSize.value,
       quality: localImageQuality.value,
       ratio: localImageRatio.value,
       resolution: localResolution.value,
+      error: ''
+    }))
+
+    if (!persistence.persisted) {
+      window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
+      return
+    }
+
+    const savedOk = await saveProject()
+    const saveState = projectSaveState.value || {}
+    updateNode(props.id, {
+      persistStatus: savedOk ? 'saved' : 'error',
+      persistError: savedOk
+        ? ''
+        : (saveState.hasTransientMedia
+          ? 'Image uses a temporary address and was not fully saved.'
+          : 'Project save failed. Refresh may lose this image.'),
       updatedAt: Date.now()
     })
-    const savedOk = await saveProject()
     if (!savedOk) {
-      window.$message?.warning('Image generated, but project save failed. Refresh may lose this image.')
+      if (saveState.hasTransientMedia) {
+        window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
+      } else {
+        window.$message?.warning('Image generated and uploaded, but project save failed. Please retry save.')
+      }
+    } else {
+      window.$message?.success(mode === 'regenerate' ? 'Image regenerated' : 'Image generated')
     }
-    window.$message?.success(mode === 'regenerate' ? 'Image regenerated' : 'Image generated')
   } catch (err) {
     const message = getErrorMessage(err, 'Image generation failed')
     updateNode(props.id, { loading: false, error: message })
@@ -970,7 +1005,7 @@ const normalizeCropRect = (nextRect) => {
 }
 
 const startCropMode = async () => {
-  if (!props.data?.url) return
+  if (!hasDisplayImage.value) return
   showPreviewModal.value = false
   activeTool.value = 'crop'
   await nextTick()
@@ -1089,6 +1124,7 @@ const createLinkedImageNode = (payload = {}) => {
     ratio: payload.ratio || localImageRatio.value,
     resolution: payload.resolution || localResolution.value,
     url: payload.url || '',
+    previewUrl: payload.previewUrl || '',
     base64: payload.base64 || '',
     fileType: payload.fileType || 'image/png',
     label: payload.label || 'Image',
@@ -1097,6 +1133,8 @@ const createLinkedImageNode = (payload = {}) => {
     sourcePrompt: payload.sourcePrompt || '',
     sourceRefImages: Array.isArray(payload.sourceRefImages) ? payload.sourceRefImages : [],
     error: '',
+    persistStatus: payload.persistStatus || '',
+    persistError: payload.persistError || '',
     updatedAt: Date.now()
   })
 
@@ -1133,6 +1171,7 @@ const updateLinkedImageNode = async (nodeId, payload = {}) => {
     ratio: payload.ratio || localImageRatio.value,
     resolution: payload.resolution || localResolution.value,
     url: payload.url || '',
+    previewUrl: payload.previewUrl || '',
     base64: payload.base64 || '',
     fileType: payload.fileType || 'image/png',
     loading: !!payload.loading,
@@ -1140,14 +1179,15 @@ const updateLinkedImageNode = async (nodeId, payload = {}) => {
     sourcePrompt: payload.sourcePrompt || '',
     sourceRefImages: Array.isArray(payload.sourceRefImages) ? payload.sourceRefImages : [],
     error: payload.error || '',
+    persistStatus: payload.persistStatus || '',
+    persistError: payload.persistError || '',
     updatedAt: Date.now()
   }
   if (payload.label) patch.label = payload.label
   updateNode(nodeId, patch)
   setTimeout(() => updateNodeInternals(nodeId), 40)
-  if (!payload.loading) {
-    await flushSave()
-  }
+  if (payload.loading) return true
+  return flushSave()
 }
 
 const replaceCurrentImageNode = async (payload = {}) => {
@@ -1156,33 +1196,49 @@ const replaceCurrentImageNode = async (payload = {}) => {
   const nextSize = String(payload.size || localImageSize.value || '').trim()
   const nextRatio = String(payload.ratio || localImageRatio.value || '').trim()
   const nextResolution = String(payload.resolution || localResolution.value || '').trim()
+  const previewSource = nextBase64 || nextUrl
+  const previousPersistedUrl = String(props.data?.url || '').trim()
 
   localImageSize.value = nextSize || localImageSize.value
   localImageRatio.value = nextRatio || localImageRatio.value
   localResolution.value = nextResolution || localResolution.value
 
   updateNode(props.id, {
-    url: nextUrl || nextBase64,
-    base64: nextBase64,
+    url: previousPersistedUrl,
+    previewUrl: previewSource,
+    base64: '',
     size: localImageSize.value,
     ratio: localImageRatio.value,
     resolution: localResolution.value,
     fileType: payload.fileType || 'image/png',
     updatedAt: Date.now(),
-    error: ''
+    error: '',
+    persistStatus: isLocalPreviewMode.value ? 'saved' : 'saving',
+    persistError: ''
   })
 
   setTimeout(() => updateNodeInternals(props.id), 30)
 
   const persistFileName = payload.fileName || `crop-${Date.now()}.png`
-  const uploadTarget = nextBase64 || nextUrl
+  const uploadTarget = previewSource
   const file = dataUrlToFile(uploadTarget, persistFileName)
   if (isLocalPreviewMode.value) {
     await flushSave()
     return
   }
   if (!file) {
-    await flushSave()
+    updateNode(props.id, {
+      persistStatus: 'error',
+      persistError: 'Image upload failed. The new result is only shown temporarily.',
+      updatedAt: Date.now()
+    })
+    const savedOk = await flushSave()
+    if (!savedOk) {
+      const saveState = projectSaveState.value || {}
+      window.$message?.warning(saveState.hasTransientMedia
+        ? 'The new image is only shown temporarily. Refresh may lose it.'
+        : 'Project save failed after image replacement.')
+    }
     return
   }
 
@@ -1191,15 +1247,47 @@ const replaceCurrentImageNode = async (payload = {}) => {
     if (uploadedUrl) {
       updateNode(props.id, {
         url: uploadedUrl,
+        previewUrl: '',
         base64: '',
         updatedAt: Date.now(),
-        error: ''
+        error: '',
+        persistStatus: 'saving',
+        persistError: ''
       })
     }
-    await flushSave()
+    const savedOk = await flushSave()
+    const saveState = projectSaveState.value || {}
+    updateNode(props.id, {
+      persistStatus: savedOk ? 'saved' : 'error',
+      persistError: savedOk
+        ? ''
+        : (saveState.hasTransientMedia
+          ? 'Image uses a temporary address and was not fully saved.'
+          : 'Project save failed. Refresh may lose this image.'),
+      updatedAt: Date.now()
+    })
+    if (!savedOk) {
+      window.$message?.warning(saveState.hasTransientMedia
+        ? 'The new image is only shown temporarily. Refresh may lose it.'
+        : 'Project save failed after image replacement.')
+    }
   } catch (err) {
     console.warn('Crop persistence failed:', err)
-    await flushSave()
+    updateNode(props.id, {
+      url: previousPersistedUrl,
+      previewUrl: previewSource,
+      base64: '',
+      persistStatus: 'error',
+      persistError: 'Image upload failed. The new result is only shown temporarily.',
+      updatedAt: Date.now()
+    })
+    const savedOk = await flushSave()
+    if (!savedOk) {
+      const saveState = projectSaveState.value || {}
+      window.$message?.warning(saveState.hasTransientMedia
+        ? 'The new image is only shown temporarily. Refresh may lose it.'
+        : 'Project save failed after image replacement.')
+    }
   }
 }
 
@@ -1252,7 +1340,7 @@ const handleFileUpload = async (event) => {
 
     replaceLocalPreviewUrl(previewUrl)
     updateNode(props.id, {
-      url: previewUrl,
+      previewUrl,
       base64: '',
       fileName: file.name,
       fileType: file.type,
@@ -1260,6 +1348,8 @@ const handleFileUpload = async (event) => {
       updatedAt: Date.now(),
       loading: false,
       error: '',
+      persistStatus: isLocalPreviewMode.value ? 'saved' : 'uploading',
+      persistError: '',
       ratio: ratio,
       size: w && h ? `${w}x${h}` : localImageSize.value
     })
@@ -1299,13 +1389,26 @@ const handleFileUpload = async (event) => {
         clearLocalPreviewUrl()
         updateNode(props.id, {
           url: uploadedUrl,
+          previewUrl: '',
           base64: '',
           fileName: file.name,
           fileType: file.type,
           updatedAt: Date.now(),
-          error: ''
+          error: '',
+          persistStatus: 'saving',
+          persistError: ''
         })
         const savedOk = await flushSave()
+        const saveState = projectSaveState.value || {}
+        updateNode(props.id, {
+          persistStatus: savedOk ? 'saved' : 'error',
+          persistError: savedOk
+            ? ''
+            : (saveState.hasTransientMedia
+              ? 'Image uses a temporary address and was not fully saved.'
+              : 'Project save failed. Please retry save.'),
+          updatedAt: Date.now()
+        })
         if (savedOk) {
           uploadStage.value = 'success'
           uploadProgress.value = 100
@@ -1314,7 +1417,9 @@ const handleFileUpload = async (event) => {
         } else {
           uploadStage.value = 'error'
           uploadProgress.value = 100
-          window.$message?.warning('Project save failed after upload. Please retry save.')
+          window.$message?.warning(saveState.hasTransientMedia
+            ? 'Upload succeeded, but the image is still temporary. Refresh may lose it.'
+            : 'Project save failed after upload. Please retry save.')
           resetUploadProgress(2200)
         }
       } else {
@@ -1326,7 +1431,20 @@ const handleFileUpload = async (event) => {
     } catch (err) {
       uploadStage.value = 'error'
       uploadProgress.value = 100
-      window.$message?.warning('Upload/save failed. Please retry.')
+      updateNode(props.id, {
+        persistStatus: 'error',
+        persistError: 'Image upload failed. The selected file is only shown temporarily.',
+        updatedAt: Date.now()
+      })
+      const savedOk = await flushSave()
+      if (!savedOk) {
+        const saveState = projectSaveState.value || {}
+        window.$message?.warning(saveState.hasTransientMedia
+          ? 'Upload failed. The selected file is only shown temporarily.'
+          : 'Upload failed and the project could not be saved. Please retry.')
+      } else {
+        window.$message?.warning('Upload failed. The selected file is only shown temporarily.')
+      }
       resetUploadProgress(2200)
     } finally {
       isUploading.value = false
@@ -1359,7 +1477,7 @@ const handleMetaMouseDown = (event) => {
 }
 
 const openPreviewModal = () => {
-  if (!props.data?.url) return
+  if (!hasDisplayImage.value) return
   activeTool.value = ''
   previewZoom.value = 1
   showPreviewModal.value = true
@@ -1505,16 +1623,16 @@ const handleEnhanceTo4k = async () => {
 
   try {
     const result = await imageGen.generate(request)
-    const finalUrl = await resolveImageOutputUrl(
+    const persistence = await resolveImagePersistence(
       result?.[0]?.url,
       `enhanced-4k-${Date.now()}.png`,
       'Enhanced image persistence failed. Please retry.'
     )
 
-    await updateLinkedImageNode(newNodeId, {
-      url: finalUrl,
-      base64: '',
+    const savedOk = await updateLinkedImageNode(newNodeId, {
+      ...buildImagePersistencePatch(persistence),
       loading: false,
+      shouldSave: persistence.persisted,
       fileType: 'image/png',
       size: request.size,
       ratio: request.ratio,
@@ -1524,7 +1642,14 @@ const handleEnhanceTo4k = async () => {
       sourceRefImages: request.sourceRefImages
     })
 
-    window.$message?.success('4K enhanced image created')
+    const saveState = projectSaveState.value || {}
+    if (savedOk) {
+      window.$message?.success('4K enhanced image created')
+    } else if (saveState.hasTransientMedia || !persistence.persisted) {
+      window.$message?.warning('4K result is only shown temporarily. Please retry until it is saved.')
+    } else {
+      window.$message?.warning('Project save failed after 4K enhancement. Please retry save.')
+    }
   } catch (err) {
     const message = getErrorMessage(err, '4K enhancement failed')
     await updateLinkedImageNode(newNodeId, {
@@ -1543,7 +1668,7 @@ const handleEnhanceTo4k = async () => {
   }
 }
 const handleRemoveBackground = async () => {
-  const source = String(props.data?.base64 || props.data?.url || '').trim()
+  const source = displayImageUrl.value
   if (!source) return
 
   toolActionLoading.value = 'remove-background'
@@ -1556,22 +1681,34 @@ const handleRemoveBackground = async () => {
       crop: false,
       despill: false
     })
-    const finalUrl = await resolveImageOutputUrl(
+    const persistence = await resolveImagePersistence(
       result?.url,
       `remove-bg-${Date.now()}.png`,
       'Background removal persistence failed. Please retry.'
     )
 
     createLinkedImageNode({
-      url: finalUrl,
-      base64: '',
+      ...buildImagePersistencePatch(persistence),
       size: props.data?.size || localImageSize.value,
       ratio: props.data?.ratio || localImageRatio.value,
       resolution: props.data?.resolution || localResolution.value,
       fileType: 'image/png',
     })
-    await flushSave()
-    window.$message?.success('Background removed and linked')
+    if (!persistence.persisted) {
+      window.$message?.warning('Background removed, but the result is only shown temporarily. Please retry.')
+      return
+    }
+    const savedOk = await flushSave()
+    const saveState = projectSaveState.value || {}
+    if (!savedOk) {
+      if (saveState.hasTransientMedia) {
+        window.$message?.warning('Background removed, but the result is only shown temporarily. Please retry.')
+      } else {
+        window.$message?.warning('Background removed, but project save failed. Please retry save.')
+      }
+    } else {
+      window.$message?.success('Background removed and linked')
+    }
   } catch (err) {
     window.$message?.error(err?.message || 'Background removal failed')
   } finally {
@@ -1613,7 +1750,7 @@ const loadImageElement = async (source) => {
 }
 
 const applyCrop = async () => {
-  const source = String(props.data?.base64 || props.data?.url || '').trim()
+  const source = displayImageUrl.value
   if (!source) return
 
   toolActionLoading.value = 'crop'
@@ -1689,7 +1826,7 @@ const getPreviewDownloadFilename = () => {
   let extension = 'png'
 
   try {
-    const sourceUrl = new URL(String(props.data?.url || ''), window.location.origin)
+    const sourceUrl = new URL(displayImageUrl.value || '', window.location.origin)
     const match = sourceUrl.pathname.match(/\.([a-zA-Z0-9]+)$/)
     if (match?.[1]) extension = match[1].toLowerCase()
   } catch {
@@ -1709,7 +1846,7 @@ const triggerPreviewDownload = (href, filename) => {
   document.body.removeChild(link)
 }
 const downloadPreviewImage = async () => {
-  const sourceUrl = String(props.data?.url || '').trim()
+  const sourceUrl = displayImageUrl.value
   if (!sourceUrl) return
 
   const filename = getPreviewDownloadFilename()
@@ -1796,22 +1933,82 @@ const handleMultiAngleApply = async (payload = {}) => {
   }
 
   try {
+    const persistence = await resolveImagePersistence(
+      nextPayload.base64 || nextPayload.url,
+      nextPayload.fileName,
+      'Multi-angle persistence failed. Please retry.'
+    )
+
     if (payload.targetMode === 'replace') {
-      await replaceCurrentImageNode(nextPayload)
-      await flushSave()
-      window.$message?.success('Multi-angle result applied')
+      const previousPersistedUrl = String(props.data?.url || '').trim()
+      updateNode(props.id, {
+        ...(persistence.persisted
+          ? buildImagePersistencePatch(persistence)
+          : {
+              url: previousPersistedUrl,
+              previewUrl: persistence.displayUrl,
+              base64: '',
+              persistStatus: 'error',
+              persistError: 'Multi-angle result is only shown temporarily. Please retry.'
+            }),
+        size: nextPayload.size || localImageSize.value,
+        ratio: nextPayload.ratio || localImageRatio.value,
+        resolution: nextPayload.resolution || localResolution.value,
+        fileType: nextPayload.fileType || 'image/png',
+        updatedAt: Date.now(),
+        error: ''
+      })
+
+      const savedOk = await flushSave()
+      const saveState = projectSaveState.value || {}
+      updateNode(props.id, {
+        persistStatus: savedOk ? 'saved' : 'error',
+        persistError: savedOk
+          ? ''
+          : (saveState.hasTransientMedia
+            ? 'Image uses a temporary address and was not fully saved.'
+            : 'Project save failed. Refresh may lose this image.'),
+        updatedAt: Date.now()
+      })
+      if (savedOk) {
+        window.$message?.success('Multi-angle result applied')
+      } else if (saveState.hasTransientMedia || !persistence.persisted) {
+        window.$message?.warning('Multi-angle result is only shown temporarily. Please retry until it is saved.')
+      } else {
+        window.$message?.warning('Image uploaded, but project save failed. Please retry save.')
+      }
     } else {
+      let savedOk = true
       if (pendingMultiAngleNodeId.value) {
-        await updateLinkedImageNode(pendingMultiAngleNodeId.value, {
-          ...nextPayload,
+        savedOk = await updateLinkedImageNode(pendingMultiAngleNodeId.value, {
+          ...buildImagePersistencePatch(persistence),
           loading: false,
-          error: ''
+          shouldSave: persistence.persisted,
+          error: '',
+          fileType: nextPayload.fileType || 'image/png',
+          size: nextPayload.size || localImageSize.value,
+          ratio: nextPayload.ratio || localImageRatio.value,
+          resolution: nextPayload.resolution || localResolution.value,
+          persistError: persistence.persisted ? '' : 'Multi-angle result is only shown temporarily. Please retry.'
         })
       } else {
-        createLinkedImageNode(nextPayload)
-        await flushSave()
+        createLinkedImageNode({
+          ...buildImagePersistencePatch(persistence),
+          fileType: nextPayload.fileType || 'image/png',
+          size: nextPayload.size || localImageSize.value,
+          ratio: nextPayload.ratio || localImageRatio.value,
+          resolution: nextPayload.resolution || localResolution.value
+        })
+        savedOk = await flushSave()
       }
-      window.$message?.success('Multi-angle result created')
+      const saveState = projectSaveState.value || {}
+      if (savedOk) {
+        window.$message?.success('Multi-angle result created')
+      } else if (saveState.hasTransientMedia || !persistence.persisted) {
+        window.$message?.warning('Multi-angle result is only shown temporarily. Please retry until it is saved.')
+      } else {
+        window.$message?.warning('Project save failed after multi-angle generation. Please retry save.')
+      }
     }
     pendingMultiAngleNodeId.value = ''
     showMultiAngleDrawer.value = false

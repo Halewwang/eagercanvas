@@ -5,6 +5,7 @@ export const isDataImageUrl = (value = '') => /^data:image\//i.test(String(value
 export const isDataUrl = (value = '') => /^data:/i.test(String(value || ''))
 export const isRemoteHttpUrl = (value = '') => /^https?:\/\//i.test(String(value || ''))
 export const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
+export const isTransientRemoteMediaUrl = (value = '') => isRemoteHttpUrl(value) && !isPersistedUploadUrl(value)
 
 const parseDateValue = (value = '') => {
   const raw = String(value || '').trim()
@@ -89,10 +90,10 @@ export const uploadImageFile = async (file, options = {}) => {
   const formData = new FormData()
   formData.append('file', file, file?.name || 'asset')
 
-    const uploadRes = await request.post('/upload', formData, {
-      onUploadProgress: (event) => {
-        if (typeof onProgress !== 'function') return
-        const loaded = Number(event?.loaded || 0)
+  const uploadRes = await request.post('/upload', formData, {
+    onUploadProgress: (event) => {
+      if (typeof onProgress !== 'function') return
+      const loaded = Number(event?.loaded || 0)
       const total = Number(event?.total || 0)
       if (!total) return
       const percent = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)))

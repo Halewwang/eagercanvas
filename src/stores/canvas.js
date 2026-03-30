@@ -5,6 +5,15 @@
 import { ref, watch } from 'vue'
 import { updateProjectCanvas, getProjectCanvas } from './projects'
 import { IMAGE_MODELS, VIDEO_MODELS, MODEL3D_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL, DEFAULT_MODEL3D_MODEL } from '../config/models'
+import { isTransientRemoteMediaUrl } from '@/utils/media'
+
+const isLocalPreviewHost = () => {
+  if (typeof window === 'undefined') return false
+  const host = String(window.location.hostname || '').trim().toLowerCase()
+  return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
+}
+
+const BYPASS_AUTH_IN_DEV = (import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true') || isLocalPreviewHost()
 
 // Node ID counter | 节点ID计数器
 let nodeId = 0
@@ -27,6 +36,14 @@ export const canvasViewport = ref({ x: 100, y: 50, zoom: 0.8 })
 
 // Selected node | 选中的节点
 export const selectedNode = ref(null)
+export const projectSaveState = ref({
+  status: 'idle',
+  localSaved: false,
+  remoteSynced: false,
+  hasTransientMedia: false,
+  reason: '',
+  error: null
+})
 
 // Auto-save flag | 自动保存标志
 let autoSaveEnabled = false
@@ -34,6 +51,14 @@ let saveTimeout = null
 let saveInFlight = null
 let saveQueued = false
 let lastPersistedSnapshotKey = ''
+let lastSaveResult = {
+  status: 'idle',
+  localSaved: false,
+  remoteSynced: false,
+  hasTransientMedia: false,
+  reason: '',
+  error: null
+}
 
 // History for undo/redo | 撤销/重做历史
 const history = ref([])
@@ -94,6 +119,7 @@ const cloneEdges = (items) => JSON.parse(JSON.stringify(items))
 
 const TRANSIENT_NODE_FIELDS = new Set([
   'base64',
+  'previewUrl',
   'persistStatus',
   'persistError',
   'loading',
@@ -106,6 +132,17 @@ const isEphemeralMediaUrl = (value) => {
   const raw = String(value || '').trim()
   return raw.startsWith('blob:') || /^data:/i.test(raw)
 }
+
+const hasUnpersistedMedia = () => nodes.value.some((node) => {
+  const base64 = String(node?.data?.base64 || '').trim()
+  if (base64) return true
+  const previewUrl = String(node?.data?.previewUrl || '').trim()
+  if (previewUrl) return true
+  const url = String(node?.data?.url || '').trim()
+  if (!url) return false
+  if (isEphemeralMediaUrl(url)) return true
+  return isTransientRemoteMediaUrl(url)
+})
 
 const sanitizeNodeForPersistence = (node) => {
   const nextNode = JSON.parse(JSON.stringify(node))
@@ -121,7 +158,7 @@ const sanitizeNodeForPersistence = (node) => {
       }
     })
 
-    if (isEphemeralMediaUrl(data.url)) {
+    if (isEphemeralMediaUrl(data.url) || isTransientRemoteMediaUrl(data.url)) {
       delete data.url
     }
   }
@@ -577,6 +614,15 @@ export const resetCanvasSession = () => {
   isRestoring = true
   currentProjectId.value = null
   currentProjectVersion.value = null
+  projectSaveState.value = {
+    status: 'idle',
+    localSaved: false,
+    remoteSynced: false,
+    hasTransientMedia: false,
+    reason: '',
+    error: null
+  }
+  lastSaveResult = { ...projectSaveState.value }
   lastPersistedSnapshotKey = ''
   saveQueued = false
   if (saveTimeout) {
@@ -599,8 +645,8 @@ export const loadProject = (projectId) => {
   
   if (canvasData) {
     // Restore project version
-    if (canvasData._meta && (canvasData._meta.serverUpdatedAt || canvasData._meta.updatedAt)) {
-      currentProjectVersion.value = canvasData._meta.serverUpdatedAt || canvasData._meta.updatedAt
+    if (canvasData._meta && (canvasData._meta.serverUpdatedAt || canvasData._meta.draftBaseVersion)) {
+      currentProjectVersion.value = canvasData._meta.serverUpdatedAt || canvasData._meta.draftBaseVersion
     } else {
       currentProjectVersion.value = null
     }
@@ -680,10 +726,24 @@ export const saveProject = async () => {
   if (!currentProjectId.value) return
   if (!getProjectCanvas(currentProjectId.value)) return false
 
+  const containsTransientMedia = hasUnpersistedMedia()
+  if (containsTransientMedia) {
+    lastSaveResult = {
+      status: 'transient-media',
+      localSaved: false,
+      remoteSynced: false,
+      hasTransientMedia: true,
+      reason: 'transient-media',
+      error: null
+    }
+    projectSaveState.value = { ...lastSaveResult }
+    return false
+  }
+
   const snapshot = createCanvasSnapshot()
   const snapshotKey = getSnapshotKey(snapshot)
   if (snapshotKey === lastPersistedSnapshotKey) {
-    return true
+    return !!lastSaveResult.remoteSynced && !lastSaveResult.hasTransientMedia
   }
 
   if (saveInFlight) {
@@ -694,19 +754,51 @@ export const saveProject = async () => {
   const runSave = async () => {
     let saved = true
     try {
-      const updatedProject = await updateProjectCanvas(
+      const result = await updateProjectCanvas(
         currentProjectId.value,
         snapshot,
         currentProjectVersion.value
       )
-      lastPersistedSnapshotKey = snapshotKey
+      const remoteSynced = !!result?.remoteSynced
+      const localSaved = !!result?.localSaved
+      lastSaveResult = {
+        status: result?.status || (remoteSynced ? 'synced' : 'local-only'),
+        localSaved,
+        remoteSynced,
+        hasTransientMedia: containsTransientMedia,
+        reason: containsTransientMedia ? 'transient-media' : (remoteSynced ? 'synced' : 'remote-failed'),
+        error: result?.error || null
+      }
+      projectSaveState.value = { ...lastSaveResult }
+
+      if (remoteSynced || containsTransientMedia) {
+        lastPersistedSnapshotKey = snapshotKey
+      }
 
       // Update local version after successful save
-      if (updatedProject?.serverUpdatedAt || updatedProject?.updatedAt) {
-        currentProjectVersion.value = updatedProject.serverUpdatedAt || updatedProject.updatedAt
+      if (result?.project?.serverUpdatedAt || result?.project?.updatedAt) {
+        currentProjectVersion.value = result.project.serverUpdatedAt || result.project.updatedAt
+      }
+      if (containsTransientMedia && !BYPASS_AUTH_IN_DEV) {
+        saved = false
+      } else {
+        saved = remoteSynced
       }
     } catch (error) {
       saved = false
+      lastSaveResult = {
+        status: error?.status === 409 || error?.code === 'PROJECT_CONFLICT'
+          ? 'conflict'
+          : 'failed',
+        localSaved: true,
+        remoteSynced: false,
+        hasTransientMedia: containsTransientMedia,
+        reason: error?.code === 'EMPTY_CANVAS_OVERWRITE_BLOCKED'
+          ? 'empty-canvas'
+          : 'remote-error',
+        error
+      }
+      projectSaveState.value = { ...lastSaveResult }
       if (error.status === 409 || error.code === 'PROJECT_CONFLICT') {
         // Handle conflict: Show dialog to user
         window.$message?.error('Project has been updated elsewhere. Please refresh.')

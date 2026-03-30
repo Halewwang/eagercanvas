@@ -137,7 +137,7 @@ export const resolveNodeInputs = (targetNodeId) => {
 
     if (sourceNode.type !== 'image') return
 
-    const imageValue = sourceNode.data?.base64 || sourceNode.data?.url
+    const imageValue = sourceNode.data?.previewUrl || sourceNode.data?.base64 || sourceNode.data?.url
     if (!imageValue) return
 
     if (isImageTarget(targetNode?.type)) {
