@@ -75,7 +75,7 @@
         <div v-else-if="data.url" class="module-image-shell">
           <div class="module-image-frame">
             <img
-              :src="displayImageUrl"
+              :src="data.url"
               :alt="data.label || 'Image'"
               class="module-image"
               @load="handlePreviewImageLoad"
@@ -158,7 +158,7 @@
           <div class="zoom-stage-canvas" :style="previewCanvasStyle">
             <div class="zoom-image-wrap" :style="previewImageStyle">
               <img
-                :src="displayImageUrl"
+                :src="data.url"
                 alt="Preview"
                 class="zoom-image-original"
                 @load="handlePreviewImageLoad"
@@ -247,7 +247,7 @@ import {
 } from '../../stores/models'
 import { useApiConfig, useImageGeneration } from '../../hooks'
 import { getErrorMessage } from '@/utils'
-import { createAuthenticatedMediaProxyUrl, dataUrlToFile, persistImageUrl, uploadImageFile } from '@/utils/media'
+import { dataUrlToFile, persistImageUrl, uploadImageFile } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 import { useImageTools } from '../../hooks/useApi'
@@ -538,7 +538,6 @@ const stageStyle = computed(() => {
 const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
 const progressPercent = computed(() => Math.round(progressValue.value))
 const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
-const displayImageUrl = computed(() => createAuthenticatedMediaProxyUrl(props.data?.url || ''))
 const previewViewportSize = computed(() => ({
   width: Math.max(0, previewStageSize.value.width - 40),
   height: Math.max(0, previewStageSize.value.height - 40)
@@ -1589,7 +1588,7 @@ const loadImageElement = async (source) => {
 
   if (!resolvedSource.startsWith('data:image/')) {
     try {
-      const response = await fetch(createAuthenticatedMediaProxyUrl(resolvedSource) || resolvedSource)
+      const response = await fetch(resolvedSource)
       const blob = await response.blob()
       objectUrl = URL.createObjectURL(blob)
       img.src = objectUrl
@@ -1711,7 +1710,7 @@ const triggerPreviewDownload = (href, filename) => {
   document.body.removeChild(link)
 }
 const downloadPreviewImage = async () => {
-  const sourceUrl = displayImageUrl.value
+  const sourceUrl = String(props.data?.url || '').trim()
   if (!sourceUrl) return
 
   const filename = getPreviewDownloadFilename()
