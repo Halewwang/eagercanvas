@@ -580,7 +580,7 @@ watch(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 22px;
+  gap: 34px;
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -692,7 +692,7 @@ watch(
   }
 
   .home-topbar-nav {
-    gap: 16px;
+    gap: 24px;
   }
 }
 
@@ -703,7 +703,7 @@ watch(
   }
 
   .home-topbar-nav {
-    gap: 12px;
+    gap: 18px;
   }
 
   .home-topbar-link {
