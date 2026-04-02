@@ -358,6 +358,7 @@ const MAX_UPLOAD_SIZE_BYTES = 150 * 1024 * 1024
 const PREVIEW_MIN_ZOOM = 0.75
 const PREVIEW_MAX_ZOOM = 4
 const PREVIEW_ZOOM_STEP = 0.25
+const DEFAULT_ENHANCE_PROMPT = 'Enhance this image to 4K while preserving composition, style, and details.'
 const MIN_CROP_SIZE = 48
 const cropHandles = ['nw', 'ne', 'sw', 'se']
 const isLocalPreviewHost = () => {
@@ -808,6 +809,19 @@ const getConnectedInputs = () => {
     refImages: resolved.refImages
   }
 }
+
+const buildSourceRefImages = (...groups) => {
+  const seen = new Set()
+  return groups
+    .flat()
+    .map((value) => String(value || '').trim())
+    .filter((value) => {
+      if (!value || seen.has(value)) return false
+      seen.add(value)
+      return true
+    })
+}
+
 const activeImageInputSet = computed(() => {
   const incoming = edges.value.filter((edge) => edge.target === props.id)
   const activeKeys = []
@@ -959,6 +973,8 @@ const runImageGeneration = async (mode = 'create') => {
       quality: localImageQuality.value,
       ratio: localImageRatio.value,
       resolution: localResolution.value,
+      sourcePrompt: prompt || 'Generate a polished visual based on this reference.',
+      sourceRefImages: buildSourceRefImages(refImages),
       error: ''
     }))
 
@@ -1398,6 +1414,8 @@ const handleFileUpload = async (event) => {
       error: '',
       persistStatus: isLocalPreviewMode.value ? 'saved' : 'uploading',
       persistError: '',
+      sourcePrompt: String(props.data?.sourcePrompt || '').trim(),
+      sourceRefImages: buildSourceRefImages(previewUrl),
       ratio: ratio,
       size: w && h ? `${w}x${h}` : localImageSize.value
     })
@@ -1446,6 +1464,8 @@ const handleFileUpload = async (event) => {
           fileType: file.type,
           updatedAt: Date.now(),
           error: '',
+          sourcePrompt: String(props.data?.sourcePrompt || '').trim(),
+          sourceRefImages: buildSourceRefImages(uploadedUrl),
           persistStatus: 'saving',
           persistError: ''
         })
@@ -1600,6 +1620,7 @@ const buildEnhancementRequest = () => {
   const inheritedRefs = Array.isArray(props.data?.sourceRefImages)
     ? props.data.sourceRefImages.filter(Boolean)
     : []
+  const selfImage = String(displayImageUrl.value || '').trim()
 
   let prompt = inheritedPrompt
   let refImages = inheritedRefs
@@ -1610,6 +1631,12 @@ const buildEnhancementRequest = () => {
     refImages = Array.isArray(resolved.refImages) && resolved.refImages.length > 0
       ? resolved.refImages.filter(Boolean)
       : inheritedRefs
+  }
+
+  refImages = buildSourceRefImages(refImages, selfImage ? [selfImage] : [])
+
+  if (!prompt && refImages.length > 0) {
+    prompt = DEFAULT_ENHANCE_PROMPT
   }
 
   if (!prompt && refImages.length === 0) {
