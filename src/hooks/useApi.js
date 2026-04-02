@@ -492,12 +492,18 @@ export const useVideoGeneration = () => {
     const candidates = [
       task?.task_id,
       task?.taskId,
+      task?.requestId,
+      task?.request_id,
       task?.id,
       task?.task?.task_id,
       task?.raw?.task_id,
+      task?.raw?.requestId,
+      task?.raw?.request_id,
       task?.raw?.task?.task_id,
       task?.data?.task_id,
       task?.data?.taskId,
+      task?.data?.requestId,
+      task?.data?.request_id,
       task?.data?.id,
       task?.data?.data?.task_id,
       task?.data?.data?.id
@@ -517,19 +523,22 @@ export const useVideoGeneration = () => {
       result?.data?.status ||
       result?.data?.task_status ||
       result?.data?.state ||
+      result?.state ||
       ''
     ).toLowerCase()
   }
 
-  const doneStatuses = new Set(['completed', 'succeeded', 'success', 'done', 'finished', 'succeed', 'successed'])
+  const doneStatuses = new Set(['completed', 'complete', 'succeeded', 'success', 'done', 'finished', 'succeed', 'successed'])
   const transientErrorStatuses = new Set([408, 425, 429, 500, 502, 503, 504])
 
   const getVideoUrl = (result) => {
     return (
       result?.url ||
       result?.video_url ||
+      result?.download?.url ||
       result?.data?.url ||
       result?.data?.video_url ||
+      result?.data?.download?.url ||
       result?.data?.task_result?.video_url ||
       result?.data?.task_result?.video?.url ||
       result?.data?.task_result?.videos?.[0]?.url ||
@@ -537,6 +546,7 @@ export const useVideoGeneration = () => {
       result?.task_result?.video?.url ||
       result?.task_result?.videos?.[0]?.url ||
       result?.raw?.video_url ||
+      result?.raw?.download?.url ||
       result?.raw?.task?.task_result?.videos?.[0]?.url ||
       result?.raw?.output?.[0]?.url ||
       result?.detail?.draft_info?.downloadable_url ||
@@ -573,6 +583,14 @@ export const useVideoGeneration = () => {
         prompt: params.prompt || ''
       }
       if (params.projectId) requestData.projectId = params.projectId
+      if (params.tool) requestData.tool = params.tool
+
+      if (params.tool === 'enhance') {
+        if (params.file) requestData.file = params.file
+        if (Array.isArray(params.filters) && params.filters.length > 0) requestData.filters = params.filters
+        if (params.output && typeof params.output === 'object') requestData.output = params.output
+      }
+
       // Add optional params | 添加可选参数
       if (params.first_frame_image) requestData.first_frame_image = params.first_frame_image
       if (params.last_frame_image) requestData.last_frame_image = params.last_frame_image

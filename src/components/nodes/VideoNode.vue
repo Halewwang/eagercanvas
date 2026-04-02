@@ -19,6 +19,12 @@
         <div class="capsule-divider" />
 
         <div class="capsule-group">
+          <BaseDropdown :options="toolDropdownOptions" compact @select="handleToolAction">
+            <button class="capsule-select capsule-tool-trigger" :disabled="!data.url || isToolBusy">
+              <img :src="toolsIcon" alt="" class="capsule-tool-icon" />
+              <span>Tools</span>
+            </button>
+          </BaseDropdown>
           <button class="capsule-icon" :disabled="!data.url" @click="openPreviewModal" title="Preview"><n-icon :size="14"><ExpandOutline /></n-icon></button>
           <button class="capsule-icon" @click="handleDuplicate" title="Duplicate"><n-icon :size="14"><CopyOutline /></n-icon></button>
           <button class="capsule-icon" @click="handleDelete" title="Delete"><n-icon :size="14"><TrashOutline /></n-icon></button>
@@ -112,6 +118,15 @@
         </div>
       </template>
     </BaseModal>
+    <VideoEnhanceToolDrawer
+      v-model:show="showEnhanceDrawer"
+      :video-url="data.url || ''"
+      :ratio="localRatio"
+      :resolution="localResolution"
+      @pending="handleEnhancePending"
+      @apply="handleEnhanceApply"
+      @error="handleEnhanceError"
+    />
 
     <div v-if="showUploadProgress" class="upload-progress-wrap" :style="moduleStyle">
       <div class="upload-progress-track">
@@ -139,13 +154,15 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NModal } from 'naive-ui'
 import { BaseButton, BaseDropdown, BaseModal } from '@/components/ui'
+import VideoEnhanceToolDrawer from '@/components/tools/VideoEnhanceToolDrawer.vue'
 import { CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
-import { duplicateNode, edges, flushSave, nodes, removeNode, updateNode, currentProjectId } from '../../stores/canvas'
+import { addEdge, addNode, currentProjectId, duplicateNode, edges, flushSave, nodes, removeNode, saveProject, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
-import { uploadImageFile } from '@/utils/media'
-import { resolveNodeInputs } from '../../services/edgeStrategy'
+import { persistMediaUrl, uploadImageFile } from '@/utils/media'
+import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
+import toolsIcon from '@/assets/tools-icon.svg'
 
 const props = defineProps({ id: String, data: Object, selected: Boolean })
 
@@ -161,9 +178,12 @@ const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
 const showErrorModal = ref(false)
 const showValidationModal = ref(false)
+const showEnhanceDrawer = ref(false)
 const validationTitle = ref('Upload Limit')
 const validationMessage = ref('')
 const videoActionLoading = ref('')
+const toolActionLoading = ref('')
+const pendingEnhancedNodeId = ref('')
 const isUploading = ref(false)
 const showUploadProgress = ref(false)
 const uploadProgress = ref(0)
@@ -197,6 +217,13 @@ const audioOptions = [
   { key: 'off', label: 'Audio Off' },
   { key: 'on', label: 'Audio On' }
 ]
+const toolDropdownOptions = computed(() => ([
+  {
+    label: 'Enhance Video',
+    key: 'enhance-video',
+    disabled: !props.data?.url || isToolBusy.value
+  }
+]))
 
 const modelOptions = computed(() => videoModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const ratioOptions = computed(() => getModelRatioOptions(localModel.value))
@@ -298,6 +325,7 @@ const capsuleStyle = computed(() => {
   const safeScale = Math.min(1.06, Math.max(0.82, inverse))
   return { transform: `translateX(-50%) scale(${safeScale})`, transformOrigin: 'top center' }
 })
+const isToolBusy = computed(() => !!toolActionLoading.value)
 const clearProgressTimers = () => {
   if (progressTimer.value) {
     clearInterval(progressTimer.value)
@@ -448,6 +476,73 @@ const getConnectedInputs = () => {
   }
 }
 
+const createLinkedVideoNode = (payload = {}) => {
+  const currentNode = nodes.value.find((node) => node.id === props.id)
+  const position = {
+    x: (currentNode?.position?.x || 0) + 360,
+    y: currentNode?.position?.y || 0
+  }
+
+  const nodeId = addNode('video', position, {
+    url: '',
+    loading: true,
+    label: 'Enhanced video',
+    ...payload
+  })
+
+  addEdge(edgeStrategy.resolve({
+    source: props.id,
+    target: nodeId,
+    sourceHandle: 'right',
+    targetHandle: 'left'
+  }))
+
+  setTimeout(() => {
+    updateNodeInternals(nodeId)
+  }, 50)
+
+  return nodeId
+}
+
+const updateLinkedVideoNode = async (nodeId, payload = {}) => {
+  if (!nodeId) return false
+  updateNode(nodeId, {
+    ...payload,
+    updatedAt: Date.now()
+  })
+  return saveProject()
+}
+
+const resolveVideoPersistence = async (rawValue, fileName) => {
+  const rawUrl = String(rawValue || '').trim()
+  if (!rawUrl) {
+    throw new Error('No video output')
+  }
+
+  try {
+    const stableUrl = await persistMediaUrl(rawUrl, fileName, {
+      projectId: currentProjectId.value,
+      source: 'video_enhance',
+      sourceNodeId: props.id
+    })
+    if (stableUrl) {
+      return {
+        persisted: true,
+        persistedUrl: stableUrl,
+        displayUrl: stableUrl
+      }
+    }
+  } catch (error) {
+    console.warn('Video persistence failed, keeping preview only:', error)
+  }
+
+  return {
+    persisted: false,
+    persistedUrl: '',
+    displayUrl: rawUrl
+  }
+}
+
 const runVideoGeneration = async (mode = 'create') => {
   if (!isConfigured.value) {
     window.$message?.warning('Please sign in first')
@@ -516,6 +611,76 @@ const handleStopGeneration = () => {
 
 const handleGenerateVideo = () => runVideoGeneration('create')
 const handleRegenerateVideo = () => runVideoGeneration('regenerate')
+const handleToolAction = async (key) => {
+  if (key === 'enhance-video') {
+    showEnhanceDrawer.value = true
+  }
+}
+
+const handleEnhancePending = async (payload = {}) => {
+  if (payload.targetMode === 'replace') return
+  if (pendingEnhancedNodeId.value) return
+
+  toolActionLoading.value = 'enhance-video'
+  const nodeId = createLinkedVideoNode({
+    fileType: payload.fileType || 'video/mp4',
+    sourceTool: 'video-enhance',
+    error: ''
+  })
+  pendingEnhancedNodeId.value = nodeId || ''
+  await flushSave()
+}
+
+const handleEnhanceApply = async (payload = {}) => {
+  const targetNodeId = pendingEnhancedNodeId.value
+  pendingEnhancedNodeId.value = ''
+
+  try {
+    const persistence = await resolveVideoPersistence(
+      payload.url,
+      `enhanced-video-${Date.now()}.mp4`
+    )
+
+    const savedOk = await updateLinkedVideoNode(targetNodeId, {
+      url: persistence.persisted ? persistence.persistedUrl : persistence.displayUrl,
+      loading: false,
+      error: '',
+      fileType: payload.fileType || 'video/mp4',
+      persistStatus: persistence.persisted ? 'saved' : 'error',
+      persistError: persistence.persisted ? '' : 'Enhanced result is only shown temporarily. Please retry.'
+    })
+
+    if (persistence.persisted && savedOk) {
+      window.$message?.success('Enhanced video created')
+    } else if (!persistence.persisted) {
+      window.$message?.warning('Enhanced result is only shown temporarily. Please retry until it is saved.')
+    } else {
+      window.$message?.warning('Enhanced video created, but project save failed. Please retry save.')
+    }
+    showEnhanceDrawer.value = false
+  } catch (error) {
+    if (targetNodeId) {
+      await updateLinkedVideoNode(targetNodeId, {
+        loading: false,
+        error: error?.message || 'Video enhancement failed'
+      })
+    }
+    window.$message?.error(error?.message || 'Video enhancement failed')
+  } finally {
+    toolActionLoading.value = ''
+  }
+}
+
+const handleEnhanceError = async (payload = {}) => {
+  const failedNodeId = pendingEnhancedNodeId.value
+  pendingEnhancedNodeId.value = ''
+  toolActionLoading.value = ''
+  if (!failedNodeId) return
+  await updateLinkedVideoNode(failedNodeId, {
+    loading: false,
+    error: payload?.message || 'Video enhancement failed'
+  })
+}
 
 const triggerUpload = () => {
   uploadInputRef.value?.click()
@@ -734,6 +899,19 @@ watch(
   font-size: 12px;
   padding: 6px 12px;
   line-height: 1;
+}
+
+.capsule-tool-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.capsule-tool-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  filter: brightness(0) saturate(100%) invert(81%) sepia(6%) saturate(243%) hue-rotate(182deg) brightness(93%) contrast(88%);
 }
 
 .video-node::after {

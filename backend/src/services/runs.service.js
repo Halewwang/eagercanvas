@@ -32,11 +32,17 @@ const extractProviderTaskId = (result = {}) => {
   const candidates = [
     result?.task_id,
     result?.taskId,
+    result?.requestId,
+    result?.request_id,
     result?.id,
     result?.raw?.task_id,
+    result?.raw?.requestId,
+    result?.raw?.request_id,
     result?.raw?.task?.task_id,
     result?.data?.task_id,
     result?.data?.taskId,
+    result?.data?.requestId,
+    result?.data?.request_id,
     result?.data?.id
   ]
   const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
@@ -46,10 +52,13 @@ const extractProviderTaskId = (result = {}) => {
 const extractProviderVideoUrl = (result = {}) =>
   result?.url ||
   result?.video_url ||
+  result?.download?.url ||
   result?.data?.url ||
   result?.data?.video_url ||
+  result?.data?.download?.url ||
   result?.raw?.url ||
   result?.raw?.video_url ||
+  result?.raw?.download?.url ||
   result?.raw?.task_result?.video_url ||
   result?.raw?.task_result?.videos?.[0]?.url ||
   ''

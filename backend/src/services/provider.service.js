@@ -569,9 +569,11 @@ const extractVideoUrl = (data = {}) => {
     data?.url ||
     data?.videoUrl ||
     data?.video_url ||
+    data?.download?.url ||
     data?.data?.url ||
     data?.data?.videoUrl ||
     data?.data?.video_url ||
+    data?.data?.download?.url ||
     data?.video?.url ||
     data?.videos?.[0]?.url ||
     data?.data?.videos?.[0]?.url ||
@@ -1026,6 +1028,39 @@ export const providerRemoveBackground = async (payload = {}) => {
 }
 
 export const providerCreateVideo = async (payload = {}, requestOptions = {}) => {
+  const tool = String(payload.tool || payload.operation || '').trim().toLowerCase()
+
+  if (tool === 'enhance') {
+    const source =
+      String(payload.file || '').trim() ||
+      String(payload.source_url || '').trim() ||
+      String(payload.video_url || '').trim() ||
+      String(payload.url || '').trim()
+
+    if (!source) {
+      throw new HttpError(400, 'Video source is required', 'VIDEO_SOURCE_REQUIRED')
+    }
+
+    const raw = await callProvider('/topazlabs/video/upload', {
+      file: source,
+      filters: Array.isArray(payload.filters) && payload.filters.length > 0
+        ? payload.filters
+        : [{ model: String(payload.model || 'prob-4').trim() || 'prob-4' }],
+      output: typeof payload.output === 'object' && payload.output
+        ? payload.output
+        : undefined
+    }, 'POST', requestOptions)
+
+    const requestId = String(raw?.requestId || raw?.request_id || '').trim()
+
+    return {
+      task_id: requestId,
+      requestId,
+      status: 'processing',
+      raw
+    }
+  }
+
   const model = String(payload.model_name || payload.model || '').trim()
   const lowerModel = model.toLowerCase()
   const prompt = String(payload.prompt || '').trim()
@@ -1203,7 +1238,37 @@ export const providerVideoStatus = async (taskId, requestOptions = {}) => {
   const mayBeKling = safeTaskId.startsWith('kling_') || safeTaskId.startsWith('task_')
   const mayBeSora = normalizedSoraTaskId.startsWith('video_')
   const mayBeWaveSpeed = /^[0-9a-f]{32}$/i.test(safeTaskId)
+  const topazStatusPaths = [
+    `/topazlabs/video/${taskId}/status`
+  ]
   
+  try {
+    const raw = await callProviderWithFallback(topazStatusPaths, 'GET', null, requestOptions)
+    const rawStatus = String(
+      raw?.status ||
+      raw?.state ||
+      raw?.data?.status ||
+      raw?.data?.state ||
+      ''
+    ).trim().toLowerCase()
+    const videoUrl = extractVideoUrl(raw)
+    const status = videoUrl || rawStatus === 'complete'
+      ? 'completed'
+      : ['failed', 'error', 'cancelled', 'canceled'].includes(rawStatus)
+        ? 'failed'
+        : (rawStatus || 'processing')
+
+    return {
+      task_id: taskId,
+      requestId: String(raw?.requestId || raw?.request_id || taskId).trim() || taskId,
+      status,
+      video_url: videoUrl || undefined,
+      raw
+    }
+  } catch {
+    // Fall through
+  }
+
   // 302.AI Kling status endpoints
   const klingStatusPaths = [
     `/klingai/task/${taskId}/fetch`,
