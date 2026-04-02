@@ -219,6 +219,18 @@
       @apply="handleMultiAngleApply"
       @error="handleMultiAngleError"
     />
+    <Wedding3x3ToolDrawer
+      v-model:show="showWedding3x3Drawer"
+      :image-url="displayImageUrl"
+      :model="localImageModel"
+      :ratio="localImageRatio"
+      :size="localImageSize"
+      :resolution="localResolution"
+      :quality="localImageQuality"
+      @pending="handleWedding3x3Pending"
+      @apply="handleWedding3x3Apply"
+      @error="handleWedding3x3Error"
+    />
   </div>
 </template>
 
@@ -228,6 +240,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NModal } from 'naive-ui'
 import { BaseButton, BaseDropdown, BaseModal } from '@/components/ui'
 import MultiAngleToolDrawer from '@/components/tools/MultiAngleToolDrawer.vue'
+import Wedding3x3ToolDrawer from '@/components/tools/Wedding3x3ToolDrawer.vue'
 import {
   CloseCircleOutline,
   CopyOutline,
@@ -288,6 +301,8 @@ const previewNaturalSize = ref({ width: 0, height: 0 })
 const activeTool = ref('')
 const showMultiAngleDrawer = ref(false)
 const pendingMultiAngleNodeId = ref('')
+const showWedding3x3Drawer = ref(false)
+const pendingWedding3x3NodeId = ref('')
 const cropRect = ref({ x: 0, y: 0, width: 0, height: 0 })
 const cropInteraction = ref(null)
 const showErrorModal = ref(false)
@@ -335,6 +350,11 @@ const toolDropdownOptions = computed(() => ([
     key: 'multi-angle',
     disabled: !hasDisplayImage.value || isToolBusy.value,
     renderIcon: () => h('img', { src: cameraOrbitIcon, alt: '', class: 'tool-option-icon' })
+  },
+  {
+    label: 'Wedding 3x3',
+    key: 'wedding-3x3',
+    disabled: !hasDisplayImage.value || isToolBusy.value
   }
 ]))
 const imageInputStatusMap = {
@@ -1584,6 +1604,10 @@ const handleToolAction = async (key) => {
   }
   if (key === 'multi-angle') {
     showMultiAngleDrawer.value = true
+    return
+  }
+  if (key === 'wedding-3x3') {
+    showWedding3x3Drawer.value = true
   }
 }
 
@@ -2141,6 +2165,94 @@ const handleMultiAngleError = async (payload = {}) => {
     base64: '',
     loading: false,
     error: payload?.message || 'Multi-angle generation failed'
+  })
+}
+
+const handleWedding3x3Apply = async (payload = {}) => {
+  const nextPayload = {
+    ...payload,
+    fileName: `wedding-3x3-${Date.now()}.png`
+  }
+
+  try {
+    const persistence = await resolveImagePersistence(
+      nextPayload.base64 || nextPayload.url,
+      nextPayload.fileName,
+      'Wedding 3x3 persistence failed. Please retry.'
+    )
+
+    let savedOk = true
+    if (pendingWedding3x3NodeId.value) {
+      savedOk = await updateLinkedImageNode(pendingWedding3x3NodeId.value, {
+        ...buildImagePersistencePatch(persistence),
+        loading: false,
+        shouldSave: persistence.persisted,
+        error: '',
+        label: nextPayload.label || 'Wedding 3x3 Result',
+        fileType: nextPayload.fileType || 'image/png',
+        size: nextPayload.size || localImageSize.value,
+        ratio: nextPayload.ratio || localImageRatio.value,
+        resolution: nextPayload.resolution || localResolution.value,
+        quality: nextPayload.quality || localImageQuality.value,
+        sourcePrompt: nextPayload.sourcePrompt || '',
+        sourceRefImages: Array.isArray(nextPayload.sourceRefImages) ? nextPayload.sourceRefImages : [],
+        persistError: persistence.persisted ? '' : 'Wedding 3x3 result is only shown temporarily. Please retry.'
+      })
+    } else {
+      createLinkedImageNode({
+        ...buildImagePersistencePatch(persistence),
+        label: nextPayload.label || 'Wedding 3x3 Result',
+        fileType: nextPayload.fileType || 'image/png',
+        size: nextPayload.size || localImageSize.value,
+        ratio: nextPayload.ratio || localImageRatio.value,
+        resolution: nextPayload.resolution || localResolution.value,
+        quality: nextPayload.quality || localImageQuality.value,
+        sourcePrompt: nextPayload.sourcePrompt || '',
+        sourceRefImages: Array.isArray(nextPayload.sourceRefImages) ? nextPayload.sourceRefImages : []
+      })
+      savedOk = await flushSave()
+    }
+
+    const saveState = projectSaveState.value || {}
+    const saveFeedback = resolveImageSaveFeedback(savedOk)
+    if (saveFeedback.mode === 'synced') {
+      window.$message?.success('Wedding 3x3 result created')
+    } else if (saveFeedback.mode === 'local-only') {
+      window.$message?.success('Wedding 3x3 result saved in the current project')
+    } else if (saveState.hasTransientMedia || !persistence.persisted || saveFeedback.mode === 'temporary') {
+      window.$message?.warning('Wedding 3x3 result is only shown temporarily. Please retry until it is saved.')
+    } else {
+      window.$message?.warning('Project save failed after Wedding 3x3 generation. Please retry save.')
+    }
+    pendingWedding3x3NodeId.value = ''
+    showWedding3x3Drawer.value = false
+  } catch (error) {
+    window.$message?.error(error?.message || 'Wedding 3x3 apply failed')
+  }
+}
+
+const handleWedding3x3Pending = async (payload = {}) => {
+  if (pendingWedding3x3NodeId.value) return
+  const nodeId = createLinkedImageNode({
+    ...payload,
+    loading: true,
+    url: '',
+    base64: '',
+    error: ''
+  })
+  pendingWedding3x3NodeId.value = nodeId || ''
+  await flushSave()
+}
+
+const handleWedding3x3Error = async (payload = {}) => {
+  if (!pendingWedding3x3NodeId.value) return
+  const failedNodeId = pendingWedding3x3NodeId.value
+  pendingWedding3x3NodeId.value = ''
+  await updateLinkedImageNode(failedNodeId, {
+    url: '',
+    base64: '',
+    loading: false,
+    error: payload?.message || 'Wedding 3x3 generation failed'
   })
 }
 
