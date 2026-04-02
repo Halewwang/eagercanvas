@@ -66,6 +66,30 @@
           </BaseDropdown>
         </div>
 
+        <div v-if="modeOptions.length > 0" class="flex items-center justify-between">
+          <span class="text-xs text-[#8f939e]">Mode</span>
+          <BaseDropdown :options="modeOptions" compact @select="handleModeSelect">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
+              {{ displayMode }}
+              <n-icon :size="12">
+                <ChevronForwardOutline />
+              </n-icon>
+            </button>
+          </BaseDropdown>
+        </div>
+
+        <div v-if="typeOptions.length > 0" class="flex items-center justify-between">
+          <span class="text-xs text-[#8f939e]">Type</span>
+          <BaseDropdown :options="typeOptions" compact @select="handleTypeSelect">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
+              {{ displayType }}
+              <n-icon :size="12">
+                <ChevronForwardOutline />
+              </n-icon>
+            </button>
+          </BaseDropdown>
+        </div>
+
         <div v-if="supportsAudioToggle" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Audio</span>
           <BaseDropdown :options="audioOptions" compact @select="handleAudioSelect">
@@ -178,7 +202,7 @@ import { BaseDropdown } from '@/components/ui'
 import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject, currentProjectId } from '../../stores/canvas'
-import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoResolutionOptions, getModelVideoSizeOptions, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '../../stores/models'
+import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '../../stores/models'
 import { persistMediaUrl } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 
@@ -204,13 +228,27 @@ const localModel = ref(resolveVideoModelKey(props.data?.model || DEFAULT_VIDEO_M
 const localRatio = ref(props.data?.ratio || '16:9')
 const localSize = ref(props.data?.size || '')
 const localResolution = ref(props.data?.resolution || getModelConfig(resolveVideoModelKey(props.data?.model || DEFAULT_VIDEO_MODEL))?.defaultParams?.resolution || '')
-const localGenerateAudio = ref(Boolean(props.data?.generate_audio ?? getModelConfig(resolveVideoModelKey(props.data?.model || DEFAULT_VIDEO_MODEL))?.defaultParams?.generate_audio ?? false))
+const localO1Type = ref('')
+const localMode = ref('')
+const localGenerateAudio = ref(Boolean(props.data?.generate_audio ?? props.data?.enable_audio ?? getModelConfig(resolveVideoModelKey(props.data?.model || DEFAULT_VIDEO_MODEL))?.defaultParams?.generate_audio ?? getModelConfig(resolveVideoModelKey(props.data?.model || DEFAULT_VIDEO_MODEL))?.defaultParams?.enable_audio ?? false))
 const getDurationFromData = (data) => {
   const raw = data?.duration ?? data?.dur
   const parsed = Number(raw)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_VIDEO_DURATION
 }
 const localDuration = ref(getDurationFromData(props.data))
+const getDefaultMode = (modelKey, data = props.data) => {
+  const config = getModelConfig(modelKey)
+  const options = getModelVideoModeOptions(modelKey)
+  return String(data?.mode || config?.defaultParams?.mode || options[0]?.key || '').trim()
+}
+const getDefaultType = (modelKey, data = props.data) => {
+  const config = getModelConfig(modelKey)
+  const options = getModelVideoTypeOptions(modelKey)
+  return String(data?.o1_type || config?.defaultParams?.o1_type || options[0]?.key || '').trim()
+}
+localMode.value = getDefaultMode(localModel.value)
+localO1Type.value = getDefaultType(localModel.value)
 
 // Get connected images with roles | 获取连接的图片及其角色
 const connectedImages = computed(() => {
@@ -248,7 +286,6 @@ const imagesByRole = computed(() => {
 
 // Get current model config | 获取当前Model配置
 const currentModelConfig = computed(() => getModelConfig(localModel.value))
-const isVeo31Model = (model) => String(model || '').trim().toLowerCase().startsWith('veo-3.1')
 const ratioFromSize = (size) => {
   const [w, h] = String(size || '').split('x').map(Number)
   if (!w || !h) return '16:9'
@@ -274,11 +311,15 @@ const displayModelName = computed(() => {
 const ratioOptions = computed(() => {
   return getModelRatioOptions(localModel.value)
 })
+const modeOptions = computed(() => getModelVideoModeOptions(localModel.value))
+const typeOptions = computed(() => getModelVideoTypeOptions(localModel.value))
 const sizeOptions = computed(() => getModelVideoSizeOptions(localModel.value, localRatio.value))
 const resolutionOptions = computed(() => getModelVideoResolutionOptions(localModel.value))
-const supportsAudioToggle = computed(() => isVeo31Model(localModel.value))
+const supportsAudioToggle = computed(() => Boolean(currentModelConfig.value?.supportAudioToggle))
 const displaySize = computed(() => String(localSize.value || '').trim() || 'Select size')
 const displayResolution = computed(() => String(localResolution.value || '').trim() || 'Select resolution')
+const displayType = computed(() => typeOptions.value.find(m => m.key === localO1Type.value)?.label || localO1Type.value || 'Select type')
+const displayMode = computed(() => modeOptions.value.find(m => m.key === localMode.value)?.label || localMode.value || 'Select mode')
 const displayAudio = computed(() => (localGenerateAudio.value ? 'Audio On' : 'Audio Off'))
 
 // Duration options based on model | 基于Model的Duration选项
@@ -298,10 +339,15 @@ const handleModelSelect = (key) => {
   }
   localSize.value = config?.defaultParams?.size || ''
   localResolution.value = config?.defaultParams?.resolution || ''
-  localGenerateAudio.value = Boolean(config?.defaultParams?.generate_audio ?? false)
+  localO1Type.value = String(config?.defaultParams?.o1_type || typeOptions.value[0]?.key || '').trim()
+  localMode.value = String(config?.defaultParams?.mode || modeOptions.value[0]?.key || '').trim()
+  localGenerateAudio.value = Boolean(config?.defaultParams?.generate_audio ?? config?.defaultParams?.enable_audio ?? false)
   updates.size = localSize.value
   updates.resolution = localResolution.value
   updates.generate_audio = localGenerateAudio.value
+  updates.enable_audio = localGenerateAudio.value
+  updates.o1_type = localO1Type.value
+  updates.mode = localMode.value
   if (config?.defaultParams?.duration) {
     const modelDurationOptions = getModelDurationOptions(key)
     const defaultDuration = Number(config.defaultParams.duration)
@@ -347,9 +393,19 @@ const handleResolutionSelect = (key) => {
   updateNode(props.id, { resolution: localResolution.value })
 }
 
+const handleModeSelect = (key) => {
+  localMode.value = String(key || '')
+  updateNode(props.id, { mode: localMode.value })
+}
+
+const handleTypeSelect = (key) => {
+  localO1Type.value = String(key || '')
+  updateNode(props.id, { o1_type: localO1Type.value })
+}
+
 const handleAudioSelect = (key) => {
   localGenerateAudio.value = key === 'on'
-  updateNode(props.id, { generate_audio: localGenerateAudio.value })
+  updateNode(props.id, { generate_audio: localGenerateAudio.value, enable_audio: localGenerateAudio.value })
 }
 
 // Handle duration selection | 处理Duration选择
@@ -454,6 +510,14 @@ const handleGenerate = async () => {
       params.images = images
     }
 
+    if (localO1Type.value) {
+      params.o1_type = localO1Type.value
+    }
+
+    if (localMode.value) {
+      params.mode = localMode.value
+    }
+
     // Add ratio/size | 添加Ratio参数
     if (localRatio.value) {
       params.ratio = localRatio.value
@@ -469,6 +533,7 @@ const handleGenerate = async () => {
 
     if (supportsAudioToggle.value) {
       params.generate_audio = localGenerateAudio.value
+      params.enable_audio = localGenerateAudio.value
     }
 
     // Add duration | 添加Duration
@@ -491,9 +556,12 @@ const handleGenerate = async () => {
         label: 'Video Gen',
         model: localModel.value,
         ratio: localRatio.value,
+        o1_type: localO1Type.value,
+        mode: localMode.value,
         size: localSize.value,
         resolution: localResolution.value,
         generate_audio: localGenerateAudio.value,
+        enable_audio: localGenerateAudio.value,
         duration: localDuration.value,
         dur: localDuration.value,
         persistStatus: 'saving',
@@ -559,6 +627,8 @@ onMounted(() => {
     localModel.value = resolvedModel
     updateNode(props.id, { model: localModel.value })
   }
+  localMode.value = getDefaultMode(localModel.value)
+  localO1Type.value = getDefaultType(localModel.value)
 })
 
 // Watch for model changes from props | 监听 props 中Model变化
@@ -579,14 +649,57 @@ watch(() => props.data, (val) => {
   if (val.ratio && val.ratio !== localRatio.value) localRatio.value = val.ratio
   if ((val.size || '') !== localSize.value) localSize.value = val.size || ''
   if ((val.resolution || '') !== localResolution.value) localResolution.value = val.resolution || ''
+  if ((val.o1_type || '') !== localO1Type.value) localO1Type.value = val.o1_type || ''
+  if ((val.mode || '') !== localMode.value) localMode.value = val.mode || ''
   if (typeof val.generate_audio === 'boolean' && val.generate_audio !== localGenerateAudio.value) {
     localGenerateAudio.value = val.generate_audio
+  }
+  if (typeof val.enable_audio === 'boolean' && val.enable_audio !== localGenerateAudio.value) {
+    localGenerateAudio.value = val.enable_audio
   }
   const nextDuration = Number(val.duration ?? val.dur)
   if (Number.isFinite(nextDuration) && nextDuration > 0 && nextDuration !== localDuration.value) {
     localDuration.value = nextDuration
   }
 }, { deep: true })
+
+watch(
+  typeOptions,
+  () => {
+    if (!typeOptions.value.length) {
+      localO1Type.value = ''
+      return
+    }
+    const current = String(localO1Type.value || '').trim()
+    if (current && typeOptions.value.some((item) => item.key === current)) return
+    localO1Type.value = getDefaultType(localModel.value)
+  },
+  { immediate: true }
+)
+
+watch(
+  modeOptions,
+  () => {
+    if (!modeOptions.value.length) {
+      localMode.value = ''
+      return
+    }
+    const current = String(localMode.value || '').trim()
+    if (current && modeOptions.value.some((item) => item.key === current)) return
+    localMode.value = getDefaultMode(localModel.value)
+  },
+  { immediate: true }
+)
+
+watch(
+  sizeOptions,
+  () => {
+    if (!sizeOptions.value.length) {
+      localSize.value = ''
+    }
+  },
+  { immediate: true }
+)
 
 // Watch for auto-execute flag | 监听自动执行标志
 watch(

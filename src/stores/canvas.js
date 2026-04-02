@@ -433,6 +433,10 @@ const getDefaultNodeData = (type) => {
         prompt: '',
         ratio: videoModel?.defaultParams?.ratio || '16:9',
         duration: videoModel?.defaultParams?.duration || 5,
+        mode: videoModel?.defaultParams?.mode || '',
+        o1_type: videoModel?.defaultParams?.o1_type || '',
+        generate_audio: !!(videoModel?.defaultParams?.generate_audio ?? videoModel?.defaultParams?.enable_audio),
+        enable_audio: !!videoModel?.defaultParams?.enable_audio,
         model: DEFAULT_VIDEO_MODEL,
         label: '图生视频'
       }
@@ -462,6 +466,10 @@ const getDefaultNodeData = (type) => {
         size: '',
         dur: defaultVideoDuration,
         duration: defaultVideoDuration,
+        mode: defaultVideoModel?.defaultParams?.mode || '',
+        o1_type: defaultVideoModel?.defaultParams?.o1_type || '',
+        generate_audio: !!(defaultVideoModel?.defaultParams?.generate_audio ?? defaultVideoModel?.defaultParams?.enable_audio),
+        enable_audio: !!defaultVideoModel?.defaultParams?.enable_audio,
         label: '视频节点'
       }
     }
