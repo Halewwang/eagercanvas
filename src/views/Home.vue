@@ -436,7 +436,7 @@ const openEditorSpace = () => {
 }
 
 const openCutSpace = () => {
-  window.open('https://cut.enbrand.space/', '_self')
+  window.open('https://cut.enbrand.space/projects', '_self')
 }
 
 const handleLogout = async () => {
