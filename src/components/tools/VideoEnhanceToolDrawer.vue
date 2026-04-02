@@ -322,47 +322,55 @@ const applyEnhancement = async () => {
 
 .multi-angle-float {
   position: absolute;
-  top: 0;
-  right: 0;
-  width: min(460px, calc(100vw - 24px));
-  height: 100%;
+  top: 88px;
+  right: 24px;
+  width: min(468px, calc(100vw - 48px));
+  max-height: calc(100vh - 112px);
   pointer-events: auto;
 }
 
 .multi-angle-shell {
-  height: 100%;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(180deg, rgba(14, 16, 20, 0.98) 0%, rgba(10, 11, 15, 0.98) 100%);
-  box-shadow: -28px 0 60px rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(20px);
+  gap: 0;
+  max-height: 100%;
+  overflow: hidden;
+  padding: 16px 16px 14px;
+  border-radius: 24px;
+  border: 1px solid rgba(143, 143, 143, 0.14);
+  background: rgba(12, 13, 15, 0.96);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
 }
 
 .multi-angle-panel {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid rgba(143, 143, 143, 0.12);
+  background: #111214;
 }
 
 .multi-angle-panel-scroll {
-  height: 100%;
-  overflow-y: auto;
-  padding: 24px 22px 28px;
+  max-height: calc(100vh - 226px);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .multi-angle-section {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  padding: 16px 16px 18px;
+  background: transparent;
 }
 
 .multi-angle-section-first {
-  padding-top: 2px;
+  padding-top: 18px;
 }
 
 .multi-angle-section-last {
-  padding-bottom: 6px;
+  padding-bottom: 16px;
 }
 
 .section-heading {
@@ -381,8 +389,8 @@ const applyEnhancement = async () => {
 
 .section-divider {
   height: 1px;
-  margin: 22px 0;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02));
+  margin: 0 16px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .video-preview-card {
@@ -512,9 +520,10 @@ const applyEnhancement = async () => {
 }
 
 .drawer-footer {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 18px 22px 20px;
-  background: linear-gradient(180deg, rgba(12, 13, 17, 0.02), rgba(8, 9, 12, 0.88));
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 14px;
 }
 
 .footer-actions {
@@ -552,11 +561,15 @@ const applyEnhancement = async () => {
 
 @media (max-width: 720px) {
   .multi-angle-float {
-    width: 100%;
+    top: 72px;
+    right: 12px;
+    width: min(468px, calc(100vw - 24px));
+    max-height: calc(100vh - 88px);
   }
 
-  .multi-angle-panel-scroll {
-    padding: 18px 16px 22px;
+  .multi-angle-shell {
+    padding: 12px 12px 10px;
+    border-radius: 20px;
   }
 
   .input-options-grid,
@@ -571,6 +584,10 @@ const applyEnhancement = async () => {
 
   .compact-select {
     width: 100%;
+  }
+
+  .multi-angle-panel-scroll {
+    max-height: calc(100vh - 182px);
   }
 }
 </style>
