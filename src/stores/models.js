@@ -141,6 +141,27 @@ export const getModelVideoResolutionOptions = (modelKey) => {
   }))
 }
 
+/**
+ * Get mode options for video model | 获取视频模型模式选项
+ */
+export const getModelVideoModeOptions = (modelKey) => {
+  const model = VIDEO_MODELS.find(m => m.key === modelKey)
+  const modes = Array.isArray(model?.modes) ? model.modes : []
+  return modes.map((item) => ({
+    label: item.label || item.key,
+    key: item.key
+  }))
+}
+
+export const getModelVideoTypeOptions = (modelKey) => {
+  const model = VIDEO_MODELS.find(m => m.key === modelKey)
+  const generationTypes = Array.isArray(model?.generationTypes) ? model.generationTypes : []
+  return generationTypes.map((item) => ({
+    label: item.label || item.key,
+    key: item.key
+  }))
+}
+
 // Dropdown options (built-in + custom) | 下拉选项（内置 + 自定义）
 export const imageModelOptions = computed(() => {
   const modelConfig = getModelConfigHook()

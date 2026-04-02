@@ -142,6 +142,22 @@ export const VIDEO_MODELS = [
         defaultParams: { ratio: '16:9', duration: 5 }
     },
     {
+        label: 'Kling O3',
+        key: 'kling-o3',
+        ratios: ['16:9', '1:1', '9:16'],
+        modes: [
+            { label: 'Standard', key: 'std' },
+            { label: 'Pro', key: 'pro' }
+        ],
+        generationTypes: [
+            { label: 'Image Reference', key: 'referImage' },
+            { label: 'First + Last Frame', key: 'firstTail' }
+        ],
+        durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
+        defaultParams: { ratio: '16:9', duration: 5, mode: 'pro', o1_type: 'referImage', enable_audio: false },
+        supportAudioToggle: true
+    },
+    {
         label: 'Google Veo 3.1',
         key: 'veo-3.1',
         ratios: ['16:9', '9:16'],
@@ -150,7 +166,8 @@ export const VIDEO_MODELS = [
             { label: '1080p', key: '1080p' }
         ],
         durs: [{ label: '4 秒', key: 4 }, { label: '6 秒', key: 6 }, { label: '8 秒', key: 8 }],
-        defaultParams: { ratio: '16:9', duration: 8, resolution: '1080p', generate_audio: false }
+        defaultParams: { ratio: '16:9', duration: 8, resolution: '1080p', generate_audio: false },
+        supportAudioToggle: true
     }
 ]
 

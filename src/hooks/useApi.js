@@ -580,6 +580,8 @@ export const useVideoGeneration = () => {
         requestData.aspect_ratio = params.ratio
       }
       if (params.size) requestData.size = params.size
+      if (params.mode) requestData.mode = params.mode
+      if (params.o1_type) requestData.o1_type = params.o1_type
       const normalizedDuration = Number(params.duration ?? params.dur)
       if (Number.isFinite(normalizedDuration) && normalizedDuration > 0) {
         requestData.duration = normalizedDuration
@@ -587,6 +589,12 @@ export const useVideoGeneration = () => {
       }
       if (Array.isArray(params.images) && params.images.length > 0) {
         requestData.images = params.images
+      }
+      if (typeof params.enable_audio === 'boolean') {
+        requestData.enable_audio = params.enable_audio
+      }
+      if (typeof params.generate_audio === 'boolean') {
+        requestData.generate_audio = params.generate_audio
       }
 
       // Call API | 调用 API

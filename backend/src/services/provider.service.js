@@ -661,6 +661,7 @@ const normalizeErrorMessage = (message = '') => {
 const mapVideoModelName = (model = '') => {
   const lowerModel = String(model || '').trim().toLowerCase()
   if (lowerModel === 'sora2') return 'sora-2'
+  if (lowerModel === 'kling-o3') return 'kling-o3'
   if (lowerModel === 'veo-3.1') return 'veo3.1'
   if (lowerModel === 'veo-3.1-pro') return 'veo3.1-pro'
   return String(model || '').trim()
@@ -712,6 +713,60 @@ const buildKlingO1Request = ({ prompt, aspectRatio, duration, firstFrameImage, l
     duration: Math.max(5, Math.min(10, Number(duration || 5))),
     aspect_ratio: safeAspectRatio,
     o1_type: o1Type
+  }
+}
+
+const buildKlingO3Request = ({
+  prompt,
+  aspectRatio,
+  duration,
+  firstFrameImage,
+  lastFrameImage,
+  referenceImages,
+  mode,
+  generateAudio,
+  o1Type
+}) => {
+  const allowedTypes = new Set(['referImage', 'firstTail'])
+  const requestedType = String(o1Type || '').trim()
+  const resolvedType = allowedTypes.has(requestedType)
+    ? requestedType
+    : (firstFrameImage && lastFrameImage ? 'firstTail' : 'referImage')
+
+  if (resolvedType === 'firstTail' && (!firstFrameImage || !lastFrameImage)) {
+    throw new HttpError(400, 'Kling O3 firstTail requires both first and last frame images', 'INVALID_VIDEO_INPUT')
+  }
+
+  const images = []
+  if (resolvedType === 'firstTail') {
+    images.push(firstFrameImage, lastFrameImage)
+  } else {
+    if (firstFrameImage) images.push(firstFrameImage)
+    if (lastFrameImage) images.push(lastFrameImage)
+    if (Array.isArray(referenceImages) && referenceImages.length > 0) {
+      images.push(...referenceImages.slice(0, Math.max(0, 7 - images.length)))
+    }
+  }
+
+  const normalizedImages = images.filter(Boolean).slice(0, 7)
+  if (normalizedImages.length === 0) {
+    throw new HttpError(400, 'Kling O3 requires at least one input image', 'INVALID_VIDEO_INPUT')
+  }
+
+  const allowedReferImageRatios = new Set(['16:9', '9:16', '1:1'])
+  const safeAspectRatio =
+    resolvedType === 'firstTail'
+      ? 'auto'
+      : (allowedReferImageRatios.has(String(aspectRatio || '')) ? String(aspectRatio) : '16:9')
+
+  return {
+    images: normalizedImages,
+    prompt,
+    duration: Math.max(5, Math.min(10, Number(duration || 5))),
+    aspect_ratio: safeAspectRatio,
+    mode: String(mode || '').trim().toLowerCase() === 'std' ? 'std' : 'pro',
+    o1_type: resolvedType,
+    enable_audio: Boolean(generateAudio)
   }
 }
 
@@ -1087,6 +1142,39 @@ export const providerCreateVideo = async (payload = {}, requestOptions = {}) => 
       {
         ...(klingRequest || {}),
         model: mappedModel || 'kling-o1'
+      },
+      requestOptions
+    )
+
+    return {
+      task_id: extractTaskId(raw),
+      status: extractKlingStatus(raw),
+      raw
+    }
+  }
+
+  if (lowerModel.startsWith('kling-o3')) {
+    const klingRequest = buildKlingO3Request({
+      prompt: effectivePrompt,
+      aspectRatio: aspectRatio || '16:9',
+      duration,
+      firstFrameImage: firstFrameImage || inputImage,
+      lastFrameImage,
+      referenceImages,
+      mode: payload.mode,
+      generateAudio: payload.enable_audio ?? payload.generate_audio,
+      o1Type: payload.o1_type
+    })
+
+    const raw = await callProviderWithFallback(
+      [
+        '/klingai/m2v_omni_3_video',
+        '/302/v2/video/create'
+      ],
+      'POST',
+      {
+        ...klingRequest,
+        model: mappedModel || 'kling-o3'
       },
       requestOptions
     )
