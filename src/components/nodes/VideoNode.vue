@@ -6,11 +6,10 @@
     </div>
 
     <div v-show="showNodeCapsule" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
-      <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
+        <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
         <div class="capsule-group">
           <BaseDropdown :options="modelOptions" compact @select="setModel"><button class="capsule-select">{{ displayModel }}</button></BaseDropdown>
           <BaseDropdown :options="ratioOptions" compact @select="setRatio"><button class="capsule-select">{{ localRatio }}</button></BaseDropdown>
-          <BaseDropdown v-if="typeOptions.length > 0" :options="typeOptions" compact @select="setO1Type"><button class="capsule-select">{{ displayO1Type }}</button></BaseDropdown>
           <BaseDropdown v-if="modeOptions.length > 0" :options="modeOptions" compact @select="setMode"><button class="capsule-select">{{ displayMode }}</button></BaseDropdown>
           <BaseDropdown v-if="sizeOptions.length > 0" :options="sizeOptions" compact @select="setSize"><button class="capsule-select">{{ displaySize }}</button></BaseDropdown>
           <BaseDropdown v-if="resolutionOptions.length > 0" :options="resolutionOptions" compact @select="setResolution"><button class="capsule-select">{{ displayResolution }}</button></BaseDropdown>
@@ -22,13 +21,10 @@
 
         <div class="capsule-group">
           <BaseDropdown :options="toolDropdownOptions" compact @select="handleToolAction">
-            <button class="capsule-select capsule-tool-trigger" :disabled="!data.url || isToolBusy">
+            <button class="capsule-select capsule-tool-trigger" :disabled="isToolsDisabled">
               <img :src="toolsIcon" alt="" class="capsule-tool-icon" />
               <span>Tools</span>
             </button>
-          </BaseDropdown>
-          <BaseDropdown :options="uploadActionOptions" compact @select="handleUploadAction">
-            <button class="capsule-select">{{ uploadActionLabel }}</button>
           </BaseDropdown>
           <button class="capsule-icon" :disabled="!data.url" @click="openPreviewModal" title="Preview"><n-icon :size="14"><ExpandOutline /></n-icon></button>
           <button class="capsule-icon" @click="handleDuplicate" title="Duplicate"><n-icon :size="14"><CopyOutline /></n-icon></button>
@@ -163,7 +159,7 @@ import VideoEnhanceToolDrawer from '@/components/tools/VideoEnhanceToolDrawer.vu
 import { CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
 import { addEdge, addNode, currentProjectId, duplicateNode, edges, flushSave, nodes, removeNode, saveProject, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
-import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
+import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
 import { persistMediaUrl, uploadImageFile } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
@@ -206,11 +202,6 @@ const getInitialVideoMode = (data) => {
   const options = getModelVideoModeOptions(getInitialVideoModel(data))
   return String(data?.mode || config?.defaultParams?.mode || options[0]?.key || '').trim()
 }
-const getInitialVideoType = (data) => {
-  const config = getInitialVideoConfig(data)
-  const options = getModelVideoTypeOptions(getInitialVideoModel(data))
-  return String(data?.o1_type || config?.defaultParams?.o1_type || options[0]?.key || '').trim()
-}
 const getInitialVideoAudio = (data) => {
   const config = getInitialVideoConfig(data)
   return Boolean(
@@ -226,7 +217,6 @@ const localModel = ref(getInitialVideoModel(props.data))
 const localRatio = ref(props.data?.ratio || DEFAULT_VIDEO_RATIO)
 const localSize = ref(props.data?.size || '')
 const localResolution = ref('')
-const localO1Type = ref(getInitialVideoType(props.data))
 const localMode = ref(getInitialVideoMode(props.data))
 const localGenerateAudio = ref(getInitialVideoAudio(props.data))
 const getDurationFromData = (data) => {
@@ -239,8 +229,8 @@ const localDuration = ref(getDurationFromData(props.data))
 const imageRoleStatusMap = {
   prompt: 'Prompt',
   first_frame_image: 'First Frame',
-  last_frame_image: 'Second Frame',
-  input_reference: 'Reference Picture'
+  last_frame_image: 'Last Frame',
+  input_reference: 'Image Reference'
 }
 const audioOptions = [
   { key: 'off', label: 'Audio Off' },
@@ -248,32 +238,27 @@ const audioOptions = [
 ]
 const toolDropdownOptions = computed(() => ([
   {
+    label: 'Replace Video',
+    key: 'replace-video',
+    disabled: isUploading.value || isVideoBusy.value || !props.data?.url
+  },
+  {
     label: 'Enhance Video',
     key: 'enhance-video',
-    disabled: !props.data?.url || isToolBusy.value
+    disabled: !props.data?.url || isToolBusy.value || isVideoBusy.value
   }
 ]))
 
 const modelOptions = computed(() => videoModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const ratioOptions = computed(() => getModelRatioOptions(localModel.value))
-const typeOptions = computed(() => getModelVideoTypeOptions(localModel.value))
 const modeOptions = computed(() => getModelVideoModeOptions(localModel.value))
 const sizeOptions = computed(() => getModelVideoSizeOptions(localModel.value, localRatio.value))
 const resolutionOptions = computed(() => getModelVideoResolutionOptions(localModel.value))
 const durationOptions = computed(() => getModelDurationOptions(localModel.value))
 const supportsAudioToggle = computed(() => Boolean(getModelConfig(localModel.value)?.supportAudioToggle))
 const displayModel = computed(() => videoModelOptions.value.find(m => m.key === localModel.value)?.label || localModel.value)
-const displayO1Type = computed(() => typeOptions.value.find(m => m.key === localO1Type.value)?.label || localO1Type.value || 'Type')
 const displayMode = computed(() => modeOptions.value.find(m => m.key === localMode.value)?.label || localMode.value || 'Mode')
 const displaySize = computed(() => String(localSize.value || '').trim() || 'Size')
-const uploadActionLabel = computed(() => (props.data?.url ? 'Re-upload' : 'Upload'))
-const uploadActionOptions = computed(() => ([
-  {
-    key: 'replace-video',
-    label: uploadActionLabel.value,
-    disabled: (!!props.data?.loading && !props.data?.url) || videoGen.loading.value || !!videoActionLoading.value || isUploading.value
-  }
-]))
 const resolvedResolution = computed(() => {
   const optionKeys = resolutionOptions.value.map((item) => String(item.key || '').trim()).filter(Boolean)
   const current = String(localResolution.value || '').trim()
@@ -310,6 +295,14 @@ const activeImageRoleSet = computed(() => {
 
   return { keys: new Set(activeRoleKeys), previews: rolePreviews }
 })
+const resolvedVideoType = computed(() => {
+  if (localModel.value !== 'kling-o3') {
+    return String(props.data?.o1_type || getModelConfig(localModel.value)?.defaultParams?.o1_type || '').trim()
+  }
+  const hasFirstFrame = activeImageRoleSet.value.keys.has('first_frame_image')
+  const hasLastFrame = activeImageRoleSet.value.keys.has('last_frame_image')
+  return hasFirstFrame && hasLastFrame ? 'firstTail' : 'referImage'
+})
 
 const syncResolutionToModelOptions = () => {
   const optionKeys = resolutionOptions.value.map((item) => String(item.key || '').trim()).filter(Boolean)
@@ -330,16 +323,6 @@ const syncModeToModelOptions = () => {
   const current = String(localMode.value || '').trim()
   if (current && optionKeys.includes(current)) return
   localMode.value = String(getModelConfig(localModel.value)?.defaultParams?.mode || optionKeys[0] || '').trim()
-}
-const syncTypeToModelOptions = () => {
-  const optionKeys = typeOptions.value.map((item) => String(item.key || '').trim()).filter(Boolean)
-  if (!optionKeys.length) {
-    localO1Type.value = ''
-    return
-  }
-  const current = String(localO1Type.value || '').trim()
-  if (current && optionKeys.includes(current)) return
-  localO1Type.value = String(getModelConfig(localModel.value)?.defaultParams?.o1_type || optionKeys[0] || '').trim()
 }
 const imageRoleStatusList = computed(() => {
   const { keys, previews } = activeImageRoleSet.value
@@ -387,6 +370,7 @@ const capsuleStyle = computed(() => {
   return { transform: `translateX(-50%) scale(${safeScale})`, transformOrigin: 'top center' }
 })
 const isToolBusy = computed(() => !!toolActionLoading.value)
+const isToolsDisabled = computed(() => !props.data?.url || isToolBusy.value || isUploading.value || isVideoBusy.value)
 const clearProgressTimers = () => {
   if (progressTimer.value) {
     clearInterval(progressTimer.value)
@@ -477,10 +461,8 @@ const setModel = (key) => {
   if (config?.defaultParams?.size) localSize.value = config.defaultParams.size
   else localSize.value = ''
   localResolution.value = ''
-  localO1Type.value = String(config?.defaultParams?.o1_type || typeOptions.value[0]?.key || '').trim()
   localMode.value = String(config?.defaultParams?.mode || modeOptions.value[0]?.key || '').trim()
   syncResolutionToModelOptions()
-  syncTypeToModelOptions()
   syncModeToModelOptions()
   localGenerateAudio.value = Boolean(config?.defaultParams?.generate_audio ?? config?.defaultParams?.enable_audio ?? false)
   const modelDurationOptions = getModelDurationOptions(localModel.value)
@@ -494,7 +476,7 @@ const setModel = (key) => {
   updateNode(props.id, {
     model: localModel.value,
     ratio: localRatio.value,
-    o1_type: localO1Type.value,
+    o1_type: resolvedVideoType.value,
     mode: localMode.value,
     size: localSize.value,
     resolution: resolvedResolution.value === 'Resolution' ? '' : resolvedResolution.value,
@@ -513,10 +495,6 @@ const setRatio = (key) => {
     localSize.value = ''
   }
   updateNode(props.id, { ratio: key, size: localSize.value })
-}
-const setO1Type = (key) => {
-  localO1Type.value = String(key || '')
-  updateNode(props.id, { o1_type: localO1Type.value })
 }
 const setSize = (key) => {
   localSize.value = String(key || '')
@@ -642,7 +620,7 @@ const runVideoGeneration = async (mode = 'create') => {
       first_frame_image,
       last_frame_image,
       images,
-      o1_type: localO1Type.value || undefined,
+      o1_type: resolvedVideoType.value || undefined,
       mode: localMode.value,
       size: localSize.value || undefined,
       resolution: localResolution.value || undefined,
@@ -656,7 +634,7 @@ const runVideoGeneration = async (mode = 'create') => {
       url: result?.url || '',
       model: localModel.value,
       ratio: localRatio.value,
-      o1_type: localO1Type.value,
+      o1_type: resolvedVideoType.value,
       mode: localMode.value,
       size: localSize.value,
       resolution: localResolution.value,
@@ -694,6 +672,10 @@ const handleStopGeneration = () => {
 const handleGenerateVideo = () => runVideoGeneration('create')
 const handleRegenerateVideo = () => runVideoGeneration('regenerate')
 const handleToolAction = async (key) => {
+  if (key === 'replace-video') {
+    triggerUpload()
+    return
+  }
   if (key === 'enhance-video') {
     showEnhanceDrawer.value = true
   }
@@ -767,12 +749,6 @@ const handleEnhanceError = async (payload = {}) => {
 const triggerUpload = () => {
   if (isUploading.value) return
   uploadInputRef.value?.click()
-}
-
-const handleUploadAction = (key) => {
-  if (key === 'replace-video') {
-    triggerUpload()
-  }
 }
 
 const resetUploadProgress = (delayMs = 1500) => {
@@ -889,7 +865,6 @@ watch(
     if (val.ratio && val.ratio !== localRatio.value) localRatio.value = val.ratio
     if ((val.size || '') !== localSize.value) localSize.value = val.size || ''
     if ((val.resolution || '') !== localResolution.value) localResolution.value = val.resolution || ''
-    if ((val.o1_type || '') !== localO1Type.value) localO1Type.value = val.o1_type || ''
     if ((val.mode || '') !== localMode.value) localMode.value = val.mode || ''
     if (typeof val.generate_audio === 'boolean' && val.generate_audio !== localGenerateAudio.value) localGenerateAudio.value = val.generate_audio
     if (typeof val.enable_audio === 'boolean' && val.enable_audio !== localGenerateAudio.value) localGenerateAudio.value = val.enable_audio
@@ -915,14 +890,6 @@ watch(
     if (!sizeOptions.value.length) {
       localSize.value = ''
     }
-  },
-  { immediate: true }
-)
-
-watch(
-  typeOptions,
-  () => {
-    syncTypeToModelOptions()
   },
   { immediate: true }
 )

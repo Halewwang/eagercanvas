@@ -146,14 +146,14 @@ export const VIDEO_MODELS = [
         key: 'kling-o3',
         ratios: ['16:9', '1:1', '9:16'],
         modes: [
-            { label: 'Standard', key: 'std' },
-            { label: 'Pro', key: 'pro' }
+            { label: '720p', key: 'std' },
+            { label: '1080p', key: 'pro' }
         ],
         generationTypes: [
             { label: 'Image Reference', key: 'referImage' },
             { label: 'First + Last Frame', key: 'firstTail' }
         ],
-        durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
+        durs: [{ label: '3 秒', key: 3 }, { label: '5 秒', key: 5 }, { label: '8 秒', key: 8 }, { label: '10 秒', key: 10 }],
         defaultParams: { ratio: '16:9', duration: 5, mode: 'pro', o1_type: 'referImage', enable_audio: false },
         supportAudioToggle: true
     },

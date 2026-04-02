@@ -764,7 +764,7 @@ const buildKlingO3Request = ({
   return {
     images: normalizedImages,
     prompt,
-    duration: Math.max(5, Math.min(10, Number(duration || 5))),
+    duration: Math.max(3, Math.min(10, Number(duration || 5))),
     aspect_ratio: safeAspectRatio,
     mode: String(mode || '').trim().toLowerCase() === 'std' ? 'std' : 'pro',
     o1_type: resolvedType,
