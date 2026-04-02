@@ -18,6 +18,12 @@
             <img :src="aioncraftWordmark" alt="AionCraft" class="home-brand-image" />
           </button>
 
+          <nav class="home-topbar-nav" aria-label="Primary">
+            <button type="button" class="home-topbar-link" @click="scrollToTop">Home</button>
+            <button type="button" class="home-topbar-link" @click="openEditorSpace">Editor</button>
+            <button type="button" class="home-topbar-link" @click="openCutSpace">Cut</button>
+          </nav>
+
           <div class="home-topbar-actions">
             <button type="button" class="home-topbar-button home-topbar-button-register" @click="openRegister">
               <svg viewBox="0 0 14.75 14" fill="none" aria-hidden="true" class="home-inline-icon">
@@ -417,6 +423,10 @@ const openEditorSpace = () => {
   window.open('https://editor.enbrand.space/', '_self')
 }
 
+const openCutSpace = () => {
+  window.open('https://cut.enbrand.space/', '_self')
+}
+
 const scrollToTop = () => {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -530,7 +540,7 @@ watch(
   width: 954px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 28px;
   z-index: 2;
 }
 
@@ -549,10 +559,39 @@ watch(
   display: block;
 }
 
+.home-topbar-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.home-topbar-link {
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.home-topbar-link:hover,
+.home-topbar-link:focus-visible {
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
 .home-topbar-actions {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  flex: 0 0 auto;
 }
 
 .home-topbar-button {
@@ -591,6 +630,32 @@ watch(
 .home-inline-icon-sm {
   width: 14px;
   height: 14px;
+}
+
+@media (max-width: 1200px) {
+  .home-topbar {
+    width: 900px;
+    gap: 18px;
+  }
+
+  .home-topbar-nav {
+    gap: 16px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .home-topbar {
+    width: 860px;
+    gap: 14px;
+  }
+
+  .home-topbar-nav {
+    gap: 12px;
+  }
+
+  .home-topbar-link {
+    font-size: 13px;
+  }
 }
 
 .home-hero {
