@@ -242,6 +242,7 @@ import {
 } from '@/utils/wedding3x3Builder'
 import { WEDDING_3X3_LIMITS } from '@/config/wedding3x3'
 import { getModelQualityOptions, getModelSizeOptions, imageModelOptions, DEFAULT_IMAGE_MODEL } from '@/stores/models'
+import { createImageGenerationRun, getImageGenerationTask } from '@/api'
 import { useImageGeneration } from '@/hooks/useApi'
 
 const normalizeDropdownItems = (items = []) =>
@@ -778,7 +779,12 @@ const validationErrors = computed(() =>
 
 const jsonPreview = computed(() => JSON.stringify(generatedJson.value, null, 2))
 const promptPreview = computed(() => generatedJson.value.output.prompt || '')
-const applying = computed(() => imageGen.loading.value)
+const asyncApplying = ref(false)
+const applying = computed(() => imageGen.loading.value || asyncApplying.value)
+const ASYNC_IMAGE_MODELS = new Set([
+  'gemini-3.1-flash-image-preview',
+  'gemini-3-pro-image-preview'
+])
 
 const copyText = async (value, successMessage) => {
   try {
@@ -808,6 +814,75 @@ const downloadJson = () => {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+const isAsyncImageModel = (model) => ASYNC_IMAGE_MODELS.has(String(model || '').trim().toLowerCase())
+
+const extractImageTaskId = (result = {}) => {
+  const candidates = [
+    result?.task_id,
+    result?.taskId,
+    result?.id,
+    result?.data?.task_id,
+    result?.data?.taskId,
+    result?.data?.id,
+    result?.raw?.task_id,
+    result?.raw?.id,
+    result?.raw?.data?.id
+  ]
+
+  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+  return found ? String(found).trim() : ''
+}
+
+const extractGeneratedImageUrl = (result = {}) => {
+  const dataList = Array.isArray(result?.data) ? result.data : []
+  const firstDataUrl = dataList.find((item) => String(item?.url || '').trim())?.url
+  if (firstDataUrl) return String(firstDataUrl).trim()
+
+  const candidates = [
+    result?.url,
+    result?.image_url,
+    result?.imageUrl,
+    result?.data?.url,
+    result?.raw?.url,
+    result?.raw?.image_url,
+    result?.raw?.data?.url
+  ]
+  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+  return found ? String(found).trim() : ''
+}
+
+const waitForAsyncImageResult = async (taskId, attempts = 45, intervalMs = 3000) => {
+  const safeTaskId = String(taskId || '').trim()
+  if (!safeTaskId) {
+    throw new Error('Image task id is missing')
+  }
+
+  let lastMessage = ''
+  for (let index = 0; index < attempts; index += 1) {
+    const result = await getImageGenerationTask(safeTaskId, { timeout: 45000 })
+    const nextUrl = extractGeneratedImageUrl(result)
+    if (nextUrl) {
+      return result
+    }
+
+    const status = String(result?.status || '').trim().toLowerCase()
+    const message = String(result?.message || '').trim()
+    if (message) lastMessage = message
+
+    if (['failed', 'error', 'cancelled', 'canceled', 'failure'].includes(status)) {
+      throw new Error(message || 'Image generation failed')
+    }
+
+    if (index < attempts - 1) {
+      await sleep(intervalMs)
+    }
+  }
+
+  throw new Error(lastMessage || 'Image generation timed out, please try again.')
+}
+
 const generateImage = async () => {
   if (!imageSource.value || validationErrors.value.length > 0 || applying.value) return
 
@@ -830,20 +905,48 @@ const generateImage = async () => {
   })
 
   try {
-    const generated = await imageGen.generate({
-      model: selectedModel.value,
-      prompt: output.output.prompt,
-      image: imageSource.value,
-      size: selectedSize.value,
-      ratio: selectedRatio.value,
-      aspect_ratio: selectedRatio.value,
-      resolution: selectedResolution.value,
-      quality: selectedQuality.value,
-      enable_sync_mode: true,
-      enable_base64_output: false
-    })
-    const first = Array.isArray(generated) ? generated[0] : generated
-    const nextUrl = String(first?.url || '').trim()
+    asyncApplying.value = true
+    let nextUrl = ''
+
+    if (isAsyncImageModel(selectedModel.value)) {
+      const run = await createImageGenerationRun({
+        model: selectedModel.value,
+        prompt: output.output.prompt,
+        image: imageSource.value,
+        size: selectedSize.value,
+        ratio: selectedRatio.value,
+        aspect_ratio: selectedRatio.value,
+        resolution: selectedResolution.value,
+        quality: selectedQuality.value,
+        enable_sync_mode: false,
+        enable_base64_output: false
+      })
+
+      const runResult = run?.result || run
+      nextUrl = extractGeneratedImageUrl(runResult)
+
+      if (!nextUrl) {
+        const taskId = extractImageTaskId(runResult)
+        const finalResult = await waitForAsyncImageResult(taskId)
+        nextUrl = extractGeneratedImageUrl(finalResult)
+      }
+    } else {
+      const generated = await imageGen.generate({
+        model: selectedModel.value,
+        prompt: output.output.prompt,
+        image: imageSource.value,
+        size: selectedSize.value,
+        ratio: selectedRatio.value,
+        aspect_ratio: selectedRatio.value,
+        resolution: selectedResolution.value,
+        quality: selectedQuality.value,
+        enable_sync_mode: true,
+        enable_base64_output: false
+      })
+      const first = Array.isArray(generated) ? generated[0] : generated
+      nextUrl = String(first?.url || '').trim()
+    }
+
     if (!nextUrl) {
       throw new Error('No image output from model')
     }
@@ -871,6 +974,8 @@ const generateImage = async () => {
       message: error?.message || 'Wedding 3x3 generation failed'
     })
     window.$message?.error(error?.message || 'Wedding 3x3 generation failed')
+  } finally {
+    asyncApplying.value = false
   }
 }
 </script>

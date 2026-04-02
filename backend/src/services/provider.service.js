@@ -863,11 +863,12 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
     const endpointBase = lowerModel.includes('gemini-3-pro-image-preview')
       ? '/ws/api/v3/google/nano-banana-pro'
       : '/ws/api/v3/google/nano-banana-2'
+    const syncMode = payload.enable_sync_mode ?? true
     const body = {
       prompt,
       aspect_ratio: aspectRatio,
       resolution,
-      enable_sync_mode: true,
+      enable_sync_mode: syncMode,
       enable_base64_output: payload.enable_base64_output ?? false
     }
     if (typeof payload.callback === 'string' && payload.callback.trim()) {
@@ -884,6 +885,14 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
     if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
       const prediction = extractPredictionMeta(raw)
       if (prediction.id && ['created', 'queued', 'pending', 'processing', 'running', 'in_progress'].includes(prediction.status)) {
+        if (!syncMode) {
+          return {
+            task_id: prediction.id,
+            status: prediction.status,
+            raw
+          }
+        }
+
         raw = await pollPredictionResult(prediction.id, 20, 3000, requestOptions)
         normalized = normalizeImageResponse(raw)
       }
@@ -900,6 +909,32 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
     throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
   }
   return normalized
+}
+
+export const providerImageStatus = async (taskId, requestOptions = {}) => {
+  const safeTaskId = String(taskId || '').trim()
+  if (!safeTaskId) {
+    throw new HttpError(400, 'Image task id is required', 'IMAGE_TASK_ID_REQUIRED')
+  }
+
+  const raw = await callProvider(`/ws/api/v3/predictions/${safeTaskId}/result`, null, 'GET', requestOptions)
+  const normalized = normalizeImageResponse(raw)
+  if (Array.isArray(normalized.data) && normalized.data.length > 0) {
+    return {
+      ...normalized,
+      task_id: safeTaskId,
+      status: 'completed',
+      raw
+    }
+  }
+
+  const prediction = extractPredictionMeta(raw)
+  return {
+    task_id: safeTaskId,
+    status: prediction.status || 'processing',
+    message: prediction.error || '',
+    raw
+  }
 }
 
 export const providerCreate3D = async (payload = {}, requestOptions = {}) => {

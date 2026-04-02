@@ -19,6 +19,32 @@ export const generateImage = (data, options = {}) => {
   })
 }
 
+export const createImageGenerationRun = (data, options = {}) => {
+  const { timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
+
+  return request({
+    url: '/runs',
+    method: 'post',
+    data: {
+      type: 'image',
+      projectId: data?.projectId || null,
+      model: data?.model,
+      payload: data
+    },
+    timeout
+  })
+}
+
+export const getImageGenerationTask = (taskId, options = {}) => {
+  const { timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
+
+  return request({
+    url: `/images/${encodeURIComponent(String(taskId || '').trim())}`,
+    method: 'get',
+    timeout
+  })
+}
+
 export const removeBackground = (data, options = {}) => {
   const { timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
 
