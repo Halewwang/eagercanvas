@@ -1096,14 +1096,24 @@ export const providerCreateVideo = async (payload = {}, requestOptions = {}) => 
       throw new HttpError(400, 'Video source is required', 'VIDEO_SOURCE_REQUIRED')
     }
 
+    const rawOutput = typeof payload.output === 'object' && payload.output ? payload.output : {}
+    const normalizedFrameRate = Number(rawOutput.frameRate)
+    const output = {
+      ...rawOutput,
+      frameRate: Number.isFinite(normalizedFrameRate) && normalizedFrameRate > 0 ? normalizedFrameRate : 30,
+      audioTransfer: String(rawOutput.audioTransfer || 'Copy').trim() || 'Copy',
+      audioCodec: String(rawOutput.audioCodec || 'AAC').trim() || 'AAC',
+      videoEncoder: String(rawOutput.videoEncoder || 'H265').trim() || 'H265',
+      videoProfile: String(rawOutput.videoProfile || 'Main').trim() || 'Main',
+      dynamicCompressionLevel: String(rawOutput.dynamicCompressionLevel || 'High').trim() || 'High'
+    }
+
     const raw = await callProvider('/topazlabs/video/upload', {
       file: source,
       filters: Array.isArray(payload.filters) && payload.filters.length > 0
         ? payload.filters
         : [{ model: String(payload.model || 'prob-4').trim() || 'prob-4' }],
-      output: typeof payload.output === 'object' && payload.output
-        ? payload.output
-        : undefined
+      output
     }, 'POST', requestOptions)
 
     const requestId = String(raw?.requestId || raw?.request_id || '').trim()

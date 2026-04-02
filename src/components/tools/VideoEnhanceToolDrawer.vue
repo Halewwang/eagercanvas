@@ -166,7 +166,6 @@ const resolutionOptions = [
 ]
 
 const frameRateOptions = [
-  { key: 'source', label: 'Keep Original' },
   { key: '24', label: '24 fps' },
   { key: '30', label: '30 fps' },
   { key: '60', label: '60 fps' }
@@ -220,7 +219,7 @@ const buildOutput = () => {
   const frameRate = Number(selectedFrameRate.value)
 
   return {
-    ...(Number.isFinite(frameRate) && frameRate > 0 ? { frameRate } : {}),
+    frameRate: Number.isFinite(frameRate) && frameRate > 0 ? frameRate : 30,
     audioTransfer: 'Copy',
     audioCodec: 'AAC',
     videoEncoder: selectedEncoder.value,
@@ -244,7 +243,7 @@ watch(
     if (!visible) return
     videoSource.value = String(props.videoUrl || '').trim()
     selectedModel.value = 'prob-4'
-    selectedFrameRate.value = 'source'
+    selectedFrameRate.value = '30'
     selectedEncoder.value = 'H265'
     selectedCompression.value = 'High'
     selectedResolution.value = String(props.resolution || '').trim().toLowerCase() === '1080p'
