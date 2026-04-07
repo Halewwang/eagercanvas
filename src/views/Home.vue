@@ -316,7 +316,7 @@ import imageModuleIcon from '@/assets/home-figma/icon-image.svg'
 import videoModuleSecondaryIcon from '@/assets/home-figma/icon-video.svg'
 import model3dModuleIcon from '@/assets/home-figma/icon-3d.svg'
 
-const stripIcons = [
+const stripIconSet = [
   row02,
   row03,
   row05,
@@ -325,7 +325,9 @@ const stripIcons = [
   row09,
   row11,
   row13
-].map((src) => ({ kind: 'image', src }))
+]
+
+const stripIcons = [...stripIconSet, ...stripIconSet].map((src) => ({ kind: 'image', src }))
 
 const router = useRouter()
 const route = useRoute()
