@@ -4,6 +4,8 @@ import test from 'node:test'
 import {
   resolveDashboard302BaseUrl,
   assert302DashboardSuccess,
+  buildDashboard302AuthHeaders,
+  shouldRetry302DashboardWithNextKey,
   normalize302ApiKeyList,
   normalize302ApiRecordList,
   normalizeDashboardRecord
@@ -23,6 +25,18 @@ test('throws on 302 dashboard business errors even when http status is 200', () 
     () => assert302DashboardSuccess({ code: 403, msg: 'permission denied' }),
     (error) => error.status === 403 && /permission denied/.test(error.message)
   )
+})
+
+test('builds dashboard auth candidates with provider key fallback', () => {
+  assert.deepEqual(buildDashboard302AuthHeaders('sk-dashboard', 'sk-provider'), [
+    'Bearer sk-dashboard',
+    'Bearer sk-provider'
+  ])
+})
+
+test('retries dashboard request with next key for disabled or invalid key responses', () => {
+  assert.equal(shouldRetry302DashboardWithNextKey({ code: -1, msg: '此 Key 已被禁用' }), true)
+  assert.equal(shouldRetry302DashboardWithNextKey({ code: 403, msg: 'permission denied' }), false)
 })
 
 test('normalizes 302 api key list from documented data wrapper', () => {

@@ -28,16 +28,36 @@ export const assert302DashboardSuccess = (data = {}) => {
   )
 }
 
-const buildAuthHeader = () => {
-  const raw = String(env.dashboard302ApiKey || env.providerApiKey || '').trim()
-  if (!raw) {
+const toBearerHeader = (value = '') => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  return raw.toLowerCase().startsWith('bearer ') ? raw : `Bearer ${raw}`
+}
+
+export const buildDashboard302AuthHeaders = (dashboardApiKey = '', providerApiKey = '') => {
+  const headers = [
+    toBearerHeader(dashboardApiKey),
+    toBearerHeader(providerApiKey)
+  ].filter(Boolean)
+  return [...new Set(headers)]
+}
+
+export const shouldRetry302DashboardWithNextKey = (data = {}) => {
+  const code = Number(data?.code)
+  const message = String(data?.msg || data?.message || data?.error?.message || '').toLowerCase()
+  return code === -1 && /key|密钥|禁用|不存在|invalid|disabled/.test(message)
+}
+
+const getAuthHeaders = () => {
+  const headers = buildDashboard302AuthHeaders(env.dashboard302ApiKey, env.providerApiKey)
+  if (!headers.length) {
     throw new HttpError(
       500,
       'DASHBOARD_302_API_KEY (or PROVIDER_API_KEY) is not configured',
       'DASHBOARD_302_NOT_CONFIGURED'
     )
   }
-  return raw.toLowerCase().startsWith('bearer ') ? raw : `Bearer ${raw}`
+  return headers
 }
 
 const parseResponse = async (response) => {
@@ -116,35 +136,47 @@ const call302Dashboard = async (path, options = {}) => {
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const url = new URL(`${resolveDashboard302BaseUrl(env.dashboard302ApiBaseUrl, env.providerApiBaseUrl)}${path}`)
-    if (params && typeof params === 'object') {
-      Object.entries(params).forEach(([k, v]) => {
-        if (v === undefined || v === null || String(v).trim() === '') return
-        url.searchParams.set(k, String(v))
+    const authHeaders = getAuthHeaders()
+    let lastBusinessError = null
+
+    for (const authHeader of authHeaders) {
+      const url = new URL(`${resolveDashboard302BaseUrl(env.dashboard302ApiBaseUrl, env.providerApiBaseUrl)}${path}`)
+      if (params && typeof params === 'object') {
+        Object.entries(params).forEach(([k, v]) => {
+          if (v === undefined || v === null || String(v).trim() === '') return
+          url.searchParams.set(k, String(v))
+        })
+      }
+
+      const response = await fetch(url.toString(), {
+        method,
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json'
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal
       })
+
+      const data = await parseResponse(response)
+
+      if (!response.ok) {
+        throw new HttpError(
+          response.status,
+          data?.msg || data?.message || data?.error?.message || `302 dashboard request failed: ${response.status}`,
+          'DASHBOARD_302_ERROR'
+        )
+      }
+
+      if (shouldRetry302DashboardWithNextKey(data) && authHeader !== authHeaders[authHeaders.length - 1]) {
+        lastBusinessError = data
+        continue
+      }
+
+      return assert302DashboardSuccess(data)
     }
 
-    const response = await fetch(url.toString(), {
-      method,
-      headers: {
-        Authorization: buildAuthHeader(),
-        'Content-Type': 'application/json'
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: controller.signal
-    })
-
-    const data = await parseResponse(response)
-
-    if (!response.ok) {
-      throw new HttpError(
-        response.status,
-        data?.msg || data?.message || data?.error?.message || `302 dashboard request failed: ${response.status}`,
-        'DASHBOARD_302_ERROR'
-      )
-    }
-
-    return assert302DashboardSuccess(data)
+    return assert302DashboardSuccess(lastBusinessError)
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw new HttpError(504, '302 dashboard request timeout', 'DASHBOARD_302_TIMEOUT')

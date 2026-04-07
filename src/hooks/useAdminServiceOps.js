@@ -49,6 +49,13 @@ const toServiceNotice = (fallback, error) => {
   return message
 }
 
+const prefixNotice = (scope, message) => {
+  const safeScope = String(scope || '').trim()
+  const safeMessage = String(message || '').trim()
+  if (!safeScope || !safeMessage) return safeMessage
+  return `${safeScope}：${safeMessage}`
+}
+
 const resetCreateKeyForm = (form) => {
   Object.assign(form, createEmptyKeyForm())
 }
@@ -100,7 +107,7 @@ export const useAdminServiceOps = ({
       balance.value = ''
       const message = toServiceNotice('加载 Eager 服务余额失败', error)
       if (!silent && !error?.__handled) window.$message?.error(message)
-      return { ok: false, message, error }
+      return { ok: false, message: prefixNotice('账户余额', message), error }
     } finally {
       loadingBalance.value = false
     }
@@ -137,7 +144,7 @@ export const useAdminServiceOps = ({
       apiLogs.value = []
       const message = toServiceNotice('加载 API 日志失败', error)
       if (!silent && !error?.__handled) window.$message?.error(message)
-      return { ok: false, message, error }
+      return { ok: false, message: prefixNotice('API 日志', message), error }
     } finally {
       loadingApiLogs.value = false
     }
@@ -159,7 +166,7 @@ export const useAdminServiceOps = ({
       keyDrafts.value = {}
       const message = toServiceNotice('加载 API 密钥失败', error)
       if (!silent && !error?.__handled) window.$message?.error(message)
-      return { ok: false, message, error }
+      return { ok: false, message: prefixNotice('API 密钥', message), error }
     } finally {
       loadingKeys.value = false
     }
