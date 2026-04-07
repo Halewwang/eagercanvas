@@ -12,7 +12,7 @@ import {
   providerVideoStatus
 } from './provider.service.js'
 import { uploadRemoteFile } from './upload.service.js'
-import { get302RecordByRequestId } from './dashboard302.service.js'
+import { get302RecordByRequestId, normalizeDashboardRecord } from './dashboard302.service.js'
 import { resolveUserProviderAccess } from './admin-usage.service.js'
 import {
   extractProviderRequestId,
@@ -515,17 +515,6 @@ const syncRunStatusFrom3DTask = async ({ userId, runId, taskResult }) => {
 
   if (error) {
     console.warn('[model3d] sync run status failed', error.message)
-  }
-}
-
-const normalizeDashboardRecord = (record = {}) => {
-  if (!record || typeof record !== 'object') return null
-  return {
-    model: String(record.model || record.model_name || '').trim(),
-    inputTokens: Number(record.input_token || record.inputTokens || 0),
-    outputTokens: Number(record.output_token || record.outputTokens || 0),
-    costUsd: Number(record.cost || record.cost_usd || 0),
-    rawUsage: record
   }
 }
 

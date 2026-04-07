@@ -1,6 +1,6 @@
 import { supabase } from '../config/supabase.js'
 import { invalidateUserAuthzCache } from './rbac.service.js'
-import { get302ApiKeys, get302RuntimeApiKeyByName } from './dashboard302.service.js'
+import { get302ApiKeys, get302RuntimeApiKeyByName, normalize302ApiKeyList } from './dashboard302.service.js'
 import { HttpError } from '../utils/http.js'
 
 const ASSIGNMENT_TABLE = 'user_api_key_assignments'
@@ -37,7 +37,7 @@ const loadAssignments = async () => {
 const loadActiveApiKeyNames = async () => {
   try {
     const response = await get302ApiKeys()
-    const list = Array.isArray(response?.data) ? response.data : (Array.isArray(response) ? response : [])
+    const list = normalize302ApiKeyList(response)
     return new Set(
       list
         .map((item) => String(item?.api_name || '').trim())

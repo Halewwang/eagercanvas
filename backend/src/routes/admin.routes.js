@@ -10,6 +10,8 @@ import {
   get302ApiRecords,
   get302Balance,
   get302RecordByRequestId,
+  normalize302ApiKeyList,
+  normalize302ApiRecordList,
   update302ApiKey
 } from '../services/dashboard302.service.js'
 import {
@@ -173,17 +175,32 @@ adminRouter.get('/302/api-record', requirePermission(['admin.usage.read_all']), 
     start_time: req.query.start_time,
     end_time: req.query.end_time
   })
+  const normalized = normalize302ApiRecordList(result)
   res.json({
     data: {
-      items: Array.isArray(result?.items) ? result.items : [],
-      pagination: result?.pagination || null
+      items: normalized.items,
+      pagination: normalized.pagination
     }
   })
 }))
 
-adminRouter.get('/302/api-keys', requirePermission(['admin.api_key.manage']), asyncHandler(async (_req, res) => {
+adminRouter.get('/302/api-keys', requirePermission(['admin.api_key.manage', 'admin.api_key.assign']), asyncHandler(async (req, res) => {
   const result = await get302ApiKeys()
-  res.json({ data: Array.isArray(result?.data) ? result.data : [] })
+  const list = normalize302ApiKeyList(result)
+  const canManage = (req.user.permissions || []).includes('admin.api_key.manage')
+  res.json({
+    data: canManage
+      ? list
+      : list.map((item) => ({
+        id: item.id,
+        api_name: item.api_name,
+        current_cost: item.current_cost,
+        limit_cost: item.limit_cost,
+        limit_daily_cost: item.limit_daily_cost,
+        current_date_cost: item.current_date_cost,
+        expired_on: item.expired_on
+      }))
+  })
 }))
 
 adminRouter.post('/302/api-keys', requirePermission(['admin.api_key.manage']), asyncHandler(async (req, res) => {

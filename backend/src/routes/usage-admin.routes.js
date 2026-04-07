@@ -12,6 +12,8 @@ import {
   get302ApiRecords,
   get302Balance,
   get302RecordByRequestId,
+  normalize302ApiKeyList,
+  normalize302ApiRecordList,
   update302ApiKey
 } from '../services/dashboard302.service.js'
 import { assignApiKeyToUser, listUsersForAdmin, removeApiKeyAssignments, unassignApiKeyFromUser } from '../services/admin-usage.service.js'
@@ -78,18 +80,19 @@ usageAdminRouter.get('/302/api-record', adminUsageRequired, asyncHandler(async (
     start_time: req.query.start_time,
     end_time: req.query.end_time
   })
+  const normalized = normalize302ApiRecordList(result)
 
   res.json({
     data: {
-      items: Array.isArray(result?.items) ? result.items : [],
-      pagination: result?.pagination || null
+      items: normalized.items,
+      pagination: normalized.pagination
     }
   })
 }))
 
 usageAdminRouter.get('/302/api-keys', adminUsageRequired, asyncHandler(async (_req, res) => {
   const result = await get302ApiKeys()
-  res.json({ data: Array.isArray(result?.data) ? result.data : [] })
+  res.json({ data: normalize302ApiKeyList(result) })
 }))
 
 usageAdminRouter.get('/302/api-keys/:apiName', adminUsageRequired, asyncHandler(async (req, res) => {

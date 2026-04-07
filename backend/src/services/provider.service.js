@@ -1,6 +1,7 @@
 import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 import sharp from 'sharp'
+import { attachProviderResponseMetadata } from './provider-response-metadata.js'
 
 const parseProviderBases = () => {
   const rawList = String(env.providerApiBaseUrls || '')
@@ -114,7 +115,7 @@ const callProviderWithBase = async (base, path, body, method = 'POST', requestOp
       throw new HttpError(response.status, message, 'PROVIDER_ERROR')
     }
 
-    return data || {}
+    return attachProviderResponseMetadata(data || {}, response)
   } finally {
     clearTimeout(timer)
   }
@@ -138,7 +139,7 @@ const callProviderMultipartWithBase = async (base, path, formData, method = 'POS
       throw new HttpError(response.status, message, 'PROVIDER_ERROR')
     }
 
-    return data || {}
+    return attachProviderResponseMetadata(data || {}, response)
   } finally {
     clearTimeout(timer)
   }

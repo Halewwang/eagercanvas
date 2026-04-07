@@ -32,6 +32,62 @@ const parseResponse = async (response) => {
   }
 }
 
+const toFiniteNumber = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null || String(value).trim() === '') continue
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
+}
+
+export const normalize302ApiKeyList = (payload = {}) => {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.data?.items)) return payload.data.items
+  if (Array.isArray(payload?.items)) return payload.items
+  return []
+}
+
+export const normalize302ApiRecordList = (payload = {}) => {
+  const source = payload?.data && typeof payload.data === 'object' ? payload.data : payload
+  return {
+    items: Array.isArray(source?.items)
+      ? source.items
+      : (Array.isArray(source?.data) ? source.data : (Array.isArray(source) ? source : [])),
+    pagination: source?.pagination || payload?.pagination || null
+  }
+}
+
+export const normalizeDashboardRecord = (record = {}) => {
+  if (!record || typeof record !== 'object') return null
+  return {
+    model: String(record.model || record.model_name || '').trim(),
+    inputTokens: toFiniteNumber(
+      record.input_token,
+      record.inputTokens,
+      record.prompt_tokens,
+      record.promptTokens
+    ),
+    outputTokens: toFiniteNumber(
+      record.output_token,
+      record.outputTokens,
+      record.completion_tokens,
+      record.completionTokens
+    ),
+    costUsd: toFiniteNumber(
+      record.cost,
+      record.cost_usd,
+      record.total_cost,
+      record.totalCost,
+      record.amount,
+      record.current_cost,
+      record.currentCost
+    ),
+    rawUsage: record
+  }
+}
+
 const runtimeApiKeyCache = new Map()
 const RUNTIME_API_KEY_TTL_MS = 60 * 1000
 
@@ -121,7 +177,7 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
   if (!apiKey) {
     try {
       const response = await get302ApiKeys()
-      const list = Array.isArray(response?.data) ? response.data : (Array.isArray(response) ? response : [])
+      const list = normalize302ApiKeyList(response)
       const matched = list.find((item) => String(item?.api_name || '').trim() === safeName)
       apiKey = String(matched?.api_key || matched?.key || '').trim()
     } catch (error) {
