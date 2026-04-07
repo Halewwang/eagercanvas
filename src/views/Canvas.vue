@@ -1369,12 +1369,10 @@ const ensureProjectSnapshot = async (projectId) => {
     return
   }
 
-  if (!getProjectCanvas(id)) {
-    try {
-      await refreshProjectById(id)
-    } catch {
-      // Fall back to any locally cached draft when detail refresh is unavailable.
-    }
+  try {
+    await refreshProjectById(id)
+  } catch {
+    // Fall back to any locally cached draft when detail refresh is unavailable.
   }
 
   await loadProjectById(id)
