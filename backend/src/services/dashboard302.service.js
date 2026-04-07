@@ -19,7 +19,7 @@ export const assert302DashboardSuccess = (data = {}) => {
   if (!data || typeof data !== 'object' || Array.isArray(data) || data.code === undefined || data.code === null) return data
   const code = Number(data.code)
   if (Number.isFinite(code) && code === 0) return data
-  const status = Number.isInteger(code) && code >= 400 && code <= 599 ? code : 502
+  const status = Number.isInteger(code) && code >= 400 && code <= 599 ? code : 400
 
   throw new HttpError(
     status,
