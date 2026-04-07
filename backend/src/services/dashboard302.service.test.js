@@ -12,8 +12,8 @@ import {
 } from './dashboard302.service.js'
 import { attachProviderResponseMetadata } from './provider-response-metadata.js'
 
-test('defaults dashboard management requests to official 302.ai host', () => {
-  assert.equal(resolveDashboard302BaseUrl('', 'https://api.302ai.cn'), 'https://api.302.ai')
+test('inherits provider host for dashboard management requests by default', () => {
+  assert.equal(resolveDashboard302BaseUrl('', 'https://api.302ai.cn'), 'https://api.302ai.cn')
 })
 
 test('allows explicit dashboard management base url override', () => {

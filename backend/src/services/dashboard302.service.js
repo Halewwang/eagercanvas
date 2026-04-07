@@ -12,7 +12,8 @@ const normalizeBaseUrl = (input = '') => {
 
 export const resolveDashboard302BaseUrl = (dashboardBaseUrl = '', _providerBaseUrl = '') => {
   const explicit = String(dashboardBaseUrl || '').trim()
-  return normalizeBaseUrl(explicit || 'https://api.302.ai')
+  const provider = String(_providerBaseUrl || '').trim()
+  return normalizeBaseUrl(explicit || provider || 'https://api.302ai.cn')
 }
 
 export const assert302DashboardSuccess = (data = {}) => {
