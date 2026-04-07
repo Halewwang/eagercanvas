@@ -30,7 +30,11 @@
               <span v-else class="home-topbar-avatar-fallback">{{ avatarInitial }}</span>
             </div>
             <button type="button" class="home-topbar-button home-topbar-button-logout" @click="handleLogout">
-              <img :src="logoutIcon" alt="" class="home-inline-icon" />
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="home-inline-icon">
+                <path d="M6.5 2.75H4.25C3.83579 2.75 3.5 3.08579 3.5 3.5V12.5C3.5 12.9142 3.83579 13.25 4.25 13.25H6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M9.75 5.25L12.5 8L9.75 10.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12.25 8H6.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
               <span>Logout</span>
             </button>
           </div>
@@ -200,7 +204,7 @@
               <li>Remove Background, Crop, and Multi-Angle tools</li>
             </ul>
             <div class="home-model-icons">
-              <span class="home-model-icon home-model-icon-mask" :style="moduleMaskedIconStyle" aria-hidden="true" />
+              <img :src="imageModuleIcon" alt="" class="home-model-icon" />
             </div>
           </div>
 
@@ -238,7 +242,7 @@
               <li>Audio toggle on supported models</li>
             </ul>
             <div class="home-model-icons home-model-icons-multi">
-              <span class="home-model-icon home-model-icon-mask" :style="moduleMaskedIconStyle" aria-hidden="true" />
+              <img :src="imageModuleIcon" alt="" class="home-model-icon" />
               <img :src="videoModuleSecondaryIcon" alt="" class="home-model-icon home-model-icon-video-secondary" />
             </div>
           </div>
@@ -300,6 +304,7 @@ import videoBottomRight from '@/assets/home-figma/video-bottom-right.png'
 import model3dLeft from '@/assets/home-figma/model3d-left.png'
 import model3dRight from '@/assets/home-figma/model3d-right.png'
 import aioncraftWordmark from '@/assets/home-figma/aioncraft-wordmark.svg'
+import row01 from '@/assets/home-figma/row-01.svg'
 import row02 from '@/assets/home-figma/row-02.svg'
 import row03 from '@/assets/home-figma/row-03.svg'
 import row04 from '@/assets/home-figma/row-04.svg'
@@ -313,67 +318,26 @@ import row11 from '@/assets/home-figma/row-11.svg'
 import row12 from '@/assets/home-figma/row-12.svg'
 import row13 from '@/assets/home-figma/row-13.svg'
 import row14 from '@/assets/home-figma/row-14.svg'
-
-const logoutIcon = 'https://www.figma.com/api/mcp/asset/54af2767-9ac3-4688-b583-1819ab30af11'
-const figmaStripMask = 'https://www.figma.com/api/mcp/asset/c2e7515e-9970-4973-8b0b-7c5992cf1824'
-const figmaStripFill = 'https://www.figma.com/api/mcp/asset/4a14f4c9-dd6b-4ca1-9749-4467b4a42855'
-const moduleIconMask = 'https://www.figma.com/api/mcp/asset/64008624-09d3-4dc9-8baa-d5c702fdd0b4'
-const moduleIconFill = 'https://www.figma.com/api/mcp/asset/a8dfbdb0-3c2f-48be-b96e-78a9433c6b53'
-const videoModuleSecondaryIcon = 'https://www.figma.com/api/mcp/asset/43889a84-876f-41b2-bcab-4dca91354bdc'
-const model3dModuleIcon = 'https://www.figma.com/api/mcp/asset/fc920a90-f6d5-43ac-be50-6409bae4553e'
-
-const buildMaskedStripIcon = () => ({
-  kind: 'mask',
-  style: {
-    maskImage: `url(${figmaStripMask})`,
-    WebkitMaskImage: `url(${figmaStripMask})`,
-    maskRepeat: 'no-repeat',
-    WebkitMaskRepeat: 'no-repeat',
-    maskPosition: 'center',
-    WebkitMaskPosition: 'center',
-    maskSize: '30px 30px',
-    WebkitMaskSize: '30px 30px',
-    backgroundImage: `url(${figmaStripFill})`,
-    backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat',
-    backgroundSize: 'cover'
-  }
-})
-
-const moduleMaskedIconStyle = {
-  maskImage: `url(${moduleIconMask})`,
-  WebkitMaskImage: `url(${moduleIconMask})`,
-  maskRepeat: 'no-repeat',
-  WebkitMaskRepeat: 'no-repeat',
-  maskPosition: 'center',
-  WebkitMaskPosition: 'center',
-  maskSize: '20px 20px',
-  WebkitMaskSize: '20px 20px',
-  backgroundImage: `url(${moduleIconFill})`,
-  backgroundPosition: 'center',
-  backgroundRepeat: 'no-repeat',
-  backgroundSize: 'cover'
-}
+import imageModuleIcon from '@/assets/home-figma/icon-image.svg'
+import videoModuleSecondaryIcon from '@/assets/home-figma/icon-video.svg'
+import model3dModuleIcon from '@/assets/home-figma/icon-3d.svg'
 
 const stripIcons = [
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/a6429337-b8de-4a77-b863-b5f662b90a1e' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/7d905930-aa1e-488d-9014-5dd9046cf586' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/02aae844-d58b-4950-8733-1b2eec15b57a' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/854ba0f3-4e42-49b0-8b61-dc4dd795ab80' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/86ea12ea-60f4-4169-9b19-fffe5617cd24' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/35d1396f-5f99-4adb-87d0-bdcd2df300ea' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/63e8101d-7f08-47f6-9b28-ea184992f998' },
-  buildMaskedStripIcon(),
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/12dc8538-8cab-4d2d-9ac9-97e0f90c659f' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/a6429337-b8de-4a77-b863-b5f662b90a1e' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/7d905930-aa1e-488d-9014-5dd9046cf586' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/02aae844-d58b-4950-8733-1b2eec15b57a' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/854ba0f3-4e42-49b0-8b61-dc4dd795ab80' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/86ea12ea-60f4-4169-9b19-fffe5617cd24' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/d67321ab-4c94-42e6-b24c-9f19ba4c0ce5' },
-  { kind: 'image', src: 'https://www.figma.com/api/mcp/asset/63e8101d-7f08-47f6-9b28-ea184992f998' },
-  buildMaskedStripIcon()
-]
+  row01,
+  row02,
+  row03,
+  row04,
+  row05,
+  row06,
+  row07,
+  row08,
+  row09,
+  row10,
+  row11,
+  row12,
+  row13,
+  row14
+].map((src) => ({ kind: 'image', src }))
 
 const router = useRouter()
 const route = useRoute()
