@@ -788,11 +788,10 @@ watch(
 }
 
 .home-logo-strip-group {
-  width: 1294px;
-  padding: 0;
+  padding: 0 72px 0 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 72px;
   flex: 0 0 auto;
 }
 
@@ -1203,7 +1202,7 @@ watch(
     transform: translateX(0);
   }
   to {
-    transform: translateX(-1294px);
+    transform: translateX(-50%);
   }
 }
 </style>
