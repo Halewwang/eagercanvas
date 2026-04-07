@@ -21,7 +21,7 @@ test('allows explicit dashboard management base url override', () => {
 test('throws on 302 dashboard business errors even when http status is 200', () => {
   assert.throws(
     () => assert302DashboardSuccess({ code: 403, msg: 'permission denied' }),
-    /permission denied/
+    (error) => error.status === 403 && /permission denied/.test(error.message)
   )
 })
 
