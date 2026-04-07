@@ -10,6 +10,23 @@ const normalizeBaseUrl = (input = '') => {
     .replace(/\/v1$/i, '')
 }
 
+export const resolveDashboard302BaseUrl = (dashboardBaseUrl = '', _providerBaseUrl = '') => {
+  const explicit = String(dashboardBaseUrl || '').trim()
+  return normalizeBaseUrl(explicit || 'https://api.302.ai')
+}
+
+export const assert302DashboardSuccess = (data = {}) => {
+  if (!data || typeof data !== 'object' || Array.isArray(data) || data.code === undefined || data.code === null) return data
+  const code = Number(data.code)
+  if (Number.isFinite(code) && code === 0) return data
+
+  throw new HttpError(
+    502,
+    data?.msg || data?.message || data?.error?.message || `302 dashboard request failed: ${data.code}`,
+    'DASHBOARD_302_ERROR'
+  )
+}
+
 const buildAuthHeader = () => {
   const raw = String(env.dashboard302ApiKey || env.providerApiKey || '').trim()
   if (!raw) {
@@ -98,7 +115,7 @@ const call302Dashboard = async (path, options = {}) => {
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const url = new URL(`${normalizeBaseUrl(env.dashboard302ApiBaseUrl)}${path}`)
+    const url = new URL(`${resolveDashboard302BaseUrl(env.dashboard302ApiBaseUrl, env.providerApiBaseUrl)}${path}`)
     if (params && typeof params === 'object') {
       Object.entries(params).forEach(([k, v]) => {
         if (v === undefined || v === null || String(v).trim() === '') return
@@ -126,7 +143,7 @@ const call302Dashboard = async (path, options = {}) => {
       )
     }
 
-    return data
+    return assert302DashboardSuccess(data)
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw new HttpError(504, '302 dashboard request timeout', 'DASHBOARD_302_TIMEOUT')

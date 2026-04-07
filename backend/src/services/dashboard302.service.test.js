@@ -2,11 +2,28 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  resolveDashboard302BaseUrl,
+  assert302DashboardSuccess,
   normalize302ApiKeyList,
   normalize302ApiRecordList,
   normalizeDashboardRecord
 } from './dashboard302.service.js'
 import { attachProviderResponseMetadata } from './provider-response-metadata.js'
+
+test('defaults dashboard management requests to official 302.ai host', () => {
+  assert.equal(resolveDashboard302BaseUrl('', 'https://api.302ai.cn'), 'https://api.302.ai')
+})
+
+test('allows explicit dashboard management base url override', () => {
+  assert.equal(resolveDashboard302BaseUrl('https://proxy.example.com/v1', 'https://api.302ai.cn'), 'https://proxy.example.com')
+})
+
+test('throws on 302 dashboard business errors even when http status is 200', () => {
+  assert.throws(
+    () => assert302DashboardSuccess({ code: 403, msg: 'permission denied' }),
+    /permission denied/
+  )
+})
 
 test('normalizes 302 api key list from documented data wrapper', () => {
   const list = normalize302ApiKeyList({
