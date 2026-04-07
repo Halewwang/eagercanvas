@@ -304,39 +304,27 @@ import videoBottomRight from '@/assets/home-figma/video-bottom-right.png'
 import model3dLeft from '@/assets/home-figma/model3d-left.png'
 import model3dRight from '@/assets/home-figma/model3d-right.png'
 import aioncraftWordmark from '@/assets/home-figma/aioncraft-wordmark.svg'
-import row01 from '@/assets/home-figma/row-01.svg'
 import row02 from '@/assets/home-figma/row-02.svg'
 import row03 from '@/assets/home-figma/row-03.svg'
-import row04 from '@/assets/home-figma/row-04.svg'
 import row05 from '@/assets/home-figma/row-05.svg'
-import row06 from '@/assets/home-figma/row-06.svg'
 import row07 from '@/assets/home-figma/row-07.svg'
 import row08 from '@/assets/home-figma/row-08.svg'
 import row09 from '@/assets/home-figma/row-09.svg'
-import row10 from '@/assets/home-figma/row-10.svg'
 import row11 from '@/assets/home-figma/row-11.svg'
-import row12 from '@/assets/home-figma/row-12.svg'
 import row13 from '@/assets/home-figma/row-13.svg'
-import row14 from '@/assets/home-figma/row-14.svg'
 import imageModuleIcon from '@/assets/home-figma/icon-image.svg'
 import videoModuleSecondaryIcon from '@/assets/home-figma/icon-video.svg'
 import model3dModuleIcon from '@/assets/home-figma/icon-3d.svg'
 
 const stripIcons = [
-  row01,
   row02,
   row03,
-  row04,
   row05,
-  row06,
   row07,
   row08,
   row09,
-  row10,
   row11,
-  row12,
-  row13,
-  row14
+  row13
 ].map((src) => ({ kind: 'image', src }))
 
 const router = useRouter()
