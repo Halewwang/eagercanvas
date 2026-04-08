@@ -51,6 +51,8 @@ let saveTimeout = null
 let saveInFlight = null
 let saveQueued = false
 let lastPersistedSnapshotKey = ''
+let remoteRetryTimeout = null
+let remoteRetryDelayMs = 2000
 let lastSaveResult = {
   status: 'idle',
   localSaved: false,
@@ -65,6 +67,31 @@ const history = ref([])
 const historyIndex = ref(-1)
 const MAX_HISTORY = 50
 let isRestoring = false
+
+const REMOTE_RETRY_MIN_DELAY = 2000
+const REMOTE_RETRY_MAX_DELAY = 15000
+
+const clearRemoteRetry = () => {
+  if (!remoteRetryTimeout) return
+  clearTimeout(remoteRetryTimeout)
+  remoteRetryTimeout = null
+}
+
+const resetRemoteRetryDelay = () => {
+  remoteRetryDelayMs = REMOTE_RETRY_MIN_DELAY
+}
+
+const scheduleRemoteRetry = () => {
+  if (!currentProjectId.value || remoteRetryTimeout || saveInFlight) return
+
+  remoteRetryTimeout = setTimeout(() => {
+    remoteRetryTimeout = null
+    if (!currentProjectId.value) return
+    void saveProject()
+  }, remoteRetryDelayMs)
+
+  remoteRetryDelayMs = Math.min(remoteRetryDelayMs * 2, REMOTE_RETRY_MAX_DELAY)
+}
 
 /**
  * Save current state to history | 保存当前状态到历史
@@ -634,6 +661,8 @@ export const resetCanvasSession = () => {
   lastSaveResult = { ...projectSaveState.value }
   lastPersistedSnapshotKey = ''
   saveQueued = false
+  clearRemoteRetry()
+  resetRemoteRetryDelay()
   if (saveTimeout) {
     clearTimeout(saveTimeout)
     saveTimeout = null
@@ -648,11 +677,24 @@ export const resetCanvasSession = () => {
 export const loadProject = (projectId) => {
   autoSaveEnabled = false
   isRestoring = true
+  clearRemoteRetry()
+  resetRemoteRetryDelay()
   currentProjectId.value = projectId
   
   const canvasData = getProjectCanvas(projectId)
   
   if (canvasData) {
+    const loadRemoteSynced = canvasData?._meta?.remoteSynced !== false
+    projectSaveState.value = {
+      status: loadRemoteSynced ? 'synced' : 'local-only',
+      localSaved: true,
+      remoteSynced: loadRemoteSynced,
+      hasTransientMedia: false,
+      reason: loadRemoteSynced ? 'loaded-remote' : 'loaded-local-draft',
+      error: null
+    }
+    lastSaveResult = { ...projectSaveState.value }
+
     // Restore project version
     if (canvasData._meta && (canvasData._meta.serverUpdatedAt || canvasData._meta.draftBaseVersion)) {
       currentProjectVersion.value = canvasData._meta.serverUpdatedAt || canvasData._meta.draftBaseVersion
@@ -719,7 +761,8 @@ export const loadProject = (projectId) => {
     groups: JSON.parse(JSON.stringify(groups.value))
   }]
   historyIndex.value = 0
-  lastPersistedSnapshotKey = getSnapshotKey(createCanvasSnapshot({ preserveTransientMedia: true }))
+  const snapshotKey = getSnapshotKey(createCanvasSnapshot({ preserveTransientMedia: true }))
+  lastPersistedSnapshotKey = canvasData?._meta?.remoteSynced === false ? '' : snapshotKey
   
   // Enable auto-save after loading | 加载后启用自动保存
   setTimeout(() => {
@@ -739,7 +782,7 @@ export const saveProject = async () => {
   const localSnapshot = createCanvasSnapshot({ preserveTransientMedia: true })
   const remoteSnapshot = createCanvasSnapshot()
   const localSnapshotKey = getSnapshotKey(localSnapshot)
-  if (localSnapshotKey === lastPersistedSnapshotKey) {
+  if (localSnapshotKey === lastPersistedSnapshotKey && lastSaveResult.remoteSynced) {
     return !!lastSaveResult.localSaved
   }
 
@@ -750,6 +793,12 @@ export const saveProject = async () => {
 
   const runSave = async () => {
     let saved = true
+    clearRemoteRetry()
+    projectSaveState.value = {
+      ...lastSaveResult,
+      status: 'syncing',
+      error: null
+    }
     try {
       const result = await updateProjectCanvas(
         currentProjectId.value,
@@ -774,8 +823,12 @@ export const saveProject = async () => {
       }
       projectSaveState.value = { ...lastSaveResult }
 
-      if (localSaved) {
+      if (remoteSynced) {
         lastPersistedSnapshotKey = localSnapshotKey
+        clearRemoteRetry()
+        resetRemoteRetryDelay()
+      } else if (!containsTransientMedia && result?.error) {
+        scheduleRemoteRetry()
       }
 
       // Update local version after successful save
@@ -798,6 +851,10 @@ export const saveProject = async () => {
         error
       }
       projectSaveState.value = { ...lastSaveResult }
+      clearRemoteRetry()
+      if (error?.status !== 409 && error?.code !== 'PROJECT_CONFLICT' && error?.code !== 'EMPTY_CANVAS_OVERWRITE_BLOCKED') {
+        scheduleRemoteRetry()
+      }
       if (error.status === 409 || error.code === 'PROJECT_CONFLICT') {
         // Handle conflict: Show dialog to user
         window.$message?.error('Project has been updated elsewhere. Please refresh.')

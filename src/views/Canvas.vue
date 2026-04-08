@@ -26,6 +26,19 @@
       </div>
 
       <div class="absolute right-4 top-4 z-20 flex items-center gap-2">
+        <div
+          v-if="syncIndicator"
+          class="flora-panel rounded-full px-3 py-2"
+          :title="syncIndicator.title"
+        >
+          <div class="flex items-center gap-2 text-xs font-medium">
+            <span
+              class="h-2 w-2 rounded-full"
+              :class="syncIndicator.dotClass"
+            />
+            <span>{{ syncIndicator.label }}</span>
+          </div>
+        </div>
         <div class="flora-panel rounded-full p-1.5">
           <button
             @click="openShareDialog"
@@ -423,6 +436,7 @@ import {
   flushSave,
   resetCanvasSession,
   canvasViewport,
+  projectSaveState,
   updateViewport,
   undo,
   redo,
@@ -622,6 +636,55 @@ const canvasFlowStyle = computed(() => {
     '--canvas-grid-size': `${scaledGap}px ${scaledGap}px`,
     '--canvas-grid-position': `${offsetX}px ${offsetY}px`
   }
+})
+
+const syncIndicator = computed(() => {
+  if (!currentCanvasProjectId.value) return null
+
+  const state = projectSaveState.value || {}
+  const status = String(state.status || 'idle')
+
+  if (status === 'syncing') {
+    return {
+      label: 'Syncing...',
+      title: 'Changes are being uploaded to the cloud.',
+      dotClass: 'bg-amber-400'
+    }
+  }
+
+  if (state.remoteSynced || status === 'synced') {
+    return {
+      label: 'Synced',
+      title: 'This canvas is synced to the cloud.',
+      dotClass: 'bg-emerald-400'
+    }
+  }
+
+  if (status === 'conflict') {
+    return {
+      label: 'Sync conflict',
+      title: 'Another device has newer changes. Refresh before editing further.',
+      dotClass: 'bg-rose-400'
+    }
+  }
+
+  if (status === 'local-only') {
+    return {
+      label: 'Local only',
+      title: 'Changes are only saved on this device until cloud sync succeeds.',
+      dotClass: 'bg-amber-400'
+    }
+  }
+
+  if (status === 'failed') {
+    return {
+      label: 'Sync failed',
+      title: 'Cloud sync failed. The current canvas may only be available on this device.',
+      dotClass: 'bg-rose-400'
+    }
+  }
+
+  return null
 })
 
 const selectedNodeIds = computed(() =>
