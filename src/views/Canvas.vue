@@ -28,7 +28,7 @@
       <div class="absolute right-4 top-4 z-20 flex items-center gap-2">
         <div
           v-if="syncIndicator"
-          class="flora-panel rounded-full px-3 py-2"
+          class="flora-panel canvas-sync-pill rounded-full px-3 py-2"
           :title="syncIndicator.title"
         >
           <div class="flex items-center gap-2 text-xs font-medium">
@@ -265,7 +265,7 @@
         >
           <n-icon :size="16"><LocateOutline /></n-icon>
         </button>
-        <div class="flex h-9 items-center gap-1 rounded-full px-2">
+        <div class="canvas-zoom-pill flex h-9 items-center gap-1 rounded-full px-2">
           <button @click="zoomOut" class="ui-icon-button !h-8 !w-8">
             <n-icon :size="14"><RemoveOutline /></n-icon>
           </button>
@@ -2076,10 +2076,28 @@ onUnmounted(() => {
 
 <style>
 .canvas-flow .vue-flow__pane {
-  background-color: #080808;
-  background-image: var(--canvas-grid-image, none);
+  background-color: rgba(18, 18, 18, 0.72);
+  background-image:
+    linear-gradient(rgba(22, 22, 22, 0.78), rgba(22, 22, 22, 0.78)),
+    var(--canvas-grid-image, none);
   background-size: var(--canvas-grid-size, 20px 20px);
   background-position: var(--canvas-grid-position, 0 0);
+}
+
+.canvas-sync-pill {
+  flex: 0 1 auto;
+  width: 110px;
+  height: 50px;
+  display: flex;
+  align-self: auto;
+  justify-content: center;
+  align-items: center;
+}
+
+.canvas-zoom-pill {
+  width: 185px;
+  justify-content: flex-start;
+  align-items: center;
 }
 
 .canvas-flow .vue-flow__node-text,
