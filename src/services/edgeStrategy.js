@@ -3,6 +3,7 @@
  * Handles edge connection logic based on node types
  */
 import { nodes, edges } from '../stores/canvas'
+import { getVideoGenerationProfile } from '../config/models'
 
 const IMAGE_TARGET_TYPES = new Set(['image', 'imageConfig'])
 const VIDEO_TARGET_TYPES = new Set(['video', 'videoConfig'])
@@ -20,10 +21,32 @@ const getNextOrderedValue = (targetId, edgeType) => {
   return sameTargetEdges.length + 1
 }
 
-const getImageRoleData = () => ({
-  slot: 'first_frame_image',
-  imageRole: 'first_frame_image'
-})
+const resolveVideoTargetProfile = (targetNode) => {
+  if (!targetNode || !isVideoTarget(targetNode.type)) return null
+  return getVideoGenerationProfile(targetNode.data?.model, targetNode.data?.o1_type)
+}
+
+const getImageRoleData = (targetNode) => {
+  const profile = resolveVideoTargetProfile(targetNode)
+  if (profile?.allowFirstFrame) {
+    return {
+      slot: 'first_frame_image',
+      imageRole: 'first_frame_image'
+    }
+  }
+
+  if (profile?.allowImageReference) {
+    return {
+      slot: 'input_reference',
+      imageRole: 'input_reference'
+    }
+  }
+
+  return {
+    slot: 'first_frame_image',
+    imageRole: 'first_frame_image'
+  }
+}
 
 const normalizePromptEdgeData = (targetId) => {
   const nextOrder = getNextOrderedValue(targetId, 'promptOrder')
@@ -57,7 +80,17 @@ const getSemanticConnection = (sourceNode, targetNode, params) => {
     return {
       ...params,
       type: 'imageRole',
-      data: getImageRoleData()
+      data: getImageRoleData(targetNode)
+    }
+  }
+
+  if (sourceNode.type === 'video' && isVideoTarget(targetNode.type)) {
+    return {
+      ...params,
+      type: 'default',
+      data: {
+        slot: 'video_reference'
+      }
     }
   }
 
@@ -135,6 +168,21 @@ export const resolveNodeInputs = (targetNodeId) => {
       return
     }
 
+    if (sourceNode.type === 'video' && isVideoTarget(targetNode?.type)) {
+      const videoValue = sourceNode.data?.url
+      if (!videoValue) return
+
+      videoReferenceEntries.push({
+        edgeId: edge.id,
+        nodeId: sourceNode.id,
+        value: videoValue,
+        video: videoValue,
+        role: edge.data?.slot || 'video_reference',
+        index
+      })
+      return
+    }
+
     if (sourceNode.type !== 'image') return
 
     const imageValue = sourceNode.data?.previewUrl || sourceNode.data?.base64 || sourceNode.data?.url
@@ -188,7 +236,7 @@ export const resolveNodeInputs = (targetNodeId) => {
       return
     }
 
-    videoReferenceEntries.push(entry)
+    imageReferenceEntries.push(entry)
   })
 
   sortByOrder(promptEntries)
@@ -201,10 +249,12 @@ export const resolveNodeInputs = (targetNodeId) => {
     refImages: imageReferenceEntries.map((item) => item.value),
     firstFrame,
     lastFrame,
-    referenceImages: videoReferenceEntries,
+    referenceImages: imageReferenceEntries,
     first_frame_image: firstFrame?.value || '',
     last_frame_image: lastFrame?.value || '',
-    images: videoReferenceEntries.map((item) => item.value),
+    images: imageReferenceEntries.map((item) => item.value),
+    referenceVideos: videoReferenceEntries,
+    videos: videoReferenceEntries.map((item) => item.value),
     multiViewImages,
     multi_view_images: multiViewImages.map((item) => ({
       viewType: item.viewType,
@@ -224,7 +274,16 @@ export const isConnectionValid = (params) => {
   }
 
   if (isVideoTarget(targetNode.type)) {
-    return ['text', 'image', 'videoConfig'].includes(sourceNode.type)
+    const profile = resolveVideoTargetProfile(targetNode)
+    if (sourceNode.type === 'videoConfig') return true
+    if (sourceNode.type === 'text') return Boolean(profile?.allowPrompt ?? true)
+    if (sourceNode.type === 'image') {
+      return Boolean(profile?.allowFirstFrame || profile?.allowLastFrame || profile?.allowImageReference)
+    }
+    if (sourceNode.type === 'video') {
+      return Boolean(profile?.allowVideoReference)
+    }
+    return false
   }
 
   if (isModel3DTarget(targetNode.type)) {

@@ -123,6 +123,7 @@ export const MODEL3D_MODELS = [
 
 // Video ratio options | 视频比例选项
 export const VIDEO_RATIO_LIST = [
+    { label: '21:9 (电影宽屏)', key: '21:9' },
     { label: '16:9 (横版)', key: '16:9' },
     { label: '7:4 (横版)', key: '7:4' },
     { label: '4:3', key: '4:3' },
@@ -168,8 +169,107 @@ export const VIDEO_MODELS = [
         durs: [{ label: '4 秒', key: 4 }, { label: '6 秒', key: 6 }, { label: '8 秒', key: 8 }],
         defaultParams: { ratio: '16:9', duration: 8, resolution: '1080p', generate_audio: false },
         supportAudioToggle: true
+    },
+    {
+        label: 'Seedance 2.0',
+        key: 'seedance-2.0',
+        ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+        resolutions: [
+            { label: '480p', key: '480p' },
+            { label: '720p', key: '720p' }
+        ],
+        generationTypes: [
+            { label: 'Text to Video', key: 'text_to_video' },
+            { label: 'First + Last Frame', key: 'first_last_frames' },
+            { label: 'Omni Reference', key: 'omni_reference' }
+        ],
+        durs: [
+            { label: '4 秒', key: 4 },
+            { label: '5 秒', key: 5 },
+            { label: '6 秒', key: 6 },
+            { label: '8 秒', key: 8 },
+            { label: '10 秒', key: 10 },
+            { label: '12 秒', key: 12 },
+            { label: '15 秒', key: 15 }
+        ],
+        defaultParams: {
+            ratio: '16:9',
+            duration: 5,
+            resolution: '720p',
+            o1_type: 'text_to_video',
+            generate_audio: true
+        },
+        supportAudioToggle: true,
+        supportVideoReference: true
     }
 ]
+
+const DEFAULT_VIDEO_INPUT_PROFILE = {
+    allowPrompt: true,
+    allowFirstFrame: true,
+    allowLastFrame: true,
+    allowImageReference: true,
+    allowVideoReference: false,
+    allowRatio: true,
+    allowSize: false,
+    allowResolution: false,
+    allowMode: false,
+    allowType: false,
+    allowAudioToggle: false,
+    allowDuration: true
+}
+
+const SEEDANCE_INPUT_PROFILES = {
+    text_to_video: {
+        allowFirstFrame: false,
+        allowLastFrame: false,
+        allowImageReference: false,
+        allowVideoReference: false,
+        allowResolution: true,
+        allowType: true,
+        allowAudioToggle: true
+    },
+    first_last_frames: {
+        allowFirstFrame: true,
+        allowLastFrame: true,
+        allowImageReference: false,
+        allowVideoReference: false,
+        allowRatio: false,
+        allowResolution: true,
+        allowType: true,
+        allowAudioToggle: true
+    },
+    omni_reference: {
+        allowFirstFrame: false,
+        allowLastFrame: false,
+        allowImageReference: true,
+        allowVideoReference: true,
+        allowResolution: true,
+        allowType: true,
+        allowAudioToggle: true
+    }
+}
+
+export const getVideoGenerationProfile = (modelKey = '', generationType = '') => {
+    const model = VIDEO_MODELS.find((item) => item.key === modelKey)
+    const profile = {
+        ...DEFAULT_VIDEO_INPUT_PROFILE,
+        allowSize: Array.isArray(model?.sizes) && model.sizes.length > 0,
+        allowResolution: Array.isArray(model?.resolutions) && model.resolutions.length > 0,
+        allowMode: Array.isArray(model?.modes) && model.modes.length > 0,
+        allowType: Array.isArray(model?.generationTypes) && model.generationTypes.length > 0,
+        allowAudioToggle: Boolean(model?.supportAudioToggle),
+        allowVideoReference: Boolean(model?.supportVideoReference)
+    }
+
+    if (modelKey !== 'seedance-2.0') return profile
+
+    const safeType = String(generationType || model?.defaultParams?.o1_type || 'text_to_video').trim()
+    return {
+        ...profile,
+        ...(SEEDANCE_INPUT_PROFILES[safeType] || SEEDANCE_INPUT_PROFILES.text_to_video)
+    }
+}
 
 // Chat/LLM models | 对话模型
 export const CHAT_MODELS = [

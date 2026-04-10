@@ -9,12 +9,13 @@
         <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
         <div class="capsule-group">
           <BaseDropdown :options="modelOptions" compact @select="setModel"><button class="capsule-select">{{ displayModel }}</button></BaseDropdown>
-          <BaseDropdown :options="ratioOptions" compact @select="setRatio"><button class="capsule-select">{{ localRatio }}</button></BaseDropdown>
-          <BaseDropdown v-if="modeOptions.length > 0" :options="modeOptions" compact @select="setMode"><button class="capsule-select">{{ displayMode }}</button></BaseDropdown>
-          <BaseDropdown v-if="sizeOptions.length > 0" :options="sizeOptions" compact @select="setSize"><button class="capsule-select">{{ displaySize }}</button></BaseDropdown>
-          <BaseDropdown v-if="resolutionOptions.length > 0" :options="resolutionOptions" compact @select="setResolution"><button class="capsule-select">{{ displayResolution }}</button></BaseDropdown>
-          <BaseDropdown v-if="supportsAudioToggle" :options="audioOptions" compact @select="setGenerateAudio"><button class="capsule-select">{{ displayAudio }}</button></BaseDropdown>
-          <BaseDropdown v-if="durationOptions.length > 0" :options="durationOptions" compact @select="setDuration"><button class="capsule-select">{{ localDuration }}s</button></BaseDropdown>
+          <BaseDropdown v-if="inputProfile.allowRatio" :options="ratioOptions" compact @select="setRatio"><button class="capsule-select">{{ localRatio }}</button></BaseDropdown>
+          <BaseDropdown v-if="inputProfile.allowType && typeOptions.length > 0" :options="typeOptions" compact @select="setO1Type"><button class="capsule-select">{{ displayO1Type }}</button></BaseDropdown>
+          <BaseDropdown v-if="inputProfile.allowMode && modeOptions.length > 0" :options="modeOptions" compact @select="setMode"><button class="capsule-select">{{ displayMode }}</button></BaseDropdown>
+          <BaseDropdown v-if="inputProfile.allowSize && sizeOptions.length > 0" :options="sizeOptions" compact @select="setSize"><button class="capsule-select">{{ displaySize }}</button></BaseDropdown>
+          <BaseDropdown v-if="inputProfile.allowResolution && resolutionOptions.length > 0" :options="resolutionOptions" compact @select="setResolution"><button class="capsule-select">{{ displayResolution }}</button></BaseDropdown>
+          <BaseDropdown v-if="inputProfile.allowAudioToggle && supportsAudioToggle" :options="audioOptions" compact @select="setGenerateAudio"><button class="capsule-select">{{ displayAudio }}</button></BaseDropdown>
+          <BaseDropdown v-if="inputProfile.allowDuration && durationOptions.length > 0" :options="durationOptions" compact @select="setDuration"><button class="capsule-select">{{ localDuration }}s</button></BaseDropdown>
         </div>
 
         <div class="capsule-divider" />
@@ -79,7 +80,7 @@
           
           <div class="flex flex-col items-center gap-2">
             <n-icon :size="32" class="text-[#7b818c]"><VideocamOutline /></n-icon>
-            <span class="text-sm text-[#7b818c]">Connect Text/Image node to generate</span>
+            <span class="text-sm text-[#7b818c]">{{ connectHint }}</span>
             <button class="upload-btn" @click="triggerUpload">Upload</button>
             <input ref="uploadInputRef" type="file" accept="video/*" class="hidden" @change="handleFileUpload" />
           </div>
@@ -159,7 +160,7 @@ import VideoEnhanceToolDrawer from '@/components/tools/VideoEnhanceToolDrawer.vu
 import { CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
 import { addEdge, addNode, currentProjectId, duplicateNode, edges, flushSave, nodes, removeNode, saveProject, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
-import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
+import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
 import { persistMediaUrl, uploadImageFile } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
@@ -202,6 +203,11 @@ const getInitialVideoMode = (data) => {
   const options = getModelVideoModeOptions(getInitialVideoModel(data))
   return String(data?.mode || config?.defaultParams?.mode || options[0]?.key || '').trim()
 }
+const getInitialVideoType = (data) => {
+  const config = getInitialVideoConfig(data)
+  const options = getModelVideoTypeOptions(getInitialVideoModel(data))
+  return String(data?.o1_type || config?.defaultParams?.o1_type || options[0]?.key || '').trim()
+}
 const getInitialVideoAudio = (data) => {
   const config = getInitialVideoConfig(data)
   return Boolean(
@@ -217,6 +223,7 @@ const localModel = ref(getInitialVideoModel(props.data))
 const localRatio = ref(props.data?.ratio || DEFAULT_VIDEO_RATIO)
 const localSize = ref(props.data?.size || '')
 const localResolution = ref('')
+const localO1Type = ref(getInitialVideoType(props.data))
 const localMode = ref(getInitialVideoMode(props.data))
 const localGenerateAudio = ref(getInitialVideoAudio(props.data))
 const getDurationFromData = (data) => {
@@ -229,8 +236,9 @@ const localDuration = ref(getDurationFromData(props.data))
 const imageRoleStatusMap = {
   prompt: 'Prompt',
   first_frame_image: 'First Frame',
-  last_frame_image: 'Last Frame',
-  input_reference: 'Image Reference'
+  last_frame_image: 'Second Frame',
+  input_reference: 'Reference Picture',
+  video_reference: 'Reference Video'
 }
 const audioOptions = [
   { key: 'off', label: 'Audio Off' },
@@ -251,12 +259,15 @@ const toolDropdownOptions = computed(() => ([
 
 const modelOptions = computed(() => videoModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const ratioOptions = computed(() => getModelRatioOptions(localModel.value))
+const typeOptions = computed(() => getModelVideoTypeOptions(localModel.value))
 const modeOptions = computed(() => getModelVideoModeOptions(localModel.value))
 const sizeOptions = computed(() => getModelVideoSizeOptions(localModel.value, localRatio.value))
 const resolutionOptions = computed(() => getModelVideoResolutionOptions(localModel.value))
 const durationOptions = computed(() => getModelDurationOptions(localModel.value))
 const supportsAudioToggle = computed(() => Boolean(getModelConfig(localModel.value)?.supportAudioToggle))
+const inputProfile = computed(() => getVideoGenerationProfile(localModel.value, localO1Type.value))
 const displayModel = computed(() => videoModelOptions.value.find(m => m.key === localModel.value)?.label || localModel.value)
+const displayO1Type = computed(() => typeOptions.value.find(m => m.key === localO1Type.value)?.label || localO1Type.value || 'Type')
 const displayMode = computed(() => modeOptions.value.find(m => m.key === localMode.value)?.label || localMode.value || 'Mode')
 const displaySize = computed(() => String(localSize.value || '').trim() || 'Size')
 const resolvedResolution = computed(() => {
@@ -267,6 +278,11 @@ const resolvedResolution = computed(() => {
 })
 const displayResolution = computed(() => resolvedResolution.value)
 const displayAudio = computed(() => (localGenerateAudio.value ? 'Audio On' : 'Audio Off'))
+const connectHint = computed(() => (
+  inputProfile.value.allowVideoReference
+    ? 'Connect Text/Image/Video node to generate'
+    : 'Connect Text/Image node to generate'
+))
 const ratioFromSize = (size) => {
   const [w, h] = String(size || '').split('x').map(Number)
   if (!w || !h) return '16:9'
@@ -282,11 +298,14 @@ const activeImageRoleSet = computed(() => {
   for (const edge of incomingEdges) {
     const sourceNode = nodes.value.find((node) => node.id === edge.source)
     if (sourceNode?.type === 'image') {
-      const role = edge.data?.imageRole || 'first_frame_image'
+      const role = edge.data?.slot || edge.data?.imageRole || 'first_frame_image'
       activeRoleKeys.push(role)
       if (sourceNode.data?.url) {
         rolePreviews[role] = sourceNode.data.url
       }
+    }
+    if (sourceNode?.type === 'video' && sourceNode.data?.url) {
+      activeRoleKeys.push('video_reference')
     }
     if (sourceNode?.type === 'text' && sourceNode.data?.content) {
       activeRoleKeys.push('prompt')
@@ -296,6 +315,9 @@ const activeImageRoleSet = computed(() => {
   return { keys: new Set(activeRoleKeys), previews: rolePreviews }
 })
 const resolvedVideoType = computed(() => {
+  if (localO1Type.value) {
+    return String(localO1Type.value).trim()
+  }
   if (localModel.value !== 'kling-o3') {
     return String(props.data?.o1_type || getModelConfig(localModel.value)?.defaultParams?.o1_type || '').trim()
   }
@@ -324,14 +346,32 @@ const syncModeToModelOptions = () => {
   if (current && optionKeys.includes(current)) return
   localMode.value = String(getModelConfig(localModel.value)?.defaultParams?.mode || optionKeys[0] || '').trim()
 }
+const syncTypeToModelOptions = () => {
+  const optionKeys = typeOptions.value.map((item) => String(item.key || '').trim()).filter(Boolean)
+  if (!optionKeys.length) {
+    localO1Type.value = ''
+    return
+  }
+  const current = String(localO1Type.value || '').trim()
+  if (current && optionKeys.includes(current)) return
+  localO1Type.value = String(getModelConfig(localModel.value)?.defaultParams?.o1_type || optionKeys[0] || '').trim()
+}
 const imageRoleStatusList = computed(() => {
   const { keys, previews } = activeImageRoleSet.value
   return [
     { key: 'prompt', label: imageRoleStatusMap.prompt, active: keys.has('prompt') },
     { key: 'first_frame_image', label: imageRoleStatusMap.first_frame_image, active: keys.has('first_frame_image'), previewUrl: previews.first_frame_image },
     { key: 'last_frame_image', label: imageRoleStatusMap.last_frame_image, active: keys.has('last_frame_image'), previewUrl: previews.last_frame_image },
-    { key: 'input_reference', label: imageRoleStatusMap.input_reference, active: keys.has('input_reference'), previewUrl: previews.input_reference }
-  ]
+    { key: 'input_reference', label: imageRoleStatusMap.input_reference, active: keys.has('input_reference'), previewUrl: previews.input_reference },
+    { key: 'video_reference', label: imageRoleStatusMap.video_reference, active: keys.has('video_reference') }
+  ].filter((item) => {
+    if (item.key === 'prompt') return Boolean(inputProfile.value.allowPrompt)
+    if (item.key === 'first_frame_image') return Boolean(inputProfile.value.allowFirstFrame)
+    if (item.key === 'last_frame_image') return Boolean(inputProfile.value.allowLastFrame)
+    if (item.key === 'input_reference') return Boolean(inputProfile.value.allowImageReference)
+    if (item.key === 'video_reference') return Boolean(inputProfile.value.allowVideoReference)
+    return true
+  })
 })
 
 const stageStyle = computed(() => {
@@ -461,8 +501,10 @@ const setModel = (key) => {
   if (config?.defaultParams?.size) localSize.value = config.defaultParams.size
   else localSize.value = ''
   localResolution.value = ''
+  localO1Type.value = String(config?.defaultParams?.o1_type || typeOptions.value[0]?.key || '').trim()
   localMode.value = String(config?.defaultParams?.mode || modeOptions.value[0]?.key || '').trim()
   syncResolutionToModelOptions()
+  syncTypeToModelOptions()
   syncModeToModelOptions()
   localGenerateAudio.value = Boolean(config?.defaultParams?.generate_audio ?? config?.defaultParams?.enable_audio ?? false)
   const modelDurationOptions = getModelDurationOptions(localModel.value)
@@ -476,7 +518,7 @@ const setModel = (key) => {
   updateNode(props.id, {
     model: localModel.value,
     ratio: localRatio.value,
-    o1_type: resolvedVideoType.value,
+    o1_type: localO1Type.value,
     mode: localMode.value,
     size: localSize.value,
     resolution: resolvedResolution.value === 'Resolution' ? '' : resolvedResolution.value,
@@ -495,6 +537,10 @@ const setRatio = (key) => {
     localSize.value = ''
   }
   updateNode(props.id, { ratio: key, size: localSize.value })
+}
+const setO1Type = (key) => {
+  localO1Type.value = String(key || '')
+  updateNode(props.id, { o1_type: localO1Type.value })
 }
 const setSize = (key) => {
   localSize.value = String(key || '')
@@ -526,7 +572,8 @@ const getConnectedInputs = () => {
     prompt: resolved.prompt,
     first_frame_image: resolved.first_frame_image,
     last_frame_image: resolved.last_frame_image,
-    images: resolved.images
+    images: resolved.images,
+    videos: resolved.videos
   }
 }
 
@@ -603,10 +650,10 @@ const runVideoGeneration = async (mode = 'create') => {
     return
   }
 
-  const { prompt, first_frame_image, last_frame_image, images } = getConnectedInputs()
-  const hasInput = prompt || first_frame_image || last_frame_image || images.length > 0
+  const { prompt, first_frame_image, last_frame_image, images, videos } = getConnectedInputs()
+  const hasInput = prompt || first_frame_image || last_frame_image || images.length > 0 || videos.length > 0
   if (!hasInput) {
-    window.$message?.warning('Connect a text or image node first')
+    window.$message?.warning(inputProfile.value.allowVideoReference ? 'Connect a text, image, or video node first' : 'Connect a text or image node first')
     return
   }
 
@@ -620,21 +667,22 @@ const runVideoGeneration = async (mode = 'create') => {
       first_frame_image,
       last_frame_image,
       images,
-      o1_type: resolvedVideoType.value || undefined,
-      mode: localMode.value,
-      size: localSize.value || undefined,
-      resolution: localResolution.value || undefined,
-      generate_audio: supportsAudioToggle.value ? localGenerateAudio.value : undefined,
-      enable_audio: supportsAudioToggle.value ? localGenerateAudio.value : undefined,
-      ratio: localRatio.value,
-      duration: localDuration.value
+      videos,
+      o1_type: inputProfile.value.allowType ? (localO1Type.value || undefined) : undefined,
+      mode: inputProfile.value.allowMode ? localMode.value : undefined,
+      size: inputProfile.value.allowSize ? (localSize.value || undefined) : undefined,
+      resolution: inputProfile.value.allowResolution ? (localResolution.value || undefined) : undefined,
+      generate_audio: inputProfile.value.allowAudioToggle && supportsAudioToggle.value ? localGenerateAudio.value : undefined,
+      enable_audio: inputProfile.value.allowAudioToggle && supportsAudioToggle.value ? localGenerateAudio.value : undefined,
+      ratio: inputProfile.value.allowRatio ? localRatio.value : undefined,
+      duration: inputProfile.value.allowDuration ? localDuration.value : undefined
     })
     updateNode(props.id, {
       loading: false,
       url: result?.url || '',
       model: localModel.value,
       ratio: localRatio.value,
-      o1_type: resolvedVideoType.value,
+      o1_type: localO1Type.value,
       mode: localMode.value,
       size: localSize.value,
       resolution: localResolution.value,
@@ -865,6 +913,7 @@ watch(
     if (val.ratio && val.ratio !== localRatio.value) localRatio.value = val.ratio
     if ((val.size || '') !== localSize.value) localSize.value = val.size || ''
     if ((val.resolution || '') !== localResolution.value) localResolution.value = val.resolution || ''
+    if ((val.o1_type || '') !== localO1Type.value) localO1Type.value = val.o1_type || ''
     if ((val.mode || '') !== localMode.value) localMode.value = val.mode || ''
     if (typeof val.generate_audio === 'boolean' && val.generate_audio !== localGenerateAudio.value) localGenerateAudio.value = val.generate_audio
     if (typeof val.enable_audio === 'boolean' && val.enable_audio !== localGenerateAudio.value) localGenerateAudio.value = val.enable_audio
@@ -890,6 +939,14 @@ watch(
     if (!sizeOptions.value.length) {
       localSize.value = ''
     }
+  },
+  { immediate: true }
+)
+
+watch(
+  typeOptions,
+  () => {
+    syncTypeToModelOptions()
   },
   { immediate: true }
 )

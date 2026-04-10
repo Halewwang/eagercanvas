@@ -30,7 +30,7 @@
         </div>
 
         <!-- Aspect ratio selector | 宽高比选择 -->
-        <div class="flex items-center justify-between">
+        <div v-if="inputProfile.allowRatio" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Ratio</span>
           <BaseDropdown :options="ratioOptions" compact @select="handleRatioSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
@@ -42,7 +42,7 @@
           </BaseDropdown>
         </div>
 
-        <div v-if="sizeOptions.length > 0" class="flex items-center justify-between">
+        <div v-if="inputProfile.allowSize && sizeOptions.length > 0" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Size</span>
           <BaseDropdown :options="sizeOptions" compact @select="handleSizeSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
@@ -54,7 +54,7 @@
           </BaseDropdown>
         </div>
 
-        <div v-if="resolutionOptions.length > 0" class="flex items-center justify-between">
+        <div v-if="inputProfile.allowResolution && resolutionOptions.length > 0" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Resolution</span>
           <BaseDropdown :options="resolutionOptions" compact @select="handleResolutionSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
@@ -66,7 +66,7 @@
           </BaseDropdown>
         </div>
 
-        <div v-if="modeOptions.length > 0" class="flex items-center justify-between">
+        <div v-if="inputProfile.allowMode && modeOptions.length > 0" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Mode</span>
           <BaseDropdown :options="modeOptions" compact @select="handleModeSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
@@ -78,7 +78,7 @@
           </BaseDropdown>
         </div>
 
-        <div v-if="typeOptions.length > 0" class="flex items-center justify-between">
+        <div v-if="inputProfile.allowType && typeOptions.length > 0" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Type</span>
           <BaseDropdown :options="typeOptions" compact @select="handleTypeSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
@@ -90,7 +90,7 @@
           </BaseDropdown>
         </div>
 
-        <div v-if="supportsAudioToggle" class="flex items-center justify-between">
+        <div v-if="inputProfile.allowAudioToggle && supportsAudioToggle" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Audio</span>
           <BaseDropdown :options="audioOptions" compact @select="handleAudioSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
@@ -103,7 +103,7 @@
         </div>
 
         <!-- Duration selector | Duration选择 -->
-        <div class="flex items-center justify-between">
+        <div v-if="inputProfile.allowDuration" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Duration</span>
           <BaseDropdown :options="durationOptions" compact @select="handleDurationSelect">
             <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
@@ -118,21 +118,12 @@
         <!-- Connected inputs indicator | 连接输入指示 -->
         <div
           class="flex flex-wrap items-center gap-2 text-xs text-[#8f939e] py-1 border-t border-[rgba(143,143,143,0.28)]">
-          <span class="px-3 py-1 rounded-full"
-            :class="connectedPrompt ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
-            Prompt {{ connectedPrompt ? '✓' : '○' }}
-          </span>
-          <span class="px-3 py-1 rounded-full"
-            :class="imagesByRole.firstFrame ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
-            First Frame {{ imagesByRole.firstFrame ? '✓' : '○' }}
-          </span>
-          <span class="px-3 py-1 rounded-full"
-            :class="imagesByRole.lastFrame ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
-            Last Frame {{ imagesByRole.lastFrame ? '✓' : '○' }}
-          </span>
-          <span class="px-3 py-1 rounded-full"
-            :class="imagesByRole.referenceImages.length > 0 ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
-            Reference {{ imagesByRole.referenceImages.length > 0 ? `✓ ${imagesByRole.referenceImages.length}` : '○' }}
+          <span
+            v-for="item in connectionStatusItems"
+            :key="item.key"
+            class="px-3 py-1 rounded-full"
+            :class="item.active ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
+            {{ item.label }}
           </span>
         </div>
         <!-- Progress bar | 进度条 -->
@@ -202,7 +193,7 @@ import { BaseDropdown } from '@/components/ui'
 import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject, currentProjectId } from '../../stores/canvas'
-import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '../../stores/models'
+import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '../../stores/models'
 import { persistMediaUrl } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 
@@ -276,16 +267,31 @@ const imagesByRole = computed(() => {
   const firstFrame = connectedImages.value.find(img => img.role === 'first_frame_image')
   const lastFrame = connectedImages.value.find(img => img.role === 'last_frame_image')
   const referenceImages = connectedImages.value.filter(img => img.role === 'input_reference')
+  const referenceVideos = edges.value
+    .filter(edge => edge.target === props.id)
+    .map((edge) => {
+      const sourceNode = nodes.value.find(node => node.id === edge.source)
+      if (sourceNode?.type !== 'video' || !sourceNode.data?.url) return null
+      return {
+        nodeId: sourceNode.id,
+        edgeId: edge.id,
+        url: sourceNode.data.url,
+        role: edge.data?.slot || 'video_reference'
+      }
+    })
+    .filter(Boolean)
 
   return {
     firstFrame,
     lastFrame,
-    referenceImages
+    referenceImages,
+    referenceVideos
   }
 })
 
 // Get current model config | 获取当前Model配置
 const currentModelConfig = computed(() => getModelConfig(localModel.value))
+const inputProfile = computed(() => getVideoGenerationProfile(localModel.value, localO1Type.value))
 const ratioFromSize = (size) => {
   const [w, h] = String(size || '').split('x').map(Number)
   if (!w || !h) return '16:9'
@@ -321,6 +327,27 @@ const displayResolution = computed(() => String(localResolution.value || '').tri
 const displayType = computed(() => typeOptions.value.find(m => m.key === localO1Type.value)?.label || localO1Type.value || 'Select type')
 const displayMode = computed(() => modeOptions.value.find(m => m.key === localMode.value)?.label || localMode.value || 'Select mode')
 const displayAudio = computed(() => (localGenerateAudio.value ? 'Audio On' : 'Audio Off'))
+const connectionStatusItems = computed(() => {
+  const items = []
+  if (inputProfile.value.allowPrompt) {
+    items.push({ key: 'prompt', label: `Prompt ${connectedPrompt.value ? '✓' : '○'}`, active: Boolean(connectedPrompt.value) })
+  }
+  if (inputProfile.value.allowFirstFrame) {
+    items.push({ key: 'first', label: `First Frame ${imagesByRole.value.firstFrame ? '✓' : '○'}`, active: Boolean(imagesByRole.value.firstFrame) })
+  }
+  if (inputProfile.value.allowLastFrame) {
+    items.push({ key: 'last', label: `Last Frame ${imagesByRole.value.lastFrame ? '✓' : '○'}`, active: Boolean(imagesByRole.value.lastFrame) })
+  }
+  if (inputProfile.value.allowImageReference) {
+    const count = imagesByRole.value.referenceImages.length
+    items.push({ key: 'image-reference', label: `Reference ${count > 0 ? `✓ ${count}` : '○'}`, active: count > 0 })
+  }
+  if (inputProfile.value.allowVideoReference) {
+    const count = imagesByRole.value.referenceVideos.length
+    items.push({ key: 'video-reference', label: `Video Reference ${count > 0 ? `✓ ${count}` : '○'}`, active: count > 0 })
+  }
+  return items
+})
 
 // Duration options based on model | 基于Model的Duration选项
 const durationOptions = computed(() => {
@@ -423,7 +450,8 @@ const getConnectedInputs = () => {
     prompt: resolved.prompt,
     first_frame_image: resolved.first_frame_image,
     last_frame_image: resolved.last_frame_image,
-    images: resolved.images
+    images: resolved.images,
+    videos: resolved.videos
   }
 }
 
@@ -437,11 +465,11 @@ const createdVideoNodeId = ref(null)
 
 // Handle generate action | 处理生成操作
 const handleGenerate = async () => {
-  const { prompt, first_frame_image, last_frame_image, images } = getConnectedInputs()
+  const { prompt, first_frame_image, last_frame_image, images, videos } = getConnectedInputs()
 
-  const hasInput = prompt || first_frame_image || last_frame_image || images.length > 0
+  const hasInput = prompt || first_frame_image || last_frame_image || images.length > 0 || videos.length > 0
   if (!hasInput) {
-    window.$message?.warning('Connect a text or image node first')
+    window.$message?.warning(inputProfile.value.allowVideoReference ? 'Connect a text, image, or video node first' : 'Connect a text or image node first')
     return
   }
 
@@ -510,34 +538,38 @@ const handleGenerate = async () => {
       params.images = images
     }
 
-    if (localO1Type.value) {
+    if (videos.length > 0) {
+      params.videos = videos
+    }
+
+    if (inputProfile.value.allowType && localO1Type.value) {
       params.o1_type = localO1Type.value
     }
 
-    if (localMode.value) {
+    if (inputProfile.value.allowMode && localMode.value) {
       params.mode = localMode.value
     }
 
     // Add ratio/size | 添加Ratio参数
-    if (localRatio.value) {
+    if (inputProfile.value.allowRatio && localRatio.value) {
       params.ratio = localRatio.value
     }
 
-    if (localSize.value) {
+    if (inputProfile.value.allowSize && localSize.value) {
       params.size = localSize.value
     }
 
-    if (localResolution.value) {
+    if (inputProfile.value.allowResolution && localResolution.value) {
       params.resolution = localResolution.value
     }
 
-    if (supportsAudioToggle.value) {
+    if (inputProfile.value.allowAudioToggle && supportsAudioToggle.value) {
       params.generate_audio = localGenerateAudio.value
       params.enable_audio = localGenerateAudio.value
     }
 
     // Add duration | 添加Duration
-    if (localDuration.value) {
+    if (inputProfile.value.allowDuration && localDuration.value) {
       params.duration = localDuration.value
     }
 

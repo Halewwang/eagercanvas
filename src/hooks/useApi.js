@@ -608,6 +608,9 @@ export const useVideoGeneration = () => {
       if (Array.isArray(params.images) && params.images.length > 0) {
         requestData.images = params.images
       }
+      if (Array.isArray(params.videos) && params.videos.length > 0) {
+        requestData.videos = params.videos
+      }
       if (typeof params.enable_audio === 'boolean') {
         requestData.enable_audio = params.enable_audio
       }

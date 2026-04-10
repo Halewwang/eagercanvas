@@ -39,7 +39,8 @@ import { BaseEdge, EdgeLabelRenderer, getBezierPath, useVueFlow } from '@vue-flo
 import { NIcon } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
 import { ChevronDownOutline } from '../../icons/coolicons'
-import { edges } from '../../stores/canvas'
+import { edges, nodes } from '../../stores/canvas'
+import { getVideoGenerationProfile } from '../../config/models'
 
 // Get VueFlow instance | 获取 VueFlow 实例
 const { updateEdgeData } = useVueFlow()
@@ -61,19 +62,35 @@ const props = defineProps({
 })
 
 // Image role options | 图片角色选项
-const imageRoleOptions = [
+const ALL_IMAGE_ROLE_OPTIONS = [
   { label: 'First Frame', key: 'first_frame_image' },
   { label: 'Second Frame', key: 'last_frame_image' },
   { label: 'Reference Picture', key: 'input_reference' }
 ]
+
+const targetNode = computed(() => nodes.value.find((node) => node.id === props.target))
+const imageRoleOptions = computed(() => {
+  const node = targetNode.value
+  if (!node || !['video', 'videoConfig'].includes(node.type)) {
+    return ALL_IMAGE_ROLE_OPTIONS
+  }
+
+  const profile = getVideoGenerationProfile(node.data?.model, node.data?.o1_type)
+  return ALL_IMAGE_ROLE_OPTIONS.filter((option) => {
+    if (option.key === 'first_frame_image') return Boolean(profile.allowFirstFrame)
+    if (option.key === 'last_frame_image') return Boolean(profile.allowLastFrame)
+    if (option.key === 'input_reference') return Boolean(profile.allowImageReference)
+    return true
+  })
+})
 
 // Current role from edge data | 从边数据获取当前角色
 const currentRole = computed(() => props.data?.imageRole || 'first_frame_image')
 
 // Current role label | 当前角色标签
 const currentRoleLabel = computed(() => {
-  const option = imageRoleOptions.find(o => o.key === currentRole.value)
-  return option?.label || 'First Frame'
+  const option = imageRoleOptions.value.find(o => o.key === currentRole.value)
+  return option?.label || imageRoleOptions.value[0]?.label || 'First Frame'
 })
 const HANDLE_OFFSET = 25
 const normalizePosition = (position) => String(position || '').toLowerCase()

@@ -22,7 +22,8 @@ import {
   DEFAULT_VIDEO_RATIO,
   DEFAULT_VIDEO_DURATION,
   resolveVideoModelKey,
-  resolve3DModelKey
+  resolve3DModelKey,
+  getVideoGenerationProfile
 } from '@/config/models'
 import { useModelConfig } from '@/hooks/useModelConfig'
 
@@ -208,6 +209,7 @@ export {
   DEFAULT_IMAGE_SIZE,
   DEFAULT_VIDEO_RATIO,
   DEFAULT_VIDEO_DURATION,
+  getVideoGenerationProfile,
   resolveVideoModelKey,
   resolve3DModelKey
 }
