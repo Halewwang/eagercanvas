@@ -768,6 +768,9 @@ export const loadProject = (projectId) => {
   setTimeout(() => {
     autoSaveEnabled = true
     isRestoring = false
+    if (canvasData?._meta?.remoteSynced === false && currentProjectId.value === projectId) {
+      void saveProject()
+    }
   }, 100)
 }
 

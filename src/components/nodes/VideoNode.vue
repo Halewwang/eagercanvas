@@ -366,20 +366,34 @@ const syncTypeToModelOptions = () => {
 }
 const imageRoleStatusList = computed(() => {
   const { keys, previews } = activeImageRoleSet.value
-  return [
+  const hasAnyConnectedInput = keys.size > 0
+  const items = [
     ...(localModel.value === 'seedance-2.0'
-      ? [{
-          key: 'generation_type',
-          label: generationTypeLabels[effectiveGenerationType.value] || imageRoleStatusMap.generation_type,
-          active: true
-        }]
+      ? [
+          {
+            key: 'generation_type',
+            label: generationTypeLabels[effectiveGenerationType.value] || imageRoleStatusMap.generation_type,
+            active: hasAnyConnectedInput
+          },
+          { key: 'prompt', label: imageRoleStatusMap.prompt, active: keys.has('prompt') },
+          { key: 'first_frame_image', label: imageRoleStatusMap.first_frame_image, active: keys.has('first_frame_image'), previewUrl: previews.first_frame_image },
+          { key: 'last_frame_image', label: imageRoleStatusMap.last_frame_image, active: keys.has('last_frame_image'), previewUrl: previews.last_frame_image },
+          { key: 'input_reference', label: imageRoleStatusMap.input_reference, active: keys.has('input_reference'), previewUrl: previews.input_reference },
+          { key: 'video_reference', label: imageRoleStatusMap.video_reference, active: keys.has('video_reference') }
+        ]
       : []),
     { key: 'prompt', label: imageRoleStatusMap.prompt, active: keys.has('prompt') },
     { key: 'first_frame_image', label: imageRoleStatusMap.first_frame_image, active: keys.has('first_frame_image'), previewUrl: previews.first_frame_image },
     { key: 'last_frame_image', label: imageRoleStatusMap.last_frame_image, active: keys.has('last_frame_image'), previewUrl: previews.last_frame_image },
     { key: 'input_reference', label: imageRoleStatusMap.input_reference, active: keys.has('input_reference'), previewUrl: previews.input_reference },
     { key: 'video_reference', label: imageRoleStatusMap.video_reference, active: keys.has('video_reference') }
-  ].filter((item) => {
+  ]
+
+  if (localModel.value === 'seedance-2.0') {
+    return items.slice(0, 6)
+  }
+
+  return items.filter((item) => {
     if (item.key === 'prompt') return Boolean(inputProfile.value.allowPrompt)
     if (item.key === 'first_frame_image') return Boolean(inputProfile.value.allowFirstFrame)
     if (item.key === 'last_frame_image') return Boolean(inputProfile.value.allowLastFrame)
