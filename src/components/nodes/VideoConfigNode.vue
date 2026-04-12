@@ -193,7 +193,7 @@ import { BaseDropdown } from '@/components/ui'
 import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
 import { useVideoGeneration, useApiConfig } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject, currentProjectId } from '../../stores/canvas'
-import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '../../stores/models'
+import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveSeedanceGenerationType, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '../../stores/models'
 import { persistMediaUrl } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 
@@ -291,7 +291,16 @@ const imagesByRole = computed(() => {
 
 // Get current model config | 获取当前Model配置
 const currentModelConfig = computed(() => getModelConfig(localModel.value))
-const inputProfile = computed(() => getVideoGenerationProfile(localModel.value, localO1Type.value))
+const effectiveGenerationType = computed(() => {
+  if (localModel.value !== 'seedance-2.0') return localO1Type.value
+  return resolveSeedanceGenerationType({
+    firstFrameImage: imagesByRole.value.firstFrame?.url,
+    lastFrameImage: imagesByRole.value.lastFrame?.url,
+    referenceImages: imagesByRole.value.referenceImages.map((item) => item.url),
+    referenceVideos: imagesByRole.value.referenceVideos.map((item) => item.url)
+  })
+})
+const inputProfile = computed(() => getVideoGenerationProfile(localModel.value, effectiveGenerationType.value))
 const ratioFromSize = (size) => {
   const [w, h] = String(size || '').split('x').map(Number)
   if (!w || !h) return '16:9'
@@ -303,6 +312,11 @@ const audioOptions = [
   { key: 'off', label: 'Audio Off' },
   { key: 'on', label: 'Audio On' }
 ]
+const generationTypeLabels = {
+  text_to_video: 'Text to Video',
+  first_last_frames: 'First + Last Frame',
+  omni_reference: 'Omni Reference'
+}
 
 // Model options from store | 从 store 获取Model选项
 const modelOptions = videoModelOptions
@@ -324,11 +338,18 @@ const resolutionOptions = computed(() => getModelVideoResolutionOptions(localMod
 const supportsAudioToggle = computed(() => Boolean(currentModelConfig.value?.supportAudioToggle))
 const displaySize = computed(() => String(localSize.value || '').trim() || 'Select size')
 const displayResolution = computed(() => String(localResolution.value || '').trim() || 'Select resolution')
-const displayType = computed(() => typeOptions.value.find(m => m.key === localO1Type.value)?.label || localO1Type.value || 'Select type')
+const displayType = computed(() => generationTypeLabels[effectiveGenerationType.value] || typeOptions.value.find(m => m.key === effectiveGenerationType.value)?.label || effectiveGenerationType.value || 'Select type')
 const displayMode = computed(() => modeOptions.value.find(m => m.key === localMode.value)?.label || localMode.value || 'Select mode')
 const displayAudio = computed(() => (localGenerateAudio.value ? 'Audio On' : 'Audio Off'))
 const connectionStatusItems = computed(() => {
   const items = []
+  if (localModel.value === 'seedance-2.0') {
+    items.push({
+      key: 'generation-type',
+      label: generationTypeLabels[effectiveGenerationType.value] || 'Generation',
+      active: true
+    })
+  }
   if (inputProfile.value.allowPrompt) {
     items.push({ key: 'prompt', label: `Prompt ${connectedPrompt.value ? '✓' : '○'}`, active: Boolean(connectedPrompt.value) })
   }
@@ -493,8 +514,10 @@ const handleGenerate = async () => {
   // Create video node with loading state | 创建带加载状态的视频节点
   const videoNodeId = addNode('video', { x: nodeX + 350, y: nodeY }, {
     url: '',
+    previewUrl: '',
     loading: true,
-    label: 'Generating video...'
+    label: 'Generating video...',
+    sourceConfigId: props.id
   })
   createdVideoNodeId.value = videoNodeId
 
@@ -515,7 +538,8 @@ const handleGenerate = async () => {
     // Build request params (raw form data) | 构建请求参数（原始表单数据）
     // These will be transformed by inputTransform | 这些会被 inputTransform 转换
     const params = {
-      model: localModel.value
+      model: localModel.value,
+      sourceNodeId: videoNodeId
     }
 
     // Add prompt if provided | 如果有Prompt则添加
@@ -542,9 +566,7 @@ const handleGenerate = async () => {
       params.videos = videos
     }
 
-    if (inputProfile.value.allowType && localO1Type.value) {
-      params.o1_type = localO1Type.value
-    }
+    params.o1_type = effectiveGenerationType.value || localO1Type.value || undefined
 
     if (inputProfile.value.allowMode && localMode.value) {
       params.mode = localMode.value
@@ -583,12 +605,13 @@ const handleGenerate = async () => {
       }
 
       updateNode(videoNodeId, {
-        url: rawUrl,
+        url: '',
+        previewUrl: rawUrl,
         loading: false,
         label: 'Video Gen',
         model: localModel.value,
         ratio: localRatio.value,
-        o1_type: localO1Type.value,
+        o1_type: effectiveGenerationType.value,
         mode: localMode.value,
         size: localSize.value,
         resolution: localResolution.value,
@@ -601,6 +624,23 @@ const handleGenerate = async () => {
         updatedAt: Date.now()
       })
       
+      const stableUrl = await persistMediaUrl(rawUrl, `generated-${Date.now()}.mp4`, {
+        projectId: currentProjectId.value,
+        source: 'video_generation',
+        sourceNodeId: videoNodeId
+      })
+      const finalUrl = String(stableUrl || rawUrl).trim()
+      if (!finalUrl) {
+        throw new Error('Video persistence failed')
+      }
+      updateNode(videoNodeId, {
+        url: finalUrl,
+        previewUrl: '',
+        persistStatus: 'saving',
+        persistError: '',
+        updatedAt: Date.now()
+      })
+
       // Mark this config node as executed | 标记配置节点已执行
       updateNode(props.id, { status: 'completed', executed: true, outputNodeId: videoNodeId, error: '' })
       const savedOk = await saveProject()
@@ -608,29 +648,6 @@ const handleGenerate = async () => {
         persistStatus: savedOk ? 'saved' : 'error',
         persistError: savedOk ? '' : 'Project save failed. Refresh may lose this video.',
         updatedAt: Date.now()
-      })
-
-      void persistMediaUrl(rawUrl, `generated-${Date.now()}.mp4`, {
-        projectId: currentProjectId.value,
-        source: 'video_generation',
-        sourceNodeId: videoNodeId
-      }).then(async (stableUrl) => {
-        const finalUrl = String(stableUrl || '').trim()
-        if (!finalUrl || finalUrl === rawUrl) return
-        updateNode(videoNodeId, {
-          url: finalUrl,
-          persistStatus: 'saving',
-          persistError: '',
-          updatedAt: Date.now()
-        })
-        const persistedOk = await saveProject()
-        updateNode(videoNodeId, {
-          persistStatus: persistedOk ? 'saved' : 'error',
-          persistError: persistedOk ? '' : 'Project save failed. Refresh may lose this video.',
-          updatedAt: Date.now()
-        })
-      }).catch((persistError) => {
-        console.warn('Video persistence skipped after preview became available:', persistError)
       })
     }
     window.$message?.success('Video generated')

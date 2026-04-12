@@ -583,6 +583,7 @@ export const useVideoGeneration = () => {
         prompt: params.prompt || ''
       }
       if (params.projectId) requestData.projectId = params.projectId
+      if (params.sourceNodeId) requestData.sourceNodeId = params.sourceNodeId
       if (params.tool) requestData.tool = params.tool
 
       if (params.tool === 'enhance') {

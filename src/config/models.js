@@ -219,6 +219,17 @@ const DEFAULT_VIDEO_INPUT_PROFILE = {
     allowDuration: true
 }
 
+const SEEDANCE_CONNECTION_PROFILE = {
+    ...DEFAULT_VIDEO_INPUT_PROFILE,
+    allowFirstFrame: true,
+    allowLastFrame: true,
+    allowImageReference: true,
+    allowVideoReference: true,
+    allowResolution: true,
+    allowType: false,
+    allowAudioToggle: true
+}
+
 const SEEDANCE_INPUT_PROFILES = {
     text_to_video: {
         allowFirstFrame: false,
@@ -226,7 +237,7 @@ const SEEDANCE_INPUT_PROFILES = {
         allowImageReference: false,
         allowVideoReference: false,
         allowResolution: true,
-        allowType: true,
+        allowType: false,
         allowAudioToggle: true
     },
     first_last_frames: {
@@ -236,7 +247,7 @@ const SEEDANCE_INPUT_PROFILES = {
         allowVideoReference: false,
         allowRatio: false,
         allowResolution: true,
-        allowType: true,
+        allowType: false,
         allowAudioToggle: true
     },
     omni_reference: {
@@ -245,9 +256,26 @@ const SEEDANCE_INPUT_PROFILES = {
         allowImageReference: true,
         allowVideoReference: true,
         allowResolution: true,
-        allowType: true,
+        allowType: false,
         allowAudioToggle: true
     }
+}
+
+export const resolveSeedanceGenerationType = ({
+    firstFrameImage = '',
+    lastFrameImage = '',
+    referenceImages = [],
+    referenceVideos = []
+} = {}) => {
+    if (String(firstFrameImage || '').trim() && String(lastFrameImage || '').trim()) {
+        return 'first_last_frames'
+    }
+
+    if ((Array.isArray(referenceImages) && referenceImages.length > 0) || (Array.isArray(referenceVideos) && referenceVideos.length > 0)) {
+        return 'omni_reference'
+    }
+
+    return 'text_to_video'
 }
 
 export const getVideoGenerationProfile = (modelKey = '', generationType = '') => {
@@ -269,6 +297,13 @@ export const getVideoGenerationProfile = (modelKey = '', generationType = '') =>
         ...profile,
         ...(SEEDANCE_INPUT_PROFILES[safeType] || SEEDANCE_INPUT_PROFILES.text_to_video)
     }
+}
+
+export const getVideoConnectionProfile = (modelKey = '', generationType = '') => {
+    if (modelKey === 'seedance-2.0') {
+        return { ...SEEDANCE_CONNECTION_PROFILE }
+    }
+    return getVideoGenerationProfile(modelKey, generationType)
 }
 
 // Chat/LLM models | 对话模型

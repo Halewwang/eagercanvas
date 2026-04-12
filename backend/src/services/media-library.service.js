@@ -111,7 +111,7 @@ const normalizeGeneratedAssets = (assets = [], fallback = {}) =>
       runId: fallback.runId,
       runType: fallback.runType,
       model: fallback.model,
-      sourceNodeId: asset?.sourceNodeId
+      sourceNodeId: asset?.sourceNodeId || fallback.sourceNodeId
     }))
     .filter(Boolean)
 
@@ -197,7 +197,8 @@ export const upsertGeneratedMediaRecord = async ({
   prompt = '',
   status = 'completed',
   error = '',
-  assets = []
+  assets = [],
+  sourceNodeId = ''
 } = {}) => {
   const safeRunId = trimString(runId)
   const safeRunType = trimString(runType).toLowerCase()
@@ -207,7 +208,8 @@ export const upsertGeneratedMediaRecord = async ({
     runId: safeRunId,
     runType: safeRunType,
     projectId: normalizeProjectId(projectId),
-    model: trimString(model)
+    model: trimString(model),
+    sourceNodeId: trimString(sourceNodeId)
   })
 
   const metadata = {
@@ -220,19 +222,21 @@ export const upsertGeneratedMediaRecord = async ({
     error: trimString(error),
     output_count: normalizedAssets.length,
     preview_url: normalizedAssets[0]?.previewUrl || normalizedAssets[0]?.url || '',
+    source_node_id: trimString(sourceNodeId) || null,
     assets: normalizedAssets.map((asset) => ({
       kind: asset.kind,
       url: asset.url,
       previewUrl: asset.previewUrl,
       fileName: asset.fileName,
       fileType: asset.fileType,
-      origin: asset.origin
+      origin: asset.origin,
+      sourceNodeId: asset.sourceNodeId
     }))
   }
 
   const { data: existing, error: findError } = await supabase
     .from('audit_logs')
-    .select('id')
+    .select('id, metadata')
     .eq('user_id', userId)
     .eq('action', 'media.generated')
     .contains('metadata', { run_id: safeRunId })
@@ -244,6 +248,30 @@ export const upsertGeneratedMediaRecord = async ({
   }
 
   const existingId = existing?.[0]?.id
+  const existingMetadata = existing?.[0]?.metadata || {}
+  const existingSourceNodeId = trimString(
+    existingMetadata.source_node_id ||
+    existingMetadata.assets?.[0]?.sourceNodeId ||
+    ''
+  )
+
+  if (existingSourceNodeId && !trimString(sourceNodeId)) {
+    metadata.source_node_id = existingSourceNodeId
+    normalizedAssets.forEach((asset) => {
+      if (!asset.sourceNodeId) {
+        asset.sourceNodeId = existingSourceNodeId
+      }
+    })
+    metadata.assets = normalizedAssets.map((asset) => ({
+      kind: asset.kind,
+      url: asset.url,
+      previewUrl: asset.previewUrl,
+      fileName: asset.fileName,
+      fileType: asset.fileType,
+      origin: asset.origin,
+      sourceNodeId: asset.sourceNodeId || existingSourceNodeId
+    }))
+  }
 
   if (existingId) {
     const { error: updateError } = await supabase

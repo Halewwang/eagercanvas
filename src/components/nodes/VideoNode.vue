@@ -27,7 +27,7 @@
               <span>Tools</span>
             </button>
           </BaseDropdown>
-          <button class="capsule-icon" :disabled="!data.url" @click="openPreviewModal" title="Preview"><n-icon :size="14"><ExpandOutline /></n-icon></button>
+          <button class="capsule-icon" :disabled="!displayVideoUrl" @click="openPreviewModal" title="Preview"><n-icon :size="14"><ExpandOutline /></n-icon></button>
           <button class="capsule-icon" @click="handleDuplicate" title="Duplicate"><n-icon :size="14"><CopyOutline /></n-icon></button>
           <button class="capsule-icon" @click="handleDelete" title="Delete"><n-icon :size="14"><TrashOutline /></n-icon></button>
         </div>
@@ -62,9 +62,9 @@
           <div class="module-progress-label">Generating video... {{ progressPercent }}%</div>
         </div>
 
-        <div v-else-if="data.url && !data.loading" class="module-video-shell">
+        <div v-else-if="displayVideoUrl && !data.loading" class="module-video-shell">
           <div class="module-video-frame">
-            <video :src="data.url" controls class="module-video" />
+            <video :src="displayVideoUrl" controls class="module-video" />
           </div>
         </div>
 
@@ -93,7 +93,7 @@
 
     <n-modal v-model:show="showPreviewModal" :mask-closable="true">
       <div class="zoom-modal-card" @click.stop>
-        <video :src="data.url" controls autoplay class="zoom-video-original" />
+        <video :src="displayVideoUrl" controls autoplay class="zoom-video-original" />
       </div>
     </n-modal>
     <BaseModal
@@ -122,7 +122,7 @@
     </BaseModal>
     <VideoEnhanceToolDrawer
       v-model:show="showEnhanceDrawer"
-      :video-url="data.url || ''"
+      :video-url="displayVideoUrl || ''"
       :ratio="localRatio"
       :resolution="localResolution"
       @pending="handleEnhancePending"
@@ -160,8 +160,8 @@ import VideoEnhanceToolDrawer from '@/components/tools/VideoEnhanceToolDrawer.vu
 import { CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, TrashOutline, VideocamOutline } from '../../icons/coolicons'
 import { addEdge, addNode, currentProjectId, duplicateNode, edges, flushSave, nodes, removeNode, saveProject, updateNode } from '../../stores/canvas'
 import { useApiConfig, useVideoGeneration } from '../../hooks'
-import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
-import { persistMediaUrl, uploadImageFile } from '@/utils/media'
+import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveSeedanceGenerationType, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
+import { createAuthenticatedMediaProxyUrl, persistMediaUrl, uploadImageFile } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 import toolsIcon from '@/assets/tools-icon.svg'
@@ -234,11 +234,17 @@ const getDurationFromData = (data) => {
 const localDuration = ref(getDurationFromData(props.data))
 
 const imageRoleStatusMap = {
+  generation_type: 'Generation',
   prompt: 'Prompt',
   first_frame_image: 'First Frame',
   last_frame_image: 'Second Frame',
   input_reference: 'Reference Picture',
   video_reference: 'Reference Video'
+}
+const generationTypeLabels = {
+  text_to_video: 'Text to Video',
+  first_last_frames: 'First + Last Frame',
+  omni_reference: 'Omni Reference'
 }
 const audioOptions = [
   { key: 'off', label: 'Audio Off' },
@@ -265,11 +271,23 @@ const sizeOptions = computed(() => getModelVideoSizeOptions(localModel.value, lo
 const resolutionOptions = computed(() => getModelVideoResolutionOptions(localModel.value))
 const durationOptions = computed(() => getModelDurationOptions(localModel.value))
 const supportsAudioToggle = computed(() => Boolean(getModelConfig(localModel.value)?.supportAudioToggle))
-const inputProfile = computed(() => getVideoGenerationProfile(localModel.value, localO1Type.value))
+const resolvedInputs = computed(() => resolveNodeInputs(props.id))
+const effectiveGenerationType = computed(() => {
+  if (localModel.value !== 'seedance-2.0') return localO1Type.value
+  return resolveSeedanceGenerationType({
+    firstFrameImage: resolvedInputs.value.first_frame_image,
+    lastFrameImage: resolvedInputs.value.last_frame_image,
+    referenceImages: resolvedInputs.value.images,
+    referenceVideos: resolvedInputs.value.videos
+  })
+})
+const inputProfile = computed(() => getVideoGenerationProfile(localModel.value, effectiveGenerationType.value))
 const displayModel = computed(() => videoModelOptions.value.find(m => m.key === localModel.value)?.label || localModel.value)
-const displayO1Type = computed(() => typeOptions.value.find(m => m.key === localO1Type.value)?.label || localO1Type.value || 'Type')
+const displayO1Type = computed(() => generationTypeLabels[effectiveGenerationType.value] || typeOptions.value.find(m => m.key === effectiveGenerationType.value)?.label || effectiveGenerationType.value || 'Type')
 const displayMode = computed(() => modeOptions.value.find(m => m.key === localMode.value)?.label || localMode.value || 'Mode')
 const displaySize = computed(() => String(localSize.value || '').trim() || 'Size')
+const rawDisplayVideoUrl = computed(() => String(props.data?.previewUrl || props.data?.url || '').trim())
+const displayVideoUrl = computed(() => createAuthenticatedMediaProxyUrl(rawDisplayVideoUrl.value))
 const resolvedResolution = computed(() => {
   const optionKeys = resolutionOptions.value.map((item) => String(item.key || '').trim()).filter(Boolean)
   const current = String(localResolution.value || '').trim()
@@ -291,39 +309,29 @@ const ratioFromSize = (size) => {
   return `${Math.round(w / d)}:${Math.round(h / d)}`
 }
 const activeImageRoleSet = computed(() => {
-  const incomingEdges = edges.value.filter((edge) => edge.target === props.id)
-  const activeRoleKeys = []
+  const activeRoleKeys = new Set()
   const rolePreviews = {}
 
-  for (const edge of incomingEdges) {
-    const sourceNode = nodes.value.find((node) => node.id === edge.source)
-    if (sourceNode?.type === 'image') {
-      const role = edge.data?.slot || edge.data?.imageRole || 'first_frame_image'
-      activeRoleKeys.push(role)
-      if (sourceNode.data?.url) {
-        rolePreviews[role] = sourceNode.data.url
-      }
-    }
-    if (sourceNode?.type === 'video' && sourceNode.data?.url) {
-      activeRoleKeys.push('video_reference')
-    }
-    if (sourceNode?.type === 'text' && sourceNode.data?.content) {
-      activeRoleKeys.push('prompt')
-    }
+  if (String(resolvedInputs.value.prompt || '').trim()) {
+    activeRoleKeys.add('prompt')
+  }
+  if (String(resolvedInputs.value.first_frame_image || '').trim()) {
+    activeRoleKeys.add('first_frame_image')
+    rolePreviews.first_frame_image = resolvedInputs.value.first_frame_image
+  }
+  if (String(resolvedInputs.value.last_frame_image || '').trim()) {
+    activeRoleKeys.add('last_frame_image')
+    rolePreviews.last_frame_image = resolvedInputs.value.last_frame_image
+  }
+  if (Array.isArray(resolvedInputs.value.images) && resolvedInputs.value.images.length > 0) {
+    activeRoleKeys.add('input_reference')
+    rolePreviews.input_reference = resolvedInputs.value.images[0]
+  }
+  if (Array.isArray(resolvedInputs.value.videos) && resolvedInputs.value.videos.length > 0) {
+    activeRoleKeys.add('video_reference')
   }
 
-  return { keys: new Set(activeRoleKeys), previews: rolePreviews }
-})
-const resolvedVideoType = computed(() => {
-  if (localO1Type.value) {
-    return String(localO1Type.value).trim()
-  }
-  if (localModel.value !== 'kling-o3') {
-    return String(props.data?.o1_type || getModelConfig(localModel.value)?.defaultParams?.o1_type || '').trim()
-  }
-  const hasFirstFrame = activeImageRoleSet.value.keys.has('first_frame_image')
-  const hasLastFrame = activeImageRoleSet.value.keys.has('last_frame_image')
-  return hasFirstFrame && hasLastFrame ? 'firstTail' : 'referImage'
+  return { keys: activeRoleKeys, previews: rolePreviews }
 })
 
 const syncResolutionToModelOptions = () => {
@@ -359,6 +367,13 @@ const syncTypeToModelOptions = () => {
 const imageRoleStatusList = computed(() => {
   const { keys, previews } = activeImageRoleSet.value
   return [
+    ...(localModel.value === 'seedance-2.0'
+      ? [{
+          key: 'generation_type',
+          label: generationTypeLabels[effectiveGenerationType.value] || imageRoleStatusMap.generation_type,
+          active: true
+        }]
+      : []),
     { key: 'prompt', label: imageRoleStatusMap.prompt, active: keys.has('prompt') },
     { key: 'first_frame_image', label: imageRoleStatusMap.first_frame_image, active: keys.has('first_frame_image'), previewUrl: previews.first_frame_image },
     { key: 'last_frame_image', label: imageRoleStatusMap.last_frame_image, active: keys.has('last_frame_image'), previewUrl: previews.last_frame_image },
@@ -567,13 +582,12 @@ const setDuration = (key) => {
 }
 
 const getConnectedInputs = () => {
-  const resolved = resolveNodeInputs(props.id)
   return {
-    prompt: resolved.prompt,
-    first_frame_image: resolved.first_frame_image,
-    last_frame_image: resolved.last_frame_image,
-    images: resolved.images,
-    videos: resolved.videos
+    prompt: resolvedInputs.value.prompt,
+    first_frame_image: resolvedInputs.value.first_frame_image,
+    last_frame_image: resolvedInputs.value.last_frame_image,
+    images: resolvedInputs.value.images,
+    videos: resolvedInputs.value.videos
   }
 }
 
@@ -663,12 +677,13 @@ const runVideoGeneration = async (mode = 'create') => {
     const result = await videoGen.generate({
       model: localModel.value,
       projectId: currentProjectId.value,
+      sourceNodeId: props.id,
       prompt,
       first_frame_image,
       last_frame_image,
       images,
       videos,
-      o1_type: inputProfile.value.allowType ? (localO1Type.value || undefined) : undefined,
+      o1_type: effectiveGenerationType.value || undefined,
       mode: inputProfile.value.allowMode ? localMode.value : undefined,
       size: inputProfile.value.allowSize ? (localSize.value || undefined) : undefined,
       resolution: inputProfile.value.allowResolution ? (localResolution.value || undefined) : undefined,
@@ -677,12 +692,17 @@ const runVideoGeneration = async (mode = 'create') => {
       ratio: inputProfile.value.allowRatio ? localRatio.value : undefined,
       duration: inputProfile.value.allowDuration ? localDuration.value : undefined
     })
+    const rawUrl = String(result?.url || '').trim()
+    if (!rawUrl) {
+      throw new Error('No video output')
+    }
     updateNode(props.id, {
       loading: false,
-      url: result?.url || '',
+      url: '',
+      previewUrl: rawUrl,
       model: localModel.value,
       ratio: localRatio.value,
-      o1_type: localO1Type.value,
+      o1_type: effectiveGenerationType.value,
       mode: localMode.value,
       size: localSize.value,
       resolution: localResolution.value,
@@ -690,13 +710,46 @@ const runVideoGeneration = async (mode = 'create') => {
       enable_audio: localGenerateAudio.value,
       duration: localDuration.value,
       dur: localDuration.value,
+      persistStatus: 'saving',
+      persistError: '',
+      updatedAt: Date.now()
+    })
+
+    const stableUrl = await persistMediaUrl(rawUrl, `generated-${Date.now()}.mp4`, {
+      projectId: currentProjectId.value,
+      source: 'video_generation',
+      sourceNodeId: props.id
+    })
+    const finalUrl = String(stableUrl || rawUrl).trim()
+    if (!finalUrl) {
+      throw new Error('Video persistence failed')
+    }
+
+    updateNode(props.id, {
+      loading: false,
+      url: finalUrl,
+      previewUrl: '',
+      persistStatus: 'saving',
+      persistError: '',
+      updatedAt: Date.now()
+    })
+
+    const savedOk = await flushSave()
+    updateNode(props.id, {
+      persistStatus: savedOk ? 'saved' : 'error',
+      persistError: savedOk ? '' : 'Project save failed. Refresh may lose this video.',
       updatedAt: Date.now()
     })
     window.$message?.success(mode === 'regenerate' ? 'Video regenerated' : 'Video generated')
   } catch (err) {
     const canceled = /已取消|cancel/i.test(String(err?.message || ''))
     if (!canceled) {
-      updateNode(props.id, { loading: false, error: err?.message || 'Generation failed' })
+      updateNode(props.id, {
+        loading: false,
+        persistStatus: 'error',
+        persistError: err?.message || 'Generation failed',
+        error: err?.message || 'Generation failed'
+      })
       window.$message?.error(err?.message || 'Video generation failed')
     }
   } finally {
@@ -891,7 +944,7 @@ const handleMetaMouseDown = (event) => {
 }
 
 const openPreviewModal = () => {
-  if (!props.data?.url) return
+  if (!displayVideoUrl.value) return
   showPreviewModal.value = true
 }
 const closeErrorModal = () => {

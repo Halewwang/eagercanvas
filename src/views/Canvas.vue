@@ -430,6 +430,7 @@ import {
   groups,
   addEdge,
   addNode,
+  currentProjectId,
   createGroup,
   deleteGroupWithNodes,
   duplicateGroup,
@@ -443,6 +444,7 @@ import {
   canUndo,
   canRedo,
   loadProject,
+  hasPendingCanvasChanges,
   manualSaveHistory,
   removeNodesByIds,
   renameGroup,
@@ -461,6 +463,8 @@ import { getProjectCanvas, initProjectsStore, projects, refreshProjectById } fro
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
+import { isExpiredRemoteUrl } from '@/utils/media'
+import { shouldApplyRemoteProjectSnapshot } from '@/utils/canvasSync'
 
 // API Settings component | API 设置组件
 import ApiSettings from '../components/ApiSettings.vue'
@@ -1360,7 +1364,11 @@ const recoverBlankMediaNodes = async (projectId) => {
     const currentUrl = String(node?.data?.url || '').trim()
     const currentPreviewUrl = String(node?.data?.previewUrl || '').trim()
     const currentBase64 = String(node?.data?.base64 || '').trim()
-    if (currentUrl || currentPreviewUrl || currentBase64) return node
+    const hasRecoverableGap =
+      (!currentUrl || isExpiredRemoteUrl(currentUrl))
+      && !currentPreviewUrl
+      && !currentBase64
+    if (!hasRecoverableGap) return node
 
     const expectedKind = node.type === 'video' ? 'video' : 'image'
     const candidateIds = Array.from(new Set([
@@ -1436,6 +1444,15 @@ const ensureProjectSnapshot = async (projectId) => {
     await refreshProjectById(id)
   } catch {
     // Fall back to any locally cached draft when detail refresh is unavailable.
+  }
+
+  if (!shouldApplyRemoteProjectSnapshot({
+    refreshedProjectId: id,
+    activeRouteProjectId: String(route.params.id || ''),
+    currentCanvasProjectId: currentProjectId.value,
+    hasPendingCanvasChanges: hasPendingCanvasChanges()
+  })) {
+    return
   }
 
   await loadProjectById(id)
@@ -1530,7 +1547,12 @@ onMounted(async () => {
     await ensureProjectSnapshot(route.params.id)
   } else if (routeProjectId && routeProjectId !== 'new') {
     refreshProjectById(routeProjectId).then((project) => {
-      if (String(route.params.id || '') !== routeProjectId) return
+      if (!shouldApplyRemoteProjectSnapshot({
+        refreshedProjectId: project?.id || routeProjectId,
+        activeRouteProjectId: String(route.params.id || ''),
+        currentCanvasProjectId: currentProjectId.value,
+        hasPendingCanvasChanges: hasPendingCanvasChanges()
+      })) return
       if (!project?.canvasData) return
       loadProjectById(routeProjectId)
     }).catch(() => {

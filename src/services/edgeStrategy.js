@@ -3,7 +3,7 @@
  * Handles edge connection logic based on node types
  */
 import { nodes, edges } from '../stores/canvas'
-import { getVideoGenerationProfile } from '../config/models'
+import { getVideoConnectionProfile } from '../config/models'
 
 const IMAGE_TARGET_TYPES = new Set(['image', 'imageConfig'])
 const VIDEO_TARGET_TYPES = new Set(['video', 'videoConfig'])
@@ -23,7 +23,7 @@ const getNextOrderedValue = (targetId, edgeType) => {
 
 const resolveVideoTargetProfile = (targetNode) => {
   if (!targetNode || !isVideoTarget(targetNode.type)) return null
-  return getVideoGenerationProfile(targetNode.data?.model, targetNode.data?.o1_type)
+  return getVideoConnectionProfile(targetNode.data?.model, targetNode.data?.o1_type)
 }
 
 const getImageRoleData = (targetNode) => {

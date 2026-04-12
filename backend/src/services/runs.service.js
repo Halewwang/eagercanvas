@@ -234,16 +234,30 @@ const buildImageGenerationAssets = (result = {}) =>
     })
     .filter(Boolean)
 
-const buildVideoGenerationAssets = (result = {}) => {
+const resolveVideoSourceNodeId = (...candidates) => {
+  for (const candidate of candidates) {
+    const value = String(
+      candidate?.sourceNodeId ||
+      candidate?.source_node_id ||
+      ''
+    ).trim()
+    if (value) return value
+  }
+  return ''
+}
+
+export const buildVideoGenerationAssets = (result = {}, sourceNodeId = '') => {
   const url = String(extractProviderVideoUrl(result) || '').trim()
   if (!url) return []
+  const safeSourceNodeId = resolveVideoSourceNodeId(result, { sourceNodeId })
   return [{
     kind: 'video',
     url,
     previewUrl: url,
     fileName: 'generated-video.mp4',
     fileType: 'video/mp4',
-    origin: 'generation'
+    origin: 'generation',
+    ...(safeSourceNodeId ? { sourceNodeId: safeSourceNodeId } : {})
   }]
 }
 
@@ -266,14 +280,16 @@ const build3DGenerationAssets = (result = {}) => {
     .filter(Boolean)
 }
 
-const bindVideoTaskOwnership = async ({ userId, runId, taskId }) => {
+const bindVideoTaskOwnership = async ({ userId, runId, taskId, sourceNodeId = '' }) => {
   if (!taskId) return
+  const safeSourceNodeId = String(sourceNodeId || '').trim()
   const { error } = await supabase.from('audit_logs').insert({
     user_id: userId,
     action: 'video.task.created',
     metadata: {
       run_id: runId,
-      task_id: taskId
+      task_id: taskId,
+      ...(safeSourceNodeId ? { source_node_id: safeSourceNodeId } : {})
     }
   })
   if (error) {
@@ -388,7 +404,7 @@ const findImageRunIdByTask = async ({ userId, taskId }) => {
   return runId ? String(runId) : ''
 }
 
-const findVideoRunIdByTask = async ({ userId, taskId }) => {
+const findVideoRunContextByTask = async ({ userId, taskId }) => {
   const { data, error } = await supabase
     .from('audit_logs')
     .select('metadata')
@@ -400,11 +416,15 @@ const findVideoRunIdByTask = async ({ userId, taskId }) => {
 
   if (error) {
     console.warn('[video] resolve run by task failed', error.message)
-    return ''
+    return { runId: '', sourceNodeId: '' }
   }
 
   const runId = data?.[0]?.metadata?.run_id
-  return runId ? String(runId) : ''
+  const sourceNodeId = data?.[0]?.metadata?.source_node_id
+  return {
+    runId: runId ? String(runId) : '',
+    sourceNodeId: sourceNodeId ? String(sourceNodeId) : ''
+  }
 }
 
 const find3DRunIdByTask = async ({ userId, taskId }) => {
@@ -668,11 +688,13 @@ export const createRun = async (userId, input) => {
     if (isVideoRun) {
       const providerTaskId = extractProviderTaskId(providerResponse)
       const videoUrl = extractProviderVideoUrl(providerResponse)
+      const sourceNodeId = resolveVideoSourceNodeId(payload.payload)
 
       await bindVideoTaskOwnership({
         userId,
         runId: run.id,
-        taskId: providerTaskId
+        taskId: providerTaskId,
+        sourceNodeId
       })
 
       if (videoUrl) {
@@ -709,7 +731,8 @@ export const createRun = async (userId, input) => {
           model: payload.model || payload.payload?.model,
           prompt: payload.payload?.prompt,
           status: 'completed',
-          assets: buildVideoGenerationAssets(providerResponse)
+          assets: buildVideoGenerationAssets(providerResponse, sourceNodeId),
+          sourceNodeId
         })
 
         return {
@@ -870,7 +893,7 @@ export const getVideoTask = async (_userId, taskId) => {
   const providerAccess = await resolveUserProviderAccess(_userId)
   const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
   const result = await providerVideoStatus(taskId, providerRequestOptions)
-  const runId = await findVideoRunIdByTask({ userId: _userId, taskId })
+  const { runId, sourceNodeId } = await findVideoRunContextByTask({ userId: _userId, taskId })
   await syncRunStatusFromVideoTask({ userId: _userId, runId, taskResult: result })
   const status = String(result?.status || '').toLowerCase()
   if (runId && ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished'].includes(status)) {
@@ -896,7 +919,8 @@ export const getVideoTask = async (_userId, taskId) => {
       runType: 'video',
       model: run?.model || '',
       status: 'completed',
-      assets: buildVideoGenerationAssets(result)
+      assets: buildVideoGenerationAssets(result, sourceNodeId),
+      sourceNodeId
     })
   }
   return result

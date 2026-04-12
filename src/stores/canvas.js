@@ -972,6 +972,12 @@ export const manualSaveHistory = () => {
   saveToHistory()
 }
 
+export const hasPendingCanvasChanges = () => {
+  if (!currentProjectId.value) return false
+  const snapshotKey = getSnapshotKey(createCanvasSnapshot({ preserveTransientMedia: true }))
+  return snapshotKey !== lastPersistedSnapshotKey
+}
+
 // Watch for changes and auto-save (only save to project, not history) | 监听变化并自动保存（仅保存项目，不保存历史）
 watch([nodes, edges, groups], () => {
   debouncedSave()

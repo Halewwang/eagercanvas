@@ -40,7 +40,7 @@ import { NIcon } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
 import { ChevronDownOutline } from '../../icons/coolicons'
 import { edges, nodes } from '../../stores/canvas'
-import { getVideoGenerationProfile } from '../../config/models'
+import { getVideoConnectionProfile } from '../../config/models'
 
 // Get VueFlow instance | 获取 VueFlow 实例
 const { updateEdgeData } = useVueFlow()
@@ -75,7 +75,7 @@ const imageRoleOptions = computed(() => {
     return ALL_IMAGE_ROLE_OPTIONS
   }
 
-  const profile = getVideoGenerationProfile(node.data?.model, node.data?.o1_type)
+  const profile = getVideoConnectionProfile(node.data?.model, node.data?.o1_type)
   return ALL_IMAGE_ROLE_OPTIONS.filter((option) => {
     if (option.key === 'first_frame_image') return Boolean(profile.allowFirstFrame)
     if (option.key === 'last_frame_image') return Boolean(profile.allowLastFrame)
