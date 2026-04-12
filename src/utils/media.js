@@ -96,13 +96,12 @@ const uploadFileToSignedUrl = (signedUrl, file, onProgress) =>
       return
     }
 
-    const formData = new FormData()
-    formData.append('cacheControl', '3600')
-    formData.append('', file, file?.name || 'asset')
-
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', rawSignedUrl, true)
     xhr.setRequestHeader('x-upsert', 'false')
+    if (file?.type) {
+      xhr.setRequestHeader('content-type', file.type)
+    }
 
     xhr.upload.onprogress = (event) => {
       if (typeof onProgress !== 'function') return
@@ -123,7 +122,7 @@ const uploadFileToSignedUrl = (signedUrl, file, onProgress) =>
       reject(new Error('Upload failed'))
     }
 
-    xhr.send(formData)
+    xhr.send(file)
   })
 
 const createSignedUpload = async (file) => {

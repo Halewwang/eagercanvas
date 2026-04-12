@@ -554,6 +554,7 @@ const handleGenerate = async () => {
     const result = await generate({
       model: localModel.value,
       projectId: currentProjectId.value,
+      sourceNodeId: props.id,
       prompt: inputs.value.prompt,
       multiViewImages,
       generateType: localGenerateType.value,

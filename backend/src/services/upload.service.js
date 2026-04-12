@@ -29,7 +29,10 @@ const sanitizeOriginalName = (value = '', fallbackName = 'asset') => {
   return base.replace(/[^a-zA-Z0-9._-]/g, '_')
 }
 
-const buildStoredFileName = (originalName = '') => `${Date.now()}-${sanitizeOriginalName(originalName)}`
+const buildStoredFileName = (originalName = '') => {
+  const entropy = Math.random().toString(36).slice(2, 10)
+  return `${Date.now()}-${entropy}-${sanitizeOriginalName(originalName)}`
+}
 
 const isBucketSetupError = (error) => /bucket/i.test(String(error?.message || ''))
 

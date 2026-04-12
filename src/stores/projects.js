@@ -193,11 +193,12 @@ const toProjectSummary = (project) => ({
 
 const saveProjectCanvasDraft = (id, canvasData, options = {}) => {
   const storageKey = getProjectCanvasStorageKey(id)
-  if (!storageKey) return
+  if (!storageKey) return false
   try {
     localStorage.setItem(storageKey, JSON.stringify(createCanvasDraftRecord(canvasData, options)))
+    return true
   } catch {
-    // ignore cache write failures
+    return false
   }
 }
 
@@ -227,12 +228,13 @@ const removeProjectCanvasDraft = (id) => {
 
 const saveLocalCache = () => {
   const storageKey = getUserScopedKey(STORAGE_KEY_PREFIX)
-  if (!storageKey) return
+  if (!storageKey) return false
   try {
     const summaries = projects.value.map((project) => toProjectSummary(project))
     localStorage.setItem(storageKey, JSON.stringify(summaries))
+    return true
   } catch {
-    // ignore cache write failures
+    return false
   }
 }
 
@@ -649,22 +651,25 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
   // Always keep the latest canvas snapshot in local draft cache first.
   // This avoids losing recent nodes on refresh when the remote save fails.
   const localIdx = projects.value.findIndex((p) => p.id === id)
+  let localDraftSaved = false
+  let localMetaSaved = false
   if (localIdx !== -1) {
     projects.value[localIdx] = next
-    saveProjectCanvasDraft(id, next.canvasData, {
+    localDraftSaved = saveProjectCanvasDraft(id, next.canvasData, {
       draftUpdatedAt: localUpdatedAt,
       baseVersion: getProjectBaseVersion(project, currentVersion),
       remoteSynced: false
     })
-    saveLocalCache()
+    localMetaSaved = saveLocalCache()
   }
+  const localSaved = localDraftSaved && localMetaSaved
 
   if (BYPASS_AUTH_IN_DEV) {
     return {
       project: next,
-      localSaved: true,
+      localSaved,
       remoteSynced: true,
-      status: 'synced'
+      status: localSaved ? 'synced' : 'remote-only'
     }
   }
 
@@ -681,8 +686,9 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
     
     const response = await apiPatchProject(id, payload)
     const updatedProject = mapProjectFromApi(response.data)
+    let remoteDraftSaved = false
     if (updatedProject?.canvasData) {
-      saveProjectCanvasDraft(id, updatedProject.canvasData, {
+      remoteDraftSaved = saveProjectCanvasDraft(id, updatedProject.canvasData, {
         draftUpdatedAt: updatedProject.updatedAt || new Date().toISOString(),
         baseVersion: getProjectBaseVersion(updatedProject),
         remoteSynced: true
@@ -702,16 +708,16 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
       if (idx !== -1) {
         projects.value[idx] = mergedProject
       }
-      saveProjectCanvasDraft(id, next.canvasData, {
+      const mergedDraftSaved = saveProjectCanvasDraft(id, next.canvasData, {
         draftUpdatedAt: localUpdatedAt,
         baseVersion: getProjectBaseVersion(updatedProject),
         remoteSynced: false
       })
-      saveLocalCache()
+      const mergedMetaSaved = saveLocalCache()
 
       return {
         project: mergedProject,
-        localSaved: true,
+        localSaved: mergedDraftSaved && mergedMetaSaved,
         remoteSynced: false,
         status: 'local-only'
       }
@@ -722,11 +728,11 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
     if (idx !== -1) {
       projects.value[idx] = updatedProject
     }
-    saveLocalCache()
+    const remoteMetaSaved = saveLocalCache()
     
     return {
       project: updatedProject,
-      localSaved: true,
+      localSaved: localSaved || (remoteDraftSaved && remoteMetaSaved),
       remoteSynced: true,
       status: 'synced'
     }
@@ -738,9 +744,9 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
     console.warn('Cloud autosave failed, kept local draft:', error?.message)
     return {
       project: next,
-      localSaved: true,
+      localSaved,
       remoteSynced: false,
-      status: 'local-only',
+      status: localSaved ? 'local-only' : 'failed',
       error
     }
   }

@@ -464,7 +464,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 import { isExpiredRemoteUrl } from '@/utils/media'
-import { shouldApplyRemoteProjectSnapshot } from '@/utils/canvasSync'
+import { recoverMissingNodeMedia, shouldApplyRemoteProjectSnapshot } from '@/utils/canvasSync'
 
 // API Settings component | API 设置组件
 import ApiSettings from '../components/ApiSettings.vue'
@@ -1346,71 +1346,18 @@ const recoverBlankMediaNodes = async (projectId) => {
   const items = Array.isArray(response?.items) ? response.items : []
   if (items.length === 0) return
 
-  const assetsBySourceNodeId = new Map()
-  items.forEach((item) => {
-    const sourceNodeId = String(item?.sourceNodeId || '').trim()
-    const url = String(item?.url || '').trim()
-    if (!sourceNodeId || !url) return
-    const list = assetsBySourceNodeId.get(sourceNodeId) || []
-    list.push(item)
-    assetsBySourceNodeId.set(sourceNodeId, list)
+  const recovery = recoverMissingNodeMedia({
+    nodes: nodes.value,
+    edges: edges.value,
+    assets: items,
+    now: Date.now()
   })
 
-  let restoredCount = 0
-  const restoredNodeIds = []
-  const nextNodes = nodes.value.map((node) => {
-    if (node?.type !== 'image' && node?.type !== 'video') return node
+  if (recovery.restoredCount === 0) return
 
-    const currentUrl = String(node?.data?.url || '').trim()
-    const currentPreviewUrl = String(node?.data?.previewUrl || '').trim()
-    const currentBase64 = String(node?.data?.base64 || '').trim()
-    const hasRecoverableGap =
-      (!currentUrl || isExpiredRemoteUrl(currentUrl))
-      && !currentPreviewUrl
-      && !currentBase64
-    if (!hasRecoverableGap) return node
-
-    const expectedKind = node.type === 'video' ? 'video' : 'image'
-    const candidateIds = Array.from(new Set([
-      String(node.id || '').trim(),
-      String(node?.data?.sourceConfigId || '').trim(),
-      ...edges.value
-        .filter((edge) => edge.target === node.id)
-        .map((edge) => String(edge.source || '').trim())
-    ].filter(Boolean)))
-
-    let matchedAsset = null
-    for (const candidateId of candidateIds) {
-      const candidates = assetsBySourceNodeId.get(candidateId) || []
-      matchedAsset = candidates.find((item) => String(item?.kind || '').trim() === expectedKind && String(item?.url || '').trim())
-      if (matchedAsset) break
-    }
-
-    if (!matchedAsset) return node
-
-    restoredCount += 1
-    restoredNodeIds.push(node.id)
-    return {
-      ...node,
-      data: {
-        ...(node.data || {}),
-        url: matchedAsset.url,
-        previewUrl: '',
-        base64: '',
-        loading: false,
-        error: '',
-        persistStatus: 'saved',
-        persistError: '',
-        updatedAt: Date.now()
-      }
-    }
-  })
-
-  if (restoredCount === 0) return
-
-  nodes.value = nextNodes
+  nodes.value = recovery.nodes
   await nextTick()
-  restoredNodeIds.forEach((nodeId) => updateNodeInternals(nodeId))
+  recovery.restoredNodeIds.forEach((nodeId) => updateNodeInternals(nodeId))
   await flushSave()
 }
 

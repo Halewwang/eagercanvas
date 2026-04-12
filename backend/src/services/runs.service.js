@@ -78,13 +78,14 @@ const extractProvider3DJobId = (result = {}) => {
 
 const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
 
-const persistRemoteUrlIfNeeded = async (url, fileName) => {
+export const persistRemoteUrlIfNeeded = async (url, fileName) => {
   const raw = String(url || '').trim()
   if (!raw || isPersistedUploadUrl(raw)) return raw
   return uploadRemoteFile({ url: raw, fileName }).then((result) => String(result?.url || '').trim() || raw)
 }
 
-const persist3DResultAssets = async (result = {}) => {
+export const persist3DResultAssets = async (result = {}, options = {}) => {
+  const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
   const nextAssets = Array.isArray(result?.assets) ? [...result.assets] : []
   if (!nextAssets.length && !String(result?.previewImageUrl || '').trim()) {
     return result
@@ -93,12 +94,12 @@ const persist3DResultAssets = async (result = {}) => {
   const persistedAssets = await Promise.all(
     nextAssets.map(async (asset, index) => {
       const type = String(asset?.type || '').trim().toLowerCase()
-      const persistedUrl = await persistRemoteUrlIfNeeded(
+      const persistedUrl = await persistRemoteUrl(
         asset?.url,
         `model3d-${Date.now()}-${index}.${type || 'bin'}`
       ).catch(() => String(asset?.url || '').trim())
 
-      const persistedPreviewImageUrl = await persistRemoteUrlIfNeeded(
+      const persistedPreviewImageUrl = await persistRemoteUrl(
         asset?.previewImageUrl,
         `model3d-preview-${Date.now()}-${index}.png`
       ).catch(() => String(asset?.previewImageUrl || '').trim())
@@ -111,7 +112,7 @@ const persist3DResultAssets = async (result = {}) => {
     })
   )
 
-  const previewImageUrl = await persistRemoteUrlIfNeeded(
+  const previewImageUrl = await persistRemoteUrl(
     result?.previewImageUrl,
     `model3d-preview-${Date.now()}.png`
   ).catch(() => String(result?.previewImageUrl || '').trim())
@@ -123,7 +124,8 @@ const persist3DResultAssets = async (result = {}) => {
   }
 }
 
-const persistImageResultAssets = async (result = {}) => {
+export const persistImageResultAssets = async (result = {}, options = {}) => {
+  const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
   const entries = Array.isArray(result?.data) ? [...result.data] : []
   if (!entries.length) return result
 
@@ -132,7 +134,7 @@ const persistImageResultAssets = async (result = {}) => {
       const remoteUrl = String(entry?.url || '').trim()
       if (!remoteUrl) return entry
 
-      const persistedUrl = await persistRemoteUrlIfNeeded(
+      const persistedUrl = await persistRemoteUrl(
         remoteUrl,
         `generated-${Date.now()}-${index}.png`
       ).catch(() => remoteUrl)
@@ -150,11 +152,12 @@ const persistImageResultAssets = async (result = {}) => {
   }
 }
 
-const persistVideoResultAsset = async (result = {}) => {
+export const persistVideoResultAsset = async (result = {}, options = {}) => {
+  const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
   const rawUrl = String(extractProviderVideoUrl(result) || '').trim()
   if (!rawUrl) return result
 
-  const persistedUrl = await persistRemoteUrlIfNeeded(
+  const persistedUrl = await persistRemoteUrl(
     rawUrl,
     `video-${Date.now()}.mp4`
   ).catch(() => rawUrl)
@@ -218,7 +221,7 @@ const persistVideoResultAsset = async (result = {}) => {
   return nextResult
 }
 
-const buildImageGenerationAssets = (result = {}) =>
+export const buildImageGenerationAssets = (result = {}, sourceNodeId = '') =>
   (Array.isArray(result?.data) ? result.data : [])
     .map((item, index) => {
       const url = String(item?.url || '').trim()
@@ -229,7 +232,8 @@ const buildImageGenerationAssets = (result = {}) =>
         previewUrl: url,
         fileName: `generated-${index + 1}.png`,
         fileType: 'image/png',
-        origin: 'generation'
+        origin: 'generation',
+        ...(sourceNodeId ? { sourceNodeId } : {})
       }
     })
     .filter(Boolean)
@@ -261,7 +265,7 @@ export const buildVideoGenerationAssets = (result = {}, sourceNodeId = '') => {
   }]
 }
 
-const build3DGenerationAssets = (result = {}) => {
+export const build3DGenerationAssets = (result = {}, sourceNodeId = '') => {
   const assets = Array.isArray(result?.assets) ? result.assets : []
   return assets
     .map((asset, index) => {
@@ -274,7 +278,8 @@ const build3DGenerationAssets = (result = {}) => {
         previewUrl: String(asset?.previewImageUrl || result?.previewImageUrl || '').trim() || url,
         fileName: `model3d-${index + 1}.${type || 'bin'}`,
         fileType: type ? `model/${type}` : 'application/octet-stream',
-        origin: 'generation'
+        origin: 'generation',
+        ...(sourceNodeId ? { sourceNodeId } : {})
       }
     })
     .filter(Boolean)
@@ -312,14 +317,16 @@ const bindImageTaskOwnership = async ({ userId, runId, taskId }) => {
   }
 }
 
-const bind3DTaskOwnership = async ({ userId, runId, taskId }) => {
+const bind3DTaskOwnership = async ({ userId, runId, taskId, sourceNodeId = '' }) => {
   if (!taskId) return
+  const safeSourceNodeId = String(sourceNodeId || '').trim()
   const { error } = await supabase.from('audit_logs').insert({
     user_id: userId,
     action: 'model3d.task.created',
     metadata: {
       run_id: runId,
-      task_id: taskId
+      task_id: taskId,
+      ...(safeSourceNodeId ? { source_node_id: safeSourceNodeId } : {})
     }
   })
   if (error) {
@@ -427,7 +434,7 @@ const findVideoRunContextByTask = async ({ userId, taskId }) => {
   }
 }
 
-const find3DRunIdByTask = async ({ userId, taskId }) => {
+const find3DRunContextByTask = async ({ userId, taskId }) => {
   const { data, error } = await supabase
     .from('audit_logs')
     .select('metadata')
@@ -439,11 +446,16 @@ const find3DRunIdByTask = async ({ userId, taskId }) => {
 
   if (error) {
     console.warn('[model3d] resolve run by task failed', error.message)
-    return ''
+    return { runId: '', sourceNodeId: '' }
   }
 
-  const runId = data?.[0]?.metadata?.run_id
-  return runId ? String(runId) : ''
+  const metadata = data?.[0]?.metadata || {}
+  const runId = metadata?.run_id
+  const sourceNodeId = metadata?.source_node_id
+  return {
+    runId: runId ? String(runId) : '',
+    sourceNodeId: sourceNodeId ? String(sourceNodeId) : ''
+  }
 }
 
 const syncRunStatusFromImageTask = async ({ userId, runId, taskResult }) => {
@@ -620,11 +632,13 @@ export const createRun = async (userId, input) => {
       providerResponse = await providerChatCompletions(payload.payload, providerRequestOptions)
     } else if (payload.type === 'image') {
       providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
+      providerResponse = await persistImageResultAssets(providerResponse)
     } else if (payload.type === 'model3d') {
       providerResponse = await providerCreate3D(payload.payload, providerRequestOptions)
       providerResponse = await persist3DResultAssets(providerResponse)
     } else {
       providerResponse = await providerCreateVideo(payload.payload, providerRequestOptions)
+      providerResponse = await persistVideoResultAsset(providerResponse)
     }
 
     const latencyMs = Date.now() - startedAt
@@ -636,11 +650,13 @@ export const createRun = async (userId, input) => {
     if (payload.type === 'model3d') {
       const providerTaskId = extractProvider3DJobId(providerResponse)
       const hasAssets = Array.isArray(providerResponse?.assets) && providerResponse.assets.length > 0
+      const sourceNodeId = String(payload.payload?.sourceNodeId || '').trim()
 
       await bind3DTaskOwnership({
         userId,
         runId: run.id,
-        taskId: providerTaskId
+        taskId: providerTaskId,
+        sourceNodeId
       })
 
       if (hasAssets) {
@@ -657,7 +673,8 @@ export const createRun = async (userId, input) => {
           model: payload.model || payload.payload?.model,
           prompt: payload.payload?.prompt,
           status: 'completed',
-          assets: build3DGenerationAssets(providerResponse)
+          sourceNodeId,
+          assets: build3DGenerationAssets(providerResponse, sourceNodeId)
         })
 
         return {
@@ -731,8 +748,8 @@ export const createRun = async (userId, input) => {
           model: payload.model || payload.payload?.model,
           prompt: payload.payload?.prompt,
           status: 'completed',
-          assets: buildVideoGenerationAssets(providerResponse, sourceNodeId),
-          sourceNodeId
+          sourceNodeId,
+          assets: buildVideoGenerationAssets(providerResponse, sourceNodeId)
         })
 
         return {
@@ -836,7 +853,8 @@ export const createRun = async (userId, input) => {
         model: payload.model || payload.payload?.model,
         prompt: payload.payload?.prompt,
         status: 'completed',
-        assets: buildImageGenerationAssets(providerResponse)
+        sourceNodeId: String(payload.payload?.sourceNodeId || '').trim(),
+        assets: buildImageGenerationAssets(providerResponse, String(payload.payload?.sourceNodeId || '').trim())
       })
     }
 
@@ -892,7 +910,8 @@ export const getVideoTask = async (_userId, taskId) => {
   await assertVideoTaskOwnership({ userId: _userId, taskId })
   const providerAccess = await resolveUserProviderAccess(_userId)
   const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
-  const result = await providerVideoStatus(taskId, providerRequestOptions)
+  const rawResult = await providerVideoStatus(taskId, providerRequestOptions)
+  const result = await persistVideoResultAsset(rawResult)
   const { runId, sourceNodeId } = await findVideoRunContextByTask({ userId: _userId, taskId })
   await syncRunStatusFromVideoTask({ userId: _userId, runId, taskResult: result })
   const status = String(result?.status || '').toLowerCase()
@@ -932,7 +951,7 @@ export const get3DTask = async (_userId, taskId) => {
   const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
   const rawResult = await provider3DStatus(taskId, providerRequestOptions)
   const result = await persist3DResultAssets(rawResult)
-  const runId = await find3DRunIdByTask({ userId: _userId, taskId })
+  const { runId, sourceNodeId } = await find3DRunContextByTask({ userId: _userId, taskId })
   await syncRunStatusFrom3DTask({ userId: _userId, runId, taskResult: result })
   if (runId) {
     const run = await getRunById(_userId, runId).catch(() => null)
@@ -946,7 +965,8 @@ export const get3DTask = async (_userId, taskId) => {
         model: run?.model || '',
         prompt: '',
         status: 'completed',
-        assets: build3DGenerationAssets(result)
+        sourceNodeId,
+        assets: build3DGenerationAssets(result, sourceNodeId)
       })
     }
   }
@@ -957,7 +977,8 @@ export const getImageTask = async (_userId, taskId) => {
   await assertImageTaskOwnership({ userId: _userId, taskId })
   const providerAccess = await resolveUserProviderAccess(_userId)
   const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
-  const result = await providerImageStatus(taskId, providerRequestOptions)
+  const rawResult = await providerImageStatus(taskId, providerRequestOptions)
+  const result = await persistImageResultAssets(rawResult)
   const runId = await findImageRunIdByTask({ userId: _userId, taskId })
   await syncRunStatusFromImageTask({ userId: _userId, runId, taskResult: result })
 
@@ -1008,6 +1029,7 @@ export const getImageTask = async (_userId, taskId) => {
         model: run?.model || '',
         prompt: '',
         status: 'completed',
+        sourceNodeId: '',
         assets: buildImageGenerationAssets(result)
       })
     }

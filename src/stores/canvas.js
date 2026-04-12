@@ -160,11 +160,38 @@ const isEphemeralMediaUrl = (value) => {
   return raw.startsWith('blob:') || /^data:/i.test(raw)
 }
 
+const sanitizePersistableMediaList = (value, { preserveTransientMedia = false } = {}) => {
+  if (!Array.isArray(value)) return value
+  return value
+    .map((item) => String(item || '').trim())
+    .filter((item) => {
+      if (!item) return false
+      if (preserveTransientMedia) return true
+      if (isEphemeralMediaUrl(item)) return false
+      if (isTransientRemoteMediaUrl(item)) return false
+      return true
+    })
+}
+
 const hasUnpersistedMedia = () => nodes.value.some((node) => {
   const base64 = String(node?.data?.base64 || '').trim()
   if (base64) return true
   const previewUrl = String(node?.data?.previewUrl || '').trim()
   if (previewUrl) return true
+  const previewImageUrl = String(node?.data?.previewImageUrl || '').trim()
+  if (previewImageUrl && (isEphemeralMediaUrl(previewImageUrl) || isTransientRemoteMediaUrl(previewImageUrl))) {
+    return true
+  }
+  const sourceRefImages = Array.isArray(node?.data?.sourceRefImages) ? node.data.sourceRefImages : []
+  if (sourceRefImages.some((value) => isEphemeralMediaUrl(value) || isTransientRemoteMediaUrl(value))) {
+    return true
+  }
+  const assetUrls = node?.data?.assetUrls && typeof node.data.assetUrls === 'object'
+    ? Object.values(node.data.assetUrls)
+    : []
+  if (assetUrls.some((value) => isEphemeralMediaUrl(value) || isTransientRemoteMediaUrl(value))) {
+    return true
+  }
   const url = String(node?.data?.url || '').trim()
   if (!url) return false
   if (isEphemeralMediaUrl(url)) return true
@@ -188,6 +215,25 @@ const sanitizeNodeForPersistence = (node, options = {}) => {
 
     if (!preserveTransientMedia && (isEphemeralMediaUrl(data.url) || isTransientRemoteMediaUrl(data.url))) {
       delete data.url
+    }
+
+    if (Array.isArray(data.sourceRefImages)) {
+      data.sourceRefImages = sanitizePersistableMediaList(data.sourceRefImages, { preserveTransientMedia })
+    }
+
+    if (data.assetUrls && typeof data.assetUrls === 'object') {
+      data.assetUrls = Object.fromEntries(
+        Object.entries(data.assetUrls).filter(([_, value]) => {
+          const raw = String(value || '').trim()
+          if (!raw) return false
+          if (preserveTransientMedia) return true
+          return !isEphemeralMediaUrl(raw) && !isTransientRemoteMediaUrl(raw)
+        })
+      )
+    }
+
+    if (!preserveTransientMedia && (isEphemeralMediaUrl(data.previewImageUrl) || isTransientRemoteMediaUrl(data.previewImageUrl))) {
+      delete data.previewImageUrl
     }
   }
 
@@ -815,11 +861,13 @@ export const saveProject = async () => {
       const remoteSynced = !!result?.remoteSynced
       const localSaved = !!result?.localSaved
       lastSaveResult = {
-        status: result?.status || (remoteSynced ? 'synced' : 'local-only'),
+        status: result?.status || (remoteSynced ? 'synced' : (localSaved ? 'local-only' : 'failed')),
         localSaved,
         remoteSynced,
         hasTransientMedia: containsTransientMedia,
-        reason: containsTransientMedia
+        reason: !localSaved
+          ? 'local-cache-failed'
+          : containsTransientMedia
           ? (remoteSynced ? 'transient-media' : 'transient-media-local')
           : (remoteSynced ? 'synced' : 'remote-failed'),
         error: result?.error || null
