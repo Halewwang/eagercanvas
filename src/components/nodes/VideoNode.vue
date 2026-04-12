@@ -136,7 +136,7 @@
       </div>
     </div>
 
-    <div class="binding-status-wrap">
+    <div class="binding-status-wrap" :style="moduleStyle">
       <div class="binding-status-row">
         <div
           v-for="item in imageRoleStatusList"
@@ -241,6 +241,11 @@ const imageRoleStatusMap = {
   input_reference: 'Reference Picture',
   video_reference: 'Reference Video'
 }
+const generationTypeStatusLabels = {
+  text_to_video: 'Mode: Text to Video',
+  first_last_frames: 'Mode: First + Last Frame',
+  omni_reference: 'Mode: Omni Reference'
+}
 const generationTypeLabels = {
   text_to_video: 'Text to Video',
   first_last_frames: 'First + Last Frame',
@@ -333,6 +338,17 @@ const activeImageRoleSet = computed(() => {
 
   return { keys: activeRoleKeys, previews: rolePreviews }
 })
+const isSeedanceGenerationTagActive = computed(() => {
+  const { keys } = activeImageRoleSet.value
+  if (localModel.value !== 'seedance-2.0') return false
+  if (effectiveGenerationType.value === 'first_last_frames') {
+    return keys.has('first_frame_image') && keys.has('last_frame_image')
+  }
+  if (effectiveGenerationType.value === 'omni_reference') {
+    return keys.has('input_reference') || keys.has('video_reference')
+  }
+  return keys.has('prompt')
+})
 
 const syncResolutionToModelOptions = () => {
   const optionKeys = resolutionOptions.value.map((item) => String(item.key || '').trim()).filter(Boolean)
@@ -366,14 +382,13 @@ const syncTypeToModelOptions = () => {
 }
 const imageRoleStatusList = computed(() => {
   const { keys, previews } = activeImageRoleSet.value
-  const hasAnyConnectedInput = keys.size > 0
   const items = [
     ...(localModel.value === 'seedance-2.0'
       ? [
           {
             key: 'generation_type',
-            label: generationTypeLabels[effectiveGenerationType.value] || imageRoleStatusMap.generation_type,
-            active: hasAnyConnectedInput
+            label: generationTypeStatusLabels[effectiveGenerationType.value] || imageRoleStatusMap.generation_type,
+            active: isSeedanceGenerationTagActive.value
           },
           { key: 'prompt', label: imageRoleStatusMap.prompt, active: keys.has('prompt') },
           { key: 'first_frame_image', label: imageRoleStatusMap.first_frame_image, active: keys.has('first_frame_image'), previewUrl: previews.first_frame_image },

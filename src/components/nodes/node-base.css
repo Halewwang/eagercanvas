@@ -257,6 +257,8 @@
   align-items: center;
   gap: 8px;
   margin-top: 10px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .binding-status-row {
@@ -264,6 +266,9 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
 }
 
 .binding-status-pill {
@@ -278,6 +283,8 @@
   font-size: 12px;
   line-height: 1;
   white-space: nowrap;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .binding-status-pill-idle {
