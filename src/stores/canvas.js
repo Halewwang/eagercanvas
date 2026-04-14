@@ -4,6 +4,13 @@
  */
 import { ref, watch } from 'vue'
 import { updateProjectCanvas, getProjectCanvas } from './projects'
+import { canvasBroadcast } from './canvasBroadcast'
+import {
+  CANVAS_SYNC_STATES,
+  createSyncStatus,
+  deriveSyncStatusFromSaveResult,
+  isConflictError
+} from './canvasSyncStatus'
 import { IMAGE_MODELS, VIDEO_MODELS, MODEL3D_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL, DEFAULT_MODEL3D_MODEL } from '../config/models'
 import { isTransientRemoteMediaUrl } from '@/utils/media'
 
@@ -36,14 +43,7 @@ export const canvasViewport = ref({ x: 100, y: 50, zoom: 0.8 })
 
 // Selected node | 选中的节点
 export const selectedNode = ref(null)
-export const projectSaveState = ref({
-  status: 'idle',
-  localSaved: false,
-  remoteSynced: false,
-  hasTransientMedia: false,
-  reason: '',
-  error: null
-})
+export const projectSaveState = ref(createSyncStatus())
 
 // Auto-save flag | 自动保存标志
 let autoSaveEnabled = false
@@ -53,14 +53,7 @@ let saveQueued = false
 let lastPersistedSnapshotKey = ''
 let remoteRetryTimeout = null
 let remoteRetryDelayMs = 2000
-let lastSaveResult = {
-  status: 'idle',
-  localSaved: false,
-  remoteSynced: false,
-  hasTransientMedia: false,
-  reason: '',
-  error: null
-}
+let lastSaveResult = createSyncStatus()
 
 // History for undo/redo | 撤销/重做历史
 const history = ref([])
@@ -696,14 +689,7 @@ export const resetCanvasSession = () => {
   isRestoring = true
   currentProjectId.value = null
   currentProjectVersion.value = null
-  projectSaveState.value = {
-    status: 'idle',
-    localSaved: false,
-    remoteSynced: false,
-    hasTransientMedia: false,
-    reason: '',
-    error: null
-  }
+  projectSaveState.value = createSyncStatus()
   lastSaveResult = { ...projectSaveState.value }
   lastPersistedSnapshotKey = ''
   saveQueued = false
@@ -731,14 +717,14 @@ export const loadProject = (projectId) => {
   
   if (canvasData) {
     const loadRemoteSynced = canvasData?._meta?.remoteSynced !== false
-    projectSaveState.value = {
-      status: loadRemoteSynced ? 'synced' : 'local-only',
+    projectSaveState.value = createSyncStatus({
+      status: loadRemoteSynced ? CANVAS_SYNC_STATES.synced : CANVAS_SYNC_STATES.localPersisted,
       localSaved: true,
       remoteSynced: loadRemoteSynced,
       hasTransientMedia: false,
       reason: loadRemoteSynced ? 'loaded-remote' : 'loaded-local-draft',
       error: null
-    }
+    })
     lastSaveResult = { ...projectSaveState.value }
 
     // Restore project version
@@ -843,11 +829,11 @@ export const saveProject = async () => {
   const runSave = async () => {
     let saved = true
     clearRemoteRetry()
-    projectSaveState.value = {
+    projectSaveState.value = createSyncStatus({
       ...lastSaveResult,
-      status: 'syncing',
+      status: CANVAS_SYNC_STATES.syncing,
       error: null
-    }
+    })
     try {
       const result = await updateProjectCanvas(
         currentProjectId.value,
@@ -860,24 +846,24 @@ export const saveProject = async () => {
       )
       const remoteSynced = !!result?.remoteSynced
       const localSaved = !!result?.localSaved
-      lastSaveResult = {
-        status: result?.status || (remoteSynced ? 'synced' : (localSaved ? 'local-only' : 'failed')),
+      lastSaveResult = deriveSyncStatusFromSaveResult({
+        status: result?.status,
         localSaved,
         remoteSynced,
         hasTransientMedia: containsTransientMedia,
-        reason: !localSaved
-          ? 'local-cache-failed'
-          : containsTransientMedia
-          ? (remoteSynced ? 'transient-media' : 'transient-media-local')
-          : (remoteSynced ? 'synced' : 'remote-failed'),
         error: result?.error || null
-      }
+      })
       projectSaveState.value = { ...lastSaveResult }
 
       if (remoteSynced) {
         lastPersistedSnapshotKey = localSnapshotKey
         clearRemoteRetry()
         resetRemoteRetryDelay()
+        canvasBroadcast.publishRemoteSynced({
+          projectId: currentProjectId.value,
+          baseRevision: result?.project?.serverUpdatedAt || result?.project?.updatedAt || currentProjectVersion.value,
+          draftUpdatedAt: result?.project?.updatedAt || new Date().toISOString()
+        })
       } else if (!containsTransientMedia && result?.error) {
         scheduleRemoteRetry()
       }
@@ -889,24 +875,19 @@ export const saveProject = async () => {
       saved = localSaved
     } catch (error) {
       saved = false
-      lastSaveResult = {
-        status: error?.status === 409 || error?.code === 'PROJECT_CONFLICT'
-          ? 'conflict'
-          : 'failed',
+      lastSaveResult = deriveSyncStatusFromSaveResult({
+        status: isConflictError(error) ? CANVAS_SYNC_STATES.conflict : CANVAS_SYNC_STATES.failed,
         localSaved: true,
         remoteSynced: false,
         hasTransientMedia: containsTransientMedia,
-        reason: error?.code === 'EMPTY_CANVAS_OVERWRITE_BLOCKED'
-          ? 'empty-canvas'
-          : 'remote-error',
         error
-      }
+      })
       projectSaveState.value = { ...lastSaveResult }
       clearRemoteRetry()
-      if (error?.status !== 409 && error?.code !== 'PROJECT_CONFLICT' && error?.code !== 'EMPTY_CANVAS_OVERWRITE_BLOCKED') {
+      if (!isConflictError(error) && error?.code !== 'EMPTY_CANVAS_OVERWRITE_BLOCKED') {
         scheduleRemoteRetry()
       }
-      if (error.status === 409 || error.code === 'PROJECT_CONFLICT') {
+      if (isConflictError(error)) {
         // Handle conflict: Show dialog to user
         window.$message?.error('Project has been updated elsewhere. Please refresh.')
         // Ideally show a modal to chose: Overwrite or Refresh
@@ -946,6 +927,13 @@ export const flushSave = async () => {
  */
 const debouncedSave = () => {
   if (!autoSaveEnabled || !currentProjectId.value) return
+  projectSaveState.value = createSyncStatus({
+    ...lastSaveResult,
+    status: CANVAS_SYNC_STATES.dirty,
+    remoteSynced: false,
+    reason: 'pending-local-change',
+    error: null
+  })
   
   if (saveTimeout) {
     clearTimeout(saveTimeout)
@@ -1028,6 +1016,43 @@ export const hasPendingCanvasChanges = () => {
   const snapshotKey = getSnapshotKey(createCanvasSnapshot({ preserveTransientMedia: true }))
   return snapshotKey !== lastPersistedSnapshotKey
 }
+
+canvasBroadcast.subscribe((message) => {
+  if (!message?.projectId || message.projectId !== currentProjectId.value) return
+  if (message.type === 'remote-synced') {
+    currentProjectVersion.value = message.baseRevision || currentProjectVersion.value
+    if (!hasPendingCanvasChanges()) {
+      lastSaveResult = createSyncStatus({
+        status: CANVAS_SYNC_STATES.synced,
+        localSaved: true,
+        remoteSynced: true,
+        reason: 'synced-in-another-tab'
+      })
+      projectSaveState.value = { ...lastSaveResult }
+    }
+    return
+  }
+
+  if (message.type !== 'draft-saved') return
+  if (hasPendingCanvasChanges()) {
+    lastSaveResult = createSyncStatus({
+      status: CANVAS_SYNC_STATES.conflict,
+      localSaved: true,
+      remoteSynced: false,
+      reason: 'another-tab-draft'
+    })
+    projectSaveState.value = { ...lastSaveResult }
+    return
+  }
+
+  lastSaveResult = createSyncStatus({
+    status: CANVAS_SYNC_STATES.localPersisted,
+    localSaved: true,
+    remoteSynced: message.remoteSynced === true,
+    reason: 'saved-in-another-tab'
+  })
+  projectSaveState.value = { ...lastSaveResult }
+})
 
 // Watch for changes and auto-save (only save to project, not history) | 监听变化并自动保存（仅保存项目，不保存历史）
 watch([nodes, edges, groups], () => {

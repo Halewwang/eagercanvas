@@ -12,7 +12,9 @@ const createSchema = z.object({
 const updateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   canvasData: z.any().optional(),
-  thumbnailUrl: z.string().optional().nullable()
+  thumbnailUrl: z.string().optional().nullable(),
+  baseRevision: z.string().optional().nullable(),
+  currentUpdatedAt: z.string().optional().nullable()
 })
 
 const normalizeThumbnailUrl = (value) => {
@@ -121,8 +123,9 @@ export const updateProject = async (userId, id, input) => {
     .eq('id', id)
     .eq('user_id', userId)
 
-  if (input.currentUpdatedAt) {
-    query = query.eq('updated_at', input.currentUpdatedAt)
+  const baseRevision = payload.baseRevision || payload.currentUpdatedAt || null
+  if (baseRevision) {
+    query = query.eq('updated_at', baseRevision)
   }
 
   const { data, error } = await query.select('*').maybeSingle()
@@ -131,11 +134,11 @@ export const updateProject = async (userId, id, input) => {
   
   // If we had a version check and no data returned, it means conflict
   // 如果进行了版本检查但未返回数据，说明发生了冲突（updated_at 不匹配）
-  if (input.currentUpdatedAt && !data) {
+  if (baseRevision && !data) {
     throw new HttpError(409, 'Project has been modified by another session', 'PROJECT_CONFLICT')
   }
 
-  if (!data && !input.currentUpdatedAt) {
+  if (!data && !baseRevision) {
     // Fallback for cases without version check (e.g. name update only)
     throw new HttpError(404, 'Project not found', 'PROJECT_NOT_FOUND')
   }

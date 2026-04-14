@@ -28,7 +28,7 @@
       <div class="absolute right-4 top-4 z-20 flex items-center gap-2">
         <div
           v-if="syncIndicator"
-          class="flora-panel rounded-full px-3 py-2"
+          class="flora-panel canvas-sync-pill rounded-full px-3 py-2"
           :title="syncIndicator.title"
         >
           <div class="flex items-center gap-2 text-xs font-medium">
@@ -265,7 +265,7 @@
         >
           <n-icon :size="16"><LocateOutline /></n-icon>
         </button>
-        <div class="flex h-9 items-center gap-1 rounded-full px-2">
+        <div class="canvas-zoom-pill flex h-9 items-center gap-1 rounded-full px-2">
           <button @click="zoomOut" class="ui-icon-button !h-8 !w-8">
             <n-icon :size="14"><RemoveOutline /></n-icon>
           </button>
@@ -430,11 +430,11 @@ import {
   groups,
   addEdge,
   addNode,
-  currentProjectId,
   createGroup,
   deleteGroupWithNodes,
   duplicateGroup,
   flushSave,
+  hasPendingCanvasChanges,
   resetCanvasSession,
   canvasViewport,
   projectSaveState,
@@ -444,7 +444,6 @@ import {
   canUndo,
   canRedo,
   loadProject,
-  hasPendingCanvasChanges,
   manualSaveHistory,
   removeNodesByIds,
   renameGroup,
@@ -648,6 +647,14 @@ const syncIndicator = computed(() => {
   const state = projectSaveState.value || {}
   const status = String(state.status || 'idle')
 
+  if (status === 'dirty') {
+    return {
+      label: 'Unsaved',
+      title: 'Changes are waiting to be saved on this device.',
+      dotClass: 'bg-amber-400'
+    }
+  }
+
   if (status === 'syncing') {
     return {
       label: 'Syncing...',
@@ -672,18 +679,18 @@ const syncIndicator = computed(() => {
     }
   }
 
-  if (status === 'local-only') {
+  if (status === 'localPersisted' || status === 'offline') {
     return {
-      label: 'Local only',
-      title: 'Changes are only saved on this device until cloud sync succeeds.',
+      label: status === 'offline' ? 'Offline saved' : 'Saved locally',
+      title: 'Changes are saved on this device. Cloud sync has not completed.',
       dotClass: 'bg-amber-400'
     }
   }
 
   if (status === 'failed') {
     return {
-      label: 'Sync failed',
-      title: 'Cloud sync failed. The current canvas may only be available on this device.',
+      label: 'Save failed',
+      title: 'The latest changes could not be saved. Keep this page open and try again.',
       dotClass: 'bg-rose-400'
     }
   }
@@ -1396,7 +1403,7 @@ const ensureProjectSnapshot = async (projectId) => {
   if (!shouldApplyRemoteProjectSnapshot({
     refreshedProjectId: id,
     activeRouteProjectId: String(route.params.id || ''),
-    currentCanvasProjectId: currentProjectId.value,
+    currentCanvasProjectId: currentCanvasProjectId.value,
     hasPendingCanvasChanges: hasPendingCanvasChanges()
   })) {
     return
@@ -1497,7 +1504,7 @@ onMounted(async () => {
       if (!shouldApplyRemoteProjectSnapshot({
         refreshedProjectId: project?.id || routeProjectId,
         activeRouteProjectId: String(route.params.id || ''),
-        currentCanvasProjectId: currentProjectId.value,
+        currentCanvasProjectId: currentCanvasProjectId.value,
         hasPendingCanvasChanges: hasPendingCanvasChanges()
       })) return
       if (!project?.canvasData) return
@@ -2045,10 +2052,28 @@ onUnmounted(() => {
 
 <style>
 .canvas-flow .vue-flow__pane {
-  background-color: #080808;
-  background-image: var(--canvas-grid-image, none);
+  background-color: rgba(18, 18, 18, 0.72);
+  background-image:
+    linear-gradient(rgba(22, 22, 22, 0.78), rgba(22, 22, 22, 0.78)),
+    var(--canvas-grid-image, none);
   background-size: var(--canvas-grid-size, 20px 20px);
   background-position: var(--canvas-grid-position, 0 0);
+}
+
+.canvas-sync-pill {
+  flex: 0 1 auto;
+  width: 110px;
+  height: 50px;
+  display: flex;
+  align-self: auto;
+  justify-content: center;
+  align-items: center;
+}
+
+.canvas-zoom-pill {
+  width: 185px;
+  justify-content: flex-start;
+  align-items: center;
 }
 
 .canvas-flow .vue-flow__node-text,

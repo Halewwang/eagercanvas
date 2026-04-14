@@ -12,10 +12,12 @@ import {
 } from '@/api/projects'
 import { useAuthStore } from '@/stores/auth'
 import { isPersistedUploadUrl } from '@/utils/media'
+import { getCanvasDraftStorage } from '@/stores/canvasDrafts'
+import { buildRevisionSavePayload, CANVAS_SYNC_STATES, isConflictError } from '@/stores/canvasSyncStatus'
+import { canvasBroadcast } from '@/stores/canvasBroadcast'
 
 const LEGACY_STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-cache'
 const STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-meta'
-const STORAGE_CANVAS_KEY_PREFIX = 'ai-canvas-project-canvas-draft'
 const TOMBSTONE_KEY_PREFIX = 'ai-canvas-projects-deleted'
 const isLocalPreviewHost = () => {
   if (typeof window === 'undefined') return false
@@ -47,48 +49,6 @@ const defaultCanvasData = {
 const cloneCanvasData = (canvasData) => JSON.parse(JSON.stringify(canvasData || defaultCanvasData))
 const getCanvasDataKey = (canvasData) => JSON.stringify(canvasData || defaultCanvasData)
 
-const createCanvasDraftRecord = (canvasData, options = {}) => ({
-  version: 2,
-  canvasData: cloneCanvasData(canvasData || defaultCanvasData),
-  draftUpdatedAt: options.draftUpdatedAt || new Date().toISOString(),
-  baseVersion: options.baseVersion || null,
-  remoteSynced: options.remoteSynced === true
-})
-
-const normalizeCanvasDraftRecord = (value) => {
-  if (!value || typeof value !== 'object') return null
-
-  if (Object.prototype.hasOwnProperty.call(value, 'canvasData')) {
-    return {
-      canvasData: {
-        ...defaultCanvasData,
-        ...(value.canvasData && typeof value.canvasData === 'object' ? value.canvasData : {})
-      },
-      draftUpdatedAt: String(value.draftUpdatedAt || '').trim() || null,
-      baseVersion: String(value.baseVersion || '').trim() || null,
-      remoteSynced: value.remoteSynced === true
-    }
-  }
-
-  if (
-    Object.prototype.hasOwnProperty.call(value, 'nodes')
-    || Object.prototype.hasOwnProperty.call(value, 'edges')
-    || Object.prototype.hasOwnProperty.call(value, 'viewport')
-  ) {
-    return {
-      canvasData: {
-        ...defaultCanvasData,
-        ...value
-      },
-      draftUpdatedAt: null,
-      baseVersion: null,
-      remoteSynced: false
-    }
-  }
-
-  return null
-}
-
 const getUserScopedKey = (prefix) => {
   const { user, isAuthenticated } = useAuthStore()
   if (!isAuthenticated.value) return ''
@@ -96,10 +56,15 @@ const getUserScopedKey = (prefix) => {
   return userId ? `${prefix}:${userId}` : ''
 }
 
-const getProjectCanvasStorageKey = (projectId) => {
-  const scopedKey = getUserScopedKey(STORAGE_CANVAS_KEY_PREFIX)
-  if (!scopedKey || !projectId) return ''
-  return `${scopedKey}:${projectId}`
+const getCurrentUserId = () => {
+  const { user, isAuthenticated } = useAuthStore()
+  if (!isAuthenticated.value) return ''
+  return String(user.value?.id || '').trim()
+}
+
+const getDraftStorage = () => {
+  const userId = getCurrentUserId()
+  return userId ? getCanvasDraftStorage(userId) : null
 }
 
 const createLocalProjectRecord = (name = 'Untitled') => {
@@ -191,36 +156,51 @@ const toProjectSummary = (project) => ({
   serverUpdatedAt: project.serverUpdatedAt || null
 })
 
-const saveProjectCanvasDraft = (id, canvasData, options = {}) => {
-  const storageKey = getProjectCanvasStorageKey(id)
-  if (!storageKey) return false
+const saveProjectCanvasDraft = async (id, canvasData, options = {}) => {
+  const storage = getDraftStorage()
+  if (!storage) return false
   try {
-    localStorage.setItem(storageKey, JSON.stringify(createCanvasDraftRecord(canvasData, options)))
-    return true
+    const saved = await storage.saveDraft(id, {
+      canvasData: cloneCanvasData(canvasData || defaultCanvasData),
+      draftUpdatedAt: options.draftUpdatedAt || new Date().toISOString(),
+      baseRevision: options.baseRevision || options.baseVersion || null,
+      remoteSynced: options.remoteSynced === true,
+      status: options.status || (options.remoteSynced ? CANVAS_SYNC_STATES.synced : CANVAS_SYNC_STATES.localPersisted)
+    })
+    if (saved) {
+      canvasBroadcast.publishDraftSaved({
+        projectId: id,
+        draftUpdatedAt: options.draftUpdatedAt || new Date().toISOString(),
+        baseRevision: options.baseRevision || options.baseVersion || null,
+        status: options.status || (options.remoteSynced ? CANVAS_SYNC_STATES.synced : CANVAS_SYNC_STATES.localPersisted),
+        remoteSynced: options.remoteSynced === true
+      })
+    }
+    return saved
   } catch {
     return false
   }
 }
 
+export const hydrateCanvasDraftCache = async () => {
+  const storage = getDraftStorage()
+  if (!storage) return []
+  await storage.migrateLegacyLocalStorageDrafts()
+  return storage.hydrate()
+}
+
 const loadProjectCanvasDraftRecord = (id) => {
-  const storageKey = getProjectCanvasStorageKey(id)
-  if (!storageKey) return null
-  try {
-    const raw = localStorage.getItem(storageKey)
-    if (!raw) return null
-    return normalizeCanvasDraftRecord(JSON.parse(raw))
-  } catch {
-    return null
-  }
+  const storage = getDraftStorage()
+  return storage?.getCachedDraft(id) || null
 }
 
 const loadProjectCanvasDraft = (id) => loadProjectCanvasDraftRecord(id)?.canvasData || null
 
-const removeProjectCanvasDraft = (id) => {
-  const storageKey = getProjectCanvasStorageKey(id)
-  if (!storageKey) return
+const removeProjectCanvasDraft = async (id) => {
+  const storage = getDraftStorage()
+  if (!storage) return
   try {
-    localStorage.removeItem(storageKey)
+    await storage.deleteDraft(id)
   } catch {
     // ignore cache write failures
   }
@@ -238,14 +218,42 @@ const saveLocalCache = () => {
   }
 }
 
-const loadLocalCache = () => {
+const loadLocalCache = async () => {
   const storageKey = getUserScopedKey(STORAGE_KEY_PREFIX)
   const legacyStorageKey = getUserScopedKey(LEGACY_STORAGE_KEY_PREFIX)
   if (!storageKey) return []
   try {
+    const migrateLegacyProjectCache = async () => {
+      if (!legacyStorageKey) return []
+      const legacyRaw = localStorage.getItem(legacyStorageKey)
+      if (!legacyRaw) return []
+      const legacyParsed = JSON.parse(legacyRaw)
+      if (!Array.isArray(legacyParsed)) {
+        localStorage.removeItem(legacyStorageKey)
+        return []
+      }
+
+      const migrated = []
+      for (const project of legacyParsed.filter((project) => project?.id)) {
+        if (project.canvasData) {
+          await saveProjectCanvasDraft(project.id, project.canvasData, {
+            draftUpdatedAt: project.updatedAt || new Date().toISOString(),
+            baseRevision: project.serverUpdatedAt || project.updatedAt || null,
+            remoteSynced: false,
+            status: CANVAS_SYNC_STATES.localPersisted
+          })
+        }
+        migrated.push(toProjectSummary(project))
+      }
+
+      localStorage.removeItem(legacyStorageKey)
+      return migrated
+    }
+
     const raw = localStorage.getItem(storageKey)
     if (raw) {
       const parsed = JSON.parse(raw)
+      await migrateLegacyProjectCache()
       return Array.isArray(parsed)
         ? parsed
             .filter((project) => project?.id)
@@ -253,28 +261,10 @@ const loadLocalCache = () => {
         : []
     }
 
-    if (!legacyStorageKey) return []
-
-    const legacyRaw = localStorage.getItem(legacyStorageKey)
-    if (!legacyRaw) return []
-    const legacyParsed = JSON.parse(legacyRaw)
-    if (!Array.isArray(legacyParsed)) return []
-
-    const migrated = legacyParsed
-      .filter((project) => project?.id)
-      .map((project) => {
-        if (project.canvasData) {
-          saveProjectCanvasDraft(project.id, project.canvasData, {
-            draftUpdatedAt: project.updatedAt || new Date().toISOString(),
-            baseVersion: project.serverUpdatedAt || project.updatedAt || null,
-            remoteSynced: false
-          })
-        }
-        return toProjectSummary(project)
-      })
+    const migrated = await migrateLegacyProjectCache()
+    if (migrated.length === 0) return []
 
     localStorage.setItem(storageKey, JSON.stringify(migrated))
-    localStorage.removeItem(legacyStorageKey)
     return migrated
   } catch {
     return []
@@ -349,7 +339,7 @@ const shouldUseLocalCanvasDraft = (remote, draftRecord) => {
 
   if (draftRecord?.remoteSynced) return false
 
-  const draftBaseVersion = String(draftRecord?.baseVersion || '').trim()
+  const draftBaseVersion = String(draftRecord?.baseRevision || draftRecord?.baseVersion || '').trim()
   const remoteVersion = getProjectBaseVersion(remote)
   if (!draftBaseVersion || !remoteVersion) return false
 
@@ -402,7 +392,8 @@ export const loadProjects = async () => {
     }
     return projects.value
   }
-  const localDrafts = loadLocalCache()
+  await hydrateCanvasDraftCache()
+  const localDrafts = await loadLocalCache()
   if (BYPASS_AUTH_IN_DEV) {
     projects.value = localDrafts.map((project) => ({ ...project, readState: 'local-only' }))
     projectsLoadState.value = {
@@ -455,7 +446,7 @@ export const refreshProjectById = async (id) => {
     if (!localProject) return null
     return {
       ...localProject,
-      readState: localProject.readState || 'local-only',
+      readState: localProject.readState || 'local-draft',
       canvasData: localProject.canvasData || loadProjectCanvasDraft(id) || cloneCanvasData(defaultCanvasData)
     }
   }
@@ -465,10 +456,11 @@ export const refreshProjectById = async (id) => {
     const remoteProject = mapProjectFromApi(response.data)
     const mergedProject = mergeRemoteProjectWithLocalDraft(remoteProject, localProject)
     if (mergedProject?.canvasData && mergedProject.readState !== 'local-draft') {
-      saveProjectCanvasDraft(id, mergedProject.canvasData, {
+      await saveProjectCanvasDraft(id, mergedProject.canvasData, {
         draftUpdatedAt: mergedProject.updatedAt || new Date().toISOString(),
-        baseVersion: getProjectBaseVersion(mergedProject),
-        remoteSynced: true
+        baseRevision: getProjectBaseVersion(mergedProject),
+        remoteSynced: true,
+        status: CANVAS_SYNC_STATES.synced
       })
     }
     forgetDeletedProject(id)
@@ -508,10 +500,11 @@ export const createProject = async (name = 'Untitled') => {
   if (BYPASS_AUTH_IN_DEV) {
     const project = createLocalProjectRecord(name)
     projects.value = [project, ...projects.value]
-    saveProjectCanvasDraft(project.id, project.canvasData || defaultCanvasData, {
+    await saveProjectCanvasDraft(project.id, project.canvasData || defaultCanvasData, {
       draftUpdatedAt: project.updatedAt,
-      baseVersion: null,
-      remoteSynced: false
+      baseRevision: null,
+      remoteSynced: false,
+      status: CANVAS_SYNC_STATES.localPersisted
     })
     saveLocalCache()
     return project.id
@@ -527,10 +520,11 @@ export const createProject = async (name = 'Untitled') => {
   const project = mapProjectFromApi(response.data)
   forgetDeletedProject(project.id)
   projects.value = [project, ...projects.value]
-  saveProjectCanvasDraft(project.id, project.canvasData || defaultCanvasData, {
+  await saveProjectCanvasDraft(project.id, project.canvasData || defaultCanvasData, {
     draftUpdatedAt: project.updatedAt || new Date().toISOString(),
-    baseVersion: getProjectBaseVersion(project),
-    remoteSynced: true
+    baseRevision: getProjectBaseVersion(project),
+    remoteSynced: true,
+    status: CANVAS_SYNC_STATES.synced
   })
   saveLocalCache()
   return project.id
@@ -552,10 +546,11 @@ export const updateProject = async (id, data) => {
   const [updated] = projects.value.splice(index, 1)
   projects.value = [updated, ...projects.value]
   if (Object.prototype.hasOwnProperty.call(data || {}, 'canvasData')) {
-    saveProjectCanvasDraft(id, nextProject.canvasData || defaultCanvasData, {
+    await saveProjectCanvasDraft(id, nextProject.canvasData || defaultCanvasData, {
       draftUpdatedAt: nextProject.updatedAt,
-      baseVersion: getProjectBaseVersion(currentProject),
-      remoteSynced: false
+      baseRevision: getProjectBaseVersion(currentProject),
+      remoteSynced: false,
+      status: CANVAS_SYNC_STATES.localPersisted
     })
   }
   saveLocalCache()
@@ -568,10 +563,11 @@ export const updateProject = async (id, data) => {
     const response = await apiPatchProject(id, mapProjectToApi(nextProject))
     const normalized = mapProjectFromApi(response.data)
     if (normalized?.canvasData) {
-      saveProjectCanvasDraft(id, normalized.canvasData, {
+      await saveProjectCanvasDraft(id, normalized.canvasData, {
         draftUpdatedAt: normalized.updatedAt || new Date().toISOString(),
-        baseVersion: getProjectBaseVersion(normalized),
-        remoteSynced: true
+        baseRevision: getProjectBaseVersion(normalized),
+        remoteSynced: true,
+        status: CANVAS_SYNC_STATES.synced
       })
     }
     projects.value = [normalized, ...projects.value.filter((p) => p.id !== id)]
@@ -655,10 +651,11 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
   let localMetaSaved = false
   if (localIdx !== -1) {
     projects.value[localIdx] = next
-    localDraftSaved = saveProjectCanvasDraft(id, next.canvasData, {
+    localDraftSaved = await saveProjectCanvasDraft(id, next.canvasData, {
       draftUpdatedAt: localUpdatedAt,
-      baseVersion: getProjectBaseVersion(project, currentVersion),
-      remoteSynced: false
+      baseRevision: getProjectBaseVersion(project, currentVersion),
+      remoteSynced: false,
+      status: CANVAS_SYNC_STATES.localPersisted
     })
     localMetaSaved = saveLocalCache()
   }
@@ -668,30 +665,30 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
     return {
       project: next,
       localSaved,
-      remoteSynced: true,
-      status: localSaved ? 'synced' : 'remote-only'
+      remoteSynced: false,
+      status: localSaved ? CANVAS_SYNC_STATES.localPersisted : CANVAS_SYNC_STATES.failed
     }
   }
 
   try {
-    const payload = mapProjectToApi({
-      ...next,
-      canvasData: nextRemoteCanvasData,
-      thumbnail: resolveProjectThumbnail(nextRemoteCanvasData, next.thumbnail)
+    const payload = buildRevisionSavePayload({
+      ...mapProjectToApi({
+        ...next,
+        canvasData: nextRemoteCanvasData,
+        thumbnail: resolveProjectThumbnail(nextRemoteCanvasData, next.thumbnail)
+      }),
+      baseRevision: currentVersion
     })
-    // Pass currentVersion to API if provided
-    if (currentVersion) {
-      payload.currentUpdatedAt = currentVersion
-    }
     
     const response = await apiPatchProject(id, payload)
     const updatedProject = mapProjectFromApi(response.data)
     let remoteDraftSaved = false
     if (updatedProject?.canvasData) {
-      remoteDraftSaved = saveProjectCanvasDraft(id, updatedProject.canvasData, {
+      remoteDraftSaved = await saveProjectCanvasDraft(id, updatedProject.canvasData, {
         draftUpdatedAt: updatedProject.updatedAt || new Date().toISOString(),
-        baseVersion: getProjectBaseVersion(updatedProject),
-        remoteSynced: true
+        baseRevision: getProjectBaseVersion(updatedProject),
+        remoteSynced: true,
+        status: CANVAS_SYNC_STATES.synced
       })
     }
 
@@ -708,10 +705,11 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
       if (idx !== -1) {
         projects.value[idx] = mergedProject
       }
-      const mergedDraftSaved = saveProjectCanvasDraft(id, next.canvasData, {
+      const mergedDraftSaved = await saveProjectCanvasDraft(id, next.canvasData, {
         draftUpdatedAt: localUpdatedAt,
-        baseVersion: getProjectBaseVersion(updatedProject),
-        remoteSynced: false
+        baseRevision: getProjectBaseVersion(updatedProject),
+        remoteSynced: false,
+        status: CANVAS_SYNC_STATES.localPersisted
       })
       const mergedMetaSaved = saveLocalCache()
 
@@ -719,7 +717,7 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
         project: mergedProject,
         localSaved: mergedDraftSaved && mergedMetaSaved,
         remoteSynced: false,
-        status: 'local-only'
+        status: CANVAS_SYNC_STATES.localPersisted
       }
     }
 
@@ -734,10 +732,10 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
       project: updatedProject,
       localSaved: localSaved || (remoteDraftSaved && remoteMetaSaved),
       remoteSynced: true,
-      status: 'synced'
+      status: CANVAS_SYNC_STATES.synced
     }
   } catch (error) {
-    if (error?.status === 409 || error?.code === 'PROJECT_CONFLICT') {
+    if (isConflictError(error)) {
       console.warn('Cloud autosave conflicted:', error?.message)
       throw error
     }
@@ -746,7 +744,7 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
       project: next,
       localSaved,
       remoteSynced: false,
-      status: localSaved ? 'local-only' : 'failed',
+      status: localSaved ? CANVAS_SYNC_STATES.offline : CANVAS_SYNC_STATES.failed,
       error
     }
   }
@@ -774,7 +772,7 @@ export const getProjectCanvas = (id) => {
       readState: project?.readState || loadSource,
       loadSource,
       draftUpdatedAt: draftRecord?.draftUpdatedAt || null,
-      draftBaseVersion: draftRecord?.baseVersion || null,
+      draftBaseVersion: draftRecord?.baseRevision || draftRecord?.baseVersion || null,
       remoteSynced: draftRecord?.remoteSynced !== false
     }
   }
@@ -783,14 +781,14 @@ export const getProjectCanvas = (id) => {
 export const deleteProject = async (id) => {
   if (BYPASS_AUTH_IN_DEV) {
     projects.value = projects.value.filter((p) => p.id !== id)
-    removeProjectCanvasDraft(id)
+    await removeProjectCanvasDraft(id)
     saveLocalCache()
     return
   }
   await apiDeleteProject(id)
   rememberDeletedProject(id)
   projects.value = projects.value.filter((p) => p.id !== id)
-  removeProjectCanvasDraft(id)
+  await removeProjectCanvasDraft(id)
   saveLocalCache()
 }
 
