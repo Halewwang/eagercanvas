@@ -203,8 +203,8 @@
 import { Teleport, computed, onUnmounted, ref, watch } from 'vue'
 import { useImageGeneration } from '@/hooks/useApi'
 import {
-  QWEN_MULTI_ANGLE_MODEL,
-  buildQwenMultiAngleCameraInput
+  buildMultiAngleCameraInput,
+  buildMultiAngleCameraPrompt
 } from '@/utils/multiAngleCamera'
 
 const props = defineProps({
@@ -455,7 +455,7 @@ const computeRatioLabel = (width, height) => {
 }
 
 const buildCameraInput = () => {
-  return buildQwenMultiAngleCameraInput({
+  return buildMultiAngleCameraInput({
     azimuth: azimuth.value,
     elevation: elevation.value,
     zoom: zoom.value
@@ -468,6 +468,7 @@ const applyTransform = async () => {
 
   try {
     const cameraInput = buildCameraInput()
+    const prompt = buildMultiAngleCameraPrompt(cameraInput)
     emit('pending', {
       targetMode: 'new',
       size: selectedSize.value,
@@ -480,12 +481,14 @@ const applyTransform = async () => {
         elevation: Math.round(Number(elevation.value) || 0),
         zoom: Number(Number(zoom.value || 0).toFixed(1)),
         camera: cameraInput,
-        model: QWEN_MULTI_ANGLE_MODEL
+        prompt,
+        model: props.model
       }
     })
     const generated = await imageGen.generate({
       tool: 'multi-angle',
-      model: QWEN_MULTI_ANGLE_MODEL,
+      model: props.model,
+      prompt,
       image: imageSource.value,
       ...cameraInput,
       size: selectedSize.value,
@@ -515,7 +518,8 @@ const applyTransform = async () => {
         elevation: Math.round(Number(elevation.value) || 0),
         zoom: Number(Number(zoom.value || 0).toFixed(1)),
         camera: cameraInput,
-        model: QWEN_MULTI_ANGLE_MODEL
+        prompt,
+        model: props.model
       }
     })
   } catch (error) {

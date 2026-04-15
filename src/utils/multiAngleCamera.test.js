@@ -2,15 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  QWEN_MULTI_ANGLE_MODEL,
-  buildQwenMultiAngleCameraInput
+  buildMultiAngleCameraInput,
+  buildMultiAngleCameraPrompt
 } from './multiAngleCamera.js'
 
-test('multi angle camera input maps current left-side UI direction to qwen left-side direction', () => {
-  const input = buildQwenMultiAngleCameraInput({ azimuth: 90, elevation: 6, zoom: 5.2 })
+test('multi angle camera input maps current left-side UI direction to model camera direction', () => {
+  const input = buildMultiAngleCameraInput({ azimuth: 90, elevation: 6, zoom: 5.2 })
 
   assert.deepEqual(input, {
-    model: QWEN_MULTI_ANGLE_MODEL,
     horizontal_angle: 270,
     vertical_angle: 6,
     zoom: 5.2
@@ -18,15 +17,23 @@ test('multi angle camera input maps current left-side UI direction to qwen left-
 })
 
 test('multi angle camera input only returns model and camera parameters', () => {
-  const input = buildQwenMultiAngleCameraInput({ azimuth: 0, elevation: 78, zoom: 3.4 })
+  const input = buildMultiAngleCameraInput({ azimuth: 0, elevation: 78, zoom: 3.4 })
 
   assert.deepEqual(Object.keys(input).sort(), [
     'horizontal_angle',
-    'model',
     'vertical_angle',
     'zoom'
   ])
   assert.equal(input.horizontal_angle, 0)
   assert.equal(input.vertical_angle, 78)
   assert.equal(input.zoom, 3.4)
+})
+
+test('multi angle camera prompt contains only camera direction instructions', () => {
+  const prompt = buildMultiAngleCameraPrompt({ horizontal_angle: 270, vertical_angle: 6, zoom: 5.2 })
+
+  assert.match(prompt, /horizontal_angle=270/)
+  assert.match(prompt, /vertical_angle=6/)
+  assert.match(prompt, /zoom=5\.2/)
+  assert.doesNotMatch(prompt, /person|subject|scene|background|outfit|identity|re-photograph/i)
 })
