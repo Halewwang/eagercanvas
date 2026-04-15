@@ -435,6 +435,14 @@ const pickFirstImageInput = (payload = {}) => {
   return ''
 }
 
+const QWEN_MULTI_ANGLE_MODEL = 'fal-ai/qwen-image-edit-2511-multiple-angles'
+
+const normalizeQwenAngleNumber = (value, min, max, fallback) => {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return fallback
+  return Math.min(Math.max(numeric, min), max)
+}
+
 const normalizeImageResponse = (response = {}) => {
   const urls = []
   const pushUrl = (value, mime = 'image/png') => {
@@ -495,6 +503,8 @@ const normalizeImageResponse = (response = {}) => {
 
   pushUrl(response?.url || response?.image_url || response?.imageUrl)
   pushUrl(response?.data?.url || response?.data?.image_url || response?.data?.imageUrl)
+  pushUrl(response?.output)
+  pushUrl(response?.data?.output)
   pushUrl(response?.b64_json || response?.base64 || response?.image_base64)
   pushUrl(response?.data?.b64_json || response?.data?.base64 || response?.data?.image_base64)
 
@@ -995,6 +1005,31 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
   const isGeminiImagePreviewModel =
     lowerModel.includes('gemini-3.1-flash-image-preview') ||
     lowerModel.includes('gemini-3-pro-image-preview')
+  const isQwenMultiAngleModel =
+    String(payload.tool || '').trim().toLowerCase() === 'multi-angle' ||
+    lowerModel.includes('qwen-image-edit-2511-multiple-angles')
+
+  if (isQwenMultiAngleModel) {
+    if (!firstImage) {
+      throw new HttpError(400, 'Multi-angle generation requires an input image', 'IMAGE_INPUT_REQUIRED')
+    }
+
+    const qwenImages = inputImages.length > 0 ? inputImages : [firstImage]
+    const body = {
+      model: QWEN_MULTI_ANGLE_MODEL,
+      image_urls: qwenImages,
+      horizontal_angle: normalizeQwenAngleNumber(payload.horizontal_angle, 0, 360, 0),
+      vertical_angle: normalizeQwenAngleNumber(payload.vertical_angle, -30, 90, 0),
+      zoom: normalizeQwenAngleNumber(payload.zoom, 0, 10, 5)
+    }
+
+    const raw = await callProvider('/302/v2/image/generate', body, 'POST', requestOptions)
+    const normalized = normalizeImageResponse(raw)
+    if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
+      throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
+    }
+    return normalized
+  }
 
   if (isGeminiImagePreviewModel) {
     const endpointBase = lowerModel.includes('gemini-3-pro-image-preview')

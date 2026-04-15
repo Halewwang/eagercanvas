@@ -202,7 +202,10 @@
 <script setup>
 import { Teleport, computed, onUnmounted, ref, watch } from 'vue'
 import { useImageGeneration } from '@/hooks/useApi'
-import { buildMultiAnglePrompt } from '@/utils/multiAnglePrompt'
+import {
+  QWEN_MULTI_ANGLE_MODEL,
+  buildQwenMultiAngleCameraInput
+} from '@/utils/multiAngleCamera'
 
 const props = defineProps({
   show: Boolean,
@@ -451,8 +454,8 @@ const computeRatioLabel = (width, height) => {
   return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`
 }
 
-const buildPrompt = () => {
-  return buildMultiAnglePrompt({
+const buildCameraInput = () => {
+  return buildQwenMultiAngleCameraInput({
     azimuth: azimuth.value,
     elevation: elevation.value,
     zoom: zoom.value
@@ -464,7 +467,7 @@ const applyTransform = async () => {
   applying.value = true
 
   try {
-    const prompt = buildPrompt()
+    const cameraInput = buildCameraInput()
     emit('pending', {
       targetMode: 'new',
       size: selectedSize.value,
@@ -476,14 +479,15 @@ const applyTransform = async () => {
         azimuth: Math.round(Number(azimuth.value) || 0),
         elevation: Math.round(Number(elevation.value) || 0),
         zoom: Number(Number(zoom.value || 0).toFixed(1)),
-        prompt,
-        model: props.model
+        camera: cameraInput,
+        model: QWEN_MULTI_ANGLE_MODEL
       }
     })
     const generated = await imageGen.generate({
-      model: props.model,
-      prompt,
+      tool: 'multi-angle',
+      model: QWEN_MULTI_ANGLE_MODEL,
       image: imageSource.value,
+      ...cameraInput,
       size: selectedSize.value,
       ratio: selectedRatio.value,
       resolution: selectedResolution.value || resolutionFromSizeString(selectedSize.value),
@@ -510,8 +514,8 @@ const applyTransform = async () => {
         azimuth: Math.round(Number(azimuth.value) || 0),
         elevation: Math.round(Number(elevation.value) || 0),
         zoom: Number(Number(zoom.value || 0).toFixed(1)),
-        prompt,
-        model: props.model
+        camera: cameraInput,
+        model: QWEN_MULTI_ANGLE_MODEL
       }
     })
   } catch (error) {

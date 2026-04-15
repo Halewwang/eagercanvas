@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { providerGenerateImage } from './provider.service.js'
 
-test('Gemini image edit forwards multi-angle tool parameters to provider', async () => {
+test('Qwen multi angle sends only source image and camera parameters to provider', async () => {
   const originalFetch = global.fetch
   const requests = []
 
@@ -17,9 +17,11 @@ test('Gemini image edit forwards multi-angle tool parameters to provider', async
 
     return new Response(
       JSON.stringify({
-        data: [
-          { url: 'https://example.com/generated.png' }
-        ]
+        data: {
+          images: [
+            { url: 'https://example.com/generated.png' }
+          ]
+        }
       }),
       {
         status: 200,
@@ -33,18 +35,13 @@ test('Gemini image edit forwards multi-angle tool parameters to provider', async
   try {
     const result = await providerGenerateImage(
       {
-        model: 'gemini-3.1-flash-image-preview',
-        prompt: 'rotate subject',
+        tool: 'multi-angle',
+        model: 'fal-ai/qwen-image-edit-2511-multiple-angles',
         image: 'https://example.com/source.png',
-        aspect_ratio: '1:1',
-        resolution: '1k',
-        tools: {
-          multi_angle: {
-            azimuth: 90,
-            elevation: 6,
-            zoom: 5.2
-          }
-        }
+        prompt: 'do not forward this scene rewrite',
+        horizontal_angle: 270,
+        vertical_angle: 6,
+        zoom: 5.2
       },
       { apiKey: 'sk-test' }
     )
@@ -55,12 +52,13 @@ test('Gemini image edit forwards multi-angle tool parameters to provider', async
   }
 
   assert.equal(requests.length, 1)
-  assert.match(requests[0].url, /\/ws\/api\/v3\/google\/nano-banana-2\/edit$/)
-  assert.deepEqual(requests[0].body?.tools, {
-    multi_angle: {
-      azimuth: 90,
-      elevation: 6,
-      zoom: 5.2
-    }
+  assert.match(requests[0].url, /\/302\/v2\/image\/generate$/)
+  assert.deepEqual(requests[0].body, {
+    model: 'fal-ai/qwen-image-edit-2511-multiple-angles',
+    image_urls: ['https://example.com/source.png'],
+    horizontal_angle: 270,
+    vertical_angle: 6,
+    zoom: 5.2
   })
+  assert.equal(Object.hasOwn(requests[0].body, 'prompt'), false)
 })

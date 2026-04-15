@@ -211,6 +211,13 @@ export const useImageGeneration = () => {
       if (params.tools && typeof params.tools === 'object' && !Array.isArray(params.tools)) {
         requestData.tools = params.tools
       }
+      if (params.tool) requestData.tool = params.tool
+      if (params.image_url) requestData.image_url = params.image_url
+      for (const key of ['horizontal_angle', 'vertical_angle', 'zoom']) {
+        if (params[key] !== undefined && params[key] !== null) {
+          requestData[key] = params[key]
+        }
+      }
 
       // Add reference image if provided | 添加参考图
       if (params.image) {
