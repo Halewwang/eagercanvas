@@ -208,6 +208,9 @@ export const useImageGeneration = () => {
       requestData.resolution = resolution || '1k'
       requestData.enable_sync_mode = params.enable_sync_mode ?? true
       requestData.enable_base64_output = params.enable_base64_output ?? false
+      if (params.tools && typeof params.tools === 'object' && !Array.isArray(params.tools)) {
+        requestData.tools = params.tools
+      }
 
       // Add reference image if provided | 添加参考图
       if (params.image) {

@@ -1014,6 +1014,9 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
     if (inputImages.length > 0) {
       body.images = inputImages
     }
+    if (payload.tools && typeof payload.tools === 'object' && !Array.isArray(payload.tools)) {
+      body.tools = payload.tools
+    }
     const endpoint = inputImages.length > 0
       ? `${endpointBase}/edit`
       : `${endpointBase}/text-to-image`

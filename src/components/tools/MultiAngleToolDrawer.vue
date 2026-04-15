@@ -487,12 +487,21 @@ const buildPrompt = () => {
   return promptParts.join(' ')
 }
 
+const buildMultiAngleTools = () => ({
+  multi_angle: {
+    azimuth: Math.round(Number(azimuth.value) || 0),
+    elevation: Math.round(Number(elevation.value) || 0),
+    zoom: Number(Number(zoom.value || 0).toFixed(1))
+  }
+})
+
 const applyTransform = async () => {
   if (!imageSource.value || applying.value) return
   applying.value = true
 
   try {
     const prompt = buildPrompt()
+    const tools = buildMultiAngleTools()
     emit('pending', {
       targetMode: 'new',
       size: selectedSize.value,
@@ -515,6 +524,7 @@ const applyTransform = async () => {
       size: selectedSize.value,
       ratio: selectedRatio.value,
       resolution: selectedResolution.value || resolutionFromSizeString(selectedSize.value),
+      tools,
       enable_sync_mode: true,
       enable_base64_output: false
     })
