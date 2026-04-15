@@ -202,6 +202,7 @@
 <script setup>
 import { Teleport, computed, onUnmounted, ref, watch } from 'vue'
 import { useImageGeneration } from '@/hooks/useApi'
+import { buildMultiAnglePrompt } from '@/utils/multiAnglePrompt'
 
 const props = defineProps({
   show: Boolean,
@@ -450,50 +451,13 @@ const computeRatioLabel = (width, height) => {
   return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`
 }
 
-const describeAzimuth = (value) => {
-  const normalized = normalize360(Number(value) || 0)
-  if (normalized < 22 || normalized >= 338) return 'front view'
-  if (normalized < 68) return 'front-left three-quarter view'
-  if (normalized < 112) return 'left side view'
-  if (normalized < 158) return 'rear-left three-quarter view'
-  if (normalized < 202) return 'back view'
-  if (normalized < 248) return 'rear-right three-quarter view'
-  if (normalized < 292) return 'right side view'
-  return 'front-right three-quarter view'
-}
-
-const describeElevation = (value) => {
-  const safe = Number(value) || 0
-  if (safe <= -8) return 'from a low angle, looking upward'
-  if (safe <= 12) return 'at eye level'
-  if (safe <= 38) return 'from a slightly elevated angle'
-  return 'from above, looking downward'
-}
-
-const describeShotType = (value) => {
-  const safe = Number(value) || 0
-  if (safe <= 2.5) return 'wide shot'
-  if (safe <= 5.5) return 'medium-wide shot'
-  if (safe <= 7.5) return 'medium shot'
-  return 'medium close-up'
-}
-
 const buildPrompt = () => {
-  const promptParts = [
-    'Image 1 (Subject): The main subject to be re-photographed.',
-    `Imagine reshooting this image as a ${describeShotType(zoom.value)}, in ${describeAzimuth(azimuth.value)}, ${describeElevation(elevation.value)}.`,
-    'Appropriately adjust the background, perspective, and newly visible scene details to match the new camera angle naturally, while preserving the subject identity, outfit, lighting mood, and overall scene coherence.'
-  ]
-  return promptParts.join(' ')
+  return buildMultiAnglePrompt({
+    azimuth: azimuth.value,
+    elevation: elevation.value,
+    zoom: zoom.value
+  })
 }
-
-const buildMultiAngleTools = () => ({
-  multi_angle: {
-    azimuth: Math.round(Number(azimuth.value) || 0),
-    elevation: Math.round(Number(elevation.value) || 0),
-    zoom: Number(Number(zoom.value || 0).toFixed(1))
-  }
-})
 
 const applyTransform = async () => {
   if (!imageSource.value || applying.value) return
@@ -501,7 +465,6 @@ const applyTransform = async () => {
 
   try {
     const prompt = buildPrompt()
-    const tools = buildMultiAngleTools()
     emit('pending', {
       targetMode: 'new',
       size: selectedSize.value,
@@ -524,7 +487,6 @@ const applyTransform = async () => {
       size: selectedSize.value,
       ratio: selectedRatio.value,
       resolution: selectedResolution.value || resolutionFromSizeString(selectedSize.value),
-      tools,
       enable_sync_mode: true,
       enable_base64_output: false
     })
