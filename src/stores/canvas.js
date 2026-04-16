@@ -42,6 +42,10 @@ const getGroupId = () => `group_${groupId++}`
 // Viewport state | 视口状态
 export const canvasViewport = ref({ x: 100, y: 50, zoom: 0.8 })
 
+// Interaction flags | 交互状态标志
+export const isNodeDragging = ref(false)
+export const isCanvasZooming = ref(false)
+
 // Selected node | 选中的节点
 export const selectedNode = ref(null)
 export const projectSaveState = ref(createSyncStatus())
@@ -55,6 +59,7 @@ let lastPersistedSnapshotKey = ''
 let remoteRetryTimeout = null
 let remoteRetryDelayMs = 2000
 let lastSaveResult = createSyncStatus()
+let deferredInteractionSave = false
 
 // History for undo/redo | 撤销/重做历史
 const history = ref([])
@@ -92,6 +97,7 @@ const scheduleRemoteRetry = () => {
  */
 const saveToHistory = () => {
   if (isRestoring) return
+  if (isNodeDragging.value || isCanvasZooming.value) return
   
   const state = {
     nodes: JSON.parse(JSON.stringify(nodes.value)),
@@ -922,6 +928,10 @@ export const flushSave = async (options = {}) => {
  */
 const debouncedSave = () => {
   if (!autoSaveEnabled || !currentProjectId.value) return
+  if (isNodeDragging.value || isCanvasZooming.value) {
+    deferredInteractionSave = true
+    return
+  }
   projectSaveState.value = createSyncStatus({
     ...lastSaveResult,
     status: CANVAS_SYNC_STATES.dirty,
@@ -942,9 +952,39 @@ const debouncedSave = () => {
 /**
  * Update viewport and save | 更新视口并保存
  */
-export const updateViewport = (viewport) => {
+export const updateViewport = (viewport, options = {}) => {
+  const { persist = true } = options
   canvasViewport.value = viewport
+  if (!persist) {
+    deferredInteractionSave = true
+    return
+  }
   debouncedSave()
+}
+
+const flushDeferredInteractionSave = () => {
+  if (!deferredInteractionSave) return
+  deferredInteractionSave = false
+  debouncedSave()
+}
+
+export const beginNodeDragInteraction = () => {
+  isNodeDragging.value = true
+}
+
+export const endNodeDragInteraction = ({ saveHistory = false } = {}) => {
+  isNodeDragging.value = false
+  if (saveHistory) saveToHistory()
+  flushDeferredInteractionSave()
+}
+
+export const beginCanvasZoomInteraction = () => {
+  isCanvasZooming.value = true
+}
+
+export const endCanvasZoomInteraction = () => {
+  isCanvasZooming.value = false
+  flushDeferredInteractionSave()
 }
 
 /**

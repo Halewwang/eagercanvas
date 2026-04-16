@@ -70,6 +70,8 @@
         @connect-start="onConnectStart"
         @connect-end="onConnectEnd"
         @node-click="onNodeClick"
+        @node-drag-start="onNodeDragStart"
+        @node-drag-stop="onNodeDragStop"
         @nodes-change="onNodesChange"
         @pane-click="onPaneClick"
         @viewport-change="handleViewportChange"
@@ -78,7 +80,7 @@
         :style="canvasFlowStyle"
       >
         <MiniMap 
-          v-if="!isMobile"
+          v-if="shouldShowMiniMap"
           position="bottom-right"
           :pannable="true"
           :zoomable="true"
@@ -477,11 +479,17 @@ import {
   groups,
   addEdge,
   addNode,
+  beginCanvasZoomInteraction,
+  beginNodeDragInteraction,
   createGroup,
   deleteGroupWithNodes,
   duplicateGroup,
+  endCanvasZoomInteraction,
+  endNodeDragInteraction,
   flushSave,
   hasPendingCanvasChanges,
+  isCanvasZooming,
+  isNodeDragging,
   resetCanvasSession,
   canvasViewport,
   projectSaveState,
@@ -509,6 +517,7 @@ import { duplicateProject, getProjectCanvas, initProjectsStore, projects, refres
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
+import { getInteractionOverlayDelay, shouldRenderMinimap } from '@/utils/canvasInteraction'
 import { isExpiredRemoteUrl } from '@/utils/media'
 import { recoverMissingNodeMedia, shouldApplyRemoteProjectSnapshot } from '@/utils/canvasSync'
 
@@ -607,6 +616,9 @@ const conflictAction = ref('')
 
 let groupDragState = null
 let overlayRafId = null
+let overlayTimeoutId = null
+let viewportSettleTimeoutId = null
+let nodeDragMoved = false
 const {
   confirmDelete,
   confirmRename,
@@ -841,6 +853,14 @@ const multiSelectMenuRect = computed(() => {
   if (selectedNodeIds.value.length < 2) return null
   return multiSelectRect.value
 })
+const isCanvasInteracting = computed(() => isNodeDragging.value || isCanvasZooming.value)
+const shouldShowMiniMap = computed(() =>
+  shouldRenderMinimap({
+    isMobile: isMobile.value,
+    isInteracting: isCanvasInteracting.value,
+    nodeCount: nodes.value.length
+  })
+)
 
 const clearNodeSelection = () => {
   nodes.value = nodes.value.map((node) => ({
@@ -912,7 +932,27 @@ const updateOverlayRects = () => {
   multiSelectRect.value = selectedNodeIds.value.length >= 2 ? mergeRects(selectedRects, shellRect) : null
 }
 
-const scheduleOverlayRectUpdate = () => {
+const scheduleOverlayRectUpdate = (options = {}) => {
+  const force = options.force === true
+  const delay = force ? 0 : getInteractionOverlayDelay({ isInteracting: isCanvasInteracting.value })
+
+  if (overlayTimeoutId && force) {
+    clearTimeout(overlayTimeoutId)
+    overlayTimeoutId = null
+  }
+
+  if (delay > 0) {
+    if (overlayTimeoutId) return
+    overlayTimeoutId = setTimeout(() => {
+      overlayTimeoutId = null
+      nextTick(() => {
+        if (overlayRafId) cancelAnimationFrame(overlayRafId)
+        overlayRafId = requestAnimationFrame(updateOverlayRects)
+      })
+    }, delay)
+    return
+  }
+
   if (overlayRafId) cancelAnimationFrame(overlayRafId)
   nextTick(() => {
     overlayRafId = requestAnimationFrame(updateOverlayRects)
@@ -977,6 +1017,7 @@ const startGroupDrag = (group, event) => {
   event.preventDefault()
   event.stopPropagation()
   selectGroup(group.id)
+  beginNodeDragInteraction()
   groupDragState = {
     groupId: group.id,
     nodeIds: [...group.nodeIds],
@@ -1009,10 +1050,11 @@ const handleGroupDragMove = (event) => {
 const stopGroupDrag = () => {
   window.removeEventListener('mousemove', handleGroupDragMove)
   window.removeEventListener('mouseup', stopGroupDrag)
-  if (groupDragState?.didMove) {
-    manualSaveHistory()
-  }
+  if (!groupDragState) return
+  const didMove = !!groupDragState?.didMove
   groupDragState = null
+  endNodeDragInteraction({ saveHistory: didMove })
+  scheduleOverlayRectUpdate({ force: true })
 }
 
 const clearNodeMenuContext = () => {
@@ -1379,7 +1421,26 @@ const onNodeClick = () => {
 }
 
 // Handle node changes | 处理节点变化（包含多选/框选）
-const onNodesChange = () => {
+const onNodeDragStart = () => {
+  nodeDragMoved = false
+  beginNodeDragInteraction()
+}
+
+const onNodeDragStop = () => {
+  endNodeDragInteraction({ saveHistory: nodeDragMoved })
+  nodeDragMoved = false
+  scheduleOverlayRectUpdate({ force: true })
+}
+
+const onNodesChange = (changes = []) => {
+  if (
+    isNodeDragging.value &&
+    Array.isArray(changes) &&
+    changes.some((change) => change?.type === 'position')
+  ) {
+    nodeDragMoved = true
+  }
+
   nextTick(() => {
     syncNodeSelectedState()
     if (selectedNodeIds.value.length > 0) {
@@ -1391,8 +1452,20 @@ const onNodesChange = () => {
 
 // Handle viewport change | 处理视口变化
 const handleViewportChange = (newViewport) => {
-  updateViewport(newViewport)
+  beginCanvasZoomInteraction()
+  updateViewport(newViewport, { persist: false })
   scheduleOverlayRectUpdate()
+
+  if (viewportSettleTimeoutId) {
+    clearTimeout(viewportSettleTimeoutId)
+  }
+
+  viewportSettleTimeoutId = setTimeout(() => {
+    viewportSettleTimeoutId = null
+    updateViewport({ ...(viewport.value || newViewport) }, { persist: true })
+    endCanvasZoomInteraction()
+    scheduleOverlayRectUpdate({ force: true })
+  }, 220)
 }
 
 // Handle edges change | 处理边变化
@@ -1572,7 +1645,7 @@ watch(
   }
 )
 
-watch([nodes, groups, viewport], () => {
+watch([nodes, groups], () => {
   scheduleOverlayRectUpdate()
 }, { deep: true })
 
@@ -1651,6 +1724,8 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   stopGroupDrag()
   if (overlayRafId) cancelAnimationFrame(overlayRafId)
+  if (overlayTimeoutId) clearTimeout(overlayTimeoutId)
+  if (viewportSettleTimeoutId) clearTimeout(viewportSettleTimeoutId)
   // Save project before leaving | 离开前保存项目
   flushSave()
 })
