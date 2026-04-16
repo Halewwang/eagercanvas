@@ -90,7 +90,7 @@
         />
       </VueFlow>
 
-      <div class="group-overlay-layer" :class="{ 'is-paused': isCanvasZooming }">
+      <div class="group-overlay-layer">
         <div
           v-if="multiSelectMenuRect"
           class="capsule-menu group-capsule-menu"
@@ -1091,8 +1091,6 @@ const scheduleOverlayRectUpdate = (options = {}) => {
     ? getInteractionOverlayDelay({ isInteracting: true })
     : 0
 
-  if (scheduleMode === 'skip') return
-
   if (overlayTimeoutId && delay === 0) {
     clearTimeout(overlayTimeoutId)
     overlayTimeoutId = null
@@ -1182,7 +1180,8 @@ const startGroupDrag = (group, event) => {
     startClientY: event.clientY,
     lastDeltaX: 0,
     lastDeltaY: 0,
-    didMove: false
+    didMove: false,
+    nodeLookup: new Map(nodes.value.map((node) => [node.id, node]))
   }
   window.addEventListener('mousemove', handleGroupDragMove)
   window.addEventListener('mouseup', stopGroupDrag)
@@ -1200,7 +1199,9 @@ const handleGroupDragMove = (event) => {
   groupDragState.didMove = true
   groupDragState.lastDeltaX = nextDeltaX
   groupDragState.lastDeltaY = nextDeltaY
-  translateNodesByIds(groupDragState.nodeIds, { x: moveX, y: moveY }, false)
+  translateNodesByIds(groupDragState.nodeIds, { x: moveX, y: moveY }, false, {
+    nodeLookup: groupDragState.nodeLookup
+  })
   scheduleOverlayRectUpdate()
 }
 
@@ -1600,6 +1601,7 @@ const onNodesChange = (changes = []) => {
 const handleViewportChange = (newViewport) => {
   beginCanvasZoomInteraction()
   updateViewport(newViewport, { persist: false })
+  scheduleOverlayRectUpdate()
 
   if (viewportSettleTimeoutId) {
     clearTimeout(viewportSettleTimeoutId)
@@ -2194,10 +2196,6 @@ onUnmounted(() => {
   inset: 0;
   z-index: 18;
   pointer-events: none;
-}
-
-.group-overlay-layer.is-paused {
-  visibility: hidden;
 }
 
 .group-capsule-menu {

@@ -2,7 +2,7 @@
  * Canvas store | 画布状态管理
  * Manages nodes, edges and canvas state
  */
-import { ref } from 'vue'
+import { ref, triggerRef } from 'vue'
 import { updateProjectCanvas, getProjectCanvas } from './projects'
 import { canvasBroadcast } from './canvasBroadcast'
 import {
@@ -14,6 +14,7 @@ import {
 } from './canvasSyncStatus'
 import { IMAGE_MODELS, VIDEO_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL } from '../config/models'
 import { isTransientRemoteMediaUrl } from '@/utils/media'
+import { translateNodePositionsInPlace } from '@/utils/canvasInteraction'
 
 const isLocalPreviewHost = () => {
   if (typeof window === 'undefined') return false
@@ -388,22 +389,13 @@ export const deleteGroupWithNodes = (groupIdToDelete) => {
   return true
 }
 
-export const translateNodesByIds = (nodeIds, delta, shouldSaveHistory = false) => {
-  const nodeIdSet = new Set(nodeIds)
-  const dx = Number(delta?.x || 0)
-  const dy = Number(delta?.y || 0)
-  if (!nodeIdSet.size || (!dx && !dy)) return false
-
-  nodes.value = nodes.value.map((node) => {
-    if (!nodeIdSet.has(node.id)) return node
-    return {
-      ...node,
-      position: {
-        x: node.position.x + dx,
-        y: node.position.y + dy
-      }
-    }
+export const translateNodesByIds = (nodeIds, delta, shouldSaveHistory = false, options = {}) => {
+  const movedCount = translateNodePositionsInPlace(nodes.value, nodeIds, delta, {
+    lookup: options.nodeLookup
   })
+  if (!movedCount) return false
+
+  triggerRef(nodes)
 
   if (shouldSaveHistory) saveToHistory()
   else deferredInteractionSave = true
