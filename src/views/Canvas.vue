@@ -678,14 +678,14 @@ const nodeMenuStyle = computed(() => {
   }
 })
 
-const canvasFlowStyle = computed(() => {
-  const zoom = Math.max(Number(viewport.value?.zoom) || 1, 0.01)
+const buildCanvasFlowStyle = (sourceViewport = viewport.value) => {
+  const zoom = Math.max(Number(sourceViewport?.zoom) || 1, 0.01)
   const baseGap = 20
   const minGap = 12
   const scaledGap = Math.max(baseGap * zoom, minGap)
   const gridOpacity = Math.max(0.02, Math.min(0.05, 0.05 * Math.pow(zoom, 0.85)))
-  const rawX = Number(viewport.value?.x) || 0
-  const rawY = Number(viewport.value?.y) || 0
+  const rawX = Number(sourceViewport?.x) || 0
+  const rawY = Number(sourceViewport?.y) || 0
   const offsetX = ((rawX % scaledGap) + scaledGap) % scaledGap
   const offsetY = ((rawY % scaledGap) + scaledGap) % scaledGap
 
@@ -697,6 +697,17 @@ const canvasFlowStyle = computed(() => {
     '--canvas-grid-size': `${scaledGap}px ${scaledGap}px`,
     '--canvas-grid-position': `${offsetX}px ${offsetY}px`
   }
+}
+
+const settledCanvasFlowStyle = ref(buildCanvasFlowStyle())
+const canvasFlowStyle = computed(() => {
+  if (isCanvasZooming.value) {
+    return settledCanvasFlowStyle.value
+  }
+
+  const nextStyle = buildCanvasFlowStyle()
+  settledCanvasFlowStyle.value = nextStyle
+  return nextStyle
 })
 
 const syncIndicator = computed(() => {
@@ -882,21 +893,162 @@ const selectGroup = (groupIdToSelect) => {
   clearNodeMenuContext()
 }
 
-const getNodeElement = (nodeId) => {
-  const root = canvasShellRef.value
-  if (!root) return null
-  return root.querySelector(`.vue-flow__node[data-id="${nodeId}"]`)
+const OVERLAY_PADDING_X = 24
+const OVERLAY_PADDING_TOP = 22
+const OVERLAY_PADDING_BOTTOM = 22
+const NODE_SHELL_TOP_PADDING = 88
+const CONFIG_NODE_TOP_PADDING = 20
+const DEFAULT_NODE_SIZE = { width: 320, height: 240 }
+const TEXT_NODE_SIZE = { width: 362, height: 330 }
+const CONFIG_NODE_SIZES = {
+  imageConfig: { width: 300, height: 240 },
+  videoConfig: { width: 300, height: 330 },
+  llmConfig: { width: 370, height: 300 }
 }
 
-const mergeRects = (rects, shellRect) => {
+const IMAGE_RATIO_SIZES = {
+  '1:1': { width: 320, height: 320 },
+  '3:2': { width: 360, height: 240 },
+  '2:3': { width: 240, height: 360 },
+  '16:9': { width: 420, height: 236 },
+  '9:16': { width: 260, height: 462 },
+  '4:3': { width: 360, height: 270 },
+  '3:4': { width: 280, height: 373 },
+  '4:5': { width: 280, height: 350 },
+  '5:4': { width: 350, height: 280 },
+  '21:9': { width: 420, height: 180 }
+}
+
+const VIDEO_RATIO_SIZES = {
+  '16:9': { width: 420, height: 236 },
+  '9:16': { width: 260, height: 462 },
+  '7:4': { width: 420, height: 240 },
+  '4:7': { width: 240, height: 420 },
+  '4:3': { width: 360, height: 270 },
+  '3:4': { width: 280, height: 373 },
+  '1:1': { width: 320, height: 320 }
+}
+
+const parsePixelSize = (value) => {
+  const parsed = Number.parseFloat(String(value || '').replace('px', ''))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+const ratioFromSize = (sizeKey, fallback = '1:1') => {
+  const [width, height] = String(sizeKey || '').split('x').map(Number)
+  if (!width || !height) return fallback
+  const ratio = width / height
+  if (Math.abs(ratio - 1) < 0.03) return '1:1'
+  if (Math.abs(ratio - 3 / 2) < 0.04) return '3:2'
+  if (Math.abs(ratio - 2 / 3) < 0.04) return '2:3'
+  if (Math.abs(ratio - 16 / 9) < 0.04) return '16:9'
+  if (Math.abs(ratio - 9 / 16) < 0.04) return '9:16'
+  if (Math.abs(ratio - 4 / 3) < 0.04) return '4:3'
+  if (Math.abs(ratio - 3 / 4) < 0.04) return '3:4'
+  if (Math.abs(ratio - 4 / 5) < 0.04) return '4:5'
+  if (Math.abs(ratio - 5 / 4) < 0.04) return '5:4'
+  return `${width}:${height}`
+}
+
+const fitCustomRatio = (ratio, maxWidth, maxHeight, fallbackSize) => {
+  const [width, height] = String(ratio || '').split(':').map(Number)
+  if (!width || !height) return fallbackSize
+  const scale = Math.min(maxWidth / width, maxHeight / height)
+  return {
+    width: Math.round(width * scale),
+    height: Math.round(height * scale)
+  }
+}
+
+const getMediaNodeStageSize = (node) => {
+  const data = node?.data || {}
+  if (node?.type === 'video') {
+    const ratio = data.ratio || ratioFromSize(data.size, '16:9')
+    return VIDEO_RATIO_SIZES[ratio] || VIDEO_RATIO_SIZES['16:9']
+  }
+
+  const ratio = data.ratio || ratioFromSize(data.size, '1:1')
+  return IMAGE_RATIO_SIZES[ratio] || fitCustomRatio(ratio, 420, 462, IMAGE_RATIO_SIZES['1:1'])
+}
+
+const getFallbackNodeSize = (node) => {
+  if (node?.type === 'text') return TEXT_NODE_SIZE
+  if (node?.type === 'image' || node?.type === 'video') {
+    const stageSize = getMediaNodeStageSize(node)
+    return {
+      width: stageSize.width + 2,
+      height: stageSize.height + NODE_SHELL_TOP_PADDING + 2
+    }
+  }
+  if (CONFIG_NODE_SIZES[node?.type]) {
+    const size = CONFIG_NODE_SIZES[node.type]
+    return {
+      width: size.width,
+      height: size.height + CONFIG_NODE_TOP_PADDING
+    }
+  }
+  return DEFAULT_NODE_SIZE
+}
+
+const getNodeSize = (node) => {
+  const candidates = [
+    node?.dimensions,
+    node?.measured,
+    {
+      width: node?.width,
+      height: node?.height
+    },
+    {
+      width: parsePixelSize(node?.style?.width),
+      height: parsePixelSize(node?.style?.height)
+    }
+  ]
+
+  const measured = candidates.find((item) => Number(item?.width) > 0 && Number(item?.height) > 0)
+  if (measured) {
+    return {
+      width: Number(measured.width),
+      height: Number(measured.height)
+    }
+  }
+
+  return getFallbackNodeSize(node)
+}
+
+const getNodePosition = (node) => {
+  const position = node?.computedPosition || node?.positionAbsolute || node?.position || {}
+  return {
+    x: Number(position.x) || 0,
+    y: Number(position.y) || 0
+  }
+}
+
+const getNodeViewportRect = (node) => {
+  if (!node) return null
+  const zoom = Math.max(Number(viewport.value?.zoom) || 1, 0.01)
+  const viewportX = Number(viewport.value?.x) || 0
+  const viewportY = Number(viewport.value?.y) || 0
+  const position = getNodePosition(node)
+  const size = getNodeSize(node)
+  const left = viewportX + position.x * zoom
+  const top = viewportY + position.y * zoom
+  const width = size.width * zoom
+  const height = size.height * zoom
+
+  return {
+    left,
+    top,
+    right: left + width,
+    bottom: top + height
+  }
+}
+
+const mergeViewportRects = (rects) => {
   if (!rects.length) return null
-  const paddingX = 24
-  const paddingTop = 22
-  const paddingBottom = 22
-  const left = Math.min(...rects.map((rect) => rect.left - shellRect.left)) - paddingX
-  const top = Math.min(...rects.map((rect) => rect.top - shellRect.top)) - paddingTop
-  const right = Math.max(...rects.map((rect) => rect.right - shellRect.left)) + paddingX
-  const bottom = Math.max(...rects.map((rect) => rect.bottom - shellRect.top)) + paddingBottom
+  const left = Math.min(...rects.map((rect) => rect.left)) - OVERLAY_PADDING_X
+  const top = Math.min(...rects.map((rect) => rect.top)) - OVERLAY_PADDING_TOP
+  const right = Math.max(...rects.map((rect) => rect.right)) + OVERLAY_PADDING_X
+  const bottom = Math.max(...rects.map((rect) => rect.bottom)) + OVERLAY_PADDING_BOTTOM
   return {
     left,
     top,
@@ -907,26 +1059,24 @@ const mergeRects = (rects, shellRect) => {
 
 const updateOverlayRects = () => {
   overlayRafId = null
-  const shell = canvasShellRef.value
-  if (!shell) return
-
-  const shellRect = shell.getBoundingClientRect()
+  if (!canvasShellRef.value) return
   const nextGroupRects = {}
+  const nodeById = new Map(nodes.value.map((node) => [node.id, node]))
 
   groups.value.forEach((group) => {
     const memberRects = (group.nodeIds || [])
-      .map((nodeId) => getNodeElement(nodeId)?.getBoundingClientRect() || null)
+      .map((nodeId) => getNodeViewportRect(nodeById.get(nodeId)))
       .filter(Boolean)
-    const merged = mergeRects(memberRects, shellRect)
+    const merged = mergeViewportRects(memberRects)
     if (merged) nextGroupRects[group.id] = merged
   })
 
   const selectedRects = selectedNodeIds.value
-    .map((nodeId) => getNodeElement(nodeId)?.getBoundingClientRect() || null)
+    .map((nodeId) => getNodeViewportRect(nodeById.get(nodeId)))
     .filter(Boolean)
 
   groupRects.value = nextGroupRects
-  multiSelectRect.value = selectedNodeIds.value.length >= 2 ? mergeRects(selectedRects, shellRect) : null
+  multiSelectRect.value = selectedNodeIds.value.length >= 2 ? mergeViewportRects(selectedRects) : null
 }
 
 const scheduleOverlayRectUpdate = (options = {}) => {
@@ -1417,7 +1567,14 @@ const onNodeDragStop = () => {
   scheduleOverlayRectUpdate({ force: true })
 }
 
+const isPositionOnlyChangeBatch = (changes = []) =>
+  Array.isArray(changes) &&
+  changes.length > 0 &&
+  changes.every((change) => change?.type === 'position' && !('selected' in change) && !('selecting' in change))
+
 const onNodesChange = (changes = []) => {
+  const positionOnlyChanges = isPositionOnlyChangeBatch(changes)
+
   if (
     isNodeDragging.value &&
     Array.isArray(changes) &&
@@ -1427,9 +1584,11 @@ const onNodesChange = (changes = []) => {
   }
 
   nextTick(() => {
-    syncNodeSelectedState()
-    if (selectedNodeIds.value.length > 0) {
-      clearGroupSelection()
+    if (!positionOnlyChanges) {
+      syncNodeSelectedState()
+      if (selectedNodeIds.value.length > 0) {
+        clearGroupSelection()
+      }
     }
     scheduleOverlayRectUpdate()
   })

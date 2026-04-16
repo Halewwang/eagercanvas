@@ -2,7 +2,7 @@
  * Canvas store | 画布状态管理
  * Manages nodes, edges and canvas state
  */
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { updateProjectCanvas, getProjectCanvas } from './projects'
 import { canvasBroadcast } from './canvasBroadcast'
 import {
@@ -119,6 +119,8 @@ const saveToHistory = () => {
   } else {
     historyIndex.value++
   }
+
+  markCanvasDirty()
 }
 
 // Add a new node | 添加新节点
@@ -404,6 +406,7 @@ export const translateNodesByIds = (nodeIds, delta, shouldSaveHistory = false) =
   })
 
   if (shouldSaveHistory) saveToHistory()
+  else deferredInteractionSave = true
   return true
 }
 
@@ -542,6 +545,7 @@ export const updateNode = (id, data) => {
   nodes.value = nodes.value.map(node => 
     node.id === id ? { ...node, data: { ...node.data, ...data } } : node
   )
+  markCanvasDirty()
 }
 
 // Remove node | 删除节点
@@ -620,6 +624,7 @@ export const clearCanvas = () => {
   groups.value = []
   nodeId = 0
   groupId = 0
+  markCanvasDirty()
 }
 
 // Initialize with sample data | 使用示例数据初始化
@@ -910,6 +915,10 @@ const debouncedSave = () => {
   }, 900)
 }
 
+const markCanvasDirty = () => {
+  debouncedSave()
+}
+
 /**
  * Update viewport and save | 更新视口并保存
  */
@@ -1049,8 +1058,3 @@ canvasBroadcast.subscribe((message) => {
   })
   projectSaveState.value = { ...lastSaveResult }
 })
-
-// Watch for changes and auto-save (only save to project, not history) | 监听变化并自动保存（仅保存项目，不保存历史）
-watch([nodes, edges, groups], () => {
-  debouncedSave()
-}, { deep: true })
