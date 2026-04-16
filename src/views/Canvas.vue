@@ -90,7 +90,7 @@
         />
       </VueFlow>
 
-      <div class="group-overlay-layer">
+      <div class="group-overlay-layer" :class="{ 'is-paused': isCanvasZooming }">
         <div
           v-if="multiSelectMenuRect"
           class="capsule-menu group-capsule-menu"
@@ -334,7 +334,7 @@
       v-model:show="showConflictModal"
       title="Sync conflict"
       description="This canvas has newer changes elsewhere. Choose how to continue."
-      size="sm"
+      size="md"
       :close-on-overlay="false"
     >
       <p class="ui-body ui-modal-copy">
@@ -1091,6 +1091,8 @@ const scheduleOverlayRectUpdate = (options = {}) => {
     ? getInteractionOverlayDelay({ isInteracting: true })
     : 0
 
+  if (scheduleMode === 'skip') return
+
   if (overlayTimeoutId && delay === 0) {
     clearTimeout(overlayTimeoutId)
     overlayTimeoutId = null
@@ -1598,7 +1600,6 @@ const onNodesChange = (changes = []) => {
 const handleViewportChange = (newViewport) => {
   beginCanvasZoomInteraction()
   updateViewport(newViewport, { persist: false })
-  scheduleOverlayRectUpdate()
 
   if (viewportSettleTimeoutId) {
     clearTimeout(viewportSettleTimeoutId)
@@ -2195,6 +2196,10 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
+.group-overlay-layer.is-paused {
+  visibility: hidden;
+}
+
 .group-capsule-menu {
   position: absolute;
   transform: translateX(-50%);
@@ -2413,9 +2418,18 @@ onUnmounted(() => {
 }
 
 .canvas-zoom-pill {
-  width: 185px;
-  justify-content: flex-start;
+  width: auto;
+  justify-content: center;
   align-items: center;
+}
+
+.conflict-actions {
+  flex-wrap: wrap;
+}
+
+.conflict-actions .ui-button-text {
+  flex: 1 1 132px;
+  min-width: 0;
 }
 
 .canvas-flow .vue-flow__node-text,

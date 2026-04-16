@@ -7,7 +7,7 @@ export const shouldRenderMinimap = ({
   nodeCount = 0,
   nodeLimit = MINIMAP_NODE_LIMIT
 } = {}) => {
-  if (isMobile || isInteracting) return false
+  if (isMobile) return false
   return Number(nodeCount || 0) <= nodeLimit
 }
 
@@ -18,7 +18,7 @@ export const getOverlayScheduleMode = ({
   isDragging = false,
   isZooming = false
 } = {}) => {
-  if (isZooming) return 'raf'
+  if (isZooming) return 'skip'
   return isDragging ? 'delayed' : 'raf'
 }
 
