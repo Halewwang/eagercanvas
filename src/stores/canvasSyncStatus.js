@@ -43,7 +43,7 @@ export const deriveSyncStatusFromSaveResult = ({
   error = null,
   status = ''
 } = {}) => {
-  if (remoteSynced) {
+  if (remoteSynced && localSaved) {
     return createSyncStatus({
       status: CANVAS_SYNC_STATES.synced,
       localSaved,
@@ -51,6 +51,17 @@ export const deriveSyncStatusFromSaveResult = ({
       hasTransientMedia,
       reason: 'remote-saved',
       error: null
+    })
+  }
+
+  if (remoteSynced && !localSaved) {
+    return createSyncStatus({
+      status: CANVAS_SYNC_STATES.failed,
+      localSaved: false,
+      remoteSynced: true,
+      hasTransientMedia,
+      reason: 'local-persist-failed',
+      error
     })
   }
 
@@ -97,17 +108,47 @@ export const deriveSyncStatusFromSaveResult = ({
   })
 }
 
+export const deriveLoadSyncStatus = ({
+  loadSource = '',
+  remoteSynced = false,
+  hasTransientMedia = false
+} = {}) => {
+  const source = String(loadSource || '').trim()
+  const isRemoteSynced = remoteSynced === true && source === 'remote'
+
+  if (isRemoteSynced) {
+    return createSyncStatus({
+      status: CANVAS_SYNC_STATES.synced,
+      localSaved: true,
+      remoteSynced: true,
+      hasTransientMedia,
+      reason: 'loaded-remote',
+      error: null
+    })
+  }
+
+  return createSyncStatus({
+    status: CANVAS_SYNC_STATES.localPersisted,
+    localSaved: true,
+    remoteSynced: false,
+    hasTransientMedia,
+    reason: source === 'local-only' ? 'loaded-local-only' : 'loaded-local-draft',
+    error: null
+  })
+}
+
 export const buildRevisionSavePayload = ({
   name,
   canvasData,
   thumbnailUrl,
-  baseRevision
+  baseRevision,
+  forceOverwrite = false
 } = {}) => {
   const payload = {}
   if (name !== undefined) payload.name = name
   if (canvasData !== undefined) payload.canvasData = canvasData
   if (thumbnailUrl !== undefined) payload.thumbnailUrl = thumbnailUrl
-  if (baseRevision) {
+  if (baseRevision && !forceOverwrite) {
     payload.baseRevision = baseRevision
     payload.currentUpdatedAt = baseRevision
   }

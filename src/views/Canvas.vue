@@ -328,6 +328,53 @@
       </template>
     </BaseModal>
 
+    <BaseModal
+      v-model:show="showConflictModal"
+      title="Sync conflict"
+      description="This canvas has newer changes elsewhere. Choose how to continue."
+      size="sm"
+      :close-on-overlay="false"
+    >
+      <p class="ui-body ui-modal-copy">
+        Your current canvas is still saved on this device. Nothing has been cleared.
+      </p>
+      <template #footer>
+        <div class="ui-modal-actions conflict-actions">
+          <BaseButton
+            variant="ghost"
+            :disabled="!!conflictAction"
+            @click="cancelConflictResolution"
+          >
+            Cancel
+          </BaseButton>
+          <BaseButton
+            variant="secondary"
+            :loading="conflictAction === 'copy'"
+            :disabled="!!conflictAction && conflictAction !== 'copy'"
+            @click="saveConflictAsCopy"
+          >
+            Save as copy
+          </BaseButton>
+          <BaseButton
+            variant="secondary"
+            :loading="conflictAction === 'refresh'"
+            :disabled="!!conflictAction && conflictAction !== 'refresh'"
+            @click="refreshRemoteConflict"
+          >
+            Refresh remote
+          </BaseButton>
+          <BaseButton
+            variant="danger"
+            :loading="conflictAction === 'overwrite'"
+            :disabled="!!conflictAction && conflictAction !== 'overwrite'"
+            @click="overwriteRemoteConflict"
+          >
+            Overwrite remote
+          </BaseButton>
+        </div>
+      </template>
+    </BaseModal>
+
     <MediaLibraryPanel
       v-model:show="showMediaLibraryPanel"
       :project-id="currentCanvasProjectId"
@@ -458,7 +505,7 @@ import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { getWorkflowById } from '@/config/workflows'
 import { getMediaAssets } from '@/api'
-import { getProjectCanvas, initProjectsStore, projects, refreshProjectById } from '../stores/projects'
+import { duplicateProject, getProjectCanvas, initProjectsStore, projects, refreshProjectById } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
@@ -555,6 +602,8 @@ const multiSelectRect = ref(null)
 const showGroupRenameModal = ref(false)
 const groupRenameTargetId = ref('')
 const groupRenameValue = ref('')
+const showConflictModal = ref(false)
+const conflictAction = ref('')
 
 let groupDragState = null
 let overlayRafId = null
@@ -663,7 +712,15 @@ const syncIndicator = computed(() => {
     }
   }
 
-  if (state.remoteSynced || status === 'synced') {
+  if (status === 'conflict') {
+    return {
+      label: 'Sync conflict',
+      title: 'Another device has newer changes. Refresh before editing further.',
+      dotClass: 'bg-rose-400'
+    }
+  }
+
+  if (status === 'synced' && state.remoteSynced === true) {
     return {
       label: 'Synced',
       title: 'This canvas is synced to the cloud.',
@@ -671,11 +728,11 @@ const syncIndicator = computed(() => {
     }
   }
 
-  if (status === 'conflict') {
+  if (status === 'synced') {
     return {
-      label: 'Sync conflict',
-      title: 'Another device has newer changes. Refresh before editing further.',
-      dotClass: 'bg-rose-400'
+      label: 'Saved locally',
+      title: 'Changes are saved on this device. Cloud sync has not completed.',
+      dotClass: 'bg-amber-400'
     }
   }
 
@@ -697,6 +754,72 @@ const syncIndicator = computed(() => {
 
   return null
 })
+
+watch(
+  () => projectSaveState.value?.status,
+  (status) => {
+    if (status === 'conflict') {
+      showConflictModal.value = true
+    }
+  }
+)
+
+const cancelConflictResolution = () => {
+  if (conflictAction.value) return
+  showConflictModal.value = false
+}
+
+const refreshRemoteConflict = async () => {
+  const projectId = String(currentCanvasProjectId.value || route.params.id || '')
+  if (!projectId || conflictAction.value) return
+  conflictAction.value = 'refresh'
+  try {
+    await refreshProjectById(projectId, { preferLocalDraft: false })
+    await loadProjectById(projectId)
+    showConflictModal.value = false
+    notifier.success('Remote version loaded')
+  } catch (error) {
+    notifier.error(error?.message || 'Refresh failed')
+  } finally {
+    conflictAction.value = ''
+  }
+}
+
+const overwriteRemoteConflict = async () => {
+  if (conflictAction.value) return
+  conflictAction.value = 'overwrite'
+  try {
+    const saved = await flushSave({ forceRemoteOverwrite: true })
+    if (saved && projectSaveState.value?.status !== 'conflict') {
+      showConflictModal.value = false
+      notifier.success('Remote version overwritten')
+    }
+  } catch (error) {
+    notifier.error(error?.message || 'Overwrite failed')
+  } finally {
+    conflictAction.value = ''
+  }
+}
+
+const saveConflictAsCopy = async () => {
+  const projectId = String(currentCanvasProjectId.value || route.params.id || '')
+  if (!projectId || conflictAction.value) return
+  conflictAction.value = 'copy'
+  try {
+    const newId = await duplicateProject(projectId)
+    if (!newId) {
+      notifier.error('Save copy failed')
+      return
+    }
+    showConflictModal.value = false
+    notifier.success('Saved as copy')
+    router.push(`/canvas/${newId}`)
+  } catch (error) {
+    notifier.error(error?.message || 'Save copy failed')
+  } finally {
+    conflictAction.value = ''
+  }
+}
 
 const selectedNodeIds = computed(() =>
   nodes.value.filter((node) => node.selected || node.data?.selected).map((node) => node.id)

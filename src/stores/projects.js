@@ -196,6 +196,8 @@ const loadProjectCanvasDraftRecord = (id) => {
 
 const loadProjectCanvasDraft = (id) => loadProjectCanvasDraftRecord(id)?.canvasData || null
 
+const isRemoteSyncedDraft = (draftRecord) => draftRecord?.remoteSynced === true
+
 const removeProjectCanvasDraft = async (id) => {
   const storage = getDraftStorage()
   if (!storage) return
@@ -337,7 +339,7 @@ const shouldUseLocalCanvasDraft = (remote, draftRecord) => {
     return true
   }
 
-  if (draftRecord?.remoteSynced) return false
+  if (isRemoteSyncedDraft(draftRecord)) return false
 
   const draftBaseVersion = String(draftRecord?.baseRevision || draftRecord?.baseVersion || '').trim()
   const remoteVersion = getProjectBaseVersion(remote)
@@ -346,8 +348,15 @@ const shouldUseLocalCanvasDraft = (remote, draftRecord) => {
   return draftBaseVersion === remoteVersion
 }
 
-const mergeRemoteProjectWithLocalDraft = (remote, local) => {
+const mergeRemoteProjectWithLocalDraft = (remote, local, { preferLocalDraft = true } = {}) => {
   if (!local) return remote
+  if (!preferLocalDraft) {
+    return {
+      ...remote,
+      serverUpdatedAt: remote.serverUpdatedAt || remote.updatedAt || null,
+      readState: 'remote'
+    }
+  }
 
   const draftRecord = loadProjectCanvasDraftRecord(local.id || remote.id)
   const useLocalCanvasDraft = shouldUseLocalCanvasDraft(remote, draftRecord)
@@ -438,8 +447,9 @@ export const loadProjects = async () => {
   }
 }
 
-export const refreshProjectById = async (id) => {
+export const refreshProjectById = async (id, options = {}) => {
   if (!id) return null
+  const preferLocalDraft = options.preferLocalDraft !== false
 
   const localProject = projects.value.find((project) => project.id === id) || null
   if (BYPASS_AUTH_IN_DEV) {
@@ -454,7 +464,7 @@ export const refreshProjectById = async (id) => {
   try {
     const response = await apiGetProject(id)
     const remoteProject = mapProjectFromApi(response.data)
-    const mergedProject = mergeRemoteProjectWithLocalDraft(remoteProject, localProject)
+    const mergedProject = mergeRemoteProjectWithLocalDraft(remoteProject, localProject, { preferLocalDraft })
     if (mergedProject?.canvasData && mergedProject.readState !== 'local-draft') {
       await saveProjectCanvasDraft(id, mergedProject.canvasData, {
         draftUpdatedAt: mergedProject.updatedAt || new Date().toISOString(),
@@ -603,7 +613,7 @@ const normalizeCanvasUpdatePayload = (value) => {
   }
 }
 
-export const updateProjectCanvas = async (id, canvasData, currentVersion = null) => {
+export const updateProjectCanvas = async (id, canvasData, currentVersion = null, options = {}) => {
   const project = projects.value.find((p) => p.id === id)
   if (!project) {
     return {
@@ -677,7 +687,8 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
         canvasData: nextRemoteCanvasData,
         thumbnail: resolveProjectThumbnail(nextRemoteCanvasData, next.thumbnail)
       }),
-      baseRevision: currentVersion
+      baseRevision: currentVersion,
+      forceOverwrite: options.forceOverwrite === true
     })
     
     const response = await apiPatchProject(id, payload)
@@ -727,12 +738,13 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null)
       projects.value[idx] = updatedProject
     }
     const remoteMetaSaved = saveLocalCache()
+    const finalLocalSaved = localSaved || (remoteDraftSaved && remoteMetaSaved)
     
     return {
       project: updatedProject,
-      localSaved: localSaved || (remoteDraftSaved && remoteMetaSaved),
+      localSaved: finalLocalSaved,
       remoteSynced: true,
-      status: CANVAS_SYNC_STATES.synced
+      status: finalLocalSaved ? CANVAS_SYNC_STATES.synced : CANVAS_SYNC_STATES.failed
     }
   } catch (error) {
     if (isConflictError(error)) {
@@ -773,7 +785,7 @@ export const getProjectCanvas = (id) => {
       loadSource,
       draftUpdatedAt: draftRecord?.draftUpdatedAt || null,
       draftBaseVersion: draftRecord?.baseRevision || draftRecord?.baseVersion || null,
-      remoteSynced: draftRecord?.remoteSynced !== false
+      remoteSynced: isRemoteSyncedDraft(draftRecord)
     }
   }
 }

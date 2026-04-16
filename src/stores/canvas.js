@@ -8,6 +8,7 @@ import { canvasBroadcast } from './canvasBroadcast'
 import {
   CANVAS_SYNC_STATES,
   createSyncStatus,
+  deriveLoadSyncStatus,
   deriveSyncStatusFromSaveResult,
   isConflictError
 } from './canvasSyncStatus'
@@ -716,14 +717,10 @@ export const loadProject = (projectId) => {
   const canvasData = getProjectCanvas(projectId)
   
   if (canvasData) {
-    const loadRemoteSynced = canvasData?._meta?.remoteSynced !== false
-    projectSaveState.value = createSyncStatus({
-      status: loadRemoteSynced ? CANVAS_SYNC_STATES.synced : CANVAS_SYNC_STATES.localPersisted,
-      localSaved: true,
-      remoteSynced: loadRemoteSynced,
-      hasTransientMedia: false,
-      reason: loadRemoteSynced ? 'loaded-remote' : 'loaded-local-draft',
-      error: null
+    projectSaveState.value = deriveLoadSyncStatus({
+      loadSource: canvasData?._meta?.loadSource || canvasData?._meta?.readState,
+      remoteSynced: canvasData?._meta?.remoteSynced,
+      hasTransientMedia: false
     })
     lastSaveResult = { ...projectSaveState.value }
 
@@ -794,22 +791,19 @@ export const loadProject = (projectId) => {
   }]
   historyIndex.value = 0
   const snapshotKey = getSnapshotKey(createCanvasSnapshot({ preserveTransientMedia: true }))
-  lastPersistedSnapshotKey = canvasData?._meta?.remoteSynced === false ? '' : snapshotKey
+  lastPersistedSnapshotKey = canvasData?._meta?.remoteSynced === true ? snapshotKey : ''
   
   // Enable auto-save after loading | 加载后启用自动保存
   setTimeout(() => {
     autoSaveEnabled = true
     isRestoring = false
-    if (canvasData?._meta?.remoteSynced === false && currentProjectId.value === projectId) {
-      void saveProject()
-    }
   }, 100)
 }
 
 /**
  * Save current project | 保存当前项目
  */
-export const saveProject = async () => {
+export const saveProject = async ({ forceRemoteOverwrite = false } = {}) => {
   if (!currentProjectId.value) return
   if (!getProjectCanvas(currentProjectId.value)) return false
 
@@ -842,7 +836,8 @@ export const saveProject = async () => {
           remoteCanvasData: remoteSnapshot,
           hasTransientMedia: containsTransientMedia
         },
-        currentProjectVersion.value
+        currentProjectVersion.value,
+        { forceOverwrite: forceRemoteOverwrite }
       )
       const remoteSynced = !!result?.remoteSynced
       const localSaved = !!result?.localSaved
@@ -855,7 +850,7 @@ export const saveProject = async () => {
       })
       projectSaveState.value = { ...lastSaveResult }
 
-      if (remoteSynced) {
+      if (remoteSynced && localSaved) {
         lastPersistedSnapshotKey = localSnapshotKey
         clearRemoteRetry()
         resetRemoteRetryDelay()
@@ -914,12 +909,12 @@ export const saveProject = async () => {
 /**
  * Flush pending autosave immediately | 立即刷新待保存内容
  */
-export const flushSave = async () => {
+export const flushSave = async (options = {}) => {
   if (saveTimeout) {
     clearTimeout(saveTimeout)
     saveTimeout = null
   }
-  return saveProject()
+  return saveProject(options)
 }
 
 /**
