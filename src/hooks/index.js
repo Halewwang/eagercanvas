@@ -14,7 +14,6 @@ export {
   useApiState,
   useChat,
   useImageGeneration,
-  useModel3DGeneration,
   useVideoGeneration,
   useApi
 } from './useApi'

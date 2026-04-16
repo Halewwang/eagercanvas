@@ -44,7 +44,7 @@
 
         <section class="multi-angle-section">
           <div class="section-heading">
-            <span class="section-title">3D Camera Control</span>
+            <span class="section-title">Camera Control</span>
           </div>
 
           <div ref="controlAreaRef" class="camera-control-card">

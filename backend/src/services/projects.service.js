@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
-import { cleanupCanvas3DAssets } from './canvas3d-cleanup.service.js'
+import { sanitizeCanvasData } from './canvas-sanitize.service.js'
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -32,15 +32,12 @@ const hasCanvasContent = (canvasData) => {
 
 const normalizeCanvasForStorage = async (canvasData) => {
   if (canvasData === undefined) return undefined
-  // Save path should only sanitize the canvas, not wait for remote 3D assets to be republished.
-  const { canvasData: nextCanvasData } = await cleanupCanvas3DAssets(canvasData || {}, { persistRemote: false })
-  return nextCanvasData
+  return sanitizeCanvasData(canvasData || {})
 }
 
 const normalizeCanvasForRead = async (canvasData) => {
   if (canvasData === undefined) return undefined
-  const { canvasData: nextCanvasData } = await cleanupCanvas3DAssets(canvasData || {}, { persistRemote: false })
-  return nextCanvasData
+  return sanitizeCanvasData(canvasData || {})
 }
 
 export const listProjects = async (userId) => {

@@ -3,11 +3,9 @@ import { authRequired } from '../middleware/auth.js'
 import { asyncHandler } from '../utils/http.js'
 import {
   createChatCompletion,
-  create3DGeneration,
   createImageGeneration,
   createRun,
   createVideoGeneration,
-  get3DTask,
   getRunById,
   getVideoTask
 } from '../services/runs.service.js'
@@ -36,19 +34,9 @@ runsRouter.post('/compat/images/generations', asyncHandler(async (req, res) => {
   res.json(run.result)
 }))
 
-runsRouter.post('/compat/3d/generations', asyncHandler(async (req, res) => {
-  const run = await create3DGeneration(req.user.id, req.body)
-  res.json(run.result)
-}))
-
 runsRouter.post('/compat/videos', asyncHandler(async (req, res) => {
   const run = await createVideoGeneration(req.user.id, req.body)
   res.json(run.result)
-}))
-
-runsRouter.get('/compat/3d/:taskId', asyncHandler(async (req, res) => {
-  const result = await get3DTask(req.user.id, req.params.taskId)
-  res.json(result)
 }))
 
 runsRouter.get('/compat/videos/:taskId', asyncHandler(async (req, res) => {

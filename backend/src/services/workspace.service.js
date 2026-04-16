@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
 import { getProject } from './projects.service.js'
-import { cleanupCanvas3DAssets } from './canvas3d-cleanup.service.js'
+import { sanitizeCanvasData } from './canvas-sanitize.service.js'
 
 const DEFAULT_WORKSPACE_SLUG = 'shared-workspace'
 
@@ -35,14 +35,11 @@ const mapTemplate = (row) => ({
 })
 
 const normalizeCanvasForStorage = async (canvasData) => {
-  // Save path should only sanitize the canvas, not wait for remote 3D assets to be republished.
-  const { canvasData: nextCanvasData } = await cleanupCanvas3DAssets(canvasData || {}, { persistRemote: false })
-  return nextCanvasData
+  return sanitizeCanvasData(canvasData || {})
 }
 
 const normalizeCanvasForRead = async (canvasData) => {
-  const { canvasData: nextCanvasData } = await cleanupCanvas3DAssets(canvasData || {}, { persistRemote: false })
-  return nextCanvasData
+  return sanitizeCanvasData(canvasData || {})
 }
 
 const mapTemplateForRead = async (row) => mapTemplate({

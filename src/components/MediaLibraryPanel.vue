@@ -133,7 +133,6 @@ import { computed, ref, watch } from 'vue'
 import { NIcon } from 'naive-ui'
 import { getGenerationHistory, getMediaAssets } from '@/api'
 import {
-  AppsOutline,
   CloseOutline,
   ImageOutline,
   SparklesOutline,
@@ -189,13 +188,11 @@ const formatTimestamp = (value = '') => {
 const kindLabel = (kind = '') => {
   const normalized = String(kind || '').trim().toLowerCase()
   if (normalized === 'video') return 'Video'
-  if (normalized === 'model3d') return '3D'
   return 'Image'
 }
 
 const historyTypeLabel = (type = '') => {
   const normalized = String(type || '').trim().toLowerCase()
-  if (normalized === 'model3d') return '3D Generation'
   if (normalized === 'video') return 'Video Generation'
   return 'Image Generation'
 }
@@ -213,33 +210,13 @@ const statusLabel = (status = '') => {
 const iconByKind = (kind = '') => {
   const normalized = String(kind || '').trim().toLowerCase()
   if (normalized === 'video') return VideocamOutline
-  if (normalized === 'model3d') return AppsOutline
   if (normalized === 'history') return SparklesOutline
   return ImageOutline
 }
 
 const pickHistoryAsset = (item = {}) => {
   const assets = Array.isArray(item?.assets) ? item.assets : []
-  const primary = assets.find((asset) => String(asset?.url || '').trim()) || null
-  if (!primary) return null
-  if (String(item?.type || '').trim().toLowerCase() !== 'model3d') return primary
-
-  const assetUrls = assets.reduce((acc, asset) => {
-    const url = String(asset?.url || '').trim()
-    const fileName = String(asset?.fileName || '').trim().toLowerCase()
-    if (!url) return acc
-    if (fileName.endsWith('.glb')) acc.glb = url
-    if (fileName.endsWith('.obj')) acc.obj = url
-    if (fileName.endsWith('.fbx')) acc.fbx = url
-    if (fileName.endsWith('.stl')) acc.stl = url
-    if (fileName.endsWith('.usdz')) acc.usdz = url
-    return acc
-  }, {})
-
-  return {
-    ...primary,
-    assetUrls
-  }
+  return assets.find((asset) => String(asset?.url || '').trim()) || null
 }
 
 const loadLibrary = async () => {

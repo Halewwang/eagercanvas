@@ -450,7 +450,7 @@
  * Canvas view component | 画布视图组件
  * Main infinite canvas with Vue Flow integration
  */
-import { ref, computed, onMounted, onUnmounted, watch, nextTick, markRaw, defineAsyncComponent } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { MiniMap } from '@vue-flow/minimap'
@@ -569,8 +569,6 @@ const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange }
 const nodeTypes = {
   text: markRaw(TextNode),
   imageConfig: markRaw(ImageConfigNode),
-  model3dConfig: markRaw(defineAsyncComponent(() => import('../components/nodes/Model3DConfigNode.vue'))),
-  model3d: markRaw(defineAsyncComponent(() => import('../components/nodes/Model3DNode.vue'))),
   video: markRaw(VideoNode),
   image: markRaw(ImageNode),
   videoConfig: markRaw(VideoConfigNode),
@@ -581,7 +579,6 @@ const nodeTypes = {
 const edgeTypes = {
   default: markRaw(DefaultEdge),
   imageRole: markRaw(ImageRoleEdge),
-  model3dView: markRaw(defineAsyncComponent(() => import('../components/edges/Model3DViewEdge.vue'))),
   promptOrder: markRaw(PromptOrderEdge),
   imageOrder: markRaw(ImageOrderEdge)
 }
@@ -653,8 +650,7 @@ const {
 const nodeTypeOptions = [
   { type: 'text', name: 'Text', icon: TextOutline, description: 'Write prompts, scripts, and supporting copy.' },
   { type: 'image', name: 'Image', icon: ImageOutline, description: 'Generate, preview, and upload still images.' },
-  { type: 'video', name: 'Video', icon: VideocamOutline, description: 'Generate videos with connected visual inputs.' },
-  { type: 'model3dConfig', name: '3D Model', icon: AppsOutline, description: 'Generate an interactive 3D model from prompt and view-tagged images.' }
+  { type: 'video', name: 'Video', icon: VideocamOutline, description: 'Generate videos with connected visual inputs.' }
 ]
 const nodeMenuTitle = computed(() =>
   nodeMenuMode.value === 'connect'
@@ -1255,17 +1251,6 @@ const currentCanvasProjectId = computed(() => {
   return value && value !== 'new' ? value : ''
 })
 
-const buildModel3DAssetUrls = (asset = {}) => {
-  const safeUrl = String(asset?.url || '').trim()
-  if (!safeUrl) return {}
-  if (/\.glb($|\?)/i.test(safeUrl)) return { glb: safeUrl, ...(asset?.assetUrls || {}) }
-  if (/\.obj($|\?)/i.test(safeUrl)) return { obj: safeUrl, ...(asset?.assetUrls || {}) }
-  if (/\.fbx($|\?)/i.test(safeUrl)) return { fbx: safeUrl, ...(asset?.assetUrls || {}) }
-  if (/\.stl($|\?)/i.test(safeUrl)) return { stl: safeUrl, ...(asset?.assetUrls || {}) }
-  if (/\.usdz($|\?)/i.test(safeUrl)) return { usdz: safeUrl, ...(asset?.assetUrls || {}) }
-  return asset?.assetUrls || {}
-}
-
 const getLibraryInsertPosition = () => {
   const shell = canvasShellRef.value
   const fallbackWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
@@ -1299,15 +1284,6 @@ const handleInsertLibraryAsset = async (asset = {}) => {
       fileName: asset.fileName || 'Video Asset',
       fileType: asset.fileType || 'video/mp4',
       error: ''
-    })
-  } else if (kind === 'model3d') {
-    const assetUrls = buildModel3DAssetUrls(asset)
-    nodeId = addNode('model3d', position, {
-      url: safeUrl,
-      previewImageUrl: asset.previewUrl || '',
-      assetUrls,
-      status: 'completed',
-      label: '3D Model'
     })
   } else {
     nodeId = addNode('image', position, {

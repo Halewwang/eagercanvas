@@ -130,14 +130,14 @@
         <section class="home-overview">
           <p class="home-overview-label">Creative Modules</p>
           <h2 class="home-overview-title">
-            <span>Built for stills, motion,</span>
-            <span>and 3D.</span>
+            <span>Built for stills</span>
+            <span>and motion.</span>
           </h2>
         </section>
 
         <p class="home-support-copy">
-          One canvas connects image generation, video creation, and 3D building in a single workspace. Inputs,
-          outputs, and revisions stay close to the media they control.
+          One canvas connects image generation and video creation in a single workspace. Inputs, outputs, and
+          revisions stay close to the media they control.
         </p>
 
         <section class="home-tabs">
@@ -168,21 +168,6 @@
               Prompt + first / last frame +
               <br />
               short-form motion
-            </p>
-            <div class="home-tab-line" />
-          </div>
-
-          <div class="home-tab home-tab-3d">
-            <div class="home-tab-pill">
-              <svg viewBox="0 0 14 14.2502" fill="none" aria-hidden="true" class="home-tab-icon">
-                <path fill-rule="evenodd" clip-rule="evenodd" d="M3 1.5H11C11.8284 1.5 12.5 2.17157 12.5 3V3.5L1.5 3.5V3C1.5 2.17157 2.17157 1.5 3 1.5ZM12.5 6.75V5L1.5 5V8.5C1.5 9.32843 2.17157 10 3 10H5.75C6.16421 10 6.5 10.3358 6.5 10.75C6.5 11.1642 6.16421 11.5 5.75 11.5H3C1.34315 11.5 0 10.1569 0 8.5V3C0 1.34315 1.34315 0 3 0H11C12.6569 0 14 1.34315 14 3V6.75C14 7.16421 13.6642 7.5 13.25 7.5C12.8358 7.5 12.5 7.16421 12.5 6.75ZM9.22766 6.67179C9.00375 6.48682 8.69317 6.44775 8.43043 6.5715C8.16768 6.69525 8 6.95958 8 7.25001V12.7935C8 13.1119 8.201 13.3955 8.50136 13.5011C8.80172 13.6066 9.13598 13.511 9.33514 13.2627L10.2329 12.1429L11.0792 13.8354C11.2644 14.2059 11.7149 14.3561 12.0854 14.1708C12.4559 13.9856 12.6061 13.5351 12.4208 13.1646L11.594 11.5109H13C13.3164 11.5109 13.5987 11.3124 13.7058 11.0147C13.8128 10.717 13.7216 10.3841 13.4777 10.1827L9.22766 6.67179Z" fill="currentColor"/>
-              </svg>
-              <span>3D</span>
-            </div>
-            <p class="home-tab-copy">
-              Prompt or multi-view inputs to
-              <br />
-              interactive assets
             </p>
             <div class="home-tab-line" />
           </div>
@@ -248,36 +233,8 @@
           </div>
         </section>
 
-        <section class="home-module home-module-3d">
-          <div class="home-module-copy-panel">
-            <p class="home-module-label">3D Module</p>
-            <h2 class="home-module-title">
-              <span>Text and views into</span>
-              <span>3D assets</span>
-            </h2>
-            <p class="home-module-description">
-              Generate 3D directly from prompt or feed multiple views into the same module, then inspect and export
-              from the canvas.
-            </p>
-            <ul class="home-module-list">
-              <li>Text-only or multi-view image generation</li>
-              <li>Generate type, face count, and material controls</li>
-              <li>Preview and export GLB assets in place</li>
-            </ul>
-            <div class="home-model-icons">
-              <img :src="model3dModuleIcon" alt="" class="home-model-icon home-model-icon-3d" />
-            </div>
-          </div>
-
-          <div class="home-3d-panel">
-            <img :src="model3dLeft" alt="3D module preview" class="home-3d-panel-left" />
-            <img :src="model3dRight" alt="3D module alternate preview" class="home-3d-panel-right" />
-          </div>
-        </section>
-
         <div class="home-section-rule home-section-rule-image" />
         <div class="home-section-rule home-section-rule-video" />
-        <div class="home-section-rule home-section-rule-3d" />
       </div>
     </div>
 
@@ -301,8 +258,6 @@ import videoLarge from '@/assets/home-figma/video-large.png'
 import videoTopRight from '@/assets/home-figma/video-top-right.png'
 import videoBottomLeft from '@/assets/home-figma/video-bottom-left.png'
 import videoBottomRight from '@/assets/home-figma/video-bottom-right.png'
-import model3dLeft from '@/assets/home-figma/model3d-left.png'
-import model3dRight from '@/assets/home-figma/model3d-right.png'
 import aioncraftWordmark from '@/assets/home-figma/aioncraft-wordmark.svg'
 import row02 from '@/assets/home-figma/row-02.svg'
 import row03 from '@/assets/home-figma/row-03.svg'
@@ -314,7 +269,6 @@ import row11 from '@/assets/home-figma/row-11.svg'
 import row13 from '@/assets/home-figma/row-13.svg'
 import imageModuleIcon from '@/assets/home-figma/icon-image.svg'
 import videoModuleSecondaryIcon from '@/assets/home-figma/icon-video.svg'
-import model3dModuleIcon from '@/assets/home-figma/icon-3d.svg'
 
 const stripIconSet = [
   row02,
@@ -945,15 +899,6 @@ watch(
   column-gap: 21px;
 }
 
-.home-module-3d {
-  left: 242px;
-  top: 2298px;
-  width: 955px;
-  display: grid;
-  grid-template-columns: 346px 587px;
-  column-gap: 22px;
-}
-
 .home-module-copy-panel {
   width: 272px;
   display: flex;
@@ -1046,12 +991,6 @@ watch(
 .home-model-icon-video-secondary {
   width: 20px;
   height: 18px;
-  flex: 0 0 auto;
-}
-
-.home-model-icon-3d {
-  width: 20px;
-  height: 20px;
   flex: 0 0 auto;
 }
 
@@ -1148,32 +1087,6 @@ watch(
   object-fit: cover;
 }
 
-.home-3d-panel {
-  position: relative;
-  width: 587px;
-  height: 350px;
-}
-
-.home-3d-panel-left {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 222px;
-  height: 350px;
-  border-radius: 25px;
-  object-fit: cover;
-}
-
-.home-3d-panel-right {
-  position: absolute;
-  left: 242px;
-  top: 0;
-  width: 345px;
-  height: 350px;
-  border-radius: 25px;
-  object-fit: cover;
-}
-
 .home-section-rule {
   position: absolute;
   height: 1px;
@@ -1191,12 +1104,6 @@ watch(
   left: 851px;
   top: 2212px;
   width: 346px;
-}
-
-.home-section-rule-3d {
-  left: 243px;
-  top: 2647px;
-  width: 345px;
 }
 
 @keyframes home-logo-marquee {

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  build3DGenerationAssets,
   persistImageResultAssets,
   persistVideoResultAsset
 } from './runs.service.js'
@@ -56,32 +55,4 @@ test('persistVideoResultAsset replaces provider video URLs before history is sto
 
   assert.equal(result.video_url, 'https://storage.example.com/persisted-video.mp4')
   assert.equal(result.data.task_result.videos[0].url, 'https://storage.example.com/persisted-video.mp4')
-})
-
-test('build3DGenerationAssets keeps source node id for later recovery', () => {
-  const assets = build3DGenerationAssets(
-    {
-      previewImageUrl: 'https://storage.example.com/preview.png',
-      assets: [
-        {
-          type: 'glb',
-          url: 'https://storage.example.com/model.glb',
-          previewImageUrl: 'https://storage.example.com/preview.png'
-        }
-      ]
-    },
-    'node_3d_1'
-  )
-
-  assert.deepEqual(assets, [
-    {
-      kind: 'model3d',
-      url: 'https://storage.example.com/model.glb',
-      previewUrl: 'https://storage.example.com/preview.png',
-      fileName: 'model3d-1.glb',
-      fileType: 'model/glb',
-      origin: 'generation',
-      sourceNodeId: 'node_3d_1'
-    }
-  ])
 })

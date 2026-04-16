@@ -65,62 +65,6 @@ export const IMAGE_MODELS = [
     }
 ]
 
-// 3D generation models | 3D生成模型
-export const MODEL3D_MODELS = [
-    {
-        label: 'Hunyuan 3D Pro 3.1',
-        key: 'hunyuan3d-pro-3.1',
-        viewTypes: ['front', 'left', 'right', 'back', 'top', 'bottom', 'left_front', 'right_front'],
-        generateTypes: ['Normal', 'Geometry', 'Sketch'],
-        faceCounts: [
-            { label: '1.5m', key: '1500000' },
-            { label: '1m', key: '1000000' },
-            { label: '500k', key: '500000' }
-        ],
-        resultFormats: [
-            { label: 'GLB', key: 'GLB' }
-        ],
-        defaultParams: {
-            prompt: '',
-            allowTextOnly: true,
-            generateType: 'Normal',
-            enablePBR: false,
-            faceCount: '500000',
-            resultFormat: 'GLB',
-            polygonType: ''
-        },
-        tips: '支持多视角图像输入，每个视角仅允许 1 张图片。'
-    },
-    {
-        label: 'Hunyuan 3D Pro 3.0',
-        key: 'hunyuan3d-pro-3.0',
-        viewTypes: ['front', 'left', 'right', 'back'],
-        generateTypes: ['Normal', 'LowPoly', 'Geometry', 'Sketch'],
-        faceCounts: [
-            { label: '1.5m', key: '1500000' },
-            { label: '1m', key: '1000000' },
-            { label: '500k', key: '500000' }
-        ],
-        polygonTypes: [
-            { label: 'Triangle', key: 'triangle' },
-            { label: 'Quadrilateral', key: 'quadrilateral' }
-        ],
-        resultFormats: [
-            { label: 'GLB', key: 'GLB' }
-        ],
-        defaultParams: {
-            prompt: '',
-            allowTextOnly: true,
-            generateType: 'Normal',
-            enablePBR: false,
-            faceCount: '500000',
-            resultFormat: 'GLB',
-            polygonType: 'triangle'
-        },
-        tips: '需要主图 front，附加视角仅支持 left / right / back。'
-    }
-]
-
 // Video ratio options | 视频比例选项
 export const VIDEO_RATIO_LIST = [
     { label: '21:9 (电影宽屏)', key: '21:9' },
@@ -341,17 +285,14 @@ export const VIDEO_DURATION_OPTIONS = [
 export const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
 export const DEFAULT_VIDEO_MODEL = 'veo-3.1'
 export const DEFAULT_CHAT_MODEL = 'gemini-2.5-flash'
-export const DEFAULT_MODEL3D_MODEL = 'hunyuan3d-pro-3.1'
 export const DEFAULT_IMAGE_SIZE = '1024x1024'
 export const DEFAULT_VIDEO_RATIO = '16:9'
 export const DEFAULT_VIDEO_DURATION = 8
 export const hasVideoModel = (key) => VIDEO_MODELS.some((model) => model.key === key)
 export const resolveVideoModelKey = (key) => (hasVideoModel(key) ? key : DEFAULT_VIDEO_MODEL)
-export const has3DModel = (key) => MODEL3D_MODELS.some((model) => model.key === key)
-export const resolve3DModelKey = (key) => (has3DModel(key) ? key : DEFAULT_MODEL3D_MODEL)
 
 // Get model by key | 根据 key 获取模型
 export const getModelByName = (key) => {
-    const allModels = [...IMAGE_MODELS, ...VIDEO_MODELS, ...CHAT_MODELS, ...MODEL3D_MODELS]
+    const allModels = [...IMAGE_MODELS, ...VIDEO_MODELS, ...CHAT_MODELS]
     return allModels.find(m => m.key === key)
 }

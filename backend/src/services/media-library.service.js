@@ -3,7 +3,7 @@ import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
 
 const MEDIA_LIBRARY_ACTIONS = ['media.uploaded', 'media.generated']
-const GENERATION_TYPES = new Set(['image', 'video', 'model3d'])
+const GENERATION_TYPES = new Set(['image', 'video'])
 const DEFAULT_ASSET_LIMIT = 60
 const DEFAULT_HISTORY_LIMIT = 40
 const MAX_LIMIT = 100
@@ -29,7 +29,6 @@ const getExtensionFromUrl = (url = '') => {
 
 const inferAssetKind = ({ fileType = '', fileName = '', url = '', runType = '' } = {}) => {
   const normalizedRunType = trimString(runType).toLowerCase()
-  if (normalizedRunType === 'model3d') return 'model3d'
   if (normalizedRunType === 'video') return 'video'
   if (normalizedRunType === 'image') return 'image'
 
@@ -40,7 +39,6 @@ const inferAssetKind = ({ fileType = '', fileName = '', url = '', runType = '' }
   const extension = trimString(path.extname(fileName || '') || getExtensionFromUrl(url)).toLowerCase()
   if (['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'].includes(extension)) return 'image'
   if (['.mp4', '.webm', '.mov', '.m4v'].includes(extension)) return 'video'
-  if (['.glb', '.gltf', '.obj', '.fbx', '.stl', '.usdz', '.zip'].includes(extension)) return 'model3d'
   return 'file'
 }
 
@@ -48,10 +46,8 @@ const buildAssetTitle = ({ fileName = '', kind = '', runType = '' } = {}) => {
   const safeFileName = trimString(fileName)
   if (safeFileName) return safeFileName
   const normalizedKind = trimString(kind).toLowerCase()
-  if (normalizedKind === 'model3d') return '3D Asset'
   if (normalizedKind === 'video') return 'Video Asset'
   if (normalizedKind === 'image') return 'Image Asset'
-  if (trimString(runType).toLowerCase() === 'model3d') return '3D Result'
   return 'Asset'
 }
 

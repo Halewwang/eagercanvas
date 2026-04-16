@@ -12,7 +12,7 @@ import {
   deriveSyncStatusFromSaveResult,
   isConflictError
 } from './canvasSyncStatus'
-import { IMAGE_MODELS, VIDEO_MODELS, MODEL3D_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL, DEFAULT_MODEL3D_MODEL } from '../config/models'
+import { IMAGE_MODELS, VIDEO_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL } from '../config/models'
 import { isTransientRemoteMediaUrl } from '@/utils/media'
 
 const isLocalPreviewHost = () => {
@@ -143,6 +143,22 @@ export const addNode = (type, position = { x: 100, y: 100 }, data = {}) => {
 
 const cloneNodes = (items) => JSON.parse(JSON.stringify(items))
 const cloneEdges = (items) => JSON.parse(JSON.stringify(items))
+const REMOVED_NODE_TYPES = new Set(['model3d', 'model3dConfig'])
+
+const stripRemovedNodes = (rawNodes = [], rawEdges = []) => {
+  const nextNodes = Array.isArray(rawNodes) ? JSON.parse(JSON.stringify(rawNodes)) : []
+  const nextEdges = Array.isArray(rawEdges) ? JSON.parse(JSON.stringify(rawEdges)) : []
+  const removedIds = new Set(nextNodes.filter((node) => REMOVED_NODE_TYPES.has(node?.type)).map((node) => node.id))
+
+  if (!removedIds.size) {
+    return { nodes: nextNodes, edges: nextEdges }
+  }
+
+  return {
+    nodes: nextNodes.filter((node) => !removedIds.has(node.id)),
+    edges: nextEdges.filter((edge) => !removedIds.has(edge.source) && !removedIds.has(edge.target))
+  }
+}
 
 const TRANSIENT_NODE_FIELDS = new Set([
   'base64',
@@ -358,38 +374,6 @@ const removeNodesFromGroups = (nodeIds) => {
   )
 }
 
-const normalizeLegacyModel3DOutputs = (rawNodes = [], rawEdges = []) => {
-  const nodesCopy = Array.isArray(rawNodes) ? JSON.parse(JSON.stringify(rawNodes)) : []
-  const edgesCopy = Array.isArray(rawEdges) ? JSON.parse(JSON.stringify(rawEdges)) : []
-  const legacyOutputIds = new Set()
-
-  edgesCopy.forEach((edge) => {
-    const sourceNode = nodesCopy.find((node) => node.id === edge.source)
-    const targetNode = nodesCopy.find((node) => node.id === edge.target)
-    if (!sourceNode || !targetNode) return
-    if (sourceNode.type !== 'model3dConfig' || targetNode.type !== 'model3d') return
-
-    sourceNode.data = {
-      ...(sourceNode.data || {}),
-      url: targetNode.data?.url || sourceNode.data?.url || '',
-      previewImageUrl: targetNode.data?.previewImageUrl || sourceNode.data?.previewImageUrl || '',
-      assetUrls: targetNode.data?.assetUrls || sourceNode.data?.assetUrls || {},
-      model: targetNode.data?.model || sourceNode.data?.model,
-      status: targetNode.data?.status || sourceNode.data?.status || 'completed'
-    }
-    legacyOutputIds.add(targetNode.id)
-  })
-
-  if (!legacyOutputIds.size) {
-    return { nodes: nodesCopy, edges: edgesCopy }
-  }
-
-  return {
-    nodes: nodesCopy.filter((node) => !legacyOutputIds.has(node.id)),
-    edges: edgesCopy.filter((edge) => !legacyOutputIds.has(edge.source) && !legacyOutputIds.has(edge.target))
-  }
-}
-
 export const deleteGroupWithNodes = (groupIdToDelete) => {
   const targetGroup = groups.value.find((group) => group.id === groupIdToDelete)
   if (!targetGroup) return false
@@ -514,20 +498,6 @@ const getDefaultNodeData = (type) => {
         label: '图生视频'
       }
     }
-    case 'model3dConfig': {
-      const model3d = MODEL3D_MODELS.find(m => m.key === DEFAULT_MODEL3D_MODEL) || MODEL3D_MODELS[0]
-      return {
-        prompt: '',
-        model: model3d?.key || DEFAULT_MODEL3D_MODEL,
-        generateType: model3d?.defaultParams?.generateType || 'Normal',
-        enablePBR: !!model3d?.defaultParams?.enablePBR,
-        faceCount: model3d?.defaultParams?.faceCount || '',
-        resultFormat: model3d?.defaultParams?.resultFormat || '',
-        polygonType: model3d?.defaultParams?.polygonType || '',
-        label: '3D建模',
-        status: 'idle'
-      }
-    }
     case 'video': {
       const defaultVideoModel = VIDEO_MODELS.find(m => m.key === DEFAULT_VIDEO_MODEL) || VIDEO_MODELS[0]
       const defaultVideoRatio = defaultVideoModel?.defaultParams?.ratio || '16:9'
@@ -553,15 +523,6 @@ const getDefaultNodeData = (type) => {
         size: '1024x1024',
         quality: 'standard',
         label: '图片节点'
-      }
-    case 'model3d':
-      return {
-        url: '',
-        previewImageUrl: '',
-        model: DEFAULT_MODEL3D_MODEL,
-        assetUrls: {},
-        status: 'idle',
-        label: '3D模型节点'
       }
     case 'llmConfig':
       return {
@@ -738,9 +699,9 @@ export const loadProject = (projectId) => {
     }
 
     // Restore nodes | 恢复节点
-    const migratedCanvas = normalizeLegacyModel3DOutputs(canvasData.nodes || [], canvasData.edges || [])
-    nodes.value = migratedCanvas.nodes
-    edges.value = migratedCanvas.edges
+    const sanitizedCanvas = stripRemovedNodes(canvasData.nodes || [], canvasData.edges || [])
+    nodes.value = sanitizedCanvas.nodes
+    edges.value = sanitizedCanvas.edges
     groups.value = normalizeGroups(canvasData.groups || [], nodes.value)
     canvasViewport.value = canvasData.viewport || { x: 100, y: 50, zoom: 0.8 }
     
@@ -754,7 +715,7 @@ export const loadProject = (projectId) => {
       if (data.loading) data.loading = false
 
       // Runtime status should not survive hard refresh as "running".
-      if ((node.type === 'imageConfig' || node.type === 'videoConfig' || node.type === 'model3dConfig' || node.type === 'llmConfig') && data.status === 'running') {
+      if ((node.type === 'imageConfig' || node.type === 'videoConfig' || node.type === 'llmConfig') && data.status === 'running') {
         data.status = 'failed'
         if (!data.error) data.error = 'Task interrupted by page refresh. Please run again.'
       }

@@ -4,11 +4,9 @@ import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 import {
   providerChatCompletions,
-  providerCreate3D,
   providerCreateVideo,
   providerGenerateImage,
   providerImageStatus,
-  provider3DStatus,
   providerVideoStatus
 } from './provider.service.js'
 import { uploadRemoteFile } from './upload.service.js'
@@ -23,7 +21,7 @@ import {
 import { upsertGeneratedMediaRecord } from './media-library.service.js'
 
 const runSchema = z.object({
-  type: z.enum(['chat', 'image', 'video', 'model3d']),
+  type: z.enum(['chat', 'image', 'video']),
   projectId: z.string().uuid().optional().nullable(),
   model: z.string().optional(),
   payload: z.any()
@@ -64,64 +62,12 @@ const extractProviderVideoUrl = (result = {}) =>
   result?.raw?.task_result?.videos?.[0]?.url ||
   ''
 
-const extractProvider3DJobId = (result = {}) => {
-  const candidates = [
-    result?.jobId,
-    result?.job_id,
-    result?.JobId,
-    result?.Response?.JobId,
-    result?.data?.JobId
-  ]
-  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
-  return found ? String(found) : ''
-}
-
 const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
 
 export const persistRemoteUrlIfNeeded = async (url, fileName) => {
   const raw = String(url || '').trim()
   if (!raw || isPersistedUploadUrl(raw)) return raw
   return uploadRemoteFile({ url: raw, fileName }).then((result) => String(result?.url || '').trim() || raw)
-}
-
-export const persist3DResultAssets = async (result = {}, options = {}) => {
-  const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
-  const nextAssets = Array.isArray(result?.assets) ? [...result.assets] : []
-  if (!nextAssets.length && !String(result?.previewImageUrl || '').trim()) {
-    return result
-  }
-
-  const persistedAssets = await Promise.all(
-    nextAssets.map(async (asset, index) => {
-      const type = String(asset?.type || '').trim().toLowerCase()
-      const persistedUrl = await persistRemoteUrl(
-        asset?.url,
-        `model3d-${Date.now()}-${index}.${type || 'bin'}`
-      ).catch(() => String(asset?.url || '').trim())
-
-      const persistedPreviewImageUrl = await persistRemoteUrl(
-        asset?.previewImageUrl,
-        `model3d-preview-${Date.now()}-${index}.png`
-      ).catch(() => String(asset?.previewImageUrl || '').trim())
-
-      return {
-        ...asset,
-        url: persistedUrl,
-        previewImageUrl: persistedPreviewImageUrl
-      }
-    })
-  )
-
-  const previewImageUrl = await persistRemoteUrl(
-    result?.previewImageUrl,
-    `model3d-preview-${Date.now()}.png`
-  ).catch(() => String(result?.previewImageUrl || '').trim())
-
-  return {
-    ...result,
-    assets: persistedAssets,
-    previewImageUrl
-  }
 }
 
 export const persistImageResultAssets = async (result = {}, options = {}) => {
@@ -265,26 +211,6 @@ export const buildVideoGenerationAssets = (result = {}, sourceNodeId = '') => {
   }]
 }
 
-export const build3DGenerationAssets = (result = {}, sourceNodeId = '') => {
-  const assets = Array.isArray(result?.assets) ? result.assets : []
-  return assets
-    .map((asset, index) => {
-      const type = String(asset?.type || '').trim().toLowerCase()
-      const url = String(asset?.url || '').trim()
-      if (!url) return null
-      return {
-        kind: 'model3d',
-        url,
-        previewUrl: String(asset?.previewImageUrl || result?.previewImageUrl || '').trim() || url,
-        fileName: `model3d-${index + 1}.${type || 'bin'}`,
-        fileType: type ? `model/${type}` : 'application/octet-stream',
-        origin: 'generation',
-        ...(sourceNodeId ? { sourceNodeId } : {})
-      }
-    })
-    .filter(Boolean)
-}
-
 const bindVideoTaskOwnership = async ({ userId, runId, taskId, sourceNodeId = '' }) => {
   if (!taskId) return
   const safeSourceNodeId = String(sourceNodeId || '').trim()
@@ -314,23 +240,6 @@ const bindImageTaskOwnership = async ({ userId, runId, taskId }) => {
   })
   if (error) {
     console.warn('[image] bind task ownership failed', error.message)
-  }
-}
-
-const bind3DTaskOwnership = async ({ userId, runId, taskId, sourceNodeId = '' }) => {
-  if (!taskId) return
-  const safeSourceNodeId = String(sourceNodeId || '').trim()
-  const { error } = await supabase.from('audit_logs').insert({
-    user_id: userId,
-    action: 'model3d.task.created',
-    metadata: {
-      run_id: runId,
-      task_id: taskId,
-      ...(safeSourceNodeId ? { source_node_id: safeSourceNodeId } : {})
-    }
-  })
-  if (error) {
-    console.warn('[model3d] bind task ownership failed', error.message)
   }
 }
 
@@ -374,24 +283,6 @@ const assertVideoTaskOwnership = async ({ userId, taskId }) => {
   }
 }
 
-const assert3DTaskOwnership = async ({ userId, taskId }) => {
-  const { data, error } = await supabase
-    .from('audit_logs')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('action', 'model3d.task.created')
-    .contains('metadata', { task_id: String(taskId) })
-    .limit(1)
-
-  if (error) {
-    throw new HttpError(500, error.message, 'TASK_OWNERSHIP_CHECK_FAILED')
-  }
-
-  if (!Array.isArray(data) || data.length === 0) {
-    throw new HttpError(404, '3D task not found', 'MODEL3D_TASK_NOT_FOUND')
-  }
-}
-
 const findImageRunIdByTask = async ({ userId, taskId }) => {
   const { data, error } = await supabase
     .from('audit_logs')
@@ -428,30 +319,6 @@ const findVideoRunContextByTask = async ({ userId, taskId }) => {
 
   const runId = data?.[0]?.metadata?.run_id
   const sourceNodeId = data?.[0]?.metadata?.source_node_id
-  return {
-    runId: runId ? String(runId) : '',
-    sourceNodeId: sourceNodeId ? String(sourceNodeId) : ''
-  }
-}
-
-const find3DRunContextByTask = async ({ userId, taskId }) => {
-  const { data, error } = await supabase
-    .from('audit_logs')
-    .select('metadata')
-    .eq('user_id', userId)
-    .eq('action', 'model3d.task.created')
-    .contains('metadata', { task_id: String(taskId) })
-    .order('created_at', { ascending: false })
-    .limit(1)
-
-  if (error) {
-    console.warn('[model3d] resolve run by task failed', error.message)
-    return { runId: '', sourceNodeId: '' }
-  }
-
-  const metadata = data?.[0]?.metadata || {}
-  const runId = metadata?.run_id
-  const sourceNodeId = metadata?.source_node_id
   return {
     runId: runId ? String(runId) : '',
     sourceNodeId: sourceNodeId ? String(sourceNodeId) : ''
@@ -518,35 +385,6 @@ const syncRunStatusFromVideoTask = async ({ userId, runId, taskResult }) => {
 
   if (error) {
     console.warn('[video] sync run status failed', error.message)
-  }
-}
-
-const syncRunStatusFrom3DTask = async ({ userId, runId, taskResult }) => {
-  if (!runId || !taskResult) return
-  const status = String(taskResult?.status || '').toLowerCase()
-  const hasAsset = Array.isArray(taskResult?.assets) && taskResult.assets.length > 0
-
-  let nextStatus = 'running'
-  if (hasAsset || ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished'].includes(status)) {
-    nextStatus = 'completed'
-  } else if (['failed', 'error', 'cancelled', 'canceled', 'failure'].includes(status)) {
-    nextStatus = 'failed'
-  }
-
-  const payload = { status: nextStatus }
-  if (nextStatus === 'completed' || nextStatus === 'failed') {
-    payload.finished_at = new Date().toISOString()
-    payload.error_msg = nextStatus === 'failed' ? (taskResult?.message || '3D task failed') : null
-  }
-
-  const { error } = await supabase
-    .from('workflow_runs')
-    .update(payload)
-    .eq('id', runId)
-    .eq('user_id', userId)
-
-  if (error) {
-    console.warn('[model3d] sync run status failed', error.message)
   }
 }
 
@@ -633,9 +471,6 @@ export const createRun = async (userId, input) => {
     } else if (payload.type === 'image') {
       providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
       providerResponse = await persistImageResultAssets(providerResponse)
-    } else if (payload.type === 'model3d') {
-      providerResponse = await providerCreate3D(payload.payload, providerRequestOptions)
-      providerResponse = await persist3DResultAssets(providerResponse)
     } else {
       providerResponse = await providerCreateVideo(payload.payload, providerRequestOptions)
       providerResponse = await persistVideoResultAsset(providerResponse)
@@ -646,61 +481,6 @@ export const createRun = async (userId, input) => {
     const isVideoRun = payload.type === 'video'
     const imageTaskId = isImageRun ? extractProviderTaskId(providerResponse) : ''
     const imageHasAssets = Array.isArray(providerResponse?.data) && providerResponse.data.length > 0
-
-    if (payload.type === 'model3d') {
-      const providerTaskId = extractProvider3DJobId(providerResponse)
-      const hasAssets = Array.isArray(providerResponse?.assets) && providerResponse.assets.length > 0
-      const sourceNodeId = String(payload.payload?.sourceNodeId || '').trim()
-
-      await bind3DTaskOwnership({
-        userId,
-        runId: run.id,
-        taskId: providerTaskId,
-        sourceNodeId
-      })
-
-      if (hasAssets) {
-        await supabase
-          .from('workflow_runs')
-          .update({ status: 'completed', finished_at: new Date().toISOString() })
-          .eq('id', run.id)
-
-        await upsertGeneratedMediaRecord({
-          userId,
-          runId: run.id,
-          projectId: payload.projectId,
-          runType: 'model3d',
-          model: payload.model || payload.payload?.model,
-          prompt: payload.payload?.prompt,
-          status: 'completed',
-          sourceNodeId,
-          assets: build3DGenerationAssets(providerResponse, sourceNodeId)
-        })
-
-        return {
-          runId: run.id,
-          status: 'completed',
-          result: {
-            ...providerResponse,
-            run_id: run.id
-          }
-        }
-      }
-
-      await supabase
-        .from('workflow_runs')
-        .update({ status: 'running', finished_at: null, error_msg: null })
-        .eq('id', run.id)
-
-      return {
-        runId: run.id,
-        status: 'running',
-        result: {
-          ...providerResponse,
-          run_id: run.id
-        }
-      }
-    }
 
     if (isVideoRun) {
       const providerTaskId = extractProviderTaskId(providerResponse)
@@ -902,10 +682,6 @@ export const createVideoGeneration = async (userId, payload) => {
   return createRun(userId, { type: 'video', projectId: payload.projectId, payload, model: payload.model || payload.model_name })
 }
 
-export const create3DGeneration = async (userId, payload) => {
-  return createRun(userId, { type: 'model3d', projectId: payload.projectId, payload, model: payload.model || payload.model_name })
-}
-
 export const getVideoTask = async (_userId, taskId) => {
   await assertVideoTaskOwnership({ userId: _userId, taskId })
   const providerAccess = await resolveUserProviderAccess(_userId)
@@ -941,34 +717,6 @@ export const getVideoTask = async (_userId, taskId) => {
       assets: buildVideoGenerationAssets(result, sourceNodeId),
       sourceNodeId
     })
-  }
-  return result
-}
-
-export const get3DTask = async (_userId, taskId) => {
-  await assert3DTaskOwnership({ userId: _userId, taskId })
-  const providerAccess = await resolveUserProviderAccess(_userId)
-  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
-  const rawResult = await provider3DStatus(taskId, providerRequestOptions)
-  const result = await persist3DResultAssets(rawResult)
-  const { runId, sourceNodeId } = await find3DRunContextByTask({ userId: _userId, taskId })
-  await syncRunStatusFrom3DTask({ userId: _userId, runId, taskResult: result })
-  if (runId) {
-    const run = await getRunById(_userId, runId).catch(() => null)
-    const status = String(result?.status || '').toLowerCase()
-    if (Array.isArray(result?.assets) && result.assets.length > 0 && ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished', ''].includes(status)) {
-      await upsertGeneratedMediaRecord({
-        userId: _userId,
-        runId,
-        projectId: run?.project_id,
-        runType: 'model3d',
-        model: run?.model || '',
-        prompt: '',
-        status: 'completed',
-        sourceNodeId,
-        assets: build3DGenerationAssets(result, sourceNodeId)
-      })
-    }
   }
   return result
 }

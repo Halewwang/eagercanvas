@@ -63,15 +63,6 @@ const hasUsableUrl = (value, now = Date.now()) => {
   return false
 }
 
-const get3dAssetType = (asset = {}) => {
-  const rawType = String(asset?.type || '').trim().toLowerCase()
-  if (rawType) return rawType
-
-  const rawName = String(asset?.fileName || asset?.filename || '').trim().toLowerCase()
-  if (!rawName.includes('.')) return ''
-  return rawName.split('.').pop() || ''
-}
-
 export const recoverMissingNodeMedia = ({
   nodes = [],
   edges = [],
@@ -136,53 +127,6 @@ export const recoverMissingNodeMedia = ({
           error: '',
           persistStatus: 'saved',
           persistError: '',
-          updatedAt: now
-        }
-      }
-    }
-
-    if (node.type === 'model3dConfig') {
-      const directUrl = String(node?.data?.url || '').trim()
-      const previewImageUrl = String(node?.data?.previewImageUrl || '').trim()
-      const assetUrls = node?.data?.assetUrls && typeof node.data.assetUrls === 'object'
-        ? node.data.assetUrls
-        : {}
-      const hasCurrentAsset = hasUsableUrl(directUrl, now)
-        || hasUsableUrl(previewImageUrl, now)
-        || Object.values(assetUrls).some((url) => hasUsableUrl(url, now))
-      if (hasCurrentAsset) return node
-
-      const candidates = assetMap.get(String(node.id || '').trim()) || []
-      if (!candidates.length) return node
-
-      const nextAssetUrls = {}
-      let nextPreviewImageUrl = ''
-      candidates.forEach((asset) => {
-        const url = String(asset?.url || '').trim()
-        if (!url) return
-        const type = get3dAssetType(asset)
-        if (type && !nextAssetUrls[type]) {
-          nextAssetUrls[type] = url
-        }
-        const candidatePreview = String(asset?.previewUrl || '').trim()
-        if (!nextPreviewImageUrl && candidatePreview) {
-          nextPreviewImageUrl = candidatePreview
-        }
-      })
-
-      const nextViewerUrl = nextAssetUrls.glb || nextAssetUrls.obj || nextAssetUrls.fbx || nextAssetUrls.stl || nextAssetUrls.usdz || ''
-      if (!nextViewerUrl && !nextPreviewImageUrl) return node
-
-      restoredCount += 1
-      restoredNodeIds.push(node.id)
-      return {
-        ...node,
-        data: {
-          ...(node.data || {}),
-          url: nextViewerUrl,
-          previewImageUrl: nextPreviewImageUrl,
-          assetUrls: nextAssetUrls,
-          error: '',
           updatedAt: now
         }
       }
