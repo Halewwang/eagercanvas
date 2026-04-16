@@ -64,7 +64,21 @@
 
         <div v-else-if="displayVideoUrl && !data.loading" class="module-video-shell">
           <div class="module-video-frame">
-            <video :src="displayVideoUrl" controls class="module-video" />
+            <video
+              v-if="isVideoInteractive"
+              :src="displayVideoUrl"
+              controls
+              class="module-video"
+            />
+            <button
+              v-else
+              class="module-video-static-preview"
+              type="button"
+              @click="openPreviewModal"
+            >
+              <n-icon :size="32" class="text-[#d8dbe0]"><VideocamOutline /></n-icon>
+              <span>Preview video</span>
+            </button>
           </div>
         </div>
 
@@ -168,7 +182,7 @@ import toolsIcon from '@/assets/tools-icon.svg'
 
 const props = defineProps({ id: String, data: Object, selected: Boolean })
 
-const { updateNodeInternals, viewport } = useVueFlow()
+const { updateNodeInternals } = useVueFlow()
 const { isConfigured } = useApiConfig()
 const videoGen = useVideoGeneration()
 
@@ -176,6 +190,7 @@ const showCapsule = ref(false)
 const isSelected = computed(() => !!props.selected || !!props.data?.selected)
 const showNodeCapsule = computed(() => !props.data?.suppressCapsule && (showCapsule.value || isSelected.value))
 const showHandles = computed(() => showCapsule.value || isSelected.value)
+const isVideoInteractive = computed(() => showCapsule.value || isSelected.value || showPreviewModal.value)
 const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
 const showErrorModal = ref(false)
@@ -447,12 +462,10 @@ const uploadProgressStyle = computed(() => {
     background: color
   }
 })
-const capsuleStyle = computed(() => {
-  const zoom = viewport.value?.zoom || 1
-  const inverse = 1 / zoom
-  const safeScale = Math.min(1.06, Math.max(0.82, inverse))
-  return { transform: `translateX(-50%) scale(${safeScale})`, transformOrigin: 'top center' }
-})
+const capsuleStyle = {
+  transform: 'translateX(-50%) scale(var(--node-capsule-scale, 1))',
+  transformOrigin: 'top center'
+}
 const isToolBusy = computed(() => !!toolActionLoading.value)
 const isToolsDisabled = computed(() => !props.data?.url || isToolBusy.value || isUploading.value || isVideoBusy.value)
 const clearProgressTimers = () => {
@@ -1088,6 +1101,21 @@ watch(
   border-radius: var(--inner-radius);
   clip-path: inset(0 round var(--inner-radius));
   background: #000;
+}
+.module-video-static-preview {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: var(--inner-radius);
+  background: #000;
+  color: #d8dbe0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 12px;
+  cursor: pointer;
 }
 .binding-warning-text {
   color: #c8a06a;

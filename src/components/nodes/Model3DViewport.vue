@@ -80,6 +80,7 @@ const props = defineProps({
   previewImageUrl: { type: String, default: '' },
   alt: { type: String, default: '3D preview' },
   emptyLabel: { type: String, default: 'Run the 3D config node to preview the model here' },
+  interactive: { type: Boolean, default: true },
   showControls: { type: Boolean, default: true }
 })
 
@@ -113,6 +114,7 @@ const activeModelType = computed(() => {
   return ''
 })
 const activeModelUrl = computed(() => {
+  if (!props.interactive && hasStaticPreview.value) return ''
   if (disableInteractivePreview.value) return ''
   if (activeModelType.value === 'glb') return viewerUrl.value
   if (activeModelType.value === 'obj') return objUrl.value

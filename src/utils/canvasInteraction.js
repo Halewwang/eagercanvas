@@ -13,3 +13,16 @@ export const shouldRenderMinimap = ({
 
 export const getInteractionOverlayDelay = ({ isInteracting = false } = {}) =>
   isInteracting ? INTERACTION_OVERLAY_DELAY_MS : 0
+
+export const getOverlayScheduleMode = ({
+  isDragging = false,
+  isZooming = false
+} = {}) => {
+  if (isZooming) return 'raf'
+  return isDragging ? 'delayed' : 'raf'
+}
+
+export const getNodeCapsuleScale = (zoom = 1) => {
+  const safeZoom = Math.max(Number(zoom) || 1, 0.01)
+  return Math.min(1.06, Math.max(0.82, 1 / safeZoom))
+}

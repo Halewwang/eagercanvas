@@ -42,6 +42,7 @@
           :url="data.url"
           :asset-urls="assetUrls"
           :preview-image-url="data.previewImageUrl"
+          :interactive="isModelViewerActive"
           :alt="data.label || '3D preview'"
           empty-label="Run the 3D config node to preview the model here"
         />
@@ -86,6 +87,7 @@ const statusLabel = computed(() => {
 })
 const displayModelName = computed(() => getModelConfig(props.data?.model)?.label || props.data?.model || '3D Model')
 const isSelected = computed(() => !!props.data?.selected)
+const isModelViewerActive = computed(() => showCapsule.value || isSelected.value || !props.data?.previewImageUrl)
 const objStageRef = ref(null)
 const downloadOptions = computed(() => {
   const orderedTypes = ['glb', 'obj', 'fbx', 'stl', 'usdz', 'zip']

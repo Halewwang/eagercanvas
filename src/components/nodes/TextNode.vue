@@ -117,7 +117,7 @@ const props = defineProps({
   selected: Boolean
 })
 
-const { updateNodeInternals, viewport } = useVueFlow()
+const { updateNodeInternals } = useVueFlow()
 
 const showCapsule = ref(false)
 const isGenerating = ref(false)
@@ -197,12 +197,10 @@ const stageStyle = computed(() => ({ width: '360px', height: '240px' }))
 const moduleStyle = computed(() => ({ width: '362px' }))
 const progressPercent = computed(() => Math.round(progressValue.value))
 const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
-const capsuleStyle = computed(() => {
-  const zoom = viewport.value?.zoom || 1
-  const inverse = 1 / zoom
-  const safeScale = Math.min(1.06, Math.max(0.82, inverse))
-  return { transform: `translateX(-50%) scale(${safeScale})`, transformOrigin: 'top center' }
-})
+const capsuleStyle = {
+  transform: 'translateX(-50%) scale(var(--node-capsule-scale, 1))',
+  transformOrigin: 'top center'
+}
 
 const clearProgressTimers = () => {
   if (progressTimer.value) {

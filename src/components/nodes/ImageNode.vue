@@ -275,7 +275,7 @@ const props = defineProps({
   selected: Boolean
 })
 
-const { updateNodeInternals, viewport } = useVueFlow()
+const { updateNodeInternals } = useVueFlow()
 const { isConfigured } = useApiConfig()
 const imageGen = useImageGeneration()
 const imageTools = useImageTools()
@@ -637,15 +637,10 @@ const cropMaskBottomStyle = computed(() => ({
   width: `${cropStageMetrics.value.frameWidth}px`,
   height: `${Math.max(0, cropStageMetrics.value.frameHeight - cropRect.value.y - cropRect.value.height)}px`
 }))
-const capsuleStyle = computed(() => {
-  const zoom = viewport.value?.zoom || 1
-  const inverse = 1 / zoom
-  const safeScale = Math.min(1.06, Math.max(0.82, inverse))
-  return {
-    transform: `translateX(-50%) scale(${safeScale})`,
-    transformOrigin: 'top center'
-  }
-})
+const capsuleStyle = {
+  transform: 'translateX(-50%) scale(var(--node-capsule-scale, 1))',
+  transformOrigin: 'top center'
+}
 const clearProgressTimers = () => {
   if (progressTimer.value) {
     clearInterval(progressTimer.value)

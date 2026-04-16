@@ -517,7 +517,7 @@ import { duplicateProject, getProjectCanvas, initProjectsStore, projects, refres
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
-import { getInteractionOverlayDelay, shouldRenderMinimap } from '@/utils/canvasInteraction'
+import { getInteractionOverlayDelay, getNodeCapsuleScale, getOverlayScheduleMode, shouldRenderMinimap } from '@/utils/canvasInteraction'
 import { isExpiredRemoteUrl } from '@/utils/media'
 import { recoverMissingNodeMedia, shouldApplyRemoteProjectSnapshot } from '@/utils/canvasSync'
 
@@ -694,6 +694,7 @@ const canvasFlowStyle = computed(() => {
   const offsetY = ((rawY % scaledGap) + scaledGap) % scaledGap
 
   return {
+    '--node-capsule-scale': `${getNodeCapsuleScale(zoom)}`,
     '--canvas-grid-image': showGrid.value
       ? `radial-gradient(rgba(255,255,255,${gridOpacity}) 1px, transparent 1px)`
       : 'none',
@@ -934,9 +935,17 @@ const updateOverlayRects = () => {
 
 const scheduleOverlayRectUpdate = (options = {}) => {
   const force = options.force === true
-  const delay = force ? 0 : getInteractionOverlayDelay({ isInteracting: isCanvasInteracting.value })
+  const scheduleMode = force
+    ? 'raf'
+    : getOverlayScheduleMode({
+        isDragging: isNodeDragging.value,
+        isZooming: isCanvasZooming.value
+      })
+  const delay = scheduleMode === 'delayed'
+    ? getInteractionOverlayDelay({ isInteracting: true })
+    : 0
 
-  if (overlayTimeoutId && force) {
+  if (overlayTimeoutId && delay === 0) {
     clearTimeout(overlayTimeoutId)
     overlayTimeoutId = null
   }
