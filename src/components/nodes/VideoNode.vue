@@ -71,13 +71,22 @@
               class="module-video"
             />
             <button
-              v-else
+              v-else-if="showStaticVideoPreview"
               class="module-video-static-preview"
               type="button"
               @click="activateInlineVideoPreview"
             >
-              <n-icon :size="32" class="text-[#d8dbe0]"><VideocamOutline /></n-icon>
-              <span>Preview video</span>
+              <video
+                :src="displayVideoUrl"
+                muted
+                playsinline
+                preload="metadata"
+                class="module-video-static-media"
+              />
+              <span class="module-video-play-badge">
+                <n-icon :size="18"><VideocamOutline /></n-icon>
+              </span>
+              <span class="module-video-static-label">Preview video</span>
             </button>
           </div>
         </div>
@@ -176,7 +185,7 @@ import { addEdge, addNode, currentProjectId, duplicateNode, edges, flushSave, no
 import { useApiConfig, useVideoGeneration } from '../../hooks'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveSeedanceGenerationType, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
 import { createAuthenticatedMediaProxyUrl, persistMediaUrl, uploadImageFile } from '@/utils/media'
-import { shouldLoadInlineVideoPlayer } from '@/utils/videoPreview'
+import { shouldLoadInlineVideoPlayer, shouldRenderStaticVideoPreview } from '@/utils/videoPreview'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 import toolsIcon from '@/assets/tools-icon.svg'
@@ -194,6 +203,12 @@ const showHandles = computed(() => showCapsule.value || isSelected.value)
 const inlineVideoPreviewRequested = ref(false)
 const isVideoInteractive = computed(() =>
   shouldLoadInlineVideoPlayer({
+    hasVideoUrl: !!displayVideoUrl.value,
+    previewRequested: inlineVideoPreviewRequested.value
+  })
+)
+const showStaticVideoPreview = computed(() =>
+  shouldRenderStaticVideoPreview({
     hasVideoUrl: !!displayVideoUrl.value,
     previewRequested: inlineVideoPreviewRequested.value
   })
@@ -1121,19 +1136,55 @@ watch(
   background: #000;
 }
 .module-video-static-preview {
+  position: relative;
   width: 100%;
   height: 100%;
   border: 0;
   border-radius: var(--inner-radius);
   background: #000;
   color: #d8dbe0;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+.module-video-static-media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--inner-radius);
+  background: #000;
+}
+.module-video-play-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 42px;
+  height: 42px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.48);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  color: #f4f4f5;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  pointer-events: none;
+}
+.module-video-static-label {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #f4f4f5;
   font-size: 12px;
-  cursor: pointer;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
 }
 .binding-warning-text {
   color: #c8a06a;

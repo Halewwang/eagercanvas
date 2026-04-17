@@ -3,7 +3,10 @@ import test from 'node:test'
 
 import {
   createMemoryImagePreviewDriver,
+  getImagePreviewTargetSize,
   getImagePreviewCacheKey,
+  IMAGE_PREVIEW_MAX_EDGE,
+  IMAGE_PREVIEW_WEBP_QUALITY,
   resolveImageNodeDisplaySource,
   shouldGenerateImagePreview
 } from './imagePreviewCache.js'
@@ -12,6 +15,26 @@ test('image preview cache key is stable for the same source URL', () => {
   assert.equal(
     getImagePreviewCacheKey(' https://cdn.example.com/image.png?token=abc '),
     getImagePreviewCacheKey('https://cdn.example.com/image.png?token=abc')
+  )
+})
+
+test('image preview cache key separates regenerated higher quality previews', () => {
+  assert.equal(
+    getImagePreviewCacheKey('https://cdn.example.com/image.png'),
+    'v2:https://cdn.example.com/image.png'
+  )
+})
+
+test('image preview target keeps more detail without using full 4k dimensions', () => {
+  assert.equal(IMAGE_PREVIEW_MAX_EDGE, 1280)
+  assert.equal(IMAGE_PREVIEW_WEBP_QUALITY, 0.82)
+  assert.deepEqual(
+    getImagePreviewTargetSize({ width: 3840, height: 2160 }),
+    { width: 1280, height: 720 }
+  )
+  assert.deepEqual(
+    getImagePreviewTargetSize({ width: 2160, height: 3840 }),
+    { width: 720, height: 1280 }
   )
 })
 

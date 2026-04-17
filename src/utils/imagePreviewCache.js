@@ -1,10 +1,15 @@
-export const IMAGE_PREVIEW_MAX_EDGE = 960
+export const IMAGE_PREVIEW_MAX_EDGE = 1280
+export const IMAGE_PREVIEW_WEBP_QUALITY = 0.82
+export const IMAGE_PREVIEW_CACHE_VERSION = 'v2'
 export const IMAGE_PREVIEW_CACHE_DB = 'eager-canvas-image-previews'
 export const IMAGE_PREVIEW_CACHE_STORE = 'previews'
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
 
-export const getImagePreviewCacheKey = (source = '') => String(source || '').trim()
+export const getImagePreviewCacheKey = (source = '') => {
+  const safeSource = String(source || '').trim()
+  return safeSource ? `${IMAGE_PREVIEW_CACHE_VERSION}:${safeSource}` : ''
+}
 
 export const resolveImageNodeDisplaySource = ({
   originalUrl = '',
@@ -26,6 +31,22 @@ export const shouldGenerateImagePreview = ({
   if (isInteracting) return false
   if (String(cachedPreviewUrl || '').trim()) return false
   return !!String(originalUrl || '').trim()
+}
+
+export const getImagePreviewTargetSize = ({
+  width = 0,
+  height = 0,
+  maxEdge = IMAGE_PREVIEW_MAX_EDGE
+} = {}) => {
+  const naturalWidth = Number(width || 0)
+  const naturalHeight = Number(height || 0)
+  const edge = Number(maxEdge || IMAGE_PREVIEW_MAX_EDGE)
+  if (!naturalWidth || !naturalHeight || !edge) return { width: 0, height: 0 }
+  const scale = Math.min(1, edge / Math.max(naturalWidth, naturalHeight))
+  return {
+    width: Math.max(1, Math.round(naturalWidth * scale)),
+    height: Math.max(1, Math.round(naturalHeight * scale))
+  }
 }
 
 export const createMemoryImagePreviewDriver = () => {
@@ -125,21 +146,25 @@ export const generateImagePreviewDataUrl = async (source, options = {}) => {
   const raw = String(source || '').trim()
   if (!raw || typeof document === 'undefined') return ''
   const maxEdge = Number(options.maxEdge || IMAGE_PREVIEW_MAX_EDGE)
+  const quality = Number(options.quality || IMAGE_PREVIEW_WEBP_QUALITY)
   const image = await loadImage(raw)
   const naturalWidth = Number(image.naturalWidth || image.width || 0)
   const naturalHeight = Number(image.naturalHeight || image.height || 0)
   if (!naturalWidth || !naturalHeight) return ''
 
-  const scale = Math.min(1, maxEdge / Math.max(naturalWidth, naturalHeight))
-  const width = Math.max(1, Math.round(naturalWidth * scale))
-  const height = Math.max(1, Math.round(naturalHeight * scale))
+  const { width, height } = getImagePreviewTargetSize({
+    width: naturalWidth,
+    height: naturalHeight,
+    maxEdge
+  })
+  if (!width || !height) return ''
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
   const ctx = canvas.getContext('2d')
   if (!ctx) return ''
   ctx.drawImage(image, 0, 0, width, height)
-  return canvas.toDataURL('image/webp', 0.72)
+  return canvas.toDataURL('image/webp', quality)
 }
 
 export const loadCachedImagePreview = async (source, driver = getImagePreviewDriver()) => {
