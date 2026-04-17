@@ -351,12 +351,12 @@ const canvasDisplayImageUrl = computed(() => {
 })
 const toolDropdownOptions = computed(() => ([
   {
-    label: hasDisplayImage.value ? 'Replace Image' : 'Upload Image',
+    label: hasDisplayImage.value ? 'Replace' : 'Upload Image',
     key: 'replace-image',
     disabled: isUploading.value
   },
   {
-    label: 'Remove Background',
+    label: 'Cutout',
     key: 'remove-background',
     disabled: !hasDisplayImage.value || isToolBusy.value,
     renderIcon: () => h('img', { src: removeBgIcon, alt: '', class: 'tool-option-icon' })
@@ -368,19 +368,19 @@ const toolDropdownOptions = computed(() => ([
     renderIcon: () => h('img', { src: cropIcon, alt: '', class: 'tool-option-icon' })
   },
   {
-    label: 'Enhance to 4K',
+    label: 'Upscale',
     key: 'enhance-4k',
     disabled: !hasDisplayImage.value || isToolBusy.value,
     description: 'Reuse original model and inputs, increase resolution only'
   },
   {
-    label: 'Multi-Angle',
+    label: '3D Camera',
     key: 'multi-angle',
     disabled: !hasDisplayImage.value || isToolBusy.value,
     renderIcon: () => h('img', { src: cameraOrbitIcon, alt: '', class: 'tool-option-icon' })
   },
   {
-    label: 'Wedding 3x3',
+    label: 'Theme Set',
     key: 'wedding-3x3',
     disabled: !hasDisplayImage.value || isToolBusy.value
   }
