@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { recoverMissingNodeMedia, shouldApplyRemoteProjectSnapshot } from './canvasSync.js'
+import {
+  recoverMissingNodeMedia,
+  shouldApplyRemoteProjectSnapshot,
+  shouldUseCachedProjectBeforeRemote
+} from './canvasSync.js'
 
 test('applies refreshed snapshot when route still matches and there are no pending local edits', () => {
   assert.equal(
@@ -25,6 +29,22 @@ test('blocks refreshed snapshot when current canvas already has unsaved local ed
     }),
     false
   )
+})
+
+test('uses cached project canvas before remote refresh when cache has content', () => {
+  assert.equal(
+    shouldUseCachedProjectBeforeRemote({
+      projectId: 'project-1',
+      cachedCanvasData: {
+        nodes: [{ id: 'node-1' }],
+        edges: [],
+        groups: []
+      }
+    }),
+    true
+  )
+  assert.equal(shouldUseCachedProjectBeforeRemote({ projectId: 'project-1', cachedCanvasData: { nodes: [] } }), false)
+  assert.equal(shouldUseCachedProjectBeforeRemote({ projectId: 'new', cachedCanvasData: { nodes: [{ id: 'node-1' }] } }), false)
 })
 
 test('recovers blank image nodes from saved asset records', () => {

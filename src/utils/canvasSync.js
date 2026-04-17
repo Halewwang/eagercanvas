@@ -23,6 +23,22 @@ export const shouldApplyRemoteProjectSnapshot = ({
   return true
 }
 
+const hasCanvasContent = (canvasData = {}) => {
+  const nodeCount = Array.isArray(canvasData?.nodes) ? canvasData.nodes.length : 0
+  const edgeCount = Array.isArray(canvasData?.edges) ? canvasData.edges.length : 0
+  const groupCount = Array.isArray(canvasData?.groups) ? canvasData.groups.length : 0
+  return nodeCount > 0 || edgeCount > 0 || groupCount > 0
+}
+
+export const shouldUseCachedProjectBeforeRemote = ({
+  projectId = '',
+  cachedCanvasData = null
+} = {}) => {
+  const id = String(projectId || '').trim()
+  if (!id || id === 'new') return false
+  return hasCanvasContent(cachedCanvasData)
+}
+
 const isTransientRemoteMediaUrl = (value = '') => {
   const raw = String(value || '').trim()
   if (!raw) return false

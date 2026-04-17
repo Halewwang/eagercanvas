@@ -74,7 +74,7 @@
               v-else
               class="module-video-static-preview"
               type="button"
-              @click="openPreviewModal"
+              @click="activateInlineVideoPreview"
             >
               <n-icon :size="32" class="text-[#d8dbe0]"><VideocamOutline /></n-icon>
               <span>Preview video</span>
@@ -176,6 +176,7 @@ import { addEdge, addNode, currentProjectId, duplicateNode, edges, flushSave, no
 import { useApiConfig, useVideoGeneration } from '../../hooks'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveSeedanceGenerationType, resolveVideoModelKey, videoModelOptions } from '../../stores/models'
 import { createAuthenticatedMediaProxyUrl, persistMediaUrl, uploadImageFile } from '@/utils/media'
+import { shouldLoadInlineVideoPlayer } from '@/utils/videoPreview'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 import toolsIcon from '@/assets/tools-icon.svg'
@@ -190,7 +191,13 @@ const showCapsule = ref(false)
 const isSelected = computed(() => !!props.selected || !!props.data?.selected)
 const showNodeCapsule = computed(() => !props.data?.suppressCapsule && (showCapsule.value || isSelected.value))
 const showHandles = computed(() => showCapsule.value || isSelected.value)
-const isVideoInteractive = computed(() => showCapsule.value || isSelected.value || showPreviewModal.value)
+const inlineVideoPreviewRequested = ref(false)
+const isVideoInteractive = computed(() =>
+  shouldLoadInlineVideoPlayer({
+    hasVideoUrl: !!displayVideoUrl.value,
+    previewRequested: inlineVideoPreviewRequested.value
+  })
+)
 const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
 const showErrorModal = ref(false)
@@ -989,6 +996,10 @@ const openPreviewModal = () => {
   if (!displayVideoUrl.value) return
   showPreviewModal.value = true
 }
+const activateInlineVideoPreview = () => {
+  if (!displayVideoUrl.value) return
+  inlineVideoPreviewRequested.value = true
+}
 const closeErrorModal = () => {
   showErrorModal.value = false
   updateNode(props.id, { error: '' })
@@ -1063,6 +1074,13 @@ watch(
     }
   },
   { immediate: true }
+)
+
+watch(
+  rawDisplayVideoUrl,
+  () => {
+    inlineVideoPreviewRequested.value = false
+  }
 )
 
 </script>

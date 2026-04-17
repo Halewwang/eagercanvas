@@ -78,52 +78,7 @@
         @edges-change="onEdgesChange"
         class="canvas-flow"
         :style="canvasFlowStyle"
-      >
-        <MiniMap
-          v-if="shouldShowMiniMap && isMiniMapLive"
-          position="bottom-right"
-          :pannable="true"
-          :zoomable="true"
-          class="!bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl overflow-hidden opacity-70"
-          node-color="var(--accent-color)"
-          mask-color="rgba(0,0,0,0.1)"
-        />
-        <Panel
-          v-else-if="shouldShowMiniMap"
-          position="bottom-right"
-          class="vue-flow__minimap canvas-minimap-snapshot"
-        >
-          <svg
-            width="200"
-            height="150"
-            :viewBox="miniMapSnapshot.viewBox"
-            role="img"
-            aria-label="Canvas navigation snapshot"
-          >
-            <rect
-              v-for="item in miniMapSnapshot.nodes"
-              :key="item.id"
-              class="canvas-minimap-snapshot-node"
-              :x="item.x"
-              :y="item.y"
-              :width="item.width"
-              :height="item.height"
-              rx="2"
-              ry="2"
-            />
-            <rect
-              v-if="miniMapSnapshot.mask"
-              class="canvas-minimap-snapshot-mask"
-              :x="miniMapSnapshot.mask.x"
-              :y="miniMapSnapshot.mask.y"
-              :width="miniMapSnapshot.mask.width"
-              :height="miniMapSnapshot.mask.height"
-              rx="6"
-              ry="6"
-            />
-          </svg>
-        </Panel>
-      </VueFlow>
+      />
 
       <div class="group-overlay-layer">
         <div
@@ -487,8 +442,7 @@
  */
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Panel, VueFlow, useVueFlow } from '@vue-flow/core'
-import { MiniMap } from '@vue-flow/minimap'
+import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { NIcon } from 'naive-ui'
 import { 
   AppsOutline,
@@ -548,21 +502,18 @@ import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
 import { notifier } from '../utils/notifier'
 import { getWorkflowById } from '@/config/workflows'
 import { getMediaAssets } from '@/api'
-import { duplicateProject, getProjectCanvas, initProjectsStore, projects, refreshProjectById } from '../stores/projects'
+import { duplicateProject, getProjectCanvas, initProjectsStore, loadCachedProjects, projects, refreshProjectById } from '../stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 import {
-  MINIMAP_INTERACTION_SNAPSHOT_INTERVAL_MS,
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
-  recordCanvasPerf,
-  shouldRenderMinimap,
-  shouldScheduleMiniMapSnapshot
+  recordCanvasPerf
 } from '@/utils/canvasInteraction'
 import { isExpiredRemoteUrl } from '@/utils/media'
-import { recoverMissingNodeMedia, shouldApplyRemoteProjectSnapshot } from '@/utils/canvasSync'
+import { recoverMissingNodeMedia, shouldApplyRemoteProjectSnapshot, shouldUseCachedProjectBeforeRemote } from '@/utils/canvasSync'
 
 // API Settings component | API 设置组件
 import ApiSettings from '../components/ApiSettings.vue'
@@ -648,11 +599,6 @@ const showLocalInjectButton = computed(() => {
 const selectedGroupId = ref(null)
 const groupRects = ref({})
 const multiSelectRect = ref(null)
-const miniMapSnapshot = ref({
-  viewBox: '0 0 200 150',
-  nodes: [],
-  mask: null
-})
 const showGroupRenameModal = ref(false)
 const groupRenameTargetId = ref('')
 const groupRenameValue = ref('')
@@ -666,9 +612,6 @@ let viewportSettleTimeoutId = null
 let nodeDragMoved = false
 let nodeLookupCache = new Map()
 let nodeLookupSignature = ''
-let miniMapSnapshotRafId = null
-let miniMapSnapshotTimeoutId = null
-let miniMapSnapshotUpdatedAt = 0
 const {
   confirmDelete,
   confirmRename,
@@ -915,14 +858,6 @@ const multiSelectMenuRect = computed(() => {
   return multiSelectRect.value
 })
 const isCanvasInteracting = computed(() => isNodeDragging.value || isCanvasZooming.value)
-const shouldShowMiniMap = computed(() =>
-  shouldRenderMinimap({
-    isMobile: isMobile.value,
-    isInteracting: isCanvasInteracting.value,
-    nodeCount: nodes.value.length
-  })
-)
-const isMiniMapLive = computed(() => !isCanvasInteracting.value)
 
 const clearNodeSelection = () => {
   nodes.value = nodes.value.map((node) => ({
@@ -1122,117 +1057,6 @@ const getNodeLookup = () => {
   return nodeLookupCache
 }
 
-const getNodeCanvasRect = (node) => {
-  if (!node) return null
-  const position = getNodePosition(node)
-  const size = getNodeSize(node)
-  return {
-    x: position.x,
-    y: position.y,
-    width: size.width,
-    height: size.height,
-    right: position.x + size.width,
-    bottom: position.y + size.height
-  }
-}
-
-const getSnapshotBounds = (rects, viewRect) => {
-  const allRects = [...rects, viewRect].filter(Boolean)
-  if (!allRects.length) return { x: 0, y: 0, width: 200, height: 150 }
-  const left = Math.min(...allRects.map((rect) => rect.x))
-  const top = Math.min(...allRects.map((rect) => rect.y))
-  const right = Math.max(...allRects.map((rect) => rect.right ?? rect.x + rect.width))
-  const bottom = Math.max(...allRects.map((rect) => rect.bottom ?? rect.y + rect.height))
-  const width = Math.max(right - left, 1)
-  const height = Math.max(bottom - top, 1)
-  const scale = Math.max(width / 200, height / 150)
-  const viewWidth = scale * 200
-  const viewHeight = scale * 150
-  const padding = Math.max(scale * 5, 20)
-
-  return {
-    x: left - (viewWidth - width) / 2 - padding,
-    y: top - (viewHeight - height) / 2 - padding,
-    width: viewWidth + padding * 2,
-    height: viewHeight + padding * 2
-  }
-}
-
-const updateMiniMapSnapshot = () => {
-  miniMapSnapshotRafId = null
-  miniMapSnapshotUpdatedAt = Date.now()
-  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
-  const zoom = Math.max(Number(viewport.value?.zoom) || 1, 0.01)
-  const shell = canvasShellRef.value
-  const width = Number(shell?.clientWidth) || window.innerWidth || 1
-  const height = Number(shell?.clientHeight) || window.innerHeight || 1
-  const viewRect = {
-    x: -Number(viewport.value?.x || 0) / zoom,
-    y: -Number(viewport.value?.y || 0) / zoom,
-    width: width / zoom,
-    height: height / zoom
-  }
-  viewRect.right = viewRect.x + viewRect.width
-  viewRect.bottom = viewRect.y + viewRect.height
-
-  const snapshotItems = nodes.value
-    .filter((node) => !node.hidden)
-    .map((node) => ({ id: node.id, rect: getNodeCanvasRect(node) }))
-    .filter((item) => item.rect)
-  const rects = snapshotItems.map((item) => item.rect)
-  const bounds = getSnapshotBounds(rects, viewRect)
-
-  miniMapSnapshot.value = {
-    viewBox: `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`,
-    nodes: snapshotItems.map((item) => ({
-      id: item.id,
-      x: item.rect.x,
-      y: item.rect.y,
-      width: Math.max(item.rect.width, 4),
-      height: Math.max(item.rect.height, 4)
-    })),
-    mask: {
-      x: viewRect.x,
-      y: viewRect.y,
-      width: viewRect.width,
-      height: viewRect.height
-    }
-  }
-  recordCanvasPerf('minimap-snapshot', startedAt, {
-    nodeCount: rects.length,
-    isInteracting: isCanvasInteracting.value
-  })
-}
-
-const scheduleMiniMapSnapshotUpdate = (options = {}) => {
-  if (!shouldShowMiniMap.value) return
-  const force = options.force === true
-  const now = Date.now()
-  const shouldRun = force || shouldScheduleMiniMapSnapshot({
-    now,
-    lastUpdatedAt: miniMapSnapshotUpdatedAt,
-    isInteracting: isCanvasInteracting.value,
-    intervalMs: MINIMAP_INTERACTION_SNAPSHOT_INTERVAL_MS
-  })
-
-  if (!shouldRun) {
-    if (miniMapSnapshotTimeoutId) return
-    const waitMs = Math.max(MINIMAP_INTERACTION_SNAPSHOT_INTERVAL_MS - (now - miniMapSnapshotUpdatedAt), 0)
-    miniMapSnapshotTimeoutId = setTimeout(() => {
-      miniMapSnapshotTimeoutId = null
-      scheduleMiniMapSnapshotUpdate({ force: true })
-    }, waitMs)
-    return
-  }
-
-  if (miniMapSnapshotTimeoutId) {
-    clearTimeout(miniMapSnapshotTimeoutId)
-    miniMapSnapshotTimeoutId = null
-  }
-  if (miniMapSnapshotRafId) cancelAnimationFrame(miniMapSnapshotRafId)
-  miniMapSnapshotRafId = requestAnimationFrame(updateMiniMapSnapshot)
-}
-
 const updateOverlayRects = () => {
   overlayRafId = null
   if (!canvasShellRef.value) return
@@ -1384,7 +1208,6 @@ const handleGroupDragMove = (event) => {
     nodeLookup: groupDragState.nodeLookup
   })
   scheduleOverlayRectUpdate()
-  scheduleMiniMapSnapshotUpdate()
 }
 
 const stopGroupDrag = () => {
@@ -1395,7 +1218,6 @@ const stopGroupDrag = () => {
   groupDragState = null
   endNodeDragInteraction({ saveHistory: didMove })
   scheduleOverlayRectUpdate({ force: true })
-  scheduleMiniMapSnapshotUpdate({ force: true })
 }
 
 const clearNodeMenuContext = () => {
@@ -1751,7 +1573,6 @@ const onNodeDragStop = () => {
   endNodeDragInteraction({ saveHistory: nodeDragMoved })
   nodeDragMoved = false
   scheduleOverlayRectUpdate({ force: true })
-  scheduleMiniMapSnapshotUpdate({ force: true })
 }
 
 const isPositionOnlyChangeBatch = (changes = []) =>
@@ -1778,7 +1599,6 @@ const onNodesChange = (changes = []) => {
       }
     }
     scheduleOverlayRectUpdate()
-    scheduleMiniMapSnapshotUpdate()
   })
 }
 
@@ -1788,7 +1608,6 @@ const handleViewportChange = (newViewport) => {
   beginCanvasZoomInteraction()
   updateViewport(newViewport, { persist: false })
   scheduleOverlayRectUpdate()
-  scheduleMiniMapSnapshotUpdate()
   recordCanvasPerf('viewport-change', startedAt, {
     zoom: Number(newViewport?.zoom || 0)
   })
@@ -1802,7 +1621,6 @@ const handleViewportChange = (newViewport) => {
     updateViewport({ ...(viewport.value || newViewport) }, { persist: true })
     endCanvasZoomInteraction()
     scheduleOverlayRectUpdate({ force: true })
-    scheduleMiniMapSnapshotUpdate({ force: true })
   }, 220)
 }
 
@@ -1985,7 +1803,6 @@ watch(
 
 watch([nodes, groups], () => {
   scheduleOverlayRectUpdate()
-  scheduleMiniMapSnapshotUpdate()
 }, { deep: true })
 
 watch(selectedGroupId, (groupId) => {
@@ -2010,33 +1827,31 @@ onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
   window.addEventListener('resize', scheduleOverlayRectUpdate)
-  window.addEventListener('resize', scheduleMiniMapSnapshotUpdate)
   window.addEventListener('pagehide', handlePageHide)
   window.addEventListener('keydown', handleGlobalKeydown)
   document.addEventListener('visibilitychange', handleVisibilityChange)
 
   const routeProjectId = String(route.params.id || '')
-  const hasWarmProject = !!(
-    routeProjectId &&
-    routeProjectId !== 'new' &&
-    getProjectCanvas(routeProjectId)
-  )
+  await loadCachedProjects()
+  const cachedCanvasData = routeProjectId && routeProjectId !== 'new'
+    ? getProjectCanvas(routeProjectId)
+    : null
+  const hasWarmProject = shouldUseCachedProjectBeforeRemote({
+    projectId: routeProjectId,
+    cachedCanvasData
+  })
 
-  // Render immediately when we already have a warm project snapshot in memory.
   if (routeProjectId === 'new' || hasWarmProject) {
     loadProjectById(route.params.id)
   }
 
-  // Initialize supporting data in parallel.
-  await Promise.all([
-    initProjectsStore()
-  ])
+  const projectsReady = initProjectsStore()
 
-  // Load project data after bootstrap when no warm snapshot was available.
   if (!hasWarmProject) {
+    await projectsReady
     await ensureProjectSnapshot(route.params.id)
   } else if (routeProjectId && routeProjectId !== 'new') {
-    refreshProjectById(routeProjectId).then((project) => {
+    projectsReady.then(() => refreshProjectById(routeProjectId)).then((project) => {
       if (!shouldApplyRemoteProjectSnapshot({
         refreshedProjectId: project?.id || routeProjectId,
         activeRouteProjectId: String(route.params.id || ''),
@@ -2053,22 +1868,18 @@ onMounted(async () => {
   await nextTick()
   await applyPendingWorkflowTemplate()
   scheduleOverlayRectUpdate()
-  scheduleMiniMapSnapshotUpdate({ force: true })
 })
 
 // Cleanup on unmount | 卸载时清理
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   window.removeEventListener('resize', scheduleOverlayRectUpdate)
-  window.removeEventListener('resize', scheduleMiniMapSnapshotUpdate)
   window.removeEventListener('pagehide', handlePageHide)
   window.removeEventListener('keydown', handleGlobalKeydown)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   stopGroupDrag()
   if (overlayRafId) cancelAnimationFrame(overlayRafId)
   if (overlayTimeoutId) clearTimeout(overlayTimeoutId)
-  if (miniMapSnapshotRafId) cancelAnimationFrame(miniMapSnapshotRafId)
-  if (miniMapSnapshotTimeoutId) clearTimeout(miniMapSnapshotTimeoutId)
   if (viewportSettleTimeoutId) clearTimeout(viewportSettleTimeoutId)
   // Save project before leaving | 离开前保存项目
   flushSave()
@@ -2079,7 +1890,6 @@ onUnmounted(() => {
 /* Import Vue Flow styles | 引入 Vue Flow 样式 */
 @import '@vue-flow/core/dist/style.css';
 @import '@vue-flow/core/dist/theme-default.css';
-@import '@vue-flow/minimap/dist/style.css';
 
 .canvas-flow {
   position: relative;
@@ -2625,34 +2435,6 @@ onUnmounted(() => {
 .conflict-actions .ui-button-text {
   flex: 1 1 132px;
   min-width: 0;
-}
-
-.canvas-minimap-snapshot {
-  width: 200px;
-  height: 150px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  background: var(--bg-secondary);
-  opacity: 0.7;
-}
-
-.canvas-minimap-snapshot svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.canvas-minimap-snapshot-node {
-  fill: var(--accent-color);
-  opacity: 0.85;
-}
-
-.canvas-minimap-snapshot-mask {
-  fill: rgba(0, 0, 0, 0.1);
-  stroke: rgba(255, 255, 255, 0.36);
-  stroke-width: 2;
-  vector-effect: non-scaling-stroke;
 }
 
 .canvas-flow .vue-flow__node-text,

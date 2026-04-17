@@ -75,11 +75,16 @@
         <div v-else-if="hasDisplayImage" class="module-image-shell">
           <div class="module-image-frame">
             <img
-              :src="displayImageUrl"
+              v-if="canvasDisplayImageUrl"
+              :src="canvasDisplayImageUrl"
               :alt="data.label || 'Image'"
               class="module-image"
               @load="handlePreviewImageLoad"
             />
+            <div v-else class="module-image-preview-placeholder">
+              <img src="../../assets/loading.webp" alt="" class="w-10 h-9" />
+              <span>Preparing preview...</span>
+            </div>
             <div v-if="activeTool === 'crop'" class="crop-overlay crop-overlay-inline">
               <div class="crop-mask crop-mask-top" :style="cropMaskTopStyle"></div>
               <div class="crop-mask crop-mask-left" :style="cropMaskLeftStyle"></div>
@@ -250,7 +255,7 @@ import {
   RefreshOutline,
   TrashOutline
 } from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode, projectSaveState, currentProjectId } from '../../stores/canvas'
+import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode, projectSaveState, currentProjectId, isCanvasZooming, isNodeDragging } from '../../stores/canvas'
 import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_IMAGE_SIZE,
@@ -261,6 +266,13 @@ import {
 import { useApiConfig, useImageGeneration } from '../../hooks'
 import { getErrorMessage } from '@/utils'
 import { dataUrlToFile, persistImageUrl, uploadImageFile } from '@/utils/media'
+import {
+  generateImagePreviewDataUrl,
+  loadCachedImagePreview,
+  resolveImageNodeDisplaySource,
+  saveCachedImagePreview,
+  shouldGenerateImagePreview
+} from '@/utils/imagePreviewCache'
 import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 import { useImageTools } from '../../hooks/useApi'
@@ -321,6 +333,22 @@ const progressFinishTimer = ref(null)
 const localPreviewUrl = ref('')
 const displayImageUrl = computed(() => String(props.data?.previewUrl || props.data?.url || props.data?.base64 || '').trim())
 const hasDisplayImage = computed(() => !!displayImageUrl.value)
+const cachedCanvasPreviewUrl = ref('')
+const canvasPreviewState = ref('idle')
+let canvasPreviewRequestId = 0
+let canvasPreviewSource = ''
+const isCanvasInteracting = computed(() => isCanvasZooming.value || isNodeDragging.value)
+const canvasDisplayImageUrl = computed(() => {
+  if (activeTool.value === 'crop') return displayImageUrl.value
+  if (cachedCanvasPreviewUrl.value) {
+    return resolveImageNodeDisplaySource({
+      originalUrl: displayImageUrl.value,
+      cachedPreviewUrl: cachedCanvasPreviewUrl.value
+    }).canvasUrl
+  }
+  if (canvasPreviewState.value === 'failed') return displayImageUrl.value
+  return ''
+})
 const toolDropdownOptions = computed(() => ([
   {
     label: hasDisplayImage.value ? 'Replace Image' : 'Upload Image',
@@ -455,6 +483,63 @@ watch(
   (newVal) => {
     showErrorModal.value = !!newVal
   }
+)
+
+const syncCanvasImagePreview = async () => {
+  const source = displayImageUrl.value
+  const requestId = ++canvasPreviewRequestId
+  if (source !== canvasPreviewSource) {
+    canvasPreviewSource = source
+    cachedCanvasPreviewUrl.value = ''
+    canvasPreviewState.value = source ? 'idle' : 'empty'
+  }
+  if (!source) return
+  if (cachedCanvasPreviewUrl.value) return
+
+  try {
+    const cached = await loadCachedImagePreview(source)
+    if (requestId !== canvasPreviewRequestId || source !== displayImageUrl.value) return
+    if (cached?.previewUrl) {
+      cachedCanvasPreviewUrl.value = cached.previewUrl
+      canvasPreviewState.value = 'ready'
+      return
+    }
+  } catch {
+    // IndexedDB can be unavailable in private browsing; fall through to in-memory rendering behavior.
+  }
+
+  if (!shouldGenerateImagePreview({
+    originalUrl: source,
+    cachedPreviewUrl: cachedCanvasPreviewUrl.value,
+    isInteracting: isCanvasInteracting.value
+  })) {
+    return
+  }
+
+  canvasPreviewState.value = 'loading'
+  try {
+    const previewUrl = await generateImagePreviewDataUrl(source)
+    if (requestId !== canvasPreviewRequestId || source !== displayImageUrl.value) return
+    if (!previewUrl) {
+      canvasPreviewState.value = 'failed'
+      return
+    }
+    cachedCanvasPreviewUrl.value = previewUrl
+    canvasPreviewState.value = 'ready'
+    await saveCachedImagePreview(source, previewUrl).catch(() => false)
+  } catch {
+    if (requestId === canvasPreviewRequestId) {
+      canvasPreviewState.value = 'failed'
+    }
+  }
+}
+
+watch(
+  [displayImageUrl, isCanvasInteracting],
+  () => {
+    void syncCanvasImagePreview()
+  },
+  { immediate: true }
 )
 const imageModelDropdownOptions = computed(() => imageModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const imageSizeOptions = computed(() => getModelSizeOptions(localImageModel.value, localImageQuality.value))
@@ -2286,6 +2371,19 @@ const handleWedding3x3Error = async (payload = {}) => {
   height: 100%;
   object-fit: cover;
   border-radius: calc(var(--module-radius) - var(--module-inset));
+}
+.module-image-preview-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--module-radius) - var(--module-inset));
+  background: #080808;
+  color: #7b818c;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
 }
 .upload-progress-wrap {
   position: absolute;

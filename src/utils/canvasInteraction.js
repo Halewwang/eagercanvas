@@ -1,6 +1,4 @@
-export const MINIMAP_NODE_LIMIT = 120
 export const INTERACTION_OVERLAY_DELAY_MS = 80
-export const MINIMAP_INTERACTION_SNAPSHOT_INTERVAL_MS = 250
 export const CANVAS_PERF_LOG_STORAGE_KEY = 'eager-canvas:perf'
 
 const REMOTE_SYNC_CHANGE_TYPES = new Set([
@@ -13,16 +11,6 @@ const REMOTE_SYNC_CHANGE_TYPES = new Set([
   'edge-removed',
   'node-status'
 ])
-
-export const shouldRenderMinimap = ({
-  isMobile = false,
-  isInteracting = false,
-  nodeCount = 0,
-  nodeLimit = MINIMAP_NODE_LIMIT
-} = {}) => {
-  if (isMobile) return false
-  return true
-}
 
 export const getInteractionOverlayDelay = ({ isInteracting = false } = {}) =>
   isInteracting ? INTERACTION_OVERLAY_DELAY_MS : 0
@@ -111,16 +99,6 @@ export const createCanvasContentSnapshot = (canvasData = {}) => ({
       }))
     : []
 })
-
-export const shouldScheduleMiniMapSnapshot = ({
-  now = Date.now(),
-  lastUpdatedAt = 0,
-  isInteracting = false,
-  intervalMs = MINIMAP_INTERACTION_SNAPSHOT_INTERVAL_MS
-} = {}) => {
-  if (!isInteracting) return true
-  return Number(now || 0) - Number(lastUpdatedAt || 0) >= Number(intervalMs || 0)
-}
 
 export const isCanvasPerfLoggingEnabled = () => {
   if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PROD) return false

@@ -447,6 +447,25 @@ export const loadProjects = async () => {
   }
 }
 
+export const loadCachedProjects = async () => {
+  const { isAuthenticated } = useAuthStore()
+  if (!isAuthenticated.value) return []
+  await hydrateCanvasDraftCache()
+  const localDrafts = await loadLocalCache()
+  if (!localDrafts.length) return []
+  projects.value = localDrafts.map((project) => ({
+    ...project,
+    readState: project.readState || 'local-cache'
+  }))
+  projectsLoadState.value = {
+    source: 'local-cache',
+    reason: 'immediate-canvas-cache',
+    error: null,
+    updatedAt: new Date().toISOString()
+  }
+  return projects.value
+}
+
 export const refreshProjectById = async (id, options = {}) => {
   if (!id) return null
   const preferLocalDraft = options.preferLocalDraft !== false

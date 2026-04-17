@@ -6,19 +6,9 @@ import {
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
-  shouldScheduleMiniMapSnapshot,
-  shouldRenderMinimap,
   shouldTriggerCanvasRemoteSync,
   translateNodePositionsInPlace
 } from './canvasInteraction.js'
-
-test('minimap stays mounted during interactions and on large canvases', () => {
-  assert.equal(shouldRenderMinimap({ isMobile: false, isInteracting: true, nodeCount: 12 }), true)
-  assert.equal(shouldRenderMinimap({ isMobile: false, isInteracting: false, nodeCount: 121, nodeLimit: 120 }), true)
-  assert.equal(shouldRenderMinimap({ isMobile: false, isInteracting: true, nodeCount: 121, nodeLimit: 120 }), true)
-  assert.equal(shouldRenderMinimap({ isMobile: false, isInteracting: false, nodeCount: 120, nodeLimit: 120 }), true)
-  assert.equal(shouldRenderMinimap({ isMobile: true, isInteracting: false, nodeCount: 12 }), false)
-})
 
 test('overlay delay helper keeps the previous delay value available', () => {
   assert.equal(getInteractionOverlayDelay({ isInteracting: false }), 0)
@@ -79,10 +69,4 @@ test('content snapshot ignores viewport and node positions', () => {
   })
 
   assert.deepEqual(first, second)
-})
-
-test('minimap snapshot updates are throttled during interactions', () => {
-  assert.equal(shouldScheduleMiniMapSnapshot({ now: 1000, lastUpdatedAt: 900, isInteracting: false }), true)
-  assert.equal(shouldScheduleMiniMapSnapshot({ now: 1000, lastUpdatedAt: 900, isInteracting: true, intervalMs: 250 }), false)
-  assert.equal(shouldScheduleMiniMapSnapshot({ now: 1200, lastUpdatedAt: 900, isInteracting: true, intervalMs: 250 }), true)
 })
