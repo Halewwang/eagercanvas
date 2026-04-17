@@ -2,18 +2,22 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  createCanvasContentSnapshot,
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
+  shouldScheduleMiniMapSnapshot,
   shouldRenderMinimap,
+  shouldTriggerCanvasRemoteSync,
   translateNodePositionsInPlace
 } from './canvasInteraction.js'
 
-test('minimap stays mounted during interactions unless the canvas is too large', () => {
+test('minimap stays mounted during interactions and on large canvases', () => {
   assert.equal(shouldRenderMinimap({ isMobile: false, isInteracting: true, nodeCount: 12 }), true)
-  assert.equal(shouldRenderMinimap({ isMobile: false, isInteracting: false, nodeCount: 121, nodeLimit: 120 }), false)
-  assert.equal(shouldRenderMinimap({ isMobile: false, isInteracting: true, nodeCount: 121, nodeLimit: 120 }), false)
+  assert.equal(shouldRenderMinimap({ isMobile: false, isInteracting: false, nodeCount: 121, nodeLimit: 120 }), true)
+  assert.equal(shouldRenderMinimap({ isMobile: false, isInteracting: true, nodeCount: 121, nodeLimit: 120 }), true)
   assert.equal(shouldRenderMinimap({ isMobile: false, isInteracting: false, nodeCount: 120, nodeLimit: 120 }), true)
+  assert.equal(shouldRenderMinimap({ isMobile: true, isInteracting: false, nodeCount: 12 }), false)
 })
 
 test('overlay delay helper keeps the previous delay value available', () => {
@@ -47,4 +51,38 @@ test('group drag position updates mutate only targeted nodes without replacing t
   assert.equal(nodes[1], moved)
   assert.deepEqual(untouched.position, { x: 0, y: 0 })
   assert.deepEqual(moved.position, { x: 15, y: 16 })
+})
+
+test('remote sync is limited to content changes', () => {
+  assert.equal(shouldTriggerCanvasRemoteSync('content'), true)
+  assert.equal(shouldTriggerCanvasRemoteSync('node-generated'), true)
+  assert.equal(shouldTriggerCanvasRemoteSync('node-position'), false)
+  assert.equal(shouldTriggerCanvasRemoteSync('viewport'), false)
+})
+
+test('content snapshot ignores viewport and node positions', () => {
+  const first = createCanvasContentSnapshot({
+    viewport: { x: 10, y: 20, zoom: 0.5 },
+    nodes: [
+      { id: 'node-a', type: 'text', position: { x: 0, y: 0 }, data: { content: 'same' } }
+    ],
+    edges: [],
+    groups: []
+  })
+  const second = createCanvasContentSnapshot({
+    viewport: { x: 300, y: 600, zoom: 1.6 },
+    nodes: [
+      { id: 'node-a', type: 'text', position: { x: 120, y: 80 }, data: { content: 'same' } }
+    ],
+    edges: [],
+    groups: []
+  })
+
+  assert.deepEqual(first, second)
+})
+
+test('minimap snapshot updates are throttled during interactions', () => {
+  assert.equal(shouldScheduleMiniMapSnapshot({ now: 1000, lastUpdatedAt: 900, isInteracting: false }), true)
+  assert.equal(shouldScheduleMiniMapSnapshot({ now: 1000, lastUpdatedAt: 900, isInteracting: true, intervalMs: 250 }), false)
+  assert.equal(shouldScheduleMiniMapSnapshot({ now: 1200, lastUpdatedAt: 900, isInteracting: true, intervalMs: 250 }), true)
 })

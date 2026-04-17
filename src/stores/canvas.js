@@ -14,7 +14,12 @@ import {
 } from './canvasSyncStatus'
 import { IMAGE_MODELS, VIDEO_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL } from '../config/models'
 import { isTransientRemoteMediaUrl } from '@/utils/media'
-import { translateNodePositionsInPlace } from '@/utils/canvasInteraction'
+import {
+  createCanvasContentSnapshot,
+  recordCanvasPerf,
+  shouldTriggerCanvasRemoteSync,
+  translateNodePositionsInPlace
+} from '@/utils/canvasInteraction'
 
 const isLocalPreviewHost = () => {
   if (typeof window === 'undefined') return false
@@ -96,9 +101,10 @@ const scheduleRemoteRetry = () => {
 /**
  * Save current state to history | 保存当前状态到历史
  */
-const saveToHistory = () => {
+const saveToHistory = (options = {}) => {
   if (isRestoring) return
   if (isNodeDragging.value || isCanvasZooming.value) return
+  const changeType = options.changeType || 'content'
   
   const state = {
     nodes: JSON.parse(JSON.stringify(nodes.value)),
@@ -121,7 +127,7 @@ const saveToHistory = () => {
     historyIndex.value++
   }
 
-  markCanvasDirty()
+  markCanvasDirty(changeType)
 }
 
 // Add a new node | 添加新节点
@@ -275,6 +281,8 @@ const createCanvasSnapshot = (options = {}) => ({
 })
 
 const getSnapshotKey = (snapshot) => JSON.stringify(snapshot)
+const createCanvasContentSnapshotFromState = (options = {}) =>
+  createCanvasContentSnapshot(createCanvasSnapshot(options))
 
 const getNextGroupName = () => {
   const indices = groups.value
@@ -397,8 +405,7 @@ export const translateNodesByIds = (nodeIds, delta, shouldSaveHistory = false, o
 
   triggerRef(nodes)
 
-  if (shouldSaveHistory) saveToHistory()
-  else deferredInteractionSave = true
+  if (shouldSaveHistory) saveToHistory({ changeType: 'node-position' })
   return true
 }
 
@@ -754,7 +761,7 @@ export const loadProject = (projectId) => {
     groups: JSON.parse(JSON.stringify(groups.value))
   }]
   historyIndex.value = 0
-  const snapshotKey = getSnapshotKey(createCanvasSnapshot({ preserveTransientMedia: true }))
+  const snapshotKey = getSnapshotKey(createCanvasContentSnapshotFromState({ preserveTransientMedia: true }))
   lastPersistedSnapshotKey = canvasData?._meta?.remoteSynced === true ? snapshotKey : ''
   
   // Enable auto-save after loading | 加载后启用自动保存
@@ -774,7 +781,7 @@ export const saveProject = async ({ forceRemoteOverwrite = false } = {}) => {
   const containsTransientMedia = hasUnpersistedMedia()
   const localSnapshot = createCanvasSnapshot({ preserveTransientMedia: true })
   const remoteSnapshot = createCanvasSnapshot()
-  const localSnapshotKey = getSnapshotKey(localSnapshot)
+  const localSnapshotKey = getSnapshotKey(createCanvasContentSnapshot(localSnapshot))
   if (localSnapshotKey === lastPersistedSnapshotKey && lastSaveResult.remoteSynced) {
     return !!lastSaveResult.localSaved
   }
@@ -785,6 +792,7 @@ export const saveProject = async ({ forceRemoteOverwrite = false } = {}) => {
   }
 
   const runSave = async () => {
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
     let saved = true
     clearRemoteRetry()
     projectSaveState.value = createSyncStatus({
@@ -856,6 +864,10 @@ export const saveProject = async ({ forceRemoteOverwrite = false } = {}) => {
         console.error('Save failed:', error)
       }
     } finally {
+      recordCanvasPerf('save-project', startedAt, {
+        nodeCount: nodes.value.length,
+        edgeCount: edges.value.length
+      })
       saveInFlight = null
       if (saveQueued) {
         saveQueued = false
@@ -884,8 +896,10 @@ export const flushSave = async (options = {}) => {
 /**
  * Debounced auto-save | 防抖动自动保存
  */
-const debouncedSave = () => {
+const debouncedSave = (options = {}) => {
   if (!autoSaveEnabled || !currentProjectId.value) return
+  const changeType = options.changeType || 'content'
+  if (!shouldTriggerCanvasRemoteSync(changeType)) return
   if (isNodeDragging.value || isCanvasZooming.value) {
     deferredInteractionSave = true
     return
@@ -907,21 +921,15 @@ const debouncedSave = () => {
   }, 900)
 }
 
-const markCanvasDirty = () => {
-  debouncedSave()
+const markCanvasDirty = (changeType = 'content') => {
+  debouncedSave({ changeType })
 }
 
 /**
- * Update viewport and save | 更新视口并保存
+ * Update viewport without remote sync | 更新视口但不触发远端同步
  */
-export const updateViewport = (viewport, options = {}) => {
-  const { persist = true } = options
+export const updateViewport = (viewport) => {
   canvasViewport.value = viewport
-  if (!persist) {
-    deferredInteractionSave = true
-    return
-  }
-  debouncedSave()
 }
 
 const flushDeferredInteractionSave = () => {
@@ -936,7 +944,7 @@ export const beginNodeDragInteraction = () => {
 
 export const endNodeDragInteraction = ({ saveHistory = false } = {}) => {
   isNodeDragging.value = false
-  if (saveHistory) saveToHistory()
+  if (saveHistory) saveToHistory({ changeType: 'node-position' })
   flushDeferredInteractionSave()
 }
 
@@ -1010,7 +1018,7 @@ export const manualSaveHistory = () => {
 
 export const hasPendingCanvasChanges = () => {
   if (!currentProjectId.value) return false
-  const snapshotKey = getSnapshotKey(createCanvasSnapshot({ preserveTransientMedia: true }))
+  const snapshotKey = getSnapshotKey(createCanvasContentSnapshotFromState({ preserveTransientMedia: true }))
   return snapshotKey !== lastPersistedSnapshotKey
 }
 
