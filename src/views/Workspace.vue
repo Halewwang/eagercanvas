@@ -133,6 +133,7 @@
             </template>
 
             <div v-if="activeSection !== 'projects'" class="card-actions" @click.stop>
+              <BaseButton size="sm" variant="ghost" @click="openTemplatePreview(item)">View</BaseButton>
               <BaseButton size="sm" @click="useTemplate(item)">Use</BaseButton>
             </div>
           </div>
@@ -170,6 +171,35 @@
         <div class="ui-modal-actions">
           <BaseButton variant="ghost" @click="showDeleteModal = false">Cancel</BaseButton>
           <BaseButton variant="danger" @click="confirmDelete">Delete</BaseButton>
+        </div>
+      </template>
+    </BaseModal>
+
+    <BaseModal
+      v-model:show="showTemplatePreviewModal"
+      title="Template Preview"
+      description="View template details without copying it into your projects."
+      size="md"
+    >
+      <div v-if="previewTemplate" class="template-preview">
+        <div class="template-preview-media">
+          <img
+            v-if="previewTemplate.thumbnail || previewTemplate.cover || previewTemplate.coverUrl"
+            :src="previewTemplate.thumbnail || previewTemplate.cover || previewTemplate.coverUrl"
+            :alt="previewTemplate.title || previewTemplate.name"
+          />
+          <div v-else class="template-preview-fallback">No cover</div>
+        </div>
+        <div class="template-preview-content">
+          <h3>{{ previewTemplate.title || previewTemplate.name }}</h3>
+          <p class="template-preview-owner">{{ String(previewTemplate.ownerDisplayName || '').trim() || 'Unknown user' }}</p>
+          <p class="template-preview-description">{{ String(previewTemplate.description || '').trim() || 'No description provided.' }}</p>
+        </div>
+      </div>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton variant="ghost" @click="closeTemplatePreview">Close</BaseButton>
+          <BaseButton :disabled="!previewTemplate" @click="useTemplateFromPreview">Use</BaseButton>
         </div>
       </template>
     </BaseModal>
@@ -213,10 +243,12 @@ const renameValue = ref('')
 const showDeleteModal = ref(false)
 const deleteTargetId = ref('')
 const deleteTargetName = ref('')
+const showTemplatePreviewModal = ref(false)
+const previewTemplate = ref(null)
 
 const navItems = [
-  { key: 'projects', label: 'Recent Projects', icon: FolderOpenOutline },
-  { key: 'featured', label: 'Featured Templates', icon: SparklesOutline }
+  { key: 'projects', label: 'My Project', icon: FolderOpenOutline },
+  { key: 'featured', label: 'Share Templates', icon: SparklesOutline }
 ]
 
 const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange } = useAvatarUpload({
@@ -237,12 +269,16 @@ const {
 } = useWorkspaceStore()
 
 const workspaceBrand = computed(() => {
+  const displayName = String(user.value?.displayName || '').trim()
+  if (displayName) return `${displayName} Workspace`
+  const userId = String(user.value?.id || '').trim()
+  if (userId) return `${userId} Workspace`
   return currentWorkspace.value?.name || 'Shared Workspace'
 })
 
 const sectionTitle = computed(() => {
-  if (activeSection.value === 'featured') return 'Featured Templates'
-  return 'Recent Projects'
+  if (activeSection.value === 'featured') return 'Share Templates'
+  return 'My Project'
 })
 
 const sectionDescription = computed(() => {
@@ -329,7 +365,7 @@ const handlePrimaryClick = async (item) => {
     await router.push(`/canvas/${item.id}`)
     return
   }
-  await useTemplate(item)
+  openTemplatePreview(item)
 }
 
 const useTemplate = async (item) => {
@@ -344,6 +380,23 @@ const useTemplate = async (item) => {
   } catch (error) {
     notifier.error(getErrorMessage(error, 'Failed to create project from template'))
   }
+}
+
+const openTemplatePreview = (item) => {
+  previewTemplate.value = item || null
+  showTemplatePreviewModal.value = true
+}
+
+const closeTemplatePreview = () => {
+  showTemplatePreviewModal.value = false
+  previewTemplate.value = null
+}
+
+const useTemplateFromPreview = async () => {
+  if (!previewTemplate.value) return
+  const target = previewTemplate.value
+  closeTemplatePreview()
+  await useTemplate(target)
 }
 
 const openRename = (project) => {
@@ -785,6 +838,57 @@ onMounted(async () => {
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.template-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.template-preview-media {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, #16171a 0%, #111215 100%);
+}
+
+.template-preview-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.template-preview-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(236, 238, 244, 0.6);
+  font-size: 14px;
+}
+
+.template-preview-content h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.template-preview-owner {
+  margin: 6px 0 0;
+  color: rgba(236, 238, 244, 0.78);
+  font-size: 13px;
+}
+
+.template-preview-description {
+  margin: 10px 0 0;
+  color: rgba(236, 238, 244, 0.66);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 @media (max-width: 900px) {
