@@ -223,7 +223,8 @@ import {
   createProject,
   renameProject,
   duplicateProject,
-  deleteProject
+  deleteProject,
+  markProjectOpened
 } from '@/stores/projects'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 import { getErrorMessage } from '@/utils'
@@ -362,6 +363,7 @@ const createBlankProject = async () => {
 
 const handlePrimaryClick = async (item) => {
   if (activeSection.value === 'projects') {
+    markProjectOpened(item.id)
     await router.push(`/canvas/${item.id}`)
     return
   }

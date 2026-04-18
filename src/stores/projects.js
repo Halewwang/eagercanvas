@@ -75,6 +75,7 @@ const createLocalProjectRecord = (name = 'Untitled') => {
     thumbnail: '',
     createdAt: now,
     updatedAt: now,
+    lastOpenedAt: now,
     serverUpdatedAt: null,
     readState: 'local-only',
     canvasData: cloneCanvasData(defaultCanvasData)
@@ -87,6 +88,7 @@ const mapProjectFromApi = (row) => ({
   thumbnail: row.thumbnail_url || '',
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+  lastOpenedAt: null,
   serverUpdatedAt: row.updated_at,
   readState: 'remote',
   canvasData: Object.prototype.hasOwnProperty.call(row || {}, 'canvas_json')
@@ -153,6 +155,7 @@ const toProjectSummary = (project) => ({
   thumbnail: project.thumbnail || '',
   createdAt: project.createdAt || new Date().toISOString(),
   updatedAt: project.updatedAt || new Date().toISOString(),
+  lastOpenedAt: project.lastOpenedAt || null,
   serverUpdatedAt: project.serverUpdatedAt || null
 })
 
@@ -320,6 +323,19 @@ const toTs = (value) => {
   return Number.isFinite(ts) ? ts : 0
 }
 
+const getProjectActivityTs = (project) => Math.max(
+  toTs(project?.lastOpenedAt),
+  toTs(project?.updatedAt),
+  toTs(project?.createdAt)
+)
+
+const sortProjectsByActivity = (list = []) =>
+  [...(Array.isArray(list) ? list : [])].sort((a, b) => {
+    const delta = getProjectActivityTs(b) - getProjectActivityTs(a)
+    if (delta !== 0) return delta
+    return toTs(b?.createdAt) - toTs(a?.createdAt)
+  })
+
 const hasCanvasContent = (canvasData) => {
   const nodes = Array.isArray(canvasData?.nodes) ? canvasData.nodes.length : 0
   const edges = Array.isArray(canvasData?.edges) ? canvasData.edges.length : 0
@@ -353,6 +369,7 @@ const mergeRemoteProjectWithLocalDraft = (remote, local, { preferLocalDraft = tr
   if (!preferLocalDraft) {
     return {
       ...remote,
+      lastOpenedAt: local?.lastOpenedAt || remote?.lastOpenedAt || null,
       serverUpdatedAt: remote.serverUpdatedAt || remote.updatedAt || null,
       readState: 'remote'
     }
@@ -367,6 +384,7 @@ const mergeRemoteProjectWithLocalDraft = (remote, local, { preferLocalDraft = tr
     ...remote,
     name: String(local.name || '').trim() || remote.name,
     thumbnail: isPersistedUploadUrl(localThumbnail) ? localThumbnail : remote.thumbnail,
+    lastOpenedAt: local?.lastOpenedAt || remote?.lastOpenedAt || null,
     updatedAt: useLocalCanvasDraft
       ? (draftRecord?.draftUpdatedAt || local.updatedAt || remote.updatedAt)
       : (local.updatedAt || remote.updatedAt),
@@ -404,7 +422,7 @@ export const loadProjects = async () => {
   await hydrateCanvasDraftCache()
   const localDrafts = await loadLocalCache()
   if (BYPASS_AUTH_IN_DEV) {
-    projects.value = localDrafts.map((project) => ({ ...project, readState: 'local-only' }))
+    projects.value = sortProjectsByActivity(localDrafts).map((project) => ({ ...project, readState: 'local-only' }))
     projectsLoadState.value = {
       source: 'local-dev',
       reason: 'bypass-auth',
@@ -419,7 +437,7 @@ export const loadProjects = async () => {
     const remote = (response?.data || [])
       .map(mapProjectFromApi)
       .filter((project) => !tombstones.has(project.id))
-    projects.value = mergeRemoteWithLocalDrafts(remote, localDrafts)
+    projects.value = sortProjectsByActivity(mergeRemoteWithLocalDrafts(remote, localDrafts))
     const nextTombstones = new Set(
       Array.from(tombstones).filter((id) => !remote.some((project) => project.id === id))
     )
@@ -434,7 +452,7 @@ export const loadProjects = async () => {
     return projects.value
   } catch (error) {
     const tombstones = loadDeleteTombstones()
-    projects.value = localDrafts
+    projects.value = sortProjectsByActivity(localDrafts)
       .filter((project) => !tombstones.has(project.id))
       .map((project) => ({ ...project, readState: 'local-fallback' }))
     projectsLoadState.value = {
@@ -453,7 +471,7 @@ export const loadCachedProjects = async () => {
   await hydrateCanvasDraftCache()
   const localDrafts = await loadLocalCache()
   if (!localDrafts.length) return []
-  projects.value = localDrafts.map((project) => ({
+  projects.value = sortProjectsByActivity(localDrafts).map((project) => ({
     ...project,
     readState: project.readState || 'local-cache'
   }))
@@ -493,10 +511,10 @@ export const refreshProjectById = async (id, options = {}) => {
       })
     }
     forgetDeletedProject(id)
-    projects.value = [
+    projects.value = sortProjectsByActivity([
       mergedProject,
       ...projects.value.filter((project) => project.id !== id)
-    ]
+    ])
     saveLocalCache()
     projectsLoadState.value = {
       source: 'remote',
@@ -591,15 +609,19 @@ export const updateProject = async (id, data) => {
   try {
     const response = await apiPatchProject(id, mapProjectToApi(nextProject))
     const normalized = mapProjectFromApi(response.data)
-    if (normalized?.canvasData) {
-      await saveProjectCanvasDraft(id, normalized.canvasData, {
-        draftUpdatedAt: normalized.updatedAt || new Date().toISOString(),
-        baseRevision: getProjectBaseVersion(normalized),
+    const mergedNormalized = {
+      ...normalized,
+      lastOpenedAt: currentProject?.lastOpenedAt || normalized?.lastOpenedAt || null
+    }
+    if (mergedNormalized?.canvasData) {
+      await saveProjectCanvasDraft(id, mergedNormalized.canvasData, {
+        draftUpdatedAt: mergedNormalized.updatedAt || new Date().toISOString(),
+        baseRevision: getProjectBaseVersion(mergedNormalized),
         remoteSynced: true,
         status: CANVAS_SYNC_STATES.synced
       })
     }
-    projects.value = [normalized, ...projects.value.filter((p) => p.id !== id)]
+    projects.value = [mergedNormalized, ...projects.value.filter((p) => p.id !== id)]
     saveLocalCache()
   } catch (error) {
     console.warn('Remote update failed, kept local draft:', error?.message)
@@ -711,7 +733,10 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null,
     })
     
     const response = await apiPatchProject(id, payload)
-    const updatedProject = mapProjectFromApi(response.data)
+    const updatedProject = {
+      ...mapProjectFromApi(response.data),
+      lastOpenedAt: project?.lastOpenedAt || null
+    }
     let remoteDraftSaved = false
     if (updatedProject?.canvasData) {
       remoteDraftSaved = await saveProjectCanvasDraft(id, updatedProject.canvasData, {
@@ -851,6 +876,21 @@ export const renameProject = async (id, name) => {
 
 export const updateProjectThumbnail = async (id, thumbnail) => {
   return updateProject(id, { thumbnail })
+}
+
+export const markProjectOpened = (id, openedAt = new Date().toISOString()) => {
+  const index = projects.value.findIndex((project) => project.id === id)
+  if (index === -1) return false
+
+  const next = {
+    ...projects.value[index],
+    lastOpenedAt: openedAt
+  }
+  const nextList = [...projects.value]
+  nextList[index] = next
+  projects.value = sortProjectsByActivity(nextList)
+  saveLocalCache()
+  return true
 }
 
 export const getSortedProjects = (sortBy = 'updatedAt', order = 'desc') => {
