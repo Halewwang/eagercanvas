@@ -637,21 +637,30 @@ const qualityDropdownOptions = computed(() => {
   return qualities.map((item) => ({ key: item.key, label: item.label || item.key }))
 })
 const displayQuality = computed(() => qualityDropdownOptions.value.find((item) => item.key === localImageQuality.value)?.label || localImageQuality.value)
-const displayQualityControl = computed(() => showAdvancedCapsuleParams.value ? 'Quality' : displayQuality.value)
+const displayQualityControl = computed(() => {
+  if (!showAdvancedCapsuleParams.value) return displayQuality.value
+  return localImageQuality.value === 'auto' ? 'Quality' : displayQuality.value
+})
 const backgroundDropdownOptions = computed(() => {
   if (!showAdvancedCapsuleParams.value) return []
   const backgrounds = Array.isArray(currentImageModelConfig.value?.backgrounds) ? currentImageModelConfig.value.backgrounds : []
   return backgrounds.map((item) => ({ key: item.key, label: item.label || item.key }))
 })
 const displayBackground = computed(() => backgroundDropdownOptions.value.find((item) => item.key === localBackground.value)?.label || localBackground.value)
-const displayBackgroundControl = computed(() => showAdvancedCapsuleParams.value ? 'Background' : displayBackground.value)
+const displayBackgroundControl = computed(() => {
+  if (!showAdvancedCapsuleParams.value) return displayBackground.value
+  return localBackground.value === 'auto' ? 'Background' : displayBackground.value
+})
 const formatDropdownOptions = computed(() => {
   if (!showAdvancedCapsuleParams.value) return []
   const formats = Array.isArray(currentImageModelConfig.value?.outputFormats) ? currentImageModelConfig.value.outputFormats : []
   return formats.map((item) => ({ key: item.key, label: item.label || item.key }))
 })
 const displayOutputFormat = computed(() => formatDropdownOptions.value.find((item) => item.key === localOutputFormat.value)?.label || localOutputFormat.value)
-const displayFormatControl = computed(() => showAdvancedCapsuleParams.value ? 'Format' : displayOutputFormat.value)
+const displayFormatControl = computed(() => {
+  if (!showAdvancedCapsuleParams.value) return displayOutputFormat.value
+  return localOutputFormat.value === 'png' ? 'Format' : displayOutputFormat.value
+})
 
 const ratioFromSize = computed(() => {
   if (localImageRatio.value && localImageRatio.value.includes(':')) {

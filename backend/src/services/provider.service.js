@@ -2,7 +2,7 @@ import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 import sharp from 'sharp'
 import { attachProviderResponseMetadata } from './provider-response-metadata.js'
-import { buildGptImage2RequestBody } from './gpt-image-2-size.js'
+import { buildGptImage2RequestBody, extractGptImage2TaskId } from './gpt-image-2-size.js'
 
 const parseProviderBases = () => {
   const rawList = String(env.providerApiBaseUrls || '')
@@ -537,6 +537,42 @@ const pollPredictionResult = async (requestId, attempts = 20, intervalMs = 3000,
   return lastResponse
 }
 
+const pollGptImage2AsyncResult = async (taskId, attempts = 90, intervalMs = 5000, requestOptions = {}) => {
+  const safeTaskId = String(taskId || '').trim()
+  if (!safeTaskId) return null
+
+  let lastResponse = null
+  for (let index = 0; index < attempts; index += 1) {
+    const current = await callProvider(`/async_result?task_id=${encodeURIComponent(safeTaskId)}`, null, 'GET', requestOptions)
+    lastResponse = current
+
+    const statusCode = Number(current?.status_code || current?.statusCode || 0)
+    const err = String(current?.err || current?.error || current?.message || '').trim()
+    if (err || (statusCode && statusCode >= 400)) {
+      throw new HttpError(502, err || 'GPT Image 2 generation failed', 'IMAGE_GENERATION_FAILED')
+    }
+
+    const normalized = normalizeImageResponse(current)
+    if (Array.isArray(normalized.data) && normalized.data.length > 0) {
+      return current
+    }
+
+    const dataUrl = String(current?.data || '').trim()
+    if (/^https?:\/\//i.test(dataUrl) || /^data:image\//i.test(dataUrl)) {
+      return {
+        ...current,
+        data: [{ url: dataUrl }]
+      }
+    }
+
+    if (index < attempts - 1) {
+      await sleep(intervalMs)
+    }
+  }
+
+  return lastResponse
+}
+
 const normalizeKlingStatus = (value) => {
   if (typeof value === 'number') {
     // Kling O1: 10 processing, 50 failed, 99 success
@@ -955,7 +991,11 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
         }
       }
       await appendGptImage2MultipartImages(formData, inputImages.slice(0, 16))
-      const raw = await callProviderMultipart('/v1/images/edits', formData, 'POST', gptImage2RequestOptions)
+      const rawTask = await callProviderMultipart('/v1/images/edits?async=true', formData, 'POST', gptImage2RequestOptions)
+      const taskId = extractGptImage2TaskId(rawTask)
+      const raw = taskId
+        ? await pollGptImage2AsyncResult(taskId, 90, 5000, gptImage2RequestOptions)
+        : rawTask
       const normalized = normalizeImageResponse(raw)
       if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
         throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
@@ -963,7 +1003,11 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
       return normalized
     }
 
-    const raw = await callProvider('/v1/images/generations?async=false', body, 'POST', gptImage2RequestOptions)
+    const rawTask = await callProvider('/v1/images/generations?async=true', body, 'POST', gptImage2RequestOptions)
+    const taskId = extractGptImage2TaskId(rawTask)
+    const raw = taskId
+      ? await pollGptImage2AsyncResult(taskId, 90, 5000, gptImage2RequestOptions)
+      : rawTask
     const normalized = normalizeImageResponse(raw)
     if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
       throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')

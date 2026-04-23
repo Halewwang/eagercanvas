@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   buildGptImage2RequestBody,
+  extractGptImage2TaskId,
   resolveGptImage2Size
 } from './gpt-image-2-size.js'
 
@@ -43,4 +44,10 @@ test('builds GPT Image 2 request body with supported advanced params', () => {
       output_compression: 100
     }
   )
+})
+
+test('extracts GPT Image 2 async task ids from common response shapes', () => {
+  assert.equal(extractGptImage2TaskId({ task_id: 'task-a' }), 'task-a')
+  assert.equal(extractGptImage2TaskId({ data: { taskId: 'task-b' } }), 'task-b')
+  assert.equal(extractGptImage2TaskId({ id: 'task-c' }), 'task-c')
 })

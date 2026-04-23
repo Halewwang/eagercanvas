@@ -77,3 +77,17 @@ export const buildGptImage2RequestBody = (payload = {}) => {
 
   return body
 }
+
+export const extractGptImage2TaskId = (response = {}) => {
+  const candidates = [
+    response?.task_id,
+    response?.taskId,
+    response?.id,
+    response?.data?.task_id,
+    response?.data?.taskId,
+    response?.data?.id,
+    response?.result?.task_id,
+    response?.result?.taskId
+  ]
+  return String(candidates.find((value) => value !== undefined && value !== null && String(value).trim()) || '').trim()
+}
