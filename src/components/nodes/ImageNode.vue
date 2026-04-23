@@ -21,15 +21,15 @@
           </BaseDropdown>
 
           <BaseDropdown v-if="qualityDropdownOptions.length > 0" :options="qualityDropdownOptions" compact @select="setImageQuality">
-            <button class="capsule-select">{{ displayQuality }}</button>
+            <button class="capsule-select">{{ displayQualityControl }}</button>
           </BaseDropdown>
 
           <BaseDropdown v-if="backgroundDropdownOptions.length > 0" :options="backgroundDropdownOptions" compact @select="setBackground">
-            <button class="capsule-select">{{ displayBackground }}</button>
+            <button class="capsule-select">{{ displayBackgroundControl }}</button>
           </BaseDropdown>
 
           <BaseDropdown v-if="formatDropdownOptions.length > 0" :options="formatDropdownOptions" compact @select="setOutputFormat">
-            <button class="capsule-select">{{ displayOutputFormat }}</button>
+            <button class="capsule-select">{{ displayFormatControl }}</button>
           </BaseDropdown>
         </div>
 
@@ -571,6 +571,7 @@ watch(
 const imageModelDropdownOptions = computed(() => imageModelOptions.value.map(m => ({ key: m.key, label: m.label })))
 const currentImageModelConfig = computed(() => getModelConfig(localImageModel.value))
 const isGptImage2Model = computed(() => localImageModel.value === 'gpt-image-2')
+const showAdvancedCapsuleParams = computed(() => currentImageModelConfig.value?.showAdvancedCapsuleParams === true)
 const imageSizeOptions = computed(() => getModelSizeOptions(localImageModel.value, localImageQuality.value))
 const sizeMetaOptions = computed(() =>
   imageSizeOptions.value.map((opt) => {
@@ -631,20 +632,26 @@ const displayRatio = computed(() => {
 })
 const displayResolution = computed(() => localResolution.value.toUpperCase())
 const qualityDropdownOptions = computed(() => {
+  if (!showAdvancedCapsuleParams.value) return []
   const qualities = Array.isArray(currentImageModelConfig.value?.qualities) ? currentImageModelConfig.value.qualities : []
   return qualities.map((item) => ({ key: item.key, label: item.label || item.key }))
 })
 const displayQuality = computed(() => qualityDropdownOptions.value.find((item) => item.key === localImageQuality.value)?.label || localImageQuality.value)
+const displayQualityControl = computed(() => showAdvancedCapsuleParams.value ? 'Quality' : displayQuality.value)
 const backgroundDropdownOptions = computed(() => {
+  if (!showAdvancedCapsuleParams.value) return []
   const backgrounds = Array.isArray(currentImageModelConfig.value?.backgrounds) ? currentImageModelConfig.value.backgrounds : []
   return backgrounds.map((item) => ({ key: item.key, label: item.label || item.key }))
 })
 const displayBackground = computed(() => backgroundDropdownOptions.value.find((item) => item.key === localBackground.value)?.label || localBackground.value)
+const displayBackgroundControl = computed(() => showAdvancedCapsuleParams.value ? 'Background' : displayBackground.value)
 const formatDropdownOptions = computed(() => {
+  if (!showAdvancedCapsuleParams.value) return []
   const formats = Array.isArray(currentImageModelConfig.value?.outputFormats) ? currentImageModelConfig.value.outputFormats : []
   return formats.map((item) => ({ key: item.key, label: item.label || item.key }))
 })
 const displayOutputFormat = computed(() => formatDropdownOptions.value.find((item) => item.key === localOutputFormat.value)?.label || localOutputFormat.value)
+const displayFormatControl = computed(() => showAdvancedCapsuleParams.value ? 'Format' : displayOutputFormat.value)
 
 const ratioFromSize = computed(() => {
   if (localImageRatio.value && localImageRatio.value.includes(':')) {

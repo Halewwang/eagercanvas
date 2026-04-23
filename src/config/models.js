@@ -118,6 +118,8 @@ export const IMAGE_MODELS = [
         },
         supportImageReference: true,
         hideRatioCapsule: true,
+        showAdvancedCapsuleParams: true,
+        requestTimeoutMs: 600000,
         tips: '使用 302.AI GPT-Image-2，胶囊菜单仅选择 1K/2K/4K，4K 自动限制在最长边 3840px、总像素 830 万以内。'
     },
     {

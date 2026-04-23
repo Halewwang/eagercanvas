@@ -14,7 +14,16 @@ test('GPT Image 2 is available as a built-in image model', () => {
   assert.equal(model.label, 'GPT Image 2')
   assert.equal(model.supportImageReference, true)
   assert.equal(model.hideRatioCapsule, true)
+  assert.equal(model.showAdvancedCapsuleParams, true)
+  assert.equal(model.requestTimeoutMs, 600000)
   assert.deepEqual(model.resolutions, GPT_IMAGE_2_RESOLUTION_OPTIONS)
+})
+
+test('Gemini image models do not expose GPT Image 2 advanced capsule params', () => {
+  const model = IMAGE_MODELS.find((item) => item.key === 'gemini-3-pro-image-preview')
+
+  assert.ok(model, 'Gemini image model should exist')
+  assert.notEqual(model.showAdvancedCapsuleParams, true)
 })
 
 test('GPT Image 2 maps capsule resolution to safe square sizes by default', () => {

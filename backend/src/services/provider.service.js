@@ -100,7 +100,7 @@ const extractProviderErrorMessage = (data, status) => {
 
 const callProviderWithBase = async (base, path, body, method = 'POST', requestOptions = {}) => {
   const controller = new AbortController()
-  const timeoutMs = Number(env.providerTimeoutMs || 90000)
+  const timeoutMs = Number(requestOptions?.timeoutMs || env.providerTimeoutMs || 90000)
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(buildProviderUrl(base, path), {
@@ -124,7 +124,7 @@ const callProviderWithBase = async (base, path, body, method = 'POST', requestOp
 
 const callProviderMultipartWithBase = async (base, path, formData, method = 'POST', requestOptions = {}) => {
   const controller = new AbortController()
-  const timeoutMs = Number(env.providerTimeoutMs || 90000)
+  const timeoutMs = Number(requestOptions?.timeoutMs || env.providerTimeoutMs || 90000)
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(buildProviderUrl(base, path), {
@@ -936,6 +936,10 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
     lowerModel.includes('gemini-3.1-flash-image-preview') ||
     lowerModel.includes('gemini-3-pro-image-preview')
   if (lowerModel === 'gpt-image-2') {
+    const gptImage2RequestOptions = {
+      ...requestOptions,
+      timeoutMs: Math.max(Number(requestOptions?.timeoutMs || 0), 600000)
+    }
     const body = buildGptImage2RequestBody({
       ...payload,
       prompt,
@@ -951,7 +955,7 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
         }
       }
       await appendGptImage2MultipartImages(formData, inputImages.slice(0, 16))
-      const raw = await callProviderMultipart('/v1/images/edits', formData, 'POST', requestOptions)
+      const raw = await callProviderMultipart('/v1/images/edits', formData, 'POST', gptImage2RequestOptions)
       const normalized = normalizeImageResponse(raw)
       if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
         throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
@@ -959,7 +963,7 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
       return normalized
     }
 
-    const raw = await callProvider('/v1/images/generations?async=false', body, 'POST', requestOptions)
+    const raw = await callProvider('/v1/images/generations?async=false', body, 'POST', gptImage2RequestOptions)
     const normalized = normalizeImageResponse(raw)
     if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
       throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')

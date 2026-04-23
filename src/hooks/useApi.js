@@ -236,7 +236,7 @@ export const useImageGeneration = () => {
       const response = await generateImage(requestData, {
         requestType: 'json',
         endpoint: modelConfig?.endpoint || '/images/generations',
-        timeout: IMAGE_REQUEST_TIMEOUT_MS
+        timeout: Number(modelConfig?.requestTimeoutMs || IMAGE_REQUEST_TIMEOUT_MS)
       })
 
       // Parse response (OpenAI format) | 解析响应
