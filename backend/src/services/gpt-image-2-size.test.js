@@ -55,7 +55,9 @@ test('extracts GPT Image 2 async task ids from common response shapes', () => {
 
 test('recognizes GPT Image 2 pending async result responses', () => {
   assert.equal(isGptImage2PendingResult({ message: 'result pending' }), true)
+  assert.equal(isGptImage2PendingResult({ err: 'result pending' }), true)
   assert.equal(isGptImage2PendingResult({ error: { message: 'result pending' } }), true)
+  assert.equal(isGptImage2PendingResult({ data: { err: 'result pending' } }), true)
   assert.equal(isGptImage2PendingResult({ data: { status: 'queued' } }), true)
   assert.equal(isGptImage2PendingResult({ status: 'processing' }), true)
   assert.equal(isGptImage2PendingResult({ data: 'https://file.302.ai/result.png' }), false)

@@ -74,6 +74,32 @@ test('GPT Image 2 status treats provider result pending as processing', async ()
   assert.match(requests[0], /\/async_result\?task_id=gpt-task-1$/)
 })
 
+test('GPT Image 2 status treats official err pending body as processing', async () => {
+  const originalFetch = global.fetch
+
+  global.fetch = async () => new Response(
+    JSON.stringify({
+      content_type: '',
+      data: '',
+      err: 'result pending',
+      status_code: 400
+    }),
+    {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    }
+  )
+
+  try {
+    const result = await providerImageStatus('gpt-task-1', { apiKey: 'sk-test', model: 'gpt-image-2' })
+    assert.equal(result.task_id, 'gpt-task-1')
+    assert.equal(result.status, 'processing')
+    assert.equal(result.message, '')
+  } finally {
+    global.fetch = originalFetch
+  }
+})
+
 test('GPT Image 2 status returns completed image from async result', async () => {
   const originalFetch = global.fetch
 

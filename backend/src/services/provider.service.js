@@ -562,7 +562,7 @@ const pollGptImage2AsyncResult = async (taskId, attempts = 90, intervalMs = 5000
     const statusCode = Number(current?.status_code || current?.statusCode || 0)
     const err = String(current?.err || current?.error || current?.message || '').trim()
     const isPending = isGptImage2PendingResult(current)
-    if ((err && !isPending) || (statusCode && statusCode >= 400)) {
+    if ((err && !isPending) || (statusCode && statusCode >= 400 && !isPending)) {
       throw new HttpError(502, err || 'GPT Image 2 generation failed', 'IMAGE_GENERATION_FAILED')
     }
 
@@ -621,7 +621,7 @@ const getGptImage2AsyncResult = async (taskId, requestOptions = {}) => {
   const statusCode = Number(current?.status_code || current?.statusCode || 0)
   const err = String(current?.err || current?.error || current?.message || '').trim()
   const isPending = isGptImage2PendingResult(current)
-  if ((err && !isPending) || (statusCode && statusCode >= 400)) {
+  if ((err && !isPending) || (statusCode && statusCode >= 400 && !isPending)) {
     throw new HttpError(502, err || 'GPT Image 2 generation failed', 'IMAGE_GENERATION_FAILED')
   }
 
