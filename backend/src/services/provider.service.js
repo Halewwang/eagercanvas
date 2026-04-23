@@ -543,7 +543,20 @@ const pollGptImage2AsyncResult = async (taskId, attempts = 90, intervalMs = 5000
 
   let lastResponse = null
   for (let index = 0; index < attempts; index += 1) {
-    const current = await callProvider(`/async_result?task_id=${encodeURIComponent(safeTaskId)}`, null, 'GET', requestOptions)
+    let current
+    try {
+      current = await callProvider(`/async_result?task_id=${encodeURIComponent(safeTaskId)}`, null, 'GET', requestOptions)
+    } catch (error) {
+      if (isGptImage2PendingResult({
+        status: error?.status,
+        message: error?.message,
+        error: error?.message
+      }) && index < attempts - 1) {
+        await sleep(intervalMs)
+        continue
+      }
+      throw error
+    }
     lastResponse = current
 
     const statusCode = Number(current?.status_code || current?.statusCode || 0)

@@ -97,8 +97,17 @@ export const isGptImage2PendingResult = (response = {}) => {
     response?.status,
     response?.message,
     response?.msg,
+    response?.error,
+    response?.error?.message,
+    response?.error?.msg,
     response?.data,
-    response?.result
+    response?.data?.status,
+    response?.data?.message,
+    response?.data?.msg,
+    response?.result,
+    response?.result?.status,
+    response?.result?.message,
+    response?.result?.msg
   ].map((value) => String(value || '').trim().toLowerCase())
 
   return values.some((value) => (
