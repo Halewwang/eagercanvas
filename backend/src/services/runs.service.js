@@ -228,14 +228,15 @@ const bindVideoTaskOwnership = async ({ userId, runId, taskId, sourceNodeId = ''
   }
 }
 
-const bindImageTaskOwnership = async ({ userId, runId, taskId }) => {
+const bindImageTaskOwnership = async ({ userId, runId, taskId, model = '' }) => {
   if (!taskId) return
   const { error } = await supabase.from('audit_logs').insert({
     user_id: userId,
     action: 'image.task.created',
     metadata: {
       run_id: runId,
-      task_id: taskId
+      task_id: taskId,
+      model: String(model || '').trim()
     }
   })
   if (error) {
@@ -300,6 +301,28 @@ const findImageRunIdByTask = async ({ userId, taskId }) => {
 
   const runId = data?.[0]?.metadata?.run_id
   return runId ? String(runId) : ''
+}
+
+const findImageRunContextByTask = async ({ userId, taskId }) => {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('metadata')
+    .eq('user_id', userId)
+    .eq('action', 'image.task.created')
+    .contains('metadata', { task_id: String(taskId) })
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error) {
+    console.warn('[image] resolve run context by task failed', error.message)
+    return { runId: '', model: '' }
+  }
+
+  const metadata = data?.[0]?.metadata || {}
+  return {
+    runId: metadata?.run_id ? String(metadata.run_id) : '',
+    model: metadata?.model ? String(metadata.model) : ''
+  }
 }
 
 const findVideoRunContextByTask = async ({ userId, taskId }) => {
@@ -578,7 +601,8 @@ export const createRun = async (userId, input) => {
       await bindImageTaskOwnership({
         userId,
         runId: run.id,
-        taskId: imageTaskId
+        taskId: imageTaskId,
+        model: payload.model || payload.payload?.model
       })
 
       await supabase
@@ -724,14 +748,18 @@ export const getVideoTask = async (_userId, taskId) => {
 export const getImageTask = async (_userId, taskId) => {
   await assertImageTaskOwnership({ userId: _userId, taskId })
   const providerAccess = await resolveUserProviderAccess(_userId)
-  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
+  const imageRunContext = await findImageRunContextByTask({ userId: _userId, taskId })
+  const runId = imageRunContext.runId
+  const run = runId ? await getRunById(_userId, runId).catch(() => null) : null
+  const providerRequestOptions = {
+    ...(providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}),
+    model: imageRunContext.model || run?.model || ''
+  }
   const rawResult = await providerImageStatus(taskId, providerRequestOptions)
   const result = await persistImageResultAssets(rawResult)
-  const runId = await findImageRunIdByTask({ userId: _userId, taskId })
   await syncRunStatusFromImageTask({ userId: _userId, runId, taskResult: result })
 
   if (runId) {
-    const run = await getRunById(_userId, runId).catch(() => null)
     const status = String(result?.status || '').toLowerCase()
     if (Array.isArray(result?.data) && result.data.length > 0 && ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished', ''].includes(status)) {
       const baseUsage = extractUsageSnapshot(result)

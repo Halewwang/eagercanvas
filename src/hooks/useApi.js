@@ -6,6 +6,7 @@
 import { ref, reactive, onUnmounted } from 'vue'
 import {
   generateImage,
+  getImageGenerationTask,
   removeBackground,
   createVideoTask,
   getVideoTaskStatus,
@@ -173,6 +174,82 @@ export const useImageGeneration = () => {
   const images = ref([])
   const currentImage = ref(null)
 
+  const getTaskId = (task) => {
+    const candidates = [
+      task?.task_id,
+      task?.taskId,
+      task?.requestId,
+      task?.request_id,
+      task?.id,
+      task?.raw?.task_id,
+      task?.raw?.taskId,
+      task?.raw?.request_id,
+      task?.data?.task_id,
+      task?.data?.taskId,
+      task?.data?.request_id,
+      task?.data?.id
+    ]
+    const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+    return found ? String(found) : ''
+  }
+
+  const getTaskStatus = (result) => String(
+    result?.status ||
+    result?.task_status ||
+    result?.state ||
+    result?.data?.status ||
+    result?.raw?.status ||
+    ''
+  ).toLowerCase()
+
+  const getImageUrl = (item) => {
+    const value = (
+      item?.url ||
+      item?.b64_json ||
+      item?.data?.[0]?.url ||
+      item?.data?.url ||
+      (typeof item === 'string' ? item : '')
+    )
+    return String(value || '').trim()
+  }
+
+  const normalizeGeneratedImages = (response) => {
+    const data = response?.data || response
+    return (Array.isArray(data) ? data : [data])
+      .map(item => ({
+        url: getImageUrl(item),
+        revisedPrompt: item?.revised_prompt || ''
+      }))
+      .filter(item => item.url)
+  }
+
+  const pollImageTask = async (id, timeoutMs = IMAGE_REQUEST_TIMEOUT_MS) => {
+    status.value = 'polling'
+    const startedAt = Date.now()
+    const interval = 5000
+    const doneStatuses = new Set(['completed', 'complete', 'succeeded', 'success', 'done', 'finished', 'succeed'])
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const result = await getImageGenerationTask(id, {
+        timeout: Math.min(interval * 2, timeoutMs)
+      })
+      const generatedImages = normalizeGeneratedImages(result)
+      if (generatedImages.length > 0) return generatedImages
+
+      const resultStatus = getTaskStatus(result)
+      if (['failed', 'error', 'cancelled', 'canceled'].includes(resultStatus)) {
+        throw new Error(result?.error?.message || result?.message || '图片生成失败')
+      }
+      if (doneStatuses.has(resultStatus)) {
+        throw new Error('No image output')
+      }
+
+      await new Promise(resolve => setTimeout(resolve, interval))
+    }
+
+    throw new Error('图片生成仍在处理中，请稍后重试。')
+  }
+
   /**
    * Generate image with fixed params | 固定参数生成图片
    * @param {Object} params - { model, prompt, size, n, image (optional ref image) }
@@ -240,11 +317,18 @@ export const useImageGeneration = () => {
       })
 
       // Parse response (OpenAI format) | 解析响应
-      const data = response.data || response
-      const generatedImages = (Array.isArray(data) ? data : [data]).map(item => ({
-        url: item.url || item.b64_json || item,
-        revisedPrompt: item.revised_prompt || ''
-      }))
+      let generatedImages = normalizeGeneratedImages(response)
+      if (generatedImages.length === 0) {
+        const taskStatus = getTaskStatus(response)
+        const id = getTaskId(response)
+        if (id && ['running', 'queued', 'pending', 'processing', 'in_progress', ''].includes(taskStatus)) {
+          generatedImages = await pollImageTask(id, Number(modelConfig?.requestTimeoutMs || IMAGE_REQUEST_TIMEOUT_MS))
+        }
+      }
+
+      if (generatedImages.length === 0) {
+        throw new Error('No image output')
+      }
 
       images.value = generatedImages
       currentImage.value = generatedImages[0] || null

@@ -592,6 +592,77 @@ const pollGptImage2AsyncResult = async (taskId, attempts = 90, intervalMs = 5000
   throw new HttpError(504, 'GPT Image 2 result is still pending. Please retry later.', 'IMAGE_RESULT_PENDING')
 }
 
+const getGptImage2AsyncResult = async (taskId, requestOptions = {}) => {
+  const safeTaskId = String(taskId || '').trim()
+  if (!safeTaskId) return null
+
+  let current
+  try {
+    current = await callProvider(`/async_result?task_id=${encodeURIComponent(safeTaskId)}`, null, 'GET', requestOptions)
+  } catch (error) {
+    if (isGptImage2PendingResult({
+      status: error?.status,
+      message: error?.message,
+      error: error?.message
+    })) {
+      return {
+        task_id: safeTaskId,
+        status: 'processing',
+        message: '',
+        raw: {
+          status: error?.status,
+          message: error?.message
+        }
+      }
+    }
+    throw error
+  }
+
+  const statusCode = Number(current?.status_code || current?.statusCode || 0)
+  const err = String(current?.err || current?.error || current?.message || '').trim()
+  const isPending = isGptImage2PendingResult(current)
+  if ((err && !isPending) || (statusCode && statusCode >= 400)) {
+    throw new HttpError(502, err || 'GPT Image 2 generation failed', 'IMAGE_GENERATION_FAILED')
+  }
+
+  const normalized = normalizeImageResponse(current)
+  if (Array.isArray(normalized.data) && normalized.data.length > 0) {
+    return {
+      ...normalized,
+      task_id: safeTaskId,
+      status: 'completed',
+      raw: current
+    }
+  }
+
+  const dataUrl = String(current?.data || '').trim()
+  if (/^https?:\/\//i.test(dataUrl) || /^data:image\//i.test(dataUrl)) {
+    return {
+      ...current,
+      task_id: safeTaskId,
+      status: 'completed',
+      data: [{ url: dataUrl }],
+      raw: current
+    }
+  }
+
+  if (isPending) {
+    return {
+      task_id: safeTaskId,
+      status: 'processing',
+      message: '',
+      raw: current
+    }
+  }
+
+  return {
+    task_id: safeTaskId,
+    status: 'processing',
+    message: '',
+    raw: current
+  }
+}
+
 const normalizeKlingStatus = (value) => {
   if (typeof value === 'number') {
     // Kling O1: 10 processing, 50 failed, 99 success
@@ -1012,9 +1083,15 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
       await appendGptImage2MultipartImages(formData, inputImages.slice(0, 16))
       const rawTask = await callProviderMultipart('/v1/images/edits?async=true', formData, 'POST', gptImage2RequestOptions)
       const taskId = extractGptImage2TaskId(rawTask)
-      const raw = taskId
-        ? await pollGptImage2AsyncResult(taskId, 90, 5000, gptImage2RequestOptions)
-        : rawTask
+      if (taskId) {
+        return {
+          ...rawTask,
+          task_id: taskId,
+          status: 'running',
+          raw: rawTask
+        }
+      }
+      const raw = rawTask
       const normalized = normalizeImageResponse(raw)
       if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
         throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
@@ -1024,9 +1101,15 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
 
     const rawTask = await callProvider('/v1/images/generations?async=true', body, 'POST', gptImage2RequestOptions)
     const taskId = extractGptImage2TaskId(rawTask)
-    const raw = taskId
-      ? await pollGptImage2AsyncResult(taskId, 90, 5000, gptImage2RequestOptions)
-      : rawTask
+    if (taskId) {
+      return {
+        ...rawTask,
+        task_id: taskId,
+        status: 'running',
+        raw: rawTask
+      }
+    }
+    const raw = rawTask
     const normalized = normalizeImageResponse(raw)
     if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
       throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
@@ -1093,6 +1176,10 @@ export const providerImageStatus = async (taskId, requestOptions = {}) => {
   const safeTaskId = String(taskId || '').trim()
   if (!safeTaskId) {
     throw new HttpError(400, 'Image task id is required', 'IMAGE_TASK_ID_REQUIRED')
+  }
+
+  if (String(requestOptions?.model || '').trim().toLowerCase() === 'gpt-image-2') {
+    return getGptImage2AsyncResult(safeTaskId, requestOptions)
   }
 
   const raw = await callProvider(`/ws/api/v3/predictions/${safeTaskId}/result`, null, 'GET', requestOptions)
