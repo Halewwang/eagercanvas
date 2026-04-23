@@ -210,6 +210,11 @@ export const useImageGeneration = () => {
         requestData.tools = params.tools
       }
       if (params.tool) requestData.tool = params.tool
+      for (const key of ['background', 'output_format', 'output_compression', 'moderation']) {
+        if (params[key] !== undefined && params[key] !== null && String(params[key]).trim() !== '') {
+          requestData[key] = params[key]
+        }
+      }
       if (params.image_url) requestData.image_url = params.image_url
       for (const key of ['horizontal_angle', 'vertical_angle', 'zoom']) {
         if (params[key] !== undefined && params[key] !== null) {

@@ -48,6 +48,26 @@
           </BaseDropdown>
         </div>
 
+        <div v-if="backgroundOptions.length > 0" class="flex items-center justify-between">
+          <span class="text-xs text-[#8f939e]">Background</span>
+          <BaseDropdown :options="backgroundOptions" compact @select="handleBackgroundSelect">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
+              {{ displayBackground }}
+              <n-icon :size="12"><ChevronForwardOutline /></n-icon>
+            </button>
+          </BaseDropdown>
+        </div>
+
+        <div v-if="formatOptions.length > 0" class="flex items-center justify-between">
+          <span class="text-xs text-[#8f939e]">Format</span>
+          <BaseDropdown :options="formatOptions" compact @select="handleFormatSelect">
+            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
+              {{ displayFormat }}
+              <n-icon :size="12"><ChevronForwardOutline /></n-icon>
+            </button>
+          </BaseDropdown>
+        </div>
+
         <!-- Size selector | Size选择 -->
         <div v-if="hasSizeOptions" class="flex items-center justify-between">
           <span class="text-xs text-[#8f939e]">Size</span>
@@ -189,6 +209,8 @@ const showActions = ref(false)
 const localModel = ref(props.data?.model || DEFAULT_IMAGE_MODEL)
 const localSize = ref(props.data?.size || '1024x1024')
 const localQuality = ref(props.data?.quality || 'standard')
+const localBackground = ref(props.data?.background || 'auto')
+const localOutputFormat = ref(props.data?.output_format || props.data?.outputFormat || 'png')
 const localRatio = ref(props.data?.ratio || '1:1')
 const localResolution = ref(props.data?.resolution || '1k')
 
@@ -206,6 +228,7 @@ const BASE_SIZE_BY_RATIO = {
 }
 
 const ratioFromSizeKey = (sizeKey) => {
+  if (String(sizeKey || '').trim().toLowerCase() === 'auto') return 'auto'
   const [w, h] = String(sizeKey || '').split('x').map(Number)
   if (!w || !h) return '1:1'
   const ratio = w / h
@@ -223,6 +246,7 @@ const ratioFromSizeKey = (sizeKey) => {
 }
 
 const resolutionFromSizeKey = (sizeKey) => {
+  if (String(sizeKey || '').trim().toLowerCase() === 'auto') return '1k'
   const [w, h] = String(sizeKey || '').split('x').map(Number)
   if (!w || !h) return '1k'
   const ratio = ratioFromSizeKey(sizeKey)
@@ -261,6 +285,26 @@ const displayQuality = computed(() => {
   return option?.label || 'Standard'
 })
 
+const backgroundOptions = computed(() => {
+  const options = Array.isArray(currentModelConfig.value?.backgrounds) ? currentModelConfig.value.backgrounds : []
+  return options.map((item) => ({ key: item.key, label: item.label || item.key }))
+})
+
+const displayBackground = computed(() => {
+  const option = backgroundOptions.value.find(o => o.key === localBackground.value)
+  return option?.label || localBackground.value
+})
+
+const formatOptions = computed(() => {
+  const options = Array.isArray(currentModelConfig.value?.outputFormats) ? currentModelConfig.value.outputFormats : []
+  return options.map((item) => ({ key: item.key, label: item.label || item.key }))
+})
+
+const displayFormat = computed(() => {
+  const option = formatOptions.value.find(o => o.key === localOutputFormat.value)
+  return option?.label || localOutputFormat.value
+})
+
 // Size options based on model and quality | 基于Model和Quality的Size选项
 const sizeOptions = computed(() => {
   return getModelSizeOptions(localModel.value, localQuality.value)
@@ -292,8 +336,11 @@ const sizeMetaOptions = computed(() =>
 )
 
 const pickNearestSizeKey = (ratioKey, resolutionKey) => {
+  if (ratioKey === 'auto') return 'auto'
   let candidates = sizeMetaOptions.value.filter((opt) => opt.ratio === ratioKey)
+  candidates = candidates.filter((opt) => opt.key !== 'auto')
   if (candidates.length === 0) candidates = sizeMetaOptions.value
+  candidates = candidates.filter((opt) => opt.key !== 'auto')
   if (candidates.length === 0) return localSize.value || '1024x1024'
   const exact = candidates.find((opt) => opt.resolution === resolutionKey)
   const picked = exact || [...candidates].sort((a, b) => a.pixels - b.pixels)[0]
@@ -321,6 +368,9 @@ watch(
     if (val.model && val.model !== localModel.value) localModel.value = val.model
     if (val.size && val.size !== localSize.value) localSize.value = val.size
     if (val.quality && val.quality !== localQuality.value) localQuality.value = val.quality
+    if (val.background && val.background !== localBackground.value) localBackground.value = val.background
+    const nextFormat = val.output_format || val.outputFormat
+    if (nextFormat && nextFormat !== localOutputFormat.value) localOutputFormat.value = nextFormat
     localRatio.value = val.ratio || ratioFromSizeKey(localSize.value)
     localResolution.value = val.resolution || resolutionFromSizeKey(localSize.value)
   },
@@ -369,6 +419,14 @@ const handleModelSelect = (key) => {
     localQuality.value = config.defaultParams.quality
     updates.quality = config.defaultParams.quality
   }
+  if (config?.defaultParams?.background) {
+    localBackground.value = config.defaultParams.background
+    updates.background = config.defaultParams.background
+  }
+  if (config?.defaultParams?.output_format) {
+    localOutputFormat.value = config.defaultParams.output_format
+    updates.output_format = config.defaultParams.output_format
+  }
   localRatio.value = ratioFromSizeKey(localSize.value)
   localResolution.value = resolutionFromSizeKey(localSize.value)
   localSize.value = pickNearestSizeKey(localRatio.value, localResolution.value)
@@ -390,6 +448,16 @@ const handleQualitySelect = (quality) => {
     ratio: localRatio.value,
     resolution: localResolution.value
   })
+}
+
+const handleBackgroundSelect = (background) => {
+  localBackground.value = background
+  updateNode(props.id, { background })
+}
+
+const handleFormatSelect = (format) => {
+  localOutputFormat.value = format
+  updateNode(props.id, { output_format: format })
 }
 
 // Handle size selection | 处理Size选择
@@ -648,6 +716,16 @@ const handleGenerate = async (mode = 'auto') => {
     if (hasQualityOptions.value && localQuality.value) {
       params.quality = localQuality.value
     }
+    if (backgroundOptions.value.length > 0 && localBackground.value) {
+      params.background = localBackground.value
+    }
+    if (formatOptions.value.length > 0 && localOutputFormat.value) {
+      params.output_format = localOutputFormat.value
+      if (['jpeg', 'webp'].includes(String(localOutputFormat.value).toLowerCase())) {
+        params.output_compression = 100
+      }
+      params.moderation = 'auto'
+    }
 
     // Add reference image if provided | 如果有Reference则添加
     if (refImages.length > 0) {
@@ -679,6 +757,8 @@ const handleGenerate = async (mode = 'auto') => {
         model: localModel.value,
         size: localSize.value,
         quality: localQuality.value,
+        background: localBackground.value,
+        output_format: localOutputFormat.value,
         ratio: localRatio.value || ratioFromSizeKey(localSize.value),
         resolution: localResolution.value || resolutionFromSizeKey(localSize.value),
         sourceConfigId: props.id,

@@ -2,6 +2,7 @@ import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 import sharp from 'sharp'
 import { attachProviderResponseMetadata } from './provider-response-metadata.js'
+import { buildGptImage2RequestBody } from './gpt-image-2-size.js'
 
 const parseProviderBases = () => {
   const rawList = String(env.providerApiBaseUrls || '')
@@ -396,6 +397,18 @@ const buildGeminiImageInputParts = async (images = []) => {
   }
 
   return parts
+}
+
+const appendGptImage2MultipartImages = async (formData, images = []) => {
+  for (let index = 0; index < images.length; index += 1) {
+    const source = String(images[index] || '').trim()
+    if (!source) continue
+
+    const { mimeType, buffer } = await fetchBinaryFromSource(source)
+    const fileName = `image-${index + 1}.${extensionFromMimeType(mimeType)}`
+    const blob = new Blob([buffer], { type: mimeType || 'image/png' })
+    formData.append('image', blob, fileName)
+  }
 }
 
 const pickFirstImageInput = (payload = {}) => {
@@ -922,6 +935,38 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
   const isGeminiImagePreviewModel =
     lowerModel.includes('gemini-3.1-flash-image-preview') ||
     lowerModel.includes('gemini-3-pro-image-preview')
+  if (lowerModel === 'gpt-image-2') {
+    const body = buildGptImage2RequestBody({
+      ...payload,
+      prompt,
+      ratio: payload.ratio || payload.aspect_ratio || aspectRatio,
+      size: payload.size
+    })
+
+    if (inputImages.length > 0) {
+      const formData = new FormData()
+      for (const [key, value] of Object.entries(body)) {
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          formData.append(key, String(value))
+        }
+      }
+      await appendGptImage2MultipartImages(formData, inputImages.slice(0, 16))
+      const raw = await callProviderMultipart('/v1/images/edits', formData, 'POST', requestOptions)
+      const normalized = normalizeImageResponse(raw)
+      if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
+        throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
+      }
+      return normalized
+    }
+
+    const raw = await callProvider('/v1/images/generations?async=false', body, 'POST', requestOptions)
+    const normalized = normalizeImageResponse(raw)
+    if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
+      throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
+    }
+    return normalized
+  }
+
   if (isGeminiImagePreviewModel) {
     const endpointBase = lowerModel.includes('gemini-3-pro-image-preview')
       ? '/ws/api/v3/google/nano-banana-pro'

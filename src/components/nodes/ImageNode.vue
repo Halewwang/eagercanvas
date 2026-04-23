@@ -16,8 +16,20 @@
             <button class="capsule-select">{{ displayRatio }}</button>
           </BaseDropdown>
 
-          <BaseDropdown v-if="resolutionDropdownOptions.length > 0 && localImageModel.includes('gemini')" :options="resolutionDropdownOptions" compact @select="setResolution">
+          <BaseDropdown v-if="resolutionDropdownOptions.length > 0" :options="resolutionDropdownOptions" compact @select="setResolution">
             <button class="capsule-select capsule-resolution">{{ displayResolution }}</button>
+          </BaseDropdown>
+
+          <BaseDropdown v-if="qualityDropdownOptions.length > 0" :options="qualityDropdownOptions" compact @select="setImageQuality">
+            <button class="capsule-select">{{ displayQuality }}</button>
+          </BaseDropdown>
+
+          <BaseDropdown v-if="backgroundDropdownOptions.length > 0" :options="backgroundDropdownOptions" compact @select="setBackground">
+            <button class="capsule-select">{{ displayBackground }}</button>
+          </BaseDropdown>
+
+          <BaseDropdown v-if="formatDropdownOptions.length > 0" :options="formatDropdownOptions" compact @select="setOutputFormat">
+            <button class="capsule-select">{{ displayOutputFormat }}</button>
           </BaseDropdown>
         </div>
 
@@ -263,6 +275,7 @@ import {
   getModelSizeOptions,
   imageModelOptions
 } from '../../stores/models'
+import { resolveGptImage2Size } from '@/config/models'
 import { useApiConfig, useImageGeneration } from '../../hooks'
 import { getErrorMessage } from '@/utils'
 import { dataUrlToFile, persistImageUrl, uploadImageFile } from '@/utils/media'
@@ -301,6 +314,8 @@ const showHandles = computed(() => showCapsule.value || isSelected.value)
 const localImageModel = ref(props.data?.model || DEFAULT_IMAGE_MODEL)
 const localImageSize = ref(props.data?.size || DEFAULT_IMAGE_SIZE)
 const localImageQuality = ref(props.data?.quality || 'standard')
+const localBackground = ref(props.data?.background || 'auto')
+const localOutputFormat = ref(props.data?.output_format || props.data?.outputFormat || 'png')
 const localImageRatio = ref('1:1')
 const localResolution = ref('1k')
 const uploadInputRef = ref(null)
@@ -390,6 +405,13 @@ const imageInputStatusMap = {
   reference: 'Reference Picture'
 }
 
+const GPT_IMAGE_2_RATIO_OPTIONS = [
+  { key: 'auto', label: 'Auto' },
+  { key: '1:1', label: '1:1' },
+  { key: '3:2', label: '3:2' },
+  { key: '2:3', label: '2:3' }
+]
+
 const BASE_SIZE_BY_RATIO = {
   '1:1': { w: 1024, h: 1024 },
   '3:2': { w: 1152, h: 768 },
@@ -436,6 +458,7 @@ const replaceLocalPreviewUrl = (nextUrl = '') => {
 }
 
 const ratioFromSizeKey = (sizeKey) => {
+  if (String(sizeKey || '').trim().toLowerCase() === 'auto') return 'auto'
   const [w, h] = String(sizeKey || '').split('x').map(Number)
   if (!w || !h) return '1:1'
   const ratio = w / h
@@ -453,6 +476,7 @@ const ratioFromSizeKey = (sizeKey) => {
 }
 
 const resolutionFromSizeKey = (sizeKey) => {
+  if (String(sizeKey || '').trim().toLowerCase() === 'auto') return '1k'
   const [w, h] = String(sizeKey || '').split('x').map(Number)
   if (!w || !h) return '1k'
   const ratio = ratioFromSizeKey(sizeKey)
@@ -473,6 +497,9 @@ watch(
     if (val.model && val.model !== localImageModel.value) localImageModel.value = val.model
     if (val.size && val.size !== localImageSize.value) localImageSize.value = val.size
     if (val.quality && val.quality !== localImageQuality.value) localImageQuality.value = val.quality
+    if (val.background && val.background !== localBackground.value) localBackground.value = val.background
+    const nextFormat = val.output_format || val.outputFormat
+    if (nextFormat && nextFormat !== localOutputFormat.value) localOutputFormat.value = nextFormat
     localImageRatio.value = val.ratio || ratioFromSizeKey(localImageSize.value)
     localResolution.value = val.resolution || resolutionFromSizeKey(localImageSize.value)
   },
@@ -542,6 +569,8 @@ watch(
   { immediate: true }
 )
 const imageModelDropdownOptions = computed(() => imageModelOptions.value.map(m => ({ key: m.key, label: m.label })))
+const currentImageModelConfig = computed(() => getModelConfig(localImageModel.value))
+const isGptImage2Model = computed(() => localImageModel.value === 'gpt-image-2')
 const imageSizeOptions = computed(() => getModelSizeOptions(localImageModel.value, localImageQuality.value))
 const sizeMetaOptions = computed(() =>
   imageSizeOptions.value.map((opt) => {
@@ -559,6 +588,8 @@ const sizeMetaOptions = computed(() =>
 )
 
 const ratioDropdownOptions = computed(() => {
+  if (isGptImage2Model.value) return GPT_IMAGE_2_RATIO_OPTIONS
+  if (currentImageModelConfig.value?.hideRatioCapsule) return []
   const seen = new Set()
   return sizeMetaOptions.value
     .map((opt) => opt.ratio)
@@ -571,6 +602,12 @@ const ratioDropdownOptions = computed(() => {
 })
 
 const resolutionDropdownOptions = computed(() => {
+  if (Array.isArray(currentImageModelConfig.value?.resolutions) && currentImageModelConfig.value.resolutions.length > 0) {
+    return currentImageModelConfig.value.resolutions.map((item) => ({
+      key: item.key,
+      label: item.label || String(item.key || '').toUpperCase()
+    }))
+  }
   const seen = new Set()
   const list = sizeMetaOptions.value
     .filter((opt) => opt.ratio === localImageRatio.value)
@@ -589,9 +626,25 @@ const displayImageModel = computed(() => {
 })
 
 const displayRatio = computed(() => {
+  if (isGptImage2Model.value && localImageRatio.value === 'auto') return 'Auto'
   return localImageRatio.value
 })
 const displayResolution = computed(() => localResolution.value.toUpperCase())
+const qualityDropdownOptions = computed(() => {
+  const qualities = Array.isArray(currentImageModelConfig.value?.qualities) ? currentImageModelConfig.value.qualities : []
+  return qualities.map((item) => ({ key: item.key, label: item.label || item.key }))
+})
+const displayQuality = computed(() => qualityDropdownOptions.value.find((item) => item.key === localImageQuality.value)?.label || localImageQuality.value)
+const backgroundDropdownOptions = computed(() => {
+  const backgrounds = Array.isArray(currentImageModelConfig.value?.backgrounds) ? currentImageModelConfig.value.backgrounds : []
+  return backgrounds.map((item) => ({ key: item.key, label: item.label || item.key }))
+})
+const displayBackground = computed(() => backgroundDropdownOptions.value.find((item) => item.key === localBackground.value)?.label || localBackground.value)
+const formatDropdownOptions = computed(() => {
+  const formats = Array.isArray(currentImageModelConfig.value?.outputFormats) ? currentImageModelConfig.value.outputFormats : []
+  return formats.map((item) => ({ key: item.key, label: item.label || item.key }))
+})
+const displayOutputFormat = computed(() => formatDropdownOptions.value.find((item) => item.key === localOutputFormat.value)?.label || localOutputFormat.value)
 
 const ratioFromSize = computed(() => {
   if (localImageRatio.value && localImageRatio.value.includes(':')) {
@@ -849,6 +902,12 @@ const triggerUpload = () => {
 }
 
 const pickNearestSizeKey = (ratioKey, resolutionKey) => {
+  if (isGptImage2Model.value) {
+    localImageRatio.value = ratioKey || '1:1'
+    localResolution.value = resolutionKey || '1k'
+    if (localImageRatio.value === 'auto') return 'auto'
+    return resolveGptImage2Size({ ratio: localImageRatio.value, resolution: localResolution.value })
+  }
   let candidates = sizeMetaOptions.value.filter((opt) => opt.ratio === ratioKey)
   if (candidates.length === 0) candidates = sizeMetaOptions.value
   if (candidates.length === 0) return DEFAULT_IMAGE_SIZE
@@ -860,6 +919,10 @@ const pickNearestSizeKey = (ratioKey, resolutionKey) => {
 }
 
 const findNearestSizeKey = (ratioKey, resolutionKey) => {
+  if (isGptImage2Model.value) {
+    if (ratioKey === 'auto') return 'auto'
+    return resolveGptImage2Size({ ratio: ratioKey, resolution: resolutionKey })
+  }
   let candidates = sizeMetaOptions.value.filter((opt) => opt.ratio === ratioKey)
   if (candidates.length === 0) candidates = sizeMetaOptions.value
   if (candidates.length === 0) return DEFAULT_IMAGE_SIZE
@@ -872,6 +935,8 @@ const setImageModel = (key) => {
   const config = getModelConfig(key)
   localImageSize.value = config?.defaultParams?.size || localImageSize.value || DEFAULT_IMAGE_SIZE
   localImageQuality.value = config?.defaultParams?.quality || localImageQuality.value
+  localBackground.value = config?.defaultParams?.background || localBackground.value
+  localOutputFormat.value = config?.defaultParams?.output_format || localOutputFormat.value
   localImageRatio.value = ratioFromSizeKey(localImageSize.value)
   localResolution.value = resolutionFromSizeKey(localImageSize.value)
   localImageSize.value = pickNearestSizeKey(localImageRatio.value, localResolution.value)
@@ -879,6 +944,8 @@ const setImageModel = (key) => {
     model: localImageModel.value,
     size: localImageSize.value,
     quality: localImageQuality.value,
+    background: localBackground.value,
+    output_format: localOutputFormat.value,
     ratio: localImageRatio.value,
     resolution: localResolution.value
   })
@@ -900,6 +967,21 @@ const setResolution = (resolutionKey) => {
     ratio: localImageRatio.value,
     resolution: localResolution.value
   })
+}
+
+const setImageQuality = (quality) => {
+  localImageQuality.value = quality
+  updateNode(props.id, { quality })
+}
+
+const setBackground = (background) => {
+  localBackground.value = background
+  updateNode(props.id, { background })
+}
+
+const setOutputFormat = (format) => {
+  localOutputFormat.value = format
+  updateNode(props.id, { output_format: format })
 }
 
 const getConnectedInputs = () => {
@@ -1050,6 +1132,10 @@ const runImageGeneration = async (mode = 'create') => {
       prompt: prompt || 'Generate a polished visual based on this reference.',
       size: localImageSize.value,
       quality: localImageQuality.value,
+      background: localBackground.value,
+      output_format: localOutputFormat.value,
+      output_compression: ['jpeg', 'webp'].includes(String(localOutputFormat.value).toLowerCase()) ? 100 : undefined,
+      moderation: 'auto',
       ratio: localImageRatio.value,
       aspect_ratio: localImageRatio.value,
       resolution: localResolution.value,
@@ -1071,6 +1157,8 @@ const runImageGeneration = async (mode = 'create') => {
       model: localImageModel.value,
       size: localImageSize.value,
       quality: localImageQuality.value,
+      background: localBackground.value,
+      output_format: localOutputFormat.value,
       ratio: localImageRatio.value,
       resolution: localResolution.value,
       sourcePrompt: prompt || 'Generate a polished visual based on this reference.',

@@ -35,8 +35,91 @@ export const GEMINI_IMAGE_QUALITY_OPTIONS = [
     { label: '高清', key: 'hd' }
 ]
 
+export const GPT_IMAGE_2_RESOLUTION_OPTIONS = [
+    { label: '1K', key: '1k' },
+    { label: '2K', key: '2k' },
+    { label: '4K', key: '4k' }
+]
+
+export const GPT_IMAGE_2_QUALITY_OPTIONS = [
+    { label: 'Auto', key: 'auto' },
+    { label: 'Low', key: 'low' },
+    { label: 'Medium', key: 'medium' },
+    { label: 'High', key: 'high' }
+]
+
+export const GPT_IMAGE_2_BACKGROUND_OPTIONS = [
+    { label: 'Auto', key: 'auto' },
+    { label: 'Opaque', key: 'opaque' },
+    { label: 'Transparent', key: 'transparent' }
+]
+
+export const GPT_IMAGE_2_OUTPUT_FORMAT_OPTIONS = [
+    { label: 'PNG', key: 'png' },
+    { label: 'JPEG', key: 'jpeg' },
+    { label: 'WEBP', key: 'webp' }
+]
+
+export const GPT_IMAGE_2_BASE_SIZES = [
+    { ratio: '1:1', width: 1024, height: 1024 },
+    { ratio: '3:2', width: 1536, height: 1024 },
+    { ratio: '2:3', width: 1024, height: 1536 },
+    { ratio: '16:9', width: 1280, height: 720 },
+    { ratio: '9:16', width: 720, height: 1280 }
+]
+
+const GPT_IMAGE_2_MAX_EDGE = 3840
+const GPT_IMAGE_2_MAX_PIXELS = 8300000
+
+const scaleGptImage2Size = (base, resolution = '1k') => {
+    const safeResolution = String(resolution || '1k').toLowerCase()
+    if (safeResolution === '1k') return { width: base.width, height: base.height }
+    if (safeResolution === '2k') return { width: base.width * 2, height: base.height * 2 }
+
+    const ratioWidth = base.width
+    const ratioHeight = base.height
+    const edgeScale = GPT_IMAGE_2_MAX_EDGE / Math.max(ratioWidth, ratioHeight)
+    const pixelScale = Math.sqrt(GPT_IMAGE_2_MAX_PIXELS / (ratioWidth * ratioHeight))
+    const scale = Math.min(edgeScale, pixelScale)
+    return {
+        width: Math.floor(ratioWidth * scale),
+        height: Math.floor(ratioHeight * scale)
+    }
+}
+
+export const resolveGptImage2Size = ({ ratio = '1:1', resolution = '1k' } = {}) => {
+    const base = GPT_IMAGE_2_BASE_SIZES.find((item) => item.ratio === ratio) || GPT_IMAGE_2_BASE_SIZES[0]
+    const size = scaleGptImage2Size(base, resolution)
+    return `${size.width}x${size.height}`
+}
+
+export const GPT_IMAGE_2_SIZE_OPTIONS = GPT_IMAGE_2_BASE_SIZES.flatMap((base) =>
+    GPT_IMAGE_2_RESOLUTION_OPTIONS.map((resolution) => ({
+        label: `${base.ratio} ${resolution.label}`,
+        key: resolveGptImage2Size({ ratio: base.ratio, resolution: resolution.key })
+    }))
+)
+
 // Image generation models | 图片生成模型
 export const IMAGE_MODELS = [
+    {
+        label: 'GPT Image 2',
+        key: 'gpt-image-2',
+        sizes: ['auto', ...GPT_IMAGE_2_SIZE_OPTIONS.map(s => s.key)],
+        resolutions: GPT_IMAGE_2_RESOLUTION_OPTIONS,
+        qualities: GPT_IMAGE_2_QUALITY_OPTIONS,
+        backgrounds: GPT_IMAGE_2_BACKGROUND_OPTIONS,
+        outputFormats: GPT_IMAGE_2_OUTPUT_FORMAT_OPTIONS,
+        defaultParams: {
+            size: '1024x1024',
+            quality: 'auto',
+            background: 'auto',
+            output_format: 'png'
+        },
+        supportImageReference: true,
+        hideRatioCapsule: true,
+        tips: '使用 302.AI GPT-Image-2，胶囊菜单仅选择 1K/2K/4K，4K 自动限制在最长边 3840px、总像素 830 万以内。'
+    },
     {
         label: 'Gemini 3.1 Flash Image Preview',
         key: 'gemini-3.1-flash-image-preview',
