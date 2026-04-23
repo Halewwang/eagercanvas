@@ -227,12 +227,28 @@ export const useImageGeneration = () => {
     status.value = 'polling'
     const startedAt = Date.now()
     const interval = 5000
+    const pollRequestTimeout = 60000
     const doneStatuses = new Set(['completed', 'complete', 'succeeded', 'success', 'done', 'finished', 'succeed'])
+    const transientErrorStatuses = new Set([408, 425, 429, 500, 502, 503, 504])
 
     while (Date.now() - startedAt < timeoutMs) {
-      const result = await getImageGenerationTask(id, {
-        timeout: Math.min(interval * 2, timeoutMs)
-      })
+      let result
+      try {
+        result = await getImageGenerationTask(id, {
+          timeout: Math.min(pollRequestTimeout, timeoutMs),
+          silentErrorToast: true,
+          silentNetworkErrorToast: true
+        })
+      } catch (pollErr) {
+        const statusCode = Number(pollErr?.response?.status || pollErr?.status || 0)
+        const isTimeout = pollErr?.code === 'ECONNABORTED' || /timeout/i.test(String(pollErr?.message || ''))
+        const isTransient = isTimeout || transientErrorStatuses.has(statusCode) || !statusCode
+        if (!isTransient) throw pollErr
+
+        await new Promise(resolve => setTimeout(resolve, interval))
+        continue
+      }
+
       const generatedImages = normalizeGeneratedImages(result)
       if (generatedImages.length > 0) return generatedImages
 

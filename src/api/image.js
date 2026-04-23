@@ -36,12 +36,15 @@ export const createImageGenerationRun = (data, options = {}) => {
 }
 
 export const getImageGenerationTask = (taskId, options = {}) => {
-  const { timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
+  const { timeout = IMAGE_REQUEST_TIMEOUT_MS, ...requestOptions } = options
 
   return request({
     url: `/images/${encodeURIComponent(String(taskId || '').trim())}`,
     method: 'get',
-    timeout
+    timeout,
+    silentErrorToast: true,
+    silentNetworkErrorToast: true,
+    ...requestOptions
   })
 }
 
