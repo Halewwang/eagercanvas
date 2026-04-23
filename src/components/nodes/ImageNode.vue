@@ -406,10 +406,16 @@ const imageInputStatusMap = {
 }
 
 const GPT_IMAGE_2_RATIO_OPTIONS = [
-  { key: 'auto', label: 'Auto' },
   { key: '1:1', label: '1:1' },
   { key: '3:2', label: '3:2' },
-  { key: '2:3', label: '2:3' }
+  { key: '2:3', label: '2:3' },
+  { key: '4:3', label: '4:3' },
+  { key: '3:4', label: '3:4' },
+  { key: '4:5', label: '4:5' },
+  { key: '5:4', label: '5:4' },
+  { key: '16:9', label: '16:9' },
+  { key: '9:16', label: '9:16' },
+  { key: '21:9', label: '21:9' }
 ]
 
 const BASE_SIZE_BY_RATIO = {

@@ -64,8 +64,13 @@ export const GPT_IMAGE_2_BASE_SIZES = [
     { ratio: '1:1', width: 1024, height: 1024 },
     { ratio: '3:2', width: 1536, height: 1024 },
     { ratio: '2:3', width: 1024, height: 1536 },
+    { ratio: '4:3', width: 1152, height: 864 },
+    { ratio: '3:4', width: 864, height: 1152 },
+    { ratio: '4:5', width: 896, height: 1120 },
+    { ratio: '5:4', width: 1120, height: 896 },
     { ratio: '16:9', width: 1280, height: 720 },
-    { ratio: '9:16', width: 720, height: 1280 }
+    { ratio: '9:16', width: 720, height: 1280 },
+    { ratio: '21:9', width: 1680, height: 720 }
 ]
 
 const GPT_IMAGE_2_MAX_EDGE = 3840
@@ -117,10 +122,9 @@ export const IMAGE_MODELS = [
             output_format: 'png'
         },
         supportImageReference: true,
-        hideRatioCapsule: true,
         showAdvancedCapsuleParams: true,
         requestTimeoutMs: 600000,
-        tips: '使用 302.AI GPT-Image-2，胶囊菜单仅选择 1K/2K/4K，4K 自动限制在最长边 3840px、总像素 830 万以内。'
+        tips: '使用 302.AI GPT-Image-2，比例选项与 Gemini 一致，分辨率胶囊选择 1K/2K/4K，4K 自动限制在最长边 3840px、总像素 830 万以内。'
     },
     {
         label: 'Gemini 3.1 Flash Image Preview',

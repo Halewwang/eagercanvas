@@ -23,6 +23,14 @@ test('keeps GPT Image 2 4K output under provider limits', () => {
   assert.ok(width * height <= 8_300_000)
 })
 
+test('supports Gemini-matching GPT Image 2 aspect ratios', () => {
+  assert.equal(resolveGptImage2Size({ ratio: '4:3', resolution: '1k' }), '1152x864')
+  assert.equal(resolveGptImage2Size({ ratio: '3:4', resolution: '1k' }), '864x1152')
+  assert.equal(resolveGptImage2Size({ ratio: '4:5', resolution: '1k' }), '896x1120')
+  assert.equal(resolveGptImage2Size({ ratio: '5:4', resolution: '1k' }), '1120x896')
+  assert.equal(resolveGptImage2Size({ ratio: '21:9', resolution: '4k' }), '3840x1645')
+})
+
 test('builds GPT Image 2 request body with supported advanced params', () => {
   assert.deepEqual(
     buildGptImage2RequestBody({
