@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   buildGptImage2RequestBody,
   extractGptImage2TaskId,
+  isGptImage2PendingResult,
   resolveGptImage2Size
 } from './gpt-image-2-size.js'
 
@@ -50,4 +51,10 @@ test('extracts GPT Image 2 async task ids from common response shapes', () => {
   assert.equal(extractGptImage2TaskId({ task_id: 'task-a' }), 'task-a')
   assert.equal(extractGptImage2TaskId({ data: { taskId: 'task-b' } }), 'task-b')
   assert.equal(extractGptImage2TaskId({ id: 'task-c' }), 'task-c')
+})
+
+test('recognizes GPT Image 2 pending async result responses', () => {
+  assert.equal(isGptImage2PendingResult({ message: 'result pending' }), true)
+  assert.equal(isGptImage2PendingResult({ status: 'processing' }), true)
+  assert.equal(isGptImage2PendingResult({ data: 'https://file.302.ai/result.png' }), false)
 })

@@ -91,3 +91,22 @@ export const extractGptImage2TaskId = (response = {}) => {
   ]
   return String(candidates.find((value) => value !== undefined && value !== null && String(value).trim()) || '').trim()
 }
+
+export const isGptImage2PendingResult = (response = {}) => {
+  const values = [
+    response?.status,
+    response?.message,
+    response?.msg,
+    response?.data,
+    response?.result
+  ].map((value) => String(value || '').trim().toLowerCase())
+
+  return values.some((value) => (
+    value === 'pending' ||
+    value === 'processing' ||
+    value === 'running' ||
+    value === 'queued' ||
+    value === 'result pending' ||
+    value.includes('pending')
+  ))
+}

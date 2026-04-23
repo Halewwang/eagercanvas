@@ -2,7 +2,7 @@ import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 import sharp from 'sharp'
 import { attachProviderResponseMetadata } from './provider-response-metadata.js'
-import { buildGptImage2RequestBody, extractGptImage2TaskId } from './gpt-image-2-size.js'
+import { buildGptImage2RequestBody, extractGptImage2TaskId, isGptImage2PendingResult } from './gpt-image-2-size.js'
 
 const parseProviderBases = () => {
   const rawList = String(env.providerApiBaseUrls || '')
@@ -548,7 +548,8 @@ const pollGptImage2AsyncResult = async (taskId, attempts = 90, intervalMs = 5000
 
     const statusCode = Number(current?.status_code || current?.statusCode || 0)
     const err = String(current?.err || current?.error || current?.message || '').trim()
-    if (err || (statusCode && statusCode >= 400)) {
+    const isPending = isGptImage2PendingResult(current)
+    if ((err && !isPending) || (statusCode && statusCode >= 400)) {
       throw new HttpError(502, err || 'GPT Image 2 generation failed', 'IMAGE_GENERATION_FAILED')
     }
 
@@ -565,12 +566,17 @@ const pollGptImage2AsyncResult = async (taskId, attempts = 90, intervalMs = 5000
       }
     }
 
+    if (isPending && index < attempts - 1) {
+      await sleep(intervalMs)
+      continue
+    }
+
     if (index < attempts - 1) {
       await sleep(intervalMs)
     }
   }
 
-  return lastResponse
+  throw new HttpError(504, 'GPT Image 2 result is still pending. Please retry later.', 'IMAGE_RESULT_PENDING')
 }
 
 const normalizeKlingStatus = (value) => {
