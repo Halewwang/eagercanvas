@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:api": "npm --prefix backend run dev",
+    "test:frontend": "find src -name '*.test.js' -not -name '* 2.js' -print0 | xargs -0 node --test",
     "build": "vite build",
     "preview": "vite preview"
   },

@@ -15,13 +15,7 @@ const REMOTE_SYNC_CHANGE_TYPES = new Set([
 export const getInteractionOverlayDelay = ({ isInteracting = false } = {}) =>
   isInteracting ? INTERACTION_OVERLAY_DELAY_MS : 0
 
-export const getOverlayScheduleMode = ({
-  isDragging = false,
-  isZooming = false
-} = {}) => {
-  if (isZooming) return 'raf'
-  return 'raf'
-}
+export const getOverlayScheduleMode = () => 'raf'
 
 export const getNodeCapsuleScale = (zoom = 1) => {
   const safeZoom = Math.max(Number(zoom) || 1, 0.01)

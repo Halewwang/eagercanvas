@@ -9,7 +9,7 @@ export const toastState = reactive({
 let nextToastId = 1
 
 const levelToConsole = {
-  success: console.log,
+  success: console.info,
   warning: console.warn,
   error: console.error,
   info: console.info
@@ -24,7 +24,9 @@ const pushToast = (type, message, duration = DEFAULT_DURATION) => {
     message
   })
 
-  levelToConsole[type]?.(`[Notifier ${type}]`, message)
+  if (import.meta.env.DEV) {
+    levelToConsole[type]?.(`[Notifier ${type}]`, message)
+  }
 
   if (duration > 0) {
     window.setTimeout(() => {

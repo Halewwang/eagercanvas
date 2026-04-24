@@ -618,14 +618,12 @@ const handleGenerate = async (mode = 'auto') => {
     return
   }
   
-  // Log prompt order for debugging | 记录Prompt顺序用于调试
-  if (prompts.length > 1) {
-    console.log('[ImageConfigNode] 拼接Prompt顺序:', prompts.map(p => `${p.order}: ${p.content.substring(0, 20)}...`))
+  if (import.meta.env.DEV && prompts.length > 1) {
+    console.debug('[ImageConfigNode] 拼接Prompt顺序:', prompts.map(p => `${p.order}: ${p.content.substring(0, 20)}...`))
   }
   
-  // Log image order for debugging | 记录图片顺序用于调试
-  if (refImagesWithOrder && refImagesWithOrder.length > 1) {
-    console.log('[ImageConfigNode] Reference顺序:', refImagesWithOrder.map(r => `${r.order}: ${r.nodeId}`))
+  if (import.meta.env.DEV && refImagesWithOrder && refImagesWithOrder.length > 1) {
+    console.debug('[ImageConfigNode] Reference顺序:', refImagesWithOrder.map(r => `${r.order}: ${r.nodeId}`))
   }
 
   if (!isConfigured.value) {
