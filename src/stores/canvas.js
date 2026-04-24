@@ -12,8 +12,9 @@ import {
   deriveSyncStatusFromSaveResult,
   isConflictError
 } from './canvasSyncStatus'
-import { IMAGE_MODELS, VIDEO_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL } from '../config/models'
+import { IMAGE_MODELS, VIDEO_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL } from '@/config/models'
 import { isTransientRemoteMediaUrl } from '@/utils/media'
+import { notifier } from '@/utils/notifier'
 import {
   createCanvasContentSnapshot,
   recordCanvasPerf,
@@ -656,11 +657,15 @@ export const initSampleData = () => {
 // Current project metadata | 当前项目元数据
 export const currentProjectVersion = ref(null) // Stores updated_at for optimistic locking
 
+const setCurrentProjectSession = (projectId = null, projectVersion = null) => {
+  currentProjectId.value = projectId
+  currentProjectVersion.value = projectVersion
+}
+
 export const resetCanvasSession = () => {
   autoSaveEnabled = false
   isRestoring = true
-  currentProjectId.value = null
-  currentProjectVersion.value = null
+  setCurrentProjectSession()
   projectSaveState.value = createSyncStatus()
   lastSaveResult = { ...projectSaveState.value }
   lastPersistedSnapshotKey = ''
@@ -683,7 +688,6 @@ export const loadProject = (projectId) => {
   isRestoring = true
   clearRemoteRetry()
   resetRemoteRetryDelay()
-  currentProjectId.value = projectId
   
   const canvasData = getProjectCanvas(projectId)
   
@@ -696,11 +700,8 @@ export const loadProject = (projectId) => {
     lastSaveResult = { ...projectSaveState.value }
 
     // Restore project version
-    if (canvasData._meta && (canvasData._meta.serverUpdatedAt || canvasData._meta.draftBaseVersion)) {
-      currentProjectVersion.value = canvasData._meta.serverUpdatedAt || canvasData._meta.draftBaseVersion
-    } else {
-      currentProjectVersion.value = null
-    }
+    const projectVersion = canvasData._meta?.serverUpdatedAt || canvasData._meta?.draftBaseVersion || null
+    setCurrentProjectSession(projectId, projectVersion)
 
     // Restore nodes | 恢复节点
     const sanitizedCanvas = stripRemovedNodes(canvasData.nodes || [], canvasData.edges || [])
@@ -856,10 +857,10 @@ export const saveProject = async ({ forceRemoteOverwrite = false } = {}) => {
       }
       if (isConflictError(error)) {
         // Handle conflict: Show dialog to user
-        window.$message?.error('Project has been updated elsewhere. Please refresh.')
+        notifier.error('Project has been updated elsewhere. Please refresh.')
         // Ideally show a modal to chose: Overwrite or Refresh
       } else if (error.code === 'EMPTY_CANVAS_OVERWRITE_BLOCKED') {
-        window.$message?.error('Blocked a risky empty-canvas save. Please refresh the project.')
+        notifier.error('Blocked a risky empty-canvas save. Please refresh the project.')
       } else {
         console.error('Save failed:', error)
       }
@@ -962,7 +963,7 @@ export const endCanvasZoomInteraction = () => {
  */
 export const undo = () => {
   if (historyIndex.value <= 0) {
-    window.$message?.info('没有可撤销的操作')
+    notifier.info('没有可撤销的操作')
     return false
   }
   
@@ -976,7 +977,7 @@ export const undo = () => {
  */
 export const redo = () => {
   if (historyIndex.value >= history.value.length - 1) {
-    window.$message?.info('没有可重做的操作')
+    notifier.info('没有可重做的操作')
     return false
   }
   
@@ -1021,6 +1022,35 @@ export const hasPendingCanvasChanges = () => {
   const snapshotKey = getSnapshotKey(createCanvasContentSnapshotFromState({ preserveTransientMedia: true }))
   return snapshotKey !== lastPersistedSnapshotKey
 }
+
+export const useCanvasStore = () => ({
+  currentProjectId,
+  currentProjectVersion,
+  nodes,
+  edges,
+  groups,
+  canvasViewport,
+  isNodeDragging,
+  isCanvasZooming,
+  selectedNode,
+  projectSaveState,
+  addNode,
+  addEdge,
+  updateNode,
+  removeNode,
+  removeNodesByIds,
+  loadProject,
+  saveProject,
+  flushSave,
+  resetCanvasSession,
+  updateViewport,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
+  manualSaveHistory,
+  hasPendingCanvasChanges
+})
 
 canvasBroadcast.subscribe((message) => {
   if (!message?.projectId || message.projectId !== currentProjectId.value) return

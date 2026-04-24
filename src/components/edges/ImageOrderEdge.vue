@@ -36,7 +36,7 @@
 import { computed } from 'vue'
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, useVueFlow } from '@vue-flow/core'
 import { BaseDropdown } from '@/components/ui'
-import { edges } from '../../stores/canvas'
+import { edges } from '@/stores/canvas'
 
 // Get VueFlow instance | 获取 VueFlow 实例
 const { updateEdgeData } = useVueFlow()

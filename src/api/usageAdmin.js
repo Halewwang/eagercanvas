@@ -1,7 +1,7 @@
-import { request } from '@/utils'
+import { getStoredValue, removeStoredValue, request, setStoredValue } from '@/utils'
 import { STORAGE_KEYS } from '@/utils/constants'
 
-const getAdminToken = () => localStorage.getItem(STORAGE_KEYS.USAGE_ADMIN_TOKEN) || ''
+const getAdminToken = () => getStoredValue(STORAGE_KEYS.USAGE_ADMIN_TOKEN)
 
 const adminRequest = (config = {}) => {
   const token = getAdminToken()
@@ -19,14 +19,14 @@ const adminRequest = (config = {}) => {
 export const setUsageAdminToken = (token) => {
   const val = String(token || '').trim()
   if (!val) {
-    localStorage.removeItem(STORAGE_KEYS.USAGE_ADMIN_TOKEN)
+    removeStoredValue(STORAGE_KEYS.USAGE_ADMIN_TOKEN)
     return
   }
-  localStorage.setItem(STORAGE_KEYS.USAGE_ADMIN_TOKEN, val)
+  setStoredValue(STORAGE_KEYS.USAGE_ADMIN_TOKEN, val)
 }
 
 export const clearUsageAdminToken = () => {
-  localStorage.removeItem(STORAGE_KEYS.USAGE_ADMIN_TOKEN)
+  removeStoredValue(STORAGE_KEYS.USAGE_ADMIN_TOKEN)
 }
 
 export const usageAdminLogin = (payload) =>

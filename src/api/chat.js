@@ -2,8 +2,7 @@
  * Chat API | 对话 API
  */
 
-import { request, getBaseUrl } from '@/utils'
-import { STORAGE_KEYS } from '@/utils/constants'
+import { request, getBaseUrl, fetchWithAuth } from '@/utils'
 
 // 对话补全
 export const chatCompletions = (data) =>
@@ -15,17 +14,13 @@ export const chatCompletions = (data) =>
 
 // 流式对话补全
 export const streamChatCompletions = async function* (data, signal) {
-  const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
   const baseUrl = getBaseUrl()
-  const authToken = accessToken
   
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetchWithAuth(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      'Content-Type': 'application/json'
     },
-    credentials: 'include',
     // Backend currently returns JSON. Force non-stream to avoid empty parsed chunks.
     body: JSON.stringify({ ...data, stream: false }),
     signal

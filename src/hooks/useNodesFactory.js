@@ -3,10 +3,10 @@
  * Handles node creation logic from workflows and manual actions
  */
 import { nextTick } from 'vue'
-import { addNode, addEdge, nodes, updateNode } from '../stores/canvas'
-import { translateLabel, WORKFLOW_NAME_MAP } from '../config/labels'
-import { notifier } from '../utils/notifier'
-import { edgeStrategy } from '../services/edgeStrategy'
+import { addNode, addEdge, nodes, updateNode } from '@/stores/canvas'
+import { translateLabel, WORKFLOW_NAME_MAP } from '@/config/labels'
+import { notifier } from '@/utils/notifier'
+import { edgeStrategy } from '@/services/edgeStrategy'
 
 export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
   
@@ -48,11 +48,7 @@ export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
       node.newId = nodeId
     })
     
-    // Add edges to canvas | 将边添加到画布
-    // Use nextTick to ensure nodes are rendered before adding edges (if needed)
-    // or just add them. The original code used setTimeout 100ms.
-    // We will use a small delay or nextTick to match original behavior just in case.
-    
+    // Keep edge creation deferred until Vue Flow has registered the new nodes.
     setTimeout(() => {
       newEdges.forEach(edge => {
         addEdge(edgeStrategy.resolve({

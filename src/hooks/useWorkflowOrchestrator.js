@@ -17,6 +17,7 @@ import {
   updateNode 
 } from '@/stores/canvas'
 import { edgeStrategy } from '@/services/edgeStrategy'
+import { notifier } from '@/utils/notifier'
 
 // Workflow types | 工作流类型
 const WORKFLOW_TYPES = {
@@ -677,7 +678,7 @@ export const useWorkflowOrchestrator = () => {
       }
       
       addLog('success', `多角度分镜工作流已创建，请上传主角色图后点击各节点的"立即生成"按钮`)
-      window.$message?.info('请先上传主角色图，然后点击各角度节点的"立即生成"按钮')
+      notifier.info('请先上传主角色图，然后点击各角度节点的"立即生成"按钮')
       
       return createdNodes
     } catch (err) {

@@ -168,7 +168,7 @@ import {
   usageAdminSession
 } from '@/api/usageAdmin'
 import { STORAGE_KEYS } from '@/utils/constants'
-import { getErrorMessage } from '@/utils'
+import { getErrorMessage, getStoredValue } from '@/utils'
 
 const router = useRouter()
 
@@ -196,7 +196,7 @@ const createForm = ref({
 const isAdminAuthenticated = computed(() => !!adminSession.value)
 const balanceDisplay = computed(() => (balance.value ? `$${balance.value}` : '--'))
 
-const hasToken = () => !!localStorage.getItem(STORAGE_KEYS.USAGE_ADMIN_TOKEN)
+const hasToken = () => !!getStoredValue(STORAGE_KEYS.USAGE_ADMIN_TOKEN)
 
 const goHome = () => router.push('/')
 

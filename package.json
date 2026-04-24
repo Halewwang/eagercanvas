@@ -7,6 +7,9 @@
     "dev": "vite",
     "dev:api": "npm --prefix backend run dev",
     "test:frontend": "find src -name '*.test.js' -not -name '* 2.js' -print0 | xargs -0 node --test",
+    "lint": "eslint src --ext .js,.vue",
+    "check:maintenance": "node scripts/check-maintenance.mjs",
+    "check": "npm run lint && npm run check:maintenance && npm run test:frontend",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -25,5 +28,11 @@
     "vite": "^5.2.0",
     "vue": "^3.5.24",
     "vue-router": "^4.2.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.2.1",
+    "eslint-plugin-vue": "^10.9.0",
+    "globals": "^17.5.0"
   }
 }

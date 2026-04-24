@@ -461,7 +461,7 @@ import {
   ArrowRedoOutline,
   LocateOutline,
   RemoveOutline
-} from '../icons/coolicons'
+} from '@/icons/coolicons'
 import {
   nodes,
   edges,
@@ -493,16 +493,16 @@ import {
   renameGroup,
   translateNodesByIds,
   ungroup
-} from '../stores/canvas'
-import { loadAllModels } from '../stores/models'
-import { useNodesFactory } from '../hooks'
+} from '@/stores/canvas'
+import { loadAllModels } from '@/stores/models'
+import { useNodesFactory } from '@/hooks'
 import { useAvatarUpload } from '@/hooks/useAvatarUpload'
 import { useCanvasProjectActions } from '@/hooks/useCanvasProjectActions'
-import { edgeStrategy, isConnectionValid } from '../services/edgeStrategy'
-import { notifier } from '../utils/notifier'
+import { edgeStrategy, isConnectionValid } from '@/services/edgeStrategy'
+import { notifier } from '@/utils/notifier'
 import { getWorkflowById } from '@/config/workflows'
 import { getMediaAssets } from '@/api'
-import { duplicateProject, getProjectCanvas, initProjectsStore, loadCachedProjects, projects, refreshProjectById } from '../stores/projects'
+import { duplicateProject, getProjectCanvas, initProjectsStore, loadCachedProjects, projects, refreshProjectById } from '@/stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
@@ -516,8 +516,8 @@ import { isExpiredRemoteUrl } from '@/utils/media'
 import { recoverMissingNodeMedia, shouldApplyRemoteProjectSnapshot, shouldUseCachedProjectBeforeRemote } from '@/utils/canvasSync'
 
 // API Settings component | API 设置组件
-import ApiSettings from '../components/ApiSettings.vue'
-import MediaLibraryPanel from '../components/MediaLibraryPanel.vue'
+import ApiSettings from '@/components/ApiSettings.vue'
+import MediaLibraryPanel from '@/components/MediaLibraryPanel.vue'
 
 // Initialize models on page load | 页面加载时初始化模型
 onMounted(() => {
@@ -533,16 +533,16 @@ const localInjectInputRef = ref(null)
 const nodesFactory = useNodesFactory({ updateNodeInternals, viewport })
 
 // Custom node components | 自定义节点组件
-import TextNode from '../components/nodes/TextNode.vue'
-import ImageConfigNode from '../components/nodes/ImageConfigNode.vue'
-import VideoNode from '../components/nodes/VideoNode.vue'
-import ImageNode from '../components/nodes/ImageNode.vue'
-import VideoConfigNode from '../components/nodes/VideoConfigNode.vue'
-import LLMConfigNode from '../components/nodes/LLMConfigNode.vue'
-import ImageRoleEdge from '../components/edges/ImageRoleEdge.vue'
-import PromptOrderEdge from '../components/edges/PromptOrderEdge.vue'
-import ImageOrderEdge from '../components/edges/ImageOrderEdge.vue'
-import DefaultEdge from '../components/edges/DefaultEdge.vue'
+import TextNode from '@/components/nodes/TextNode.vue'
+import ImageConfigNode from '@/components/nodes/ImageConfigNode.vue'
+import VideoNode from '@/components/nodes/VideoNode.vue'
+import ImageNode from '@/components/nodes/ImageNode.vue'
+import VideoConfigNode from '@/components/nodes/VideoConfigNode.vue'
+import LLMConfigNode from '@/components/nodes/LLMConfigNode.vue'
+import ImageRoleEdge from '@/components/edges/ImageRoleEdge.vue'
+import PromptOrderEdge from '@/components/edges/PromptOrderEdge.vue'
+import ImageOrderEdge from '@/components/edges/ImageOrderEdge.vue'
+import DefaultEdge from '@/components/edges/DefaultEdge.vue'
 
 const router = useRouter()
 const route = useRoute()

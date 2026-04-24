@@ -1,5 +1,6 @@
 import request from './request'
 import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from './constants'
+import { getStoredValue } from './storage.js'
 
 export const isDataImageUrl = (value = '') => /^data:image\//i.test(String(value || ''))
 export const isDataUrl = (value = '') => /^data:/i.test(String(value || ''))
@@ -239,7 +240,7 @@ export const createAuthenticatedMediaProxyUrl = (url = '') => {
   if (isPersistedUploadUrl(raw)) return raw
   if (isExpiredRemoteUrl(raw)) return ''
 
-  const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
+  const accessToken = getStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
   if (!accessToken) return raw
 
   const normalizedBaseUrl = /^https?:\/\//i.test(DEFAULT_API_BASE_URL)

@@ -9,6 +9,7 @@ import {
   updateAdmin302ApiKey
 } from '@/api/admin'
 import { getErrorMessage } from '@/utils'
+import { notifier } from '@/utils/notifier'
 
 const createEmptyKeyForm = () => ({
   api_name: '',
@@ -106,7 +107,7 @@ export const useAdminServiceOps = ({
     } catch (error) {
       balance.value = ''
       const message = toServiceNotice('加载 Eager 服务余额失败', error)
-      if (!silent && !error?.__handled) window.$message?.error(message)
+      if (!silent && !error?.__handled) notifier.error(message)
       return { ok: false, message: prefixNotice('账户余额', message), error }
     } finally {
       loadingBalance.value = false
@@ -116,13 +117,13 @@ export const useAdminServiceOps = ({
   const queryRecord = async () => {
     if (!canReadUsage.value) return
     const id = String(recordRequestId.value || '').trim()
-    if (!id) return window.$message?.warning('请输入 request-id')
+    if (!id) return notifier.warning('请输入 request-id')
     loadingRecord.value = true
     try {
       const rsp = await getAdmin302Record(id)
       recordData.value = rsp?.data || null
     } catch (error) {
-      if (!error?.__handled) window.$message?.error(getErrorMessage(error, '查询扣费记录失败'))
+      if (!error?.__handled) notifier.error(getErrorMessage(error, '查询扣费记录失败'))
     } finally {
       loadingRecord.value = false
     }
@@ -143,7 +144,7 @@ export const useAdminServiceOps = ({
     } catch (error) {
       apiLogs.value = []
       const message = toServiceNotice('加载 API 日志失败', error)
-      if (!silent && !error?.__handled) window.$message?.error(message)
+      if (!silent && !error?.__handled) notifier.error(message)
       return { ok: false, message: prefixNotice('API 日志', message), error }
     } finally {
       loadingApiLogs.value = false
@@ -165,7 +166,7 @@ export const useAdminServiceOps = ({
       apiKeys.value = []
       keyDrafts.value = {}
       const message = toServiceNotice('加载 API 密钥失败', error)
-      if (!silent && !error?.__handled) window.$message?.error(message)
+      if (!silent && !error?.__handled) notifier.error(message)
       return { ok: false, message: prefixNotice('API 密钥', message), error }
     } finally {
       loadingKeys.value = false
@@ -175,16 +176,16 @@ export const useAdminServiceOps = ({
   const createApiKey = async () => {
     if (!canManageApiKeys.value) return
     if (!String(createKeyForm.api_name || '').trim()) {
-      return window.$message?.warning('必须填写 api_name')
+      return notifier.warning('必须填写 api_name')
     }
     creatingApiKey.value = true
     try {
       await createAdmin302ApiKey({ ...createKeyForm, api_name: createKeyForm.api_name.trim() })
-      window.$message?.success('API 密钥创建成功')
+      notifier.success('API 密钥创建成功')
       resetCreateKeyForm(createKeyForm)
       await loadApiKeys()
     } catch (error) {
-      if (!error?.__handled) window.$message?.error(getErrorMessage(error, '创建 API 密钥失败'))
+      if (!error?.__handled) notifier.error(getErrorMessage(error, '创建 API 密钥失败'))
     } finally {
       creatingApiKey.value = false
     }
@@ -198,10 +199,10 @@ export const useAdminServiceOps = ({
     updatingKeys.value = { ...updatingKeys.value, [name]: true }
     try {
       await updateAdmin302ApiKey(name, { ...draft, api_name: name })
-      window.$message?.success('API 密钥更新成功')
+      notifier.success('API 密钥更新成功')
       await loadApiKeys()
     } catch (error) {
-      if (!error?.__handled) window.$message?.error(getErrorMessage(error, '更新 API 密钥失败'))
+      if (!error?.__handled) notifier.error(getErrorMessage(error, '更新 API 密钥失败'))
     } finally {
       updatingKeys.value = { ...updatingKeys.value, [name]: false }
     }
@@ -215,10 +216,10 @@ export const useAdminServiceOps = ({
     deletingKeys.value = { ...deletingKeys.value, [name]: true }
     try {
       await deleteAdmin302ApiKey(name)
-      window.$message?.success('API 密钥删除成功')
+      notifier.success('API 密钥删除成功')
       await Promise.all([loadApiKeys(), loadUsers(), loadLogs()])
     } catch (error) {
-      if (!error?.__handled) window.$message?.error(getErrorMessage(error, '删除 API 密钥失败'))
+      if (!error?.__handled) notifier.error(getErrorMessage(error, '删除 API 密钥失败'))
     } finally {
       deletingKeys.value = { ...deletingKeys.value, [name]: false }
     }

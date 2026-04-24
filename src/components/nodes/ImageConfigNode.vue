@@ -137,19 +137,6 @@
           {{ error.message || 'Generation failed' }}
         </div>
 
-        <!-- Generated images preview | 生成图片Preview -->
-        <!-- <div v-if="generatedImages.length > 0" class="mt-3 space-y-2">
-        <div class="text-xs text-[var(--text-secondary)]">Result:</div>
-        <div class="grid grid-cols-2 gap-2 max-w-[240px]">
-          <div 
-            v-for="(img, idx) in generatedImages" 
-            :key="idx"
-            class="aspect-square rounded-lg overflow-hidden bg-[var(--bg-tertiary)] max-w-[110px]"
-          >
-            <img :src="img.url" class="w-full h-full object-cover" />
-          </div>
-        </div>
-      </div> -->
       </div>
 
       <!-- Handles | 连接点 -->
@@ -181,12 +168,12 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
-import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline, RefreshOutline, AddOutline } from '../../icons/coolicons'
-import { useImageGeneration, useApiConfig } from '../../hooks'
-import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject, projectSaveState, currentProjectId } from '../../stores/canvas'
-import { imageModelOptions, getModelSizeOptions, getModelQualityOptions, getModelConfig, DEFAULT_IMAGE_MODEL } from '../../stores/models'
+import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline, RefreshOutline, AddOutline } from '@/icons/coolicons'
+import { useImageGeneration, useApiConfig } from '@/hooks'
+import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject, projectSaveState, currentProjectId } from '@/stores/canvas'
+import { imageModelOptions, getModelSizeOptions, getModelQualityOptions, getModelConfig, DEFAULT_IMAGE_MODEL } from '@/stores/models'
 import { persistImageUrl } from '@/utils/media'
-import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
+import { edgeStrategy, resolveNodeInputs } from '@/services/edgeStrategy'
 
 const props = defineProps({
   id: String,

@@ -251,7 +251,7 @@
 import { computed, ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import AuthDialog from '../components/AuthDialog.vue'
+import AuthDialog from '@/components/AuthDialog.vue'
 import imagePanelLeft from '@/assets/home-figma/hero-panel-left.png'
 import imagePanelRight from '@/assets/home-figma/hero-panel-right.png'
 import videoLarge from '@/assets/home-figma/video-large.png'

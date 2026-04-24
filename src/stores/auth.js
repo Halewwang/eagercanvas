@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
-import { getAdminSession } from '../api/admin.js'
-import { STORAGE_KEYS } from '../utils/constants.js'
+import { getAdminSession } from '@/api/admin'
+import { STORAGE_KEYS } from '@/utils/constants'
+import { getStoredValue, removeStoredValue, setStoredValue } from '@/utils/storage'
 import {
   getMe,
   logoutSession,
@@ -10,7 +11,7 @@ import {
   sendRegisterCode,
   verifyLoginCode,
   verifyRegisterCode
-} from '../api/auth.js'
+} from '@/api/auth'
 
 const isLocalPreviewHost = () => {
   if (typeof window === 'undefined') return false
@@ -34,11 +35,7 @@ const permissions = ref([])
 const adminBootstrapped = ref(false)
 
 const readToken = () => {
-  try {
-    return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
-  } catch {
-    return ''
-  }
+  return getStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
 }
 
 const persistToken = (token) => {
@@ -51,12 +48,8 @@ const persistToken = (token) => {
   } else {
     adminBootstrapped.value = false
   }
-  try {
-    if (token) localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, token)
-    else localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
-  } catch {
-    // ignore
-  }
+  if (token) setStoredValue(STORAGE_KEYS.ACCESS_TOKEN, token)
+  else removeStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
 }
 
 export const useAuthStore = () => {

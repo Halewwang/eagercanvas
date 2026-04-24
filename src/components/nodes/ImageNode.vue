@@ -266,17 +266,17 @@ import {
   ImageOutline,
   RefreshOutline,
   TrashOutline
-} from '../../icons/coolicons'
-import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode, projectSaveState, currentProjectId, isCanvasZooming, isNodeDragging } from '../../stores/canvas'
+} from '@/icons/coolicons'
+import { addEdge, addNode, duplicateNode, edges, nodes, removeNode, saveProject, flushSave, updateNode, projectSaveState, currentProjectId, isCanvasZooming, isNodeDragging } from '@/stores/canvas'
 import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_IMAGE_SIZE,
   getModelConfig,
   getModelSizeOptions,
   imageModelOptions
-} from '../../stores/models'
+} from '@/stores/models'
 import { resolveGptImage2Size } from '@/config/models'
-import { useApiConfig, useImageGeneration } from '../../hooks'
+import { useApiConfig, useImageGeneration } from '@/hooks'
 import { getErrorMessage } from '@/utils'
 import { dataUrlToFile, persistImageUrl, uploadImageFile } from '@/utils/media'
 import {
@@ -286,9 +286,9 @@ import {
   saveCachedImagePreview,
   shouldGenerateImagePreview
 } from '@/utils/imagePreviewCache'
-import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
+import { edgeStrategy, resolveNodeInputs } from '@/services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
-import { useImageTools } from '../../hooks/useApi'
+import { useImageTools } from '@/hooks/useApi'
 import toolsIcon from '@/assets/tools-icon.svg'
 import removeBgIcon from '@/assets/remove-bg-icon.svg'
 import cropIcon from '@/assets/crop-icon.svg'

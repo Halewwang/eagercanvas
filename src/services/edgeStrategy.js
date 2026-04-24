@@ -2,8 +2,8 @@
  * Edge Strategy Service | 边策略服务
  * Handles edge connection logic based on node types
  */
-import { nodes, edges } from '../stores/canvas'
-import { getVideoConnectionProfile } from '../config/models'
+import { nodes, edges } from '@/stores/canvas'
+import { getVideoConnectionProfile } from '@/config/models'
 
 const IMAGE_TARGET_TYPES = new Set(['image', 'imageConfig'])
 const VIDEO_TARGET_TYPES = new Set(['video', 'videoConfig'])

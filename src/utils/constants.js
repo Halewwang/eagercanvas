@@ -3,7 +3,7 @@
  */
 
 // API Base URL | API 基础 URL
-export const DEFAULT_API_BASE_URL = import.meta.env.VITE_APP_API_BASE_URL || '/api/v1'
+export const DEFAULT_API_BASE_URL = import.meta.env?.VITE_APP_API_BASE_URL || '/api/v1'
 
 // API Endpoints | API 端点
 export const API_ENDPOINTS = {

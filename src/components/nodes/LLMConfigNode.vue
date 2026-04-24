@@ -107,10 +107,10 @@
 import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin, NSelect } from 'naive-ui'
-import { TrashOutline, CopyOutline, ChatbubbleOutline, SparklesOutline } from '../../icons/coolicons'
-import { updateNode, removeNode, duplicateNode, nodes, edges } from '../../stores/canvas'
-import { useChat, useApiConfig } from '../../hooks'
-import { chatModelSelectOptions, DEFAULT_CHAT_MODEL } from '../../stores/models'
+import { TrashOutline, CopyOutline, ChatbubbleOutline, SparklesOutline } from '@/icons/coolicons'
+import { updateNode, removeNode, duplicateNode, nodes, edges } from '@/stores/canvas'
+import { useChat, useApiConfig } from '@/hooks'
+import { chatModelSelectOptions, DEFAULT_CHAT_MODEL } from '@/stores/models'
 
 const props = defineProps({
   id: String,

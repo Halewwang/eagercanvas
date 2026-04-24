@@ -216,7 +216,7 @@ import {
   SparklesOutline,
   GridOutline,
   EllipsisHorizontalOutline
-} from '../icons/coolicons'
+} from '@/icons/coolicons'
 import {
   projects,
   initProjectsStore,

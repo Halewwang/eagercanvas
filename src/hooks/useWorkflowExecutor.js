@@ -3,9 +3,9 @@
  * Orchestrates high-level workflow execution from user input
  */
 import { ref } from 'vue'
-import { nodes } from '../stores/canvas'
+import { nodes } from '@/stores/canvas'
 import { useWorkflowOrchestrator } from './useWorkflowOrchestrator'
-import { notifier } from '../utils/notifier'
+import { notifier } from '@/utils/notifier'
 
 export const useWorkflowExecutor = () => {
   const orchestrator = useWorkflowOrchestrator()

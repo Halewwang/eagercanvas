@@ -2,7 +2,7 @@
  * Router configuration | 路由配置
  */
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '../stores/auth.js'
+import { useAuthStore } from '@/stores/auth'
 
 const routes = [
   {
@@ -18,27 +18,27 @@ const routes = [
   {
     path: '/',
     name: 'Home',
-    component: () => import('../views/Home.vue')
+    component: () => import('@/views/Home.vue')
   },
   {
     path: '/canvas/:id?',
     name: 'Canvas',
-    component: () => import('../views/Canvas.vue')
+    component: () => import('@/views/Canvas.vue')
   },
   {
     path: '/workspace',
     name: 'Workspace',
-    component: () => import('../views/Workspace.vue')
+    component: () => import('@/views/Workspace.vue')
   },
   {
     path: '/usage',
     name: 'Usage',
-    component: () => import('../views/Usage.vue')
+    component: () => import('@/views/Usage.vue')
   },
   {
     path: '/usage-admin',
     name: 'UsageAdmin',
-    component: () => import('../views/UsageAdmin.vue')
+    component: () => import('@/views/UsageAdmin.vue')
   },
   {
     path: '/admin',
@@ -47,22 +47,22 @@ const routes = [
   {
     path: '/admin/dashboard',
     name: 'AdminDashboard',
-    component: () => import('../views/AdminUsers.vue')
+    component: () => import('@/views/AdminUsers.vue')
   },
   {
     path: '/admin/users',
     name: 'AdminUsers',
-    component: () => import('../views/AdminUsers.vue')
+    component: () => import('@/views/AdminUsers.vue')
   },
   {
     path: '/admin/service',
     name: 'AdminService',
-    component: () => import('../views/AdminUsers.vue')
+    component: () => import('@/views/AdminUsers.vue')
   },
   {
     path: '/admin/audit',
     name: 'AdminAudit',
-    component: () => import('../views/AdminUsers.vue')
+    component: () => import('@/views/AdminUsers.vue')
   }
 ]
 

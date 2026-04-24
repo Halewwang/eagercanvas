@@ -28,16 +28,11 @@ const isLocalPreviewHost = () => {
 const BYPASS_AUTH_IN_DEV = (import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true') || isLocalPreviewHost()
 
 export const projects = ref([])
-export const currentProjectId = ref(null)
 export const projectsLoadState = ref({
   source: 'idle',
   reason: '',
   error: null,
   updatedAt: null
-})
-
-export const currentProject = computed(() => {
-  return projects.value.find((p) => p.id === currentProjectId.value) || null
 })
 
 const defaultCanvasData = {
@@ -915,6 +910,25 @@ export const getSortedProjects = (sortBy = 'updatedAt', order = 'desc') => {
 export const initProjectsStore = async () => {
   await loadProjects()
 }
+
+export const useProjectsStore = () => ({
+  projects,
+  projectsLoadState,
+  loadProjects,
+  loadCachedProjects,
+  refreshProjectById,
+  createProject,
+  updateProject,
+  updateProjectCanvas,
+  getProjectCanvas,
+  deleteProject,
+  duplicateProject,
+  renameProject,
+  updateProjectThumbnail,
+  markProjectOpened,
+  getSortedProjects,
+  initProjectsStore
+})
 
 if (typeof window !== 'undefined') {
   window.__aiCanvasProjects = {

@@ -38,9 +38,9 @@ import { computed } from 'vue'
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, useVueFlow } from '@vue-flow/core'
 import { NIcon } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
-import { ChevronDownOutline } from '../../icons/coolicons'
-import { edges, nodes } from '../../stores/canvas'
-import { getVideoConnectionProfile } from '../../config/models'
+import { ChevronDownOutline } from '@/icons/coolicons'
+import { edges, nodes } from '@/stores/canvas'
+import { getVideoConnectionProfile } from '@/config/models'
 
 // Get VueFlow instance | 获取 VueFlow 实例
 const { updateEdgeData } = useVueFlow()

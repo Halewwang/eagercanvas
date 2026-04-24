@@ -137,7 +137,7 @@ import {
   ImageOutline,
   SparklesOutline,
   VideocamOutline
-} from '../icons/coolicons'
+} from '@/icons/coolicons'
 
 const props = defineProps({
   show: Boolean,

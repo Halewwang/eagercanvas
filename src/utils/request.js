@@ -5,6 +5,8 @@
 
 import axios from 'axios'
 import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from './constants'
+import { notifier } from './notifier.js'
+import { getStoredValue, removeStoredValue, setStoredValue } from './storage.js'
 
 // Create axios instance | 创建 axios 实例
 const instance = axios.create({
@@ -31,7 +33,7 @@ const flushQueue = (error, token = '') => {
 // Request interceptor | 请求拦截器
 instance.interceptors.request.use(
   (config) => {
-    const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || ''
+    const accessToken = getStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
     
     if (accessToken) {
       config.headers['Authorization'] = `Bearer ${accessToken}`
@@ -67,7 +69,7 @@ instance.interceptors.response.use(
     }
     
     // Error response | 错误响应
-    if (!silent) window.$message?.error(message || 'Request failed')
+    if (!silent) notifier.error(message || 'Request failed')
     return Promise.reject(res.data)
   },
   async (error) => {
@@ -84,7 +86,7 @@ instance.interceptors.response.use(
       if (status === 401) {
         const originalRequest = error.config || {}
         const isRefreshPath = originalRequest.url?.includes('/auth/refresh')
-        const hasAccessToken = !!localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN)
+        const hasAccessToken = !!getStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
 
         if (!isRefreshPath && hasAccessToken && !originalRequest._retry) {
           originalRequest._retry = true
@@ -104,15 +106,15 @@ instance.interceptors.response.use(
             const refreshRes = await instance.post('/auth/refresh')
             const nextToken = refreshRes?.accessToken || ''
             if (nextToken) {
-              localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, nextToken)
+              setStoredValue(STORAGE_KEYS.ACCESS_TOKEN, nextToken)
               flushQueue(null, nextToken)
               originalRequest.headers['Authorization'] = `Bearer ${nextToken}`
               return instance(originalRequest)
             }
           } catch (refreshError) {
-            localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
+            removeStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
             flushQueue(refreshError, '')
-            if (!silent) window.$message?.error('登录已过期，请重新登录')
+            if (!silent) notifier.error('登录已过期，请重新登录')
             error.__handled = true
             return Promise.reject(refreshError)
           } finally {
@@ -120,14 +122,14 @@ instance.interceptors.response.use(
           }
         }
 
-        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
-        if (!silent) window.$message?.error('登录已过期，请重新登录')
+        removeStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
+        if (!silent) notifier.error('登录已过期，请重新登录')
         error.__handled = true
       } else if (status === 429) {
-        if (!silent) window.$message?.error('请求过于频繁，请稍后再试')
+        if (!silent) notifier.error('请求过于频繁，请稍后再试')
         error.__handled = true
       } else {
-        if (!silent && !silentNetwork) window.$message?.error(message || '请求失败')
+        if (!silent && !silentNetwork) notifier.error(message || '请求失败')
         error.__handled = true
       }
 
@@ -142,7 +144,7 @@ instance.interceptors.response.use(
       if (isTimeout) {
         error.message = '请求超时。图片生成时间较长，请稍后重试。'
       }
-      if (!silent && !silentNetwork) window.$message?.error(error.message || '网络错误')
+      if (!silent && !silentNetwork) notifier.error(error.message || '网络错误')
       error.__handled = true
     }
     

@@ -126,15 +126,6 @@
             {{ item.label }}
           </span>
         </div>
-        <!-- Progress bar | 进度条 -->
-        <!-- <div v-if="status === 'polling'" class="space-y-1">
-        <div class="flex justify-between text-xs text-[var(--text-secondary)]">
-          <span>Generating...</span>
-          <span>{{ progress.percentage }}%</span>
-        </div>
-        <n-progress type="line" :percentage="progress.percentage" :show-indicator="false" :height="4" />
-      </div> -->
-
         <!-- Generate button | 生成按钮 -->
         <button @click="handleGenerate" :disabled="loading || !isConfigured"
           class="flora-button-primary w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
@@ -152,13 +143,6 @@
           {{ error.message || 'Generation failed' }}
         </div>
 
-        <!-- Generated video preview | Generate VideoPreview -->
-        <!-- <div v-if="generatedVideo?.url" class="mt-3 space-y-2">
-        <div class="text-xs text-[var(--text-secondary)]">Result:</div>
-        <div class="aspect-video rounded-lg overflow-hidden bg-black">
-          <video :src="generatedVideo.url" controls class="w-full h-full object-contain" />
-        </div>
-      </div> -->
       </div>
 
       <!-- Handles | 连接点 -->
@@ -190,12 +174,12 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
-import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '../../icons/coolicons'
-import { useVideoGeneration, useApiConfig } from '../../hooks'
-import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject, currentProjectId } from '../../stores/canvas'
-import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveSeedanceGenerationType, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '../../stores/models'
+import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '@/icons/coolicons'
+import { useVideoGeneration, useApiConfig } from '@/hooks'
+import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject, currentProjectId } from '@/stores/canvas'
+import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveSeedanceGenerationType, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '@/stores/models'
 import { persistMediaUrl } from '@/utils/media'
-import { edgeStrategy, resolveNodeInputs } from '../../services/edgeStrategy'
+import { edgeStrategy, resolveNodeInputs } from '@/services/edgeStrategy'
 
 const props = defineProps({
   id: String,

@@ -61,7 +61,7 @@ import {
   PersonOutline,
   CartOutline,
   ChatbubbleOutline
-} from '../icons/coolicons'
+} from '@/icons/coolicons'
 import { useWorkflowsStore } from '@/stores/workflows'
 
 const props = defineProps({
