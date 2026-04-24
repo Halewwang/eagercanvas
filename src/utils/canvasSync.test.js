@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   recoverMissingNodeMedia,
   shouldApplyRemoteProjectSnapshot,
+  shouldShowRemoteRefreshControl,
   shouldUseCachedProjectBeforeRemote
 } from './canvasSync.js'
 
@@ -45,6 +46,13 @@ test('uses cached project canvas before remote refresh when cache has content', 
   )
   assert.equal(shouldUseCachedProjectBeforeRemote({ projectId: 'project-1', cachedCanvasData: { nodes: [] } }), false)
   assert.equal(shouldUseCachedProjectBeforeRemote({ projectId: 'new', cachedCanvasData: { nodes: [{ id: 'node-1' }] } }), false)
+})
+
+test('shows manual remote refresh only when canvas is saved locally', () => {
+  assert.equal(shouldShowRemoteRefreshControl({ status: 'localPersisted' }), true)
+  assert.equal(shouldShowRemoteRefreshControl({ status: 'offline' }), true)
+  assert.equal(shouldShowRemoteRefreshControl({ status: 'synced', remoteSynced: true }), false)
+  assert.equal(shouldShowRemoteRefreshControl({ status: 'syncing' }), false)
 })
 
 test('recovers blank image nodes from saved asset records', () => {

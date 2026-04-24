@@ -37,6 +37,16 @@
               :class="syncIndicator.dotClass"
             />
             <span>{{ syncIndicator.label }}</span>
+            <button
+              v-if="showRemoteRefreshControl"
+              class="canvas-sync-refresh-btn"
+              :disabled="remoteRefreshAction === 'refresh'"
+              title="Refresh from cloud"
+              @click.stop="openRemoteRefreshModal"
+            >
+              <n-icon :size="13"><RefreshOutline /></n-icon>
+              <span>{{ remoteRefreshAction === 'refresh' ? 'Refreshing' : 'Refresh cloud' }}</span>
+            </button>
           </div>
         </div>
         <div class="flora-panel rounded-full p-1.5">
@@ -367,6 +377,35 @@
       </template>
     </BaseModal>
 
+    <BaseModal
+      v-model:show="showRemoteRefreshModal"
+      title="Refresh from cloud"
+      description="Load the latest saved cloud canvas for this project."
+      size="sm"
+      :close-on-overlay="remoteRefreshAction !== 'refresh'"
+    >
+      <p class="ui-body ui-modal-copy">
+        Local draft changes on this device will be replaced by the cloud version.
+      </p>
+      <template #footer>
+        <div class="ui-modal-actions">
+          <BaseButton
+            variant="ghost"
+            :disabled="remoteRefreshAction === 'refresh'"
+            @click="showRemoteRefreshModal = false"
+          >
+            Cancel
+          </BaseButton>
+          <BaseButton
+            :loading="remoteRefreshAction === 'refresh'"
+            @click="confirmRemoteRefresh"
+          >
+            Refresh cloud
+          </BaseButton>
+        </div>
+      </template>
+    </BaseModal>
+
     <MediaLibraryPanel
       v-model:show="showMediaLibraryPanel"
       :project-id="currentCanvasProjectId"
@@ -460,7 +499,8 @@ import {
   ArrowUndoOutline,
   ArrowRedoOutline,
   LocateOutline,
-  RemoveOutline
+  RemoveOutline,
+  RefreshOutline
 } from '@/icons/coolicons'
 import {
   nodes,
@@ -513,7 +553,12 @@ import {
   recordCanvasPerf
 } from '@/utils/canvasInteraction'
 import { isExpiredRemoteUrl } from '@/utils/media'
-import { recoverMissingNodeMedia, shouldApplyRemoteProjectSnapshot, shouldUseCachedProjectBeforeRemote } from '@/utils/canvasSync'
+import {
+  recoverMissingNodeMedia,
+  shouldApplyRemoteProjectSnapshot,
+  shouldShowRemoteRefreshControl,
+  shouldUseCachedProjectBeforeRemote
+} from '@/utils/canvasSync'
 
 // API Settings component | API 设置组件
 import ApiSettings from '@/components/ApiSettings.vue'
@@ -604,6 +649,8 @@ const groupRenameTargetId = ref('')
 const groupRenameValue = ref('')
 const showConflictModal = ref(false)
 const conflictAction = ref('')
+const showRemoteRefreshModal = ref(false)
+const remoteRefreshAction = ref('')
 
 let groupDragState = null
 let overlayRafId = null
@@ -772,6 +819,8 @@ const syncIndicator = computed(() => {
   return null
 })
 
+const showRemoteRefreshControl = computed(() => shouldShowRemoteRefreshControl(projectSaveState.value))
+
 watch(
   () => projectSaveState.value?.status,
   (status) => {
@@ -815,6 +864,27 @@ const overwriteRemoteConflict = async () => {
     notifier.error(error?.message || 'Overwrite failed')
   } finally {
     conflictAction.value = ''
+  }
+}
+
+const openRemoteRefreshModal = () => {
+  if (remoteRefreshAction.value) return
+  showRemoteRefreshModal.value = true
+}
+
+const confirmRemoteRefresh = async () => {
+  const projectId = String(currentCanvasProjectId.value || route.params.id || '')
+  if (!projectId || remoteRefreshAction.value) return
+  remoteRefreshAction.value = 'refresh'
+  try {
+    await refreshProjectById(projectId, { preferLocalDraft: false })
+    await loadProjectById(projectId)
+    showRemoteRefreshModal.value = false
+    notifier.success('Cloud canvas refreshed')
+  } catch (error) {
+    notifier.error(error?.message || 'Refresh failed')
+  } finally {
+    remoteRefreshAction.value = ''
   }
 }
 
@@ -2495,12 +2565,39 @@ onUnmounted(() => {
 
 .canvas-sync-pill {
   flex: 0 1 auto;
-  width: 110px;
+  min-width: 110px;
+  width: auto;
   height: 50px;
   display: flex;
   align-self: auto;
   justify-content: center;
   align-items: center;
+}
+
+.canvas-sync-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin-left: 4px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.canvas-sync-refresh-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.canvas-sync-refresh-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .canvas-zoom-pill {

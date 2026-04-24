@@ -39,6 +39,11 @@ export const shouldUseCachedProjectBeforeRemote = ({
   return hasCanvasContent(cachedCanvasData)
 }
 
+export const shouldShowRemoteRefreshControl = (syncState = {}) => {
+  const status = String(syncState?.status || '').trim()
+  return status === 'localPersisted' || status === 'offline'
+}
+
 const isTransientRemoteMediaUrl = (value = '') => {
   const raw = String(value || '').trim()
   if (!raw) return false

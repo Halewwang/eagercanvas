@@ -224,7 +224,8 @@ import {
   renameProject,
   duplicateProject,
   deleteProject,
-  markProjectOpened
+  markProjectOpened,
+  refreshProjectById
 } from '@/stores/projects'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 import { getErrorMessage } from '@/utils'
@@ -246,6 +247,7 @@ const deleteTargetId = ref('')
 const deleteTargetName = ref('')
 const showTemplatePreviewModal = ref(false)
 const previewTemplate = ref(null)
+const refreshingProjectId = ref('')
 
 const navItems = [
   { key: 'projects', label: 'My Project', icon: FolderOpenOutline },
@@ -311,6 +313,7 @@ const resolveCardIcon = (item) => {
 }
 
 const projectMenuOptions = () => [
+  { label: 'Refresh from cloud', key: 'refresh-cloud' },
   { label: 'Copy project link', key: 'copy-link' },
   { label: 'Rename project', key: 'rename' },
   { label: 'Duplicate project', key: 'duplicate' },
@@ -328,6 +331,10 @@ const copyText = async (text) => {
 }
 
 const handleProjectMenuSelect = async (key, project) => {
+  if (key === 'refresh-cloud') {
+    await refreshProjectFromCloud(project)
+    return
+  }
   if (key === 'copy-link') {
     const origin = window.location.origin
     const ok = await copyText(`${origin}/canvas/${project.id}`)
@@ -364,10 +371,29 @@ const createBlankProject = async () => {
 const handlePrimaryClick = async (item) => {
   if (activeSection.value === 'projects') {
     markProjectOpened(item.id)
+    try {
+      await refreshProjectById(item.id)
+    } catch {
+      // Keep the local draft path available when the cloud detail request fails.
+    }
     await router.push(`/canvas/${item.id}`)
     return
   }
   openTemplatePreview(item)
+}
+
+const refreshProjectFromCloud = async (project) => {
+  const id = String(project?.id || '').trim()
+  if (!id || refreshingProjectId.value) return
+  refreshingProjectId.value = id
+  try {
+    await refreshProjectById(id, { preferLocalDraft: false })
+    notifier.success('Cloud canvas refreshed')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to refresh cloud canvas'))
+  } finally {
+    refreshingProjectId.value = ''
+  }
 }
 
 const useTemplate = async (item) => {
