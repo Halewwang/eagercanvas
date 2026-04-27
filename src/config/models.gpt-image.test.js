@@ -16,7 +16,7 @@ test('GPT Image 2 is available as a built-in image model', () => {
   assert.equal(model.supportImageReference, true)
   assert.notEqual(model.hideRatioCapsule, true)
   assert.equal(model.showAdvancedCapsuleParams, true)
-  assert.equal(model.requestTimeoutMs, 600000)
+  assert.ok(model.requestTimeoutMs >= 30 * 60 * 1000)
   assert.deepEqual(model.resolutions, GPT_IMAGE_2_RESOLUTION_OPTIONS)
 })
 

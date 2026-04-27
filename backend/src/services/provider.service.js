@@ -1064,7 +1064,7 @@ export const providerGenerateImage = async (payload = {}, requestOptions = {}) =
   if (lowerModel === 'gpt-image-2') {
     const gptImage2RequestOptions = {
       ...requestOptions,
-      timeoutMs: Math.max(Number(requestOptions?.timeoutMs || 0), 600000)
+      timeoutMs: Math.max(Number(requestOptions?.timeoutMs || 0), 1800000)
     }
     const body = buildGptImage2RequestBody({
       ...payload,
@@ -1202,7 +1202,7 @@ export const providerImageStatus = async (taskId, requestOptions = {}) => {
   }
 }
 
-export const providerRemoveBackground = async (payload = {}) => {
+export const providerRemoveBackground = async (payload = {}, requestOptions = {}) => {
   const source =
     String(payload.image || '').trim() ||
     String(payload.image_url || '').trim() ||
@@ -1228,7 +1228,15 @@ export const providerRemoveBackground = async (payload = {}) => {
     formData.append('bg_color', payload.bg_color.trim())
   }
 
-  const raw = await callProviderMultipart('/photoroom/v1/segment?response_format=url', formData)
+  let raw
+  try {
+    raw = await callProviderMultipart('/photoroom/v1/segment?response_format=url', formData, 'POST', requestOptions)
+  } catch (error) {
+    if (error instanceof HttpError && (error.status === 401 || error.status === 403) && error.code === 'PROVIDER_ERROR') {
+      throw new HttpError(502, 'Provider authentication failed for background removal', 'PROVIDER_AUTH_FAILED')
+    }
+    throw error
+  }
   const url = String(raw?.url || raw?.data?.url || '').trim()
 
   if (!url) {

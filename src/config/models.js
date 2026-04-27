@@ -123,7 +123,7 @@ export const IMAGE_MODELS = [
         },
         supportImageReference: true,
         showAdvancedCapsuleParams: true,
-        requestTimeoutMs: 600000,
+        requestTimeoutMs: 1800000,
         tips: '使用 302.AI GPT-Image-2，比例选项与 Gemini 一致，分辨率胶囊选择 1K/2K/4K，4K 自动限制在最长边 3840px、总像素 830 万以内。'
     },
     {
