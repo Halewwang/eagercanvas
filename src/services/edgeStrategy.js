@@ -172,7 +172,7 @@ export const resolveNodeInputs = (targetNodeId) => {
 
     if (!isVideoTarget(targetNode?.type)) return
 
-    const role = edge.data?.slot || edge.data?.imageRole || 'first_frame_image'
+    const role = edge.data?.imageRole || edge.data?.slot || 'first_frame_image'
     const entry = {
       edgeId: edge.id,
       nodeId: sourceNode.id,
