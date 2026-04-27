@@ -1,8 +1,17 @@
 import { HttpError } from '../utils/http.js'
+import { ZodError } from 'zod'
 
+/* global console */
+
+// Express error handlers must keep four parameters to be recognized.
+// eslint-disable-next-line no-unused-vars
 export const errorMiddleware = (err, req, res, _next) => {
-  const status = err instanceof HttpError ? err.status : 500
-  const code = err instanceof HttpError ? err.code : 'INTERNAL_ERROR'
+  const isValidationError = err instanceof ZodError
+  const status = isValidationError ? 400 : err instanceof HttpError ? err.status : 500
+  const code = isValidationError ? 'VALIDATION_ERROR' : err instanceof HttpError ? err.code : 'INTERNAL_ERROR'
+  const message = isValidationError
+    ? err.issues?.[0]?.message || 'Invalid request'
+    : err.message || 'Unexpected server error'
 
   if (status >= 500) {
     console.error('[server:error]', {
@@ -16,7 +25,7 @@ export const errorMiddleware = (err, req, res, _next) => {
 
   res.status(status).json({
     code,
-    message: err.message || 'Unexpected server error',
+    message,
     requestId: req.requestId
   })
 }
