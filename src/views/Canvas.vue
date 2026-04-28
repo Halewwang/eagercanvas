@@ -2,7 +2,7 @@
   <!-- Canvas page | 画布页面 -->
   <div ref="canvasShellRef" class="h-screen w-screen bg-[#080808]">
     <!-- Main canvas area | 主画布区域 -->
-    <div class="h-full relative overflow-hidden" @mousedown.capture="handleCanvasMouseDownCapture">
+    <div class="h-full relative overflow-hidden" @pointerdown.capture="handleCanvasPointerDownCapture">
       <!-- Top capsules | 顶部胶囊菜单 -->
       <div class="absolute left-4 top-4 z-20 flex items-center gap-2">
         <div class="flora-panel rounded-full p-1.5">
@@ -1329,6 +1329,7 @@ const startGroupDrag = (group, event) => {
   event.stopPropagation()
   selectGroup(group.id)
   beginNodeDragInteraction()
+  const isPointerEvent = String(event.type || '').startsWith('pointer')
   groupDragState = {
     groupId: group.id,
     nodeIds: [...group.nodeIds],
@@ -1337,10 +1338,17 @@ const startGroupDrag = (group, event) => {
     lastDeltaX: 0,
     lastDeltaY: 0,
     didMove: false,
+    pointerId: isPointerEvent ? event.pointerId : null,
+    moveEventName: isPointerEvent ? 'pointermove' : 'mousemove',
+    endEventName: isPointerEvent ? 'pointerup' : 'mouseup',
+    cancelEventName: isPointerEvent ? 'pointercancel' : null,
     nodeLookup: new Map(nodes.value.map((node) => [node.id, node]))
   }
-  window.addEventListener('mousemove', handleGroupDragMove)
-  window.addEventListener('mouseup', stopGroupDrag)
+  window.addEventListener(groupDragState.moveEventName, handleGroupDragMove)
+  window.addEventListener(groupDragState.endEventName, stopGroupDrag)
+  if (groupDragState.cancelEventName) {
+    window.addEventListener(groupDragState.cancelEventName, stopGroupDrag)
+  }
 }
 
 const startSelectedGroupBodyDrag = (group, event) => {
@@ -1365,7 +1373,7 @@ const shouldIgnoreGroupBodyDragTarget = (target) => {
   ].join(',')))
 }
 
-const handleCanvasMouseDownCapture = (event) => {
+const handleCanvasPointerDownCapture = (event) => {
   if (event.button !== 0 || !selectedGroup.value) return
   if (shouldIgnoreGroupBodyDragTarget(event.target)) return
 
@@ -1387,6 +1395,7 @@ const handleCanvasMouseDownCapture = (event) => {
 
 const handleGroupDragMove = (event) => {
   if (!groupDragState) return
+  if (groupDragState.pointerId !== null && event.pointerId !== groupDragState.pointerId) return
   const zoom = viewport.value?.zoom || 1
   const nextDeltaX = (event.clientX - groupDragState.startClientX) / zoom
   const nextDeltaY = (event.clientY - groupDragState.startClientY) / zoom
@@ -1404,9 +1413,12 @@ const handleGroupDragMove = (event) => {
 }
 
 const stopGroupDrag = () => {
-  window.removeEventListener('mousemove', handleGroupDragMove)
-  window.removeEventListener('mouseup', stopGroupDrag)
   if (!groupDragState) return
+  window.removeEventListener(groupDragState.moveEventName, handleGroupDragMove)
+  window.removeEventListener(groupDragState.endEventName, stopGroupDrag)
+  if (groupDragState.cancelEventName) {
+    window.removeEventListener(groupDragState.cancelEventName, stopGroupDrag)
+  }
   const didMove = !!groupDragState?.didMove
   groupDragState = null
   endNodeDragInteraction({ saveHistory: didMove })
