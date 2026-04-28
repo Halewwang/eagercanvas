@@ -7,6 +7,7 @@ import {
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
+  getSelectedGroupGripPointerAction,
   shouldStartSelectedGroupBodyDrag,
   shouldTriggerCanvasRemoteSync,
   translateNodePositionsInPlace
@@ -74,6 +75,11 @@ test('selected group body drag only starts from blank space inside the group rec
     groupRect,
     nodeRects
   }), false)
+})
+
+test('group grip pointer action selects first and only drags when already selected', () => {
+  assert.equal(getSelectedGroupGripPointerAction({ selected: false }), 'select')
+  assert.equal(getSelectedGroupGripPointerAction({ selected: true }), 'drag')
 })
 
 test('remote sync is limited to content changes', () => {

@@ -122,15 +122,15 @@
             <button
               class="canvas-group-title"
               :class="{ 'is-selected': selectedGroupId === group.id }"
-              @mousedown="startGroupDrag(group, $event)"
+              @pointerdown="handleGroupGripPointerDown(group, $event)"
               @click.stop="selectGroup(group.id)"
             >
               {{ group.name }}
             </button>
-            <button class="canvas-group-edge top" @mousedown="startGroupDrag(group, $event)" @click.stop="selectGroup(group.id)" />
-            <button class="canvas-group-edge right" @mousedown="startGroupDrag(group, $event)" @click.stop="selectGroup(group.id)" />
-            <button class="canvas-group-edge bottom" @mousedown="startGroupDrag(group, $event)" @click.stop="selectGroup(group.id)" />
-            <button class="canvas-group-edge left" @mousedown="startGroupDrag(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge top" @pointerdown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge right" @pointerdown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge bottom" @pointerdown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge left" @pointerdown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
           </div>
         </template>
 
@@ -552,6 +552,7 @@ import {
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
+  getSelectedGroupGripPointerAction,
   recordCanvasPerf,
   shouldStartSelectedGroupBodyDrag
 } from '@/utils/canvasInteraction'
@@ -1353,6 +1354,22 @@ const startGroupDrag = (group, event) => {
 
 const startSelectedGroupBodyDrag = (group, event) => {
   if (selectedGroupId.value !== group.id) return
+  startGroupDrag(group, event)
+}
+
+const handleGroupGripPointerDown = (group, event) => {
+  if (event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+
+  const action = getSelectedGroupGripPointerAction({
+    selected: selectedGroupId.value === group.id
+  })
+  if (action === 'select') {
+    selectGroup(group.id)
+    return
+  }
+
   startGroupDrag(group, event)
 }
 

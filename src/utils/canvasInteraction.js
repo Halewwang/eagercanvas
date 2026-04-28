@@ -19,6 +19,9 @@ export const getOverlayScheduleMode = () => 'raf'
 
 export const getGroupBoxPointerEvents = () => 'none'
 
+export const getSelectedGroupGripPointerAction = ({ selected = false } = {}) =>
+  selected ? 'drag' : 'select'
+
 const isPointInRect = (point = {}, rect = {}) => {
   const x = Number(point.x)
   const y = Number(point.y)
