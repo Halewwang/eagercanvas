@@ -2,7 +2,7 @@
   <!-- Canvas page | 画布页面 -->
   <div ref="canvasShellRef" class="h-screen w-screen bg-[#080808]">
     <!-- Main canvas area | 主画布区域 -->
-    <div class="h-full relative overflow-hidden">
+    <div class="h-full relative overflow-hidden" @mousedown.capture="handleCanvasMouseDownCapture">
       <!-- Top capsules | 顶部胶囊菜单 -->
       <div class="absolute left-4 top-4 z-20 flex items-center gap-2">
         <div class="flora-panel rounded-full p-1.5">
@@ -116,9 +116,8 @@
               top: `${group.rect.top}px`,
               width: `${group.rect.width}px`,
               height: `${group.rect.height}px`,
-              pointerEvents: getGroupBoxPointerEvents({ selected: selectedGroupId === group.id })
+              pointerEvents: getGroupBoxPointerEvents()
             }"
-            @mousedown.self="startSelectedGroupBodyDrag(group, $event)"
           >
             <button
               class="canvas-group-title"
@@ -553,7 +552,8 @@ import {
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
-  recordCanvasPerf
+  recordCanvasPerf,
+  shouldStartSelectedGroupBodyDrag
 } from '@/utils/canvasInteraction'
 import { isExpiredRemoteUrl } from '@/utils/media'
 import {
@@ -1346,6 +1346,43 @@ const startGroupDrag = (group, event) => {
 const startSelectedGroupBodyDrag = (group, event) => {
   if (selectedGroupId.value !== group.id) return
   startGroupDrag(group, event)
+}
+
+const shouldIgnoreGroupBodyDragTarget = (target) => {
+  if (!(target instanceof Element)) return false
+  return Boolean(target.closest([
+    '.canvas-group-title',
+    '.canvas-group-edge',
+    '.group-capsule-menu',
+    '.vue-flow__node',
+    '.vue-flow__edge',
+    '.vue-flow__handle',
+    'button',
+    'input',
+    'textarea',
+    'select',
+    '[contenteditable="true"]'
+  ].join(',')))
+}
+
+const handleCanvasMouseDownCapture = (event) => {
+  if (event.button !== 0 || !selectedGroup.value) return
+  if (shouldIgnoreGroupBodyDragTarget(event.target)) return
+
+  const nodeById = getNodeLookup()
+  const nodeRects = (selectedGroup.value.nodeIds || [])
+    .map((nodeId) => getNodeViewportRect(nodeById.get(nodeId)))
+    .filter(Boolean)
+
+  const shouldDragGroup = shouldStartSelectedGroupBodyDrag({
+    selected: true,
+    point: { x: event.clientX, y: event.clientY },
+    groupRect: groupRects.value[selectedGroup.value.id],
+    nodeRects
+  })
+  if (!shouldDragGroup) return
+
+  startSelectedGroupBodyDrag(selectedGroup.value, event)
 }
 
 const handleGroupDragMove = (event) => {

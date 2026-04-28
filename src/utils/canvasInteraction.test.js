@@ -7,6 +7,7 @@ import {
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
+  shouldStartSelectedGroupBodyDrag,
   shouldTriggerCanvasRemoteSync,
   translateNodePositionsInPlace
 } from './canvasInteraction.js'
@@ -44,9 +45,35 @@ test('group drag position updates mutate only targeted nodes without replacing t
   assert.deepEqual(moved.position, { x: 15, y: 16 })
 })
 
-test('selected group box can receive pointer events for body dragging', () => {
+test('group box overlay does not capture pointer events over grouped nodes', () => {
   assert.equal(getGroupBoxPointerEvents({ selected: false }), 'none')
-  assert.equal(getGroupBoxPointerEvents({ selected: true }), 'auto')
+  assert.equal(getGroupBoxPointerEvents({ selected: true }), 'none')
+})
+
+test('selected group body drag only starts from blank space inside the group rect', () => {
+  const groupRect = { left: 100, top: 100, width: 300, height: 200 }
+  const nodeRects = [{ left: 140, top: 130, right: 240, bottom: 210 }]
+
+  assert.equal(shouldStartSelectedGroupBodyDrag({
+    selected: true,
+    point: { x: 280, y: 250 },
+    groupRect,
+    nodeRects
+  }), true)
+
+  assert.equal(shouldStartSelectedGroupBodyDrag({
+    selected: true,
+    point: { x: 180, y: 160 },
+    groupRect,
+    nodeRects
+  }), false)
+
+  assert.equal(shouldStartSelectedGroupBodyDrag({
+    selected: false,
+    point: { x: 280, y: 250 },
+    groupRect,
+    nodeRects
+  }), false)
 })
 
 test('remote sync is limited to content changes', () => {

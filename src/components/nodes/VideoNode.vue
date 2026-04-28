@@ -185,7 +185,7 @@ import { addEdge, addNode, currentProjectId, duplicateNode, edges, flushSave, no
 import { useApiConfig, useVideoGeneration } from '@/hooks'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveSeedanceGenerationType, resolveVideoModelKey, videoModelOptions } from '@/stores/models'
 import { createAuthenticatedMediaProxyUrl, persistMediaUrl, uploadImageFile } from '@/utils/media'
-import { shouldLoadInlineVideoPlayer, shouldRenderStaticVideoPreview } from '@/utils/videoPreview'
+import { getVisibleVideoBindingStatusItems, shouldLoadInlineVideoPlayer, shouldRenderStaticVideoPreview } from '@/utils/videoPreview'
 import { edgeStrategy, resolveNodeInputs } from '@/services/edgeStrategy'
 import createIcon from '@/assets/create-icon.svg'
 import toolsIcon from '@/assets/tools-icon.svg'
@@ -270,19 +270,6 @@ const getDurationFromData = (data) => {
 }
 const localDuration = ref(getDurationFromData(props.data))
 
-const imageRoleStatusMap = {
-  generation_type: 'Generation',
-  prompt: 'Prompt',
-  first_frame_image: 'First Frame',
-  last_frame_image: 'Second Frame',
-  input_reference: 'Reference Picture',
-  video_reference: 'Reference Video'
-}
-const generationTypeStatusLabels = {
-  text_to_video: 'Mode: Text to Video',
-  first_last_frames: 'Mode: First + Last Frame',
-  omni_reference: 'Mode: Omni Reference'
-}
 const generationTypeLabels = {
   text_to_video: 'Text to Video',
   first_last_frames: 'First + Last Frame',
@@ -375,18 +362,6 @@ const activeImageRoleSet = computed(() => {
 
   return { keys: activeRoleKeys, previews: rolePreviews }
 })
-const isSeedanceGenerationTagActive = computed(() => {
-  const { keys } = activeImageRoleSet.value
-  if (localModel.value !== 'seedance-2.0') return false
-  if (effectiveGenerationType.value === 'first_last_frames') {
-    return keys.has('first_frame_image') && keys.has('last_frame_image')
-  }
-  if (effectiveGenerationType.value === 'omni_reference') {
-    return keys.has('input_reference') || keys.has('video_reference')
-  }
-  return keys.has('prompt')
-})
-
 const syncResolutionToModelOptions = () => {
   const optionKeys = resolutionOptions.value.map((item) => String(item.key || '').trim()).filter(Boolean)
   if (!optionKeys.length) {
@@ -419,39 +394,11 @@ const syncTypeToModelOptions = () => {
 }
 const imageRoleStatusList = computed(() => {
   const { keys, previews } = activeImageRoleSet.value
-  const items = [
-    ...(localModel.value === 'seedance-2.0'
-      ? [
-          {
-            key: 'generation_type',
-            label: generationTypeStatusLabels[effectiveGenerationType.value] || imageRoleStatusMap.generation_type,
-            active: isSeedanceGenerationTagActive.value
-          },
-          { key: 'prompt', label: imageRoleStatusMap.prompt, active: keys.has('prompt') },
-          { key: 'first_frame_image', label: imageRoleStatusMap.first_frame_image, active: keys.has('first_frame_image'), previewUrl: previews.first_frame_image },
-          { key: 'last_frame_image', label: imageRoleStatusMap.last_frame_image, active: keys.has('last_frame_image'), previewUrl: previews.last_frame_image },
-          { key: 'input_reference', label: imageRoleStatusMap.input_reference, active: keys.has('input_reference'), previewUrl: previews.input_reference },
-          { key: 'video_reference', label: imageRoleStatusMap.video_reference, active: keys.has('video_reference') }
-        ]
-      : []),
-    { key: 'prompt', label: imageRoleStatusMap.prompt, active: keys.has('prompt') },
-    { key: 'first_frame_image', label: imageRoleStatusMap.first_frame_image, active: keys.has('first_frame_image'), previewUrl: previews.first_frame_image },
-    { key: 'last_frame_image', label: imageRoleStatusMap.last_frame_image, active: keys.has('last_frame_image'), previewUrl: previews.last_frame_image },
-    { key: 'input_reference', label: imageRoleStatusMap.input_reference, active: keys.has('input_reference'), previewUrl: previews.input_reference },
-    { key: 'video_reference', label: imageRoleStatusMap.video_reference, active: keys.has('video_reference') }
-  ]
-
-  if (localModel.value === 'seedance-2.0') {
-    return items.slice(0, 6)
-  }
-
-  return items.filter((item) => {
-    if (item.key === 'prompt') return Boolean(inputProfile.value.allowPrompt)
-    if (item.key === 'first_frame_image') return Boolean(inputProfile.value.allowFirstFrame)
-    if (item.key === 'last_frame_image') return Boolean(inputProfile.value.allowLastFrame)
-    if (item.key === 'input_reference') return Boolean(inputProfile.value.allowImageReference)
-    if (item.key === 'video_reference') return Boolean(inputProfile.value.allowVideoReference)
-    return true
+  return getVisibleVideoBindingStatusItems({
+    model: localModel.value,
+    inputProfile: inputProfile.value,
+    activeKeys: keys,
+    previews
   })
 })
 

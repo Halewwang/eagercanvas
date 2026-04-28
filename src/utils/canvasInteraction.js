@@ -17,8 +17,38 @@ export const getInteractionOverlayDelay = ({ isInteracting = false } = {}) =>
 
 export const getOverlayScheduleMode = () => 'raf'
 
-export const getGroupBoxPointerEvents = ({ selected = false } = {}) =>
-  selected ? 'auto' : 'none'
+export const getGroupBoxPointerEvents = () => 'none'
+
+const isPointInRect = (point = {}, rect = {}) => {
+  const x = Number(point.x)
+  const y = Number(point.y)
+  const left = Number(rect.left)
+  const top = Number(rect.top)
+  const right = Number(rect.right ?? (left + Number(rect.width || 0)))
+  const bottom = Number(rect.bottom ?? (top + Number(rect.height || 0)))
+
+  return Number.isFinite(x) &&
+    Number.isFinite(y) &&
+    Number.isFinite(left) &&
+    Number.isFinite(top) &&
+    Number.isFinite(right) &&
+    Number.isFinite(bottom) &&
+    x >= left &&
+    x <= right &&
+    y >= top &&
+    y <= bottom
+}
+
+export const shouldStartSelectedGroupBodyDrag = ({
+  selected = false,
+  point = null,
+  groupRect = null,
+  nodeRects = []
+} = {}) => {
+  if (!selected || !point || !groupRect) return false
+  if (!isPointInRect(point, groupRect)) return false
+  return !(Array.isArray(nodeRects) ? nodeRects : []).some((rect) => isPointInRect(point, rect))
+}
 
 export const getNodeCapsuleScale = (zoom = 1) => {
   const safeZoom = Math.max(Number(zoom) || 1, 0.01)

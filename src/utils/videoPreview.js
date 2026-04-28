@@ -32,3 +32,67 @@ export const getVisibleVideoConnectionStatusItems = ({
   }
   return items
 }
+
+const VIDEO_BINDING_STATUS_LABELS = {
+  prompt: 'Prompt',
+  first_frame_image: 'First Frame',
+  last_frame_image: 'Second Frame',
+  input_reference: 'Reference Picture',
+  video_reference: 'Reference Video'
+}
+
+const toActiveKeySet = (activeKeys) => {
+  if (activeKeys instanceof Set) return activeKeys
+  if (Array.isArray(activeKeys)) return new Set(activeKeys)
+  return new Set()
+}
+
+export const getVisibleVideoBindingStatusItems = ({
+  model = '',
+  inputProfile = {},
+  activeKeys = [],
+  previews = {}
+} = {}) => {
+  const keys = toActiveKeySet(activeKeys)
+  const items = [
+    {
+      key: 'prompt',
+      label: VIDEO_BINDING_STATUS_LABELS.prompt,
+      active: keys.has('prompt')
+    },
+    {
+      key: 'first_frame_image',
+      label: VIDEO_BINDING_STATUS_LABELS.first_frame_image,
+      active: keys.has('first_frame_image'),
+      previewUrl: previews.first_frame_image
+    },
+    {
+      key: 'last_frame_image',
+      label: VIDEO_BINDING_STATUS_LABELS.last_frame_image,
+      active: keys.has('last_frame_image'),
+      previewUrl: previews.last_frame_image
+    },
+    {
+      key: 'input_reference',
+      label: VIDEO_BINDING_STATUS_LABELS.input_reference,
+      active: keys.has('input_reference'),
+      previewUrl: previews.input_reference
+    },
+    {
+      key: 'video_reference',
+      label: VIDEO_BINDING_STATUS_LABELS.video_reference,
+      active: keys.has('video_reference')
+    }
+  ]
+
+  if (model === 'seedance-2.0') return items
+
+  return items.filter((item) => {
+    if (item.key === 'prompt') return Boolean(inputProfile.allowPrompt)
+    if (item.key === 'first_frame_image') return Boolean(inputProfile.allowFirstFrame)
+    if (item.key === 'last_frame_image') return Boolean(inputProfile.allowLastFrame)
+    if (item.key === 'input_reference') return Boolean(inputProfile.allowImageReference)
+    if (item.key === 'video_reference') return Boolean(inputProfile.allowVideoReference)
+    return true
+  })
+}
