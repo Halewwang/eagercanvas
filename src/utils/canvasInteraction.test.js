@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   createCanvasContentSnapshot,
+  getGroupBoxPointerEvents,
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
@@ -41,6 +42,11 @@ test('group drag position updates mutate only targeted nodes without replacing t
   assert.equal(nodes[1], moved)
   assert.deepEqual(untouched.position, { x: 0, y: 0 })
   assert.deepEqual(moved.position, { x: 15, y: 16 })
+})
+
+test('selected group box can receive pointer events for body dragging', () => {
+  assert.equal(getGroupBoxPointerEvents({ selected: false }), 'none')
+  assert.equal(getGroupBoxPointerEvents({ selected: true }), 'auto')
 })
 
 test('remote sync is limited to content changes', () => {

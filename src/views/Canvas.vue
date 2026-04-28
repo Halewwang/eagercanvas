@@ -115,8 +115,10 @@
               left: `${group.rect.left}px`,
               top: `${group.rect.top}px`,
               width: `${group.rect.width}px`,
-              height: `${group.rect.height}px`
+              height: `${group.rect.height}px`,
+              pointerEvents: getGroupBoxPointerEvents({ selected: selectedGroupId === group.id })
             }"
+            @mousedown.self="startSelectedGroupBodyDrag(group, $event)"
           >
             <button
               class="canvas-group-title"
@@ -547,6 +549,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 import {
+  getGroupBoxPointerEvents,
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
@@ -1338,6 +1341,11 @@ const startGroupDrag = (group, event) => {
   }
   window.addEventListener('mousemove', handleGroupDragMove)
   window.addEventListener('mouseup', stopGroupDrag)
+}
+
+const startSelectedGroupBodyDrag = (group, event) => {
+  if (selectedGroupId.value !== group.id) return
+  startGroupDrag(group, event)
 }
 
 const handleGroupDragMove = (event) => {

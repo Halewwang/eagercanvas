@@ -17,6 +17,9 @@ export const getInteractionOverlayDelay = ({ isInteracting = false } = {}) =>
 
 export const getOverlayScheduleMode = () => 'raf'
 
+export const getGroupBoxPointerEvents = ({ selected = false } = {}) =>
+  selected ? 'auto' : 'none'
+
 export const getNodeCapsuleScale = (zoom = 1) => {
   const safeZoom = Math.max(Number(zoom) || 1, 0.01)
   return Math.min(1.06, Math.max(0.82, 1 / safeZoom))

@@ -179,6 +179,7 @@ import { useVideoGeneration, useApiConfig } from '@/hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject, currentProjectId } from '@/stores/canvas'
 import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveSeedanceGenerationType, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '@/stores/models'
 import { persistMediaUrl } from '@/utils/media'
+import { getVisibleVideoConnectionStatusItems } from '@/utils/videoPreview'
 import { edgeStrategy, resolveNodeInputs } from '@/services/edgeStrategy'
 
 const props = defineProps({
@@ -326,32 +327,18 @@ const displayType = computed(() => generationTypeLabels[effectiveGenerationType.
 const displayMode = computed(() => modeOptions.value.find(m => m.key === localMode.value)?.label || localMode.value || 'Select mode')
 const displayAudio = computed(() => (localGenerateAudio.value ? 'Audio On' : 'Audio Off'))
 const connectionStatusItems = computed(() => {
-  const items = []
-  if (localModel.value === 'seedance-2.0') {
-    items.push({
-      key: 'generation-type',
-      label: generationTypeLabels[effectiveGenerationType.value] || 'Generation',
-      active: true
-    })
-  }
-  if (inputProfile.value.allowPrompt) {
-    items.push({ key: 'prompt', label: `Prompt ${connectedPrompt.value ? '✓' : '○'}`, active: Boolean(connectedPrompt.value) })
-  }
-  if (inputProfile.value.allowFirstFrame) {
-    items.push({ key: 'first', label: `First Frame ${imagesByRole.value.firstFrame ? '✓' : '○'}`, active: Boolean(imagesByRole.value.firstFrame) })
-  }
-  if (inputProfile.value.allowLastFrame) {
-    items.push({ key: 'last', label: `Last Frame ${imagesByRole.value.lastFrame ? '✓' : '○'}`, active: Boolean(imagesByRole.value.lastFrame) })
-  }
-  if (inputProfile.value.allowImageReference) {
-    const count = imagesByRole.value.referenceImages.length
-    items.push({ key: 'image-reference', label: `Reference ${count > 0 ? `✓ ${count}` : '○'}`, active: count > 0 })
-  }
-  if (inputProfile.value.allowVideoReference) {
-    const count = imagesByRole.value.referenceVideos.length
-    items.push({ key: 'video-reference', label: `Video Reference ${count > 0 ? `✓ ${count}` : '○'}`, active: count > 0 })
-  }
-  return items
+  return getVisibleVideoConnectionStatusItems({
+    model: localModel.value,
+    generationType: effectiveGenerationType.value,
+    inputProfile: inputProfile.value,
+    connected: {
+      prompt: Boolean(connectedPrompt.value),
+      firstFrame: Boolean(imagesByRole.value.firstFrame),
+      lastFrame: Boolean(imagesByRole.value.lastFrame),
+      referenceImageCount: imagesByRole.value.referenceImages.length,
+      referenceVideoCount: imagesByRole.value.referenceVideos.length
+    }
+  })
 })
 
 // Duration options based on model | 基于Model的Duration选项
