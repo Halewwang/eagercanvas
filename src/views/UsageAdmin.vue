@@ -7,7 +7,7 @@
             <div class="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
               <p class="text-xs uppercase tracking-[0.18em] text-white/45">EagerCanvas</p>
               <p class="mt-1 text-sm font-medium text-white/90">Usage Admin</p>
-              <p class="mt-3 text-xs leading-5 text-white/55">Eager Service key management and consumption review.</p>
+              <p class="mt-3 text-xs leading-5 text-white/55">Eager 服务凭证管理与消耗复核。</p>
             </div>
           </div>
 
@@ -17,7 +17,7 @@
               <span>Live</span>
             </a>
             <a class="usage-nav-item" href="#keys">
-              <span>API Keys</span>
+              <span>服务凭证</span>
               <span>{{ apiKeys.length }}</span>
             </a>
             <a class="usage-nav-item" href="#users">
@@ -42,7 +42,7 @@
                 <p class="text-xs uppercase tracking-[0.2em] text-white/45">管理控制台</p>
                 <h1 class="mt-2 text-2xl font-semibold text-white md:text-3xl">Usage Admin</h1>
                 <p class="mt-3 text-sm leading-6 text-white/55">
-                  Eager Service key management, assignment, and user consumption are grouped in one control surface.
+                  Eager 服务凭证管理、用户分配和消耗复核集中在一个控制台。
                 </p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
@@ -57,7 +57,7 @@
 
           <div v-if="!isAdminAuthenticated" class="usage-card mx-auto max-w-md rounded-2xl p-6">
             <h2 class="text-lg font-medium text-white">Admin Login</h2>
-            <p class="mt-2 text-sm text-white/50">Sign in to manage service keys and user consumption.</p>
+            <p class="mt-2 text-sm text-white/50">Sign in to manage service credentials and user consumption.</p>
             <div class="mt-5 space-y-3">
               <input v-model="loginForm.username" class="usage-input w-full" placeholder="Admin username" />
               <input v-model="loginForm.password" type="password" class="usage-input w-full" placeholder="Admin password" />
@@ -71,7 +71,7 @@
             <section id="overview" class="mb-8 scroll-mt-6">
               <div class="mb-4">
                 <h2 class="usage-section-title">Overview</h2>
-                <p class="usage-section-caption">Balance, user coverage, and key inventory.</p>
+                <p class="usage-section-caption">Balance, user coverage, and credential inventory.</p>
               </div>
               <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <article class="usage-card rounded-2xl p-5">
@@ -83,11 +83,11 @@
                   <p class="mt-3 text-3xl font-semibold text-white">{{ users.length }}</p>
                 </article>
                 <article class="usage-card rounded-2xl p-5">
-                  <p class="usage-card-label">API Keys</p>
+                  <p class="usage-card-label">服务凭证</p>
                   <p class="mt-3 text-3xl font-semibold text-white">{{ apiKeys.length }}</p>
                 </article>
                 <article class="usage-card rounded-2xl p-5">
-                  <p class="usage-card-label">Users With Keys</p>
+                  <p class="usage-card-label">Users With Credentials</p>
                   <p class="mt-3 text-3xl font-semibold text-white">{{ usersWithKeys }}</p>
                 </article>
               </div>
@@ -96,11 +96,11 @@
             <section id="keys" class="usage-card mb-8 scroll-mt-6 rounded-2xl p-5 md:p-6">
               <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 class="usage-section-title">Create Eager Service API Key</h2>
-                  <p class="usage-section-caption">Create a key, set budget limits, and assign it to users below.</p>
+                  <h2 class="usage-section-title">Create Eager Service Credential</h2>
+                  <p class="usage-section-caption">Create a credential, set budget limits, and assign it to users below.</p>
                 </div>
                 <button class="usage-micro-btn usage-micro-btn-primary" :disabled="creatingKey" @click="createApiKey">
-                  {{ creatingKey ? 'Creating...' : 'Create Key' }}
+                  {{ creatingKey ? 'Creating...' : 'Create Credential' }}
                 </button>
               </div>
               <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -118,10 +118,10 @@
 
             <section class="usage-card mb-8 rounded-2xl p-5 md:p-6">
               <div class="mb-5">
-                <h2 class="usage-section-title">Eager Service API Keys</h2>
-                <p class="usage-section-caption">Key limits, assignment, and deletion.</p>
+                <h2 class="usage-section-title">Eager Service Credentials</h2>
+                <p class="usage-section-caption">Credential limits, assignment, and deletion.</p>
               </div>
-              <div v-if="apiKeys.length === 0" class="usage-empty">No API keys.</div>
+              <div v-if="apiKeys.length === 0" class="usage-empty">No service credentials.</div>
               <div v-else class="overflow-auto">
                 <table class="w-full min-w-[980px] text-sm">
               <thead>
@@ -161,7 +161,7 @@
             <section id="users" class="usage-card scroll-mt-6 rounded-2xl p-5 md:p-6">
               <div class="mb-5">
                 <h2 class="usage-section-title">Registered Users & Consumption</h2>
-                <p class="usage-section-caption">User activity, total usage, cost, and assigned keys.</p>
+                <p class="usage-section-caption">User activity, total usage, cost, and assigned credentials.</p>
               </div>
               <div v-if="users.length === 0" class="usage-empty">No users.</div>
               <div v-else class="overflow-auto">
@@ -174,7 +174,7 @@
                   <th class="py-2 pr-2">Calls</th>
                   <th class="py-2 pr-2">Tokens</th>
                   <th class="py-2 pr-2">Cost</th>
-                  <th class="py-2">Assigned Keys</th>
+                  <th class="py-2">Assigned Credentials</th>
                 </tr>
               </thead>
               <tbody>
@@ -198,7 +198,7 @@
                         {{ assigned.apiName }}
                         <button @click="unassignKey(user.id, assigned.apiName)">x</button>
                       </span>
-                      <span v-if="!(user.assignedApiKeys || []).length" class="text-xs text-white/40">No key assigned</span>
+                      <span v-if="!(user.assignedApiKeys || []).length" class="text-xs text-white/40">No credential assigned</span>
                     </div>
                   </td>
                 </tr>
@@ -342,11 +342,11 @@ const createApiKey = async () => {
       ...createForm.value,
       api_name: createForm.value.api_name.trim()
     })
-    window.$message?.success('API key created')
+    window.$message?.success('Service credential created')
     createForm.value.api_name = ''
     await loadAll()
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to create API key'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to create service credential'))
   } finally {
     creatingKey.value = false
   }
@@ -356,10 +356,10 @@ const deleteApiKey = async (apiName) => {
   if (!apiName) return
   try {
     await deleteUsageAdminApiKey(apiName)
-    window.$message?.success('API key deleted')
+    window.$message?.success('Service credential deleted')
     await loadAll()
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to delete API key'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to delete service credential'))
   }
 }
 
@@ -375,7 +375,7 @@ const assignKeyFromRow = async (apiName) => {
     window.$message?.success('Assigned')
     await loadAll()
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to assign key'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to assign credential'))
   }
 }
 
@@ -385,7 +385,7 @@ const unassignKey = async (userId, apiName) => {
     window.$message?.success('Unassigned')
     await loadAll()
   } catch (error) {
-    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to unassign key'))
+    if (!error?.__handled) window.$message?.error(getErrorMessage(error, 'Failed to unassign credential'))
   }
 }
 

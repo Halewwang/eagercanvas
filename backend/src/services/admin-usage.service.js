@@ -2,6 +2,7 @@ import { supabase } from '../config/supabase.js'
 import { invalidateUserAuthzCache } from './rbac.service.js'
 import { get302ApiKeys, get302RuntimeApiKeyByName, normalize302ApiKeyList } from './dashboard302.service.js'
 import { HttpError } from '../utils/http.js'
+import { disableUserServiceCredential, formatServiceCredentialForAdmin } from './service-access.service.js'
 
 const ASSIGNMENT_TABLE = 'user_api_key_assignments'
 
@@ -170,15 +171,23 @@ const toIsoDateEnd = (value) => {
 }
 
 export const listUsersForAdmin = async () => {
-  const [usersRes, profilesRes, dailyAggRes, assignments, usageEventsRes, activeApiKeyNames] = await Promise.all([
+  const [usersRes, profilesRes, dailyAggRes, assignments, usageEventsRes, credentialsRes, billingRecordsRes, activeApiKeyNames] = await Promise.all([
     supabase.from('users').select('*').order('created_at', { ascending: false }),
     supabase.from('user_profiles').select('user_id, display_name, registered_at, last_login_at'),
     supabase.from('usage_daily_agg').select('user_id, total_calls, total_tokens, total_images, total_video_seconds, total_cost_usd'),
     loadAssignments(),
     supabase
       .from('usage_events')
-      .select('user_id, api_name, cost_usd, billing_status, created_at')
+      .select('user_id, api_name, cost_usd, estimated_cost_usd, billing_status, created_at')
       .order('created_at', { ascending: false }),
+    supabase
+      .from('user_service_credentials')
+      .select('*')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('provider_billing_records')
+      .select('user_id, service_credential_id, model, cost_amount, cost_currency, reconciliation_status, official_created_at')
+      .order('official_created_at', { ascending: false }),
     loadActiveApiKeyNames()
   ])
 
@@ -186,6 +195,8 @@ export const listUsersForAdmin = async () => {
   if (profilesRes.error) throw new HttpError(500, profilesRes.error.message, 'PROFILES_QUERY_FAILED')
   if (dailyAggRes.error) throw new HttpError(500, dailyAggRes.error.message, 'USAGE_AGG_QUERY_FAILED')
   if (usageEventsRes.error) throw new HttpError(500, usageEventsRes.error.message, 'USAGE_EVENTS_QUERY_FAILED')
+  if (credentialsRes.error && !isMissingRelation(credentialsRes.error)) throw new HttpError(500, credentialsRes.error.message, 'SERVICE_CREDENTIALS_QUERY_FAILED')
+  if (billingRecordsRes.error && !isMissingRelation(billingRecordsRes.error)) throw new HttpError(500, billingRecordsRes.error.message, 'BILLING_RECORDS_QUERY_FAILED')
   const rolesMap = await loadRolesMap((usersRes.data || []).map((item) => item.id))
 
   const profileMap = new Map((profilesRes.data || []).map((p) => [p.user_id, p]))
@@ -229,12 +240,14 @@ export const listUsersForAdmin = async () => {
       byApiKey: new Map()
     }
     const usageTotals = usageEventTotalsMap.get(key) || {
-      totalCostUsd: 0
+      totalCostUsd: 0,
+      estimatedCostUsd: 0
     }
 
     if (!current.lastActivityAt) current.lastActivityAt = row.created_at || null
     if (String(row.billing_status || '') === 'pending') current.pendingBillingCount += 1
     usageTotals.totalCostUsd += Number(row.cost_usd || 0)
+    usageTotals.estimatedCostUsd += Number(row.estimated_cost_usd || row.cost_usd || 0)
 
     const apiName = String(row.api_name || '').trim()
     if (apiName && (!activeApiKeyNames || activeApiKeyNames.has(apiName))) {
@@ -252,9 +265,46 @@ export const listUsersForAdmin = async () => {
     usageEventTotalsMap.set(key, usageTotals)
   }
 
+  const credentialMap = new Map()
+  for (const row of credentialsRes.data || []) {
+    const list = credentialMap.get(row.user_id) || []
+    list.push(row)
+    credentialMap.set(row.user_id, list)
+  }
+
+  const officialUsageMap = new Map()
+  const reconciliationMap = new Map()
+  for (const row of billingRecordsRes.data || []) {
+    const key = row.user_id
+    if (!key) continue
+    const official = officialUsageMap.get(key) || {
+      totalCalls: 0,
+      totalCostAmount: 0,
+      currency: row.cost_currency || 'USD',
+      byModel: new Map()
+    }
+    official.totalCalls += 1
+    official.totalCostAmount += Number(row.cost_amount || 0)
+    const model = String(row.model || 'unknown')
+    const modelEntry = official.byModel.get(model) || { model, calls: 0, costAmount: 0 }
+    modelEntry.calls += 1
+    modelEntry.costAmount += Number(row.cost_amount || 0)
+    official.byModel.set(model, modelEntry)
+    officialUsageMap.set(key, official)
+
+    const reconciliation = reconciliationMap.get(key) || { unmatchedCount: 0 }
+    if (String(row.reconciliation_status || '') === 'unmatched') reconciliation.unmatchedCount += 1
+    reconciliationMap.set(key, reconciliation)
+  }
+
   return (usersRes.data || []).map((user) => {
     const profile = profileMap.get(user.id)
     const usageMeta = usageEventMetaMap.get(user.id)
+    const credentials = credentialMap.get(user.id) || []
+    const latestCredential = credentials.find((item) => item.status === 'active') || credentials[0] || null
+    const official = officialUsageMap.get(user.id)
+    const estimated = usageEventTotalsMap.get(user.id)
+    const reconciliation = reconciliationMap.get(user.id) || { unmatchedCount: 0 }
     return {
       id: user.id,
       email: user.email,
@@ -275,6 +325,29 @@ export const listUsersForAdmin = async () => {
           totalCostUsd: 0
         }),
         totalCostUsd: Number(usageEventTotalsMap.get(user.id)?.totalCostUsd || 0)
+      },
+      service: formatServiceCredentialForAdmin(latestCredential),
+      officialUsage: official
+        ? {
+            totalCalls: official.totalCalls,
+            totalCostAmount: Number(official.totalCostAmount || 0),
+            currency: official.currency || 'USD',
+            byModel: [...official.byModel.values()].sort((a, b) => Number(b.costAmount || 0) - Number(a.costAmount || 0))
+          }
+        : {
+            totalCalls: 0,
+            totalCostAmount: 0,
+            currency: 'USD',
+            byModel: []
+          },
+      estimatedUsage: {
+        totalCalls: Number(usageMap.get(user.id)?.totalCalls || 0),
+        totalCostAmount: Number(estimated?.estimatedCostUsd || estimated?.totalCostUsd || 0)
+      },
+      reconciliation: {
+        pendingCount: Number(usageMeta?.pendingBillingCount || 0),
+        unmatchedCount: Number(reconciliation.unmatchedCount || 0),
+        diffAmount: Number((official?.totalCostAmount || 0) - (estimated?.estimatedCostUsd || estimated?.totalCostUsd || 0))
       },
       usageMeta: {
         lastActivityAt: usageMeta?.lastActivityAt || null,
@@ -464,6 +537,15 @@ export const updateUserStatus = async ({
       .update({ revoked: true, revoked_at: new Date().toISOString() })
       .eq('user_id', safeTargetUserId)
       .eq('revoked', false)
+    await disableUserServiceCredential({
+      userId: safeTargetUserId,
+      operatorUserId,
+      reason: 'account suspended',
+      ip,
+      userAgent
+    }).catch((error) => {
+      console.warn('[admin] service disable after suspension failed', error.message || error)
+    })
   }
 
   invalidateUserAuthzCache(safeTargetUserId)
@@ -546,6 +628,15 @@ export const deleteUserAccount = async ({
       .delete()
       .eq('user_id', safeTargetUserId)
   ])
+  await disableUserServiceCredential({
+    userId: safeTargetUserId,
+    operatorUserId,
+    reason: 'account deleted',
+    ip,
+    userAgent
+  }).catch((error) => {
+    console.warn('[admin] service disable after deletion failed', error.message || error)
+  })
 
   invalidateUserAuthzCache(safeTargetUserId)
   await createAdminLog({
@@ -564,15 +655,20 @@ export const deleteUserAccount = async ({
 
 export const getAdminUsageSummary = async ({ from, to, userId } = {}) => {
   const query = supabase
-    .from('usage_events')
-    .select('user_id,input_tokens,output_tokens,image_count,video_seconds,cost_usd,created_at')
+    .from('provider_billing_records')
+    .select('user_id,input_tokens,output_tokens,image_count,video_seconds,cost_amount,official_created_at')
 
   if (userId) query.eq('user_id', String(userId))
-  if (from) query.gte('created_at', toIsoDateStart(from))
-  if (to) query.lte('created_at', toIsoDateEnd(to))
+  if (from) query.gte('official_created_at', toIsoDateStart(from))
+  if (to) query.lte('official_created_at', toIsoDateEnd(to))
 
   const { data, error } = await query
-  if (error) throw new HttpError(500, error.message, 'ADMIN_USAGE_SUMMARY_FAILED')
+  if (error) {
+    if (isMissingRelation(error)) {
+      return { totalCalls: 0, totalInputTokens: 0, totalOutputTokens: 0, totalImages: 0, totalVideoSeconds: 0, totalCostUsd: 0, totalUsers: 0 }
+    }
+    throw new HttpError(500, error.message, 'ADMIN_USAGE_SUMMARY_FAILED')
+  }
 
   const users = new Set()
   const summary = (data || []).reduce((acc, item) => {
@@ -582,7 +678,7 @@ export const getAdminUsageSummary = async ({ from, to, userId } = {}) => {
     acc.totalOutputTokens += Number(item.output_tokens || 0)
     acc.totalImages += Number(item.image_count || 0)
     acc.totalVideoSeconds += Number(item.video_seconds || 0)
-    acc.totalCostUsd += Number(item.cost_usd || 0)
+    acc.totalCostUsd += Number(item.cost_amount || 0)
     return acc
   }, {
     totalCalls: 0,

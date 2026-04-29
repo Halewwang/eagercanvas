@@ -26,6 +26,13 @@ import {
   updateUserStatus,
   updateUserRoles
 } from '../services/admin-usage.service.js'
+import {
+  createUserServiceCredential,
+  disableUserServiceCredential,
+  resetUserServiceCredential,
+  updateUserServiceLimits
+} from '../services/service-access.service.js'
+import { syncProviderBillingRecords } from '../services/billing-reconciliation.service.js'
 
 export const adminRouter = Router()
 adminRouter.use(authRequired)
@@ -52,6 +59,22 @@ const admin302ApiKeySchema = z.object({
 const updateUserStatusSchema = z.object({
   status: z.enum(['active', 'suspended']),
   reason: z.string().max(200).optional()
+})
+
+const serviceAccessLimitsSchema = z.object({
+  limitCost: z.number().nonnegative().default(0),
+  limitDailyCost: z.number().nonnegative().default(0),
+  expiredOn: z.number().int().nonnegative().default(0)
+})
+
+const disableServiceSchema = z.object({
+  reason: z.string().max(200).optional()
+})
+
+const reconcileSchema = z.object({
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  pageSize: z.number().int().min(1).max(500).optional()
 })
 
 adminRouter.get('/session', requirePermission(['admin.dashboard.read']), asyncHandler(async (req, res) => {
@@ -108,6 +131,56 @@ adminRouter.delete('/users/:userId', requirePermission(['admin.user.status.updat
   res.json(result)
 }))
 
+adminRouter.post('/users/:userId/service-access/activate', requirePermission(['admin.service_access.activate']), asyncHandler(async (req, res) => {
+  const payload = serviceAccessLimitsSchema.parse(req.body || {})
+  const result = await createUserServiceCredential({
+    userId: req.params.userId,
+    operatorUserId: req.user.id,
+    limitCost: payload.limitCost,
+    limitDailyCost: payload.limitDailyCost,
+    expiredOn: payload.expiredOn,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || ''
+  })
+  res.json({ ok: true, data: { userId: req.params.userId, ...result.serviceCredential } })
+}))
+
+adminRouter.post('/users/:userId/service-access/disable', requirePermission(['admin.service_access.disable']), asyncHandler(async (req, res) => {
+  const payload = disableServiceSchema.parse(req.body || {})
+  const result = await disableUserServiceCredential({
+    userId: req.params.userId,
+    operatorUserId: req.user.id,
+    reason: payload.reason,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || ''
+  })
+  res.json({ ok: true, data: { userId: req.params.userId, ...result.serviceCredential } })
+}))
+
+adminRouter.post('/users/:userId/service-access/reset', requirePermission(['admin.service_access.reset']), asyncHandler(async (req, res) => {
+  const result = await resetUserServiceCredential({
+    userId: req.params.userId,
+    operatorUserId: req.user.id,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || ''
+  })
+  res.json({ ok: true, data: { userId: req.params.userId, ...result.serviceCredential } })
+}))
+
+adminRouter.patch('/users/:userId/service-access/limits', requirePermission(['admin.service_access.update_limits']), asyncHandler(async (req, res) => {
+  const payload = serviceAccessLimitsSchema.parse(req.body || {})
+  const result = await updateUserServiceLimits({
+    userId: req.params.userId,
+    operatorUserId: req.user.id,
+    limitCost: payload.limitCost,
+    limitDailyCost: payload.limitDailyCost,
+    expiredOn: payload.expiredOn,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || ''
+  })
+  res.json({ ok: true, data: { userId: req.params.userId, ...result.serviceCredential } })
+}))
+
 adminRouter.post('/api-keys/assign', requirePermission(['admin.api_key.assign']), asyncHandler(async (req, res) => {
   const payload = apiKeyAssignSchema.parse(req.body || {})
   const result = await assignApiKeyToUser({
@@ -156,6 +229,12 @@ adminRouter.get('/usage/timeseries', requirePermission(['admin.usage.read_all'])
     userId: req.query.userId
   })
   res.json({ data, granularity: 'day' })
+}))
+
+adminRouter.post('/billing/reconcile', requirePermission(['admin.billing.reconcile']), asyncHandler(async (req, res) => {
+  const payload = reconcileSchema.parse(req.body || {})
+  const result = await syncProviderBillingRecords(payload)
+  res.json({ data: result })
 }))
 
 adminRouter.get('/302/balance', requirePermission(['admin.usage.read_all']), asyncHandler(async (_req, res) => {

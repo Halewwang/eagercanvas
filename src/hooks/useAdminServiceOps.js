@@ -45,7 +45,7 @@ const is502ServiceError = (error) => {
 const toServiceNotice = (fallback, error) => {
   const message = getErrorMessage(error, fallback)
   if (is502ServiceError(error)) {
-    return '302 服务暂时不可用，已跳过该区块的数据加载。其他后台功能仍可正常使用。'
+    return 'Eager 服务暂时不可用，已跳过该区块的数据加载。其他后台功能仍可正常使用。'
   }
   return message
 }
@@ -117,13 +117,13 @@ export const useAdminServiceOps = ({
   const queryRecord = async () => {
     if (!canReadUsage.value) return
     const id = String(recordRequestId.value || '').trim()
-    if (!id) return notifier.warning('请输入 request-id')
+    if (!id) return notifier.warning('请输入请求 ID')
     loadingRecord.value = true
     try {
       const rsp = await getAdmin302Record(id)
       recordData.value = rsp?.data || null
     } catch (error) {
-      if (!error?.__handled) notifier.error(getErrorMessage(error, '查询扣费记录失败'))
+      if (!error?.__handled) notifier.error(getErrorMessage(error, '查询消耗记录失败'))
     } finally {
       loadingRecord.value = false
     }
@@ -143,9 +143,9 @@ export const useAdminServiceOps = ({
       return { ok: true }
     } catch (error) {
       apiLogs.value = []
-      const message = toServiceNotice('加载 API 日志失败', error)
+      const message = toServiceNotice('加载服务调用日志失败', error)
       if (!silent && !error?.__handled) notifier.error(message)
-      return { ok: false, message: prefixNotice('API 日志', message), error }
+      return { ok: false, message: prefixNotice('服务调用日志', message), error }
     } finally {
       loadingApiLogs.value = false
     }
@@ -165,9 +165,9 @@ export const useAdminServiceOps = ({
     } catch (error) {
       apiKeys.value = []
       keyDrafts.value = {}
-      const message = toServiceNotice('加载 API 密钥失败', error)
+      const message = toServiceNotice('加载服务凭证失败', error)
       if (!silent && !error?.__handled) notifier.error(message)
-      return { ok: false, message: prefixNotice('API 密钥', message), error }
+      return { ok: false, message: prefixNotice('服务凭证', message), error }
     } finally {
       loadingKeys.value = false
     }
@@ -181,11 +181,11 @@ export const useAdminServiceOps = ({
     creatingApiKey.value = true
     try {
       await createAdmin302ApiKey({ ...createKeyForm, api_name: createKeyForm.api_name.trim() })
-      notifier.success('API 密钥创建成功')
+      notifier.success('服务凭证创建成功')
       resetCreateKeyForm(createKeyForm)
       await loadApiKeys()
     } catch (error) {
-      if (!error?.__handled) notifier.error(getErrorMessage(error, '创建 API 密钥失败'))
+      if (!error?.__handled) notifier.error(getErrorMessage(error, '创建服务凭证失败'))
     } finally {
       creatingApiKey.value = false
     }
@@ -199,10 +199,10 @@ export const useAdminServiceOps = ({
     updatingKeys.value = { ...updatingKeys.value, [name]: true }
     try {
       await updateAdmin302ApiKey(name, { ...draft, api_name: name })
-      notifier.success('API 密钥更新成功')
+      notifier.success('服务凭证更新成功')
       await loadApiKeys()
     } catch (error) {
-      if (!error?.__handled) notifier.error(getErrorMessage(error, '更新 API 密钥失败'))
+      if (!error?.__handled) notifier.error(getErrorMessage(error, '更新服务凭证失败'))
     } finally {
       updatingKeys.value = { ...updatingKeys.value, [name]: false }
     }
@@ -211,15 +211,15 @@ export const useAdminServiceOps = ({
   const removeApiKey = async (item) => {
     if (!canManageApiKeys.value) return
     const name = item.api_name
-    const ok = window.confirm(`确认删除 API 密钥 ${name} 吗？`)
+    const ok = window.confirm(`确认删除服务凭证 ${name} 吗？`)
     if (!ok) return
     deletingKeys.value = { ...deletingKeys.value, [name]: true }
     try {
       await deleteAdmin302ApiKey(name)
-      notifier.success('API 密钥删除成功')
+      notifier.success('服务凭证删除成功')
       await Promise.all([loadApiKeys(), loadUsers(), loadLogs()])
     } catch (error) {
-      if (!error?.__handled) notifier.error(getErrorMessage(error, '删除 API 密钥失败'))
+      if (!error?.__handled) notifier.error(getErrorMessage(error, '删除服务凭证失败'))
     } finally {
       deletingKeys.value = { ...deletingKeys.value, [name]: false }
     }

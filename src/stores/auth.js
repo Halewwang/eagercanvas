@@ -23,7 +23,8 @@ const BYPASS_AUTH_IN_DEV = (import.meta.env.DEV && import.meta.env.VITE_BYPASS_A
 const BYPASS_USER = {
   id: 'dev-bypass-user',
   email: 'preview@local.dev',
-  displayName: 'Local Preview'
+  displayName: 'Local Preview',
+  serviceStatus: 'active'
 }
 
 const user = ref(null)

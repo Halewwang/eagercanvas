@@ -11,7 +11,7 @@ import {
 } from './provider.service.js'
 import { uploadRemoteFile } from './upload.service.js'
 import { get302RecordByRequestId, normalizeDashboardRecord } from './dashboard302.service.js'
-import { resolveUserProviderAccess } from './admin-usage.service.js'
+import { resolveActiveUserServiceCredential } from './service-access.service.js'
 import {
   extractProviderRequestId,
   extractUsageSnapshot,
@@ -444,32 +444,9 @@ const enrichUsageWith302Record = async (providerResponse = {}, fallbackUsage = {
   }
 }
 
-const assertAssignedProviderAccess = (providerAccess = {}) => {
-  const apiName = String(providerAccess.apiName || '').trim()
-  const apiKey = String(providerAccess.apiKey || '').trim()
-  if (apiName && apiKey) {
-    return
-  }
-
-  if (apiName && !apiKey) {
-    throw new HttpError(
-      503,
-      'An API key is assigned to this account, but the runtime key could not be resolved. Please contact an administrator.',
-      'API_KEY_RESOLUTION_FAILED'
-    )
-  }
-
-  throw new HttpError(
-    403,
-    'No API key has been assigned to this account yet. Please contact an administrator.',
-    'API_KEY_NOT_ASSIGNED'
-  )
-}
-
 export const createRun = async (userId, input) => {
   const payload = runSchema.parse(input)
-  const providerAccess = await resolveUserProviderAccess(userId, payload.payload?.api_name || payload.payload?.apiName)
-  assertAssignedProviderAccess(providerAccess)
+  const providerAccess = await resolveActiveUserServiceCredential(userId)
   const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
 
   const startedAt = Date.now()
@@ -531,6 +508,8 @@ export const createRun = async (userId, input) => {
           model: payload.model || payload.payload?.model,
           apiName: providerAccess.apiName,
           providerRequestId: enrichedUsage.requestId || providerTaskId,
+          serviceCredentialId: providerAccess.serviceCredentialId,
+          upstreamTaskId: providerTaskId,
           inputTokens: enrichedUsage.usage.inputTokens || 0,
           outputTokens: enrichedUsage.usage.outputTokens || 0,
           videoSeconds: payload.payload?.seconds || payload.payload?.duration || 0,
@@ -577,6 +556,8 @@ export const createRun = async (userId, input) => {
         model: payload.model || payload.payload?.model,
         apiName: providerAccess.apiName,
         providerRequestId: providerTaskId,
+        serviceCredentialId: providerAccess.serviceCredentialId,
+        upstreamTaskId: providerTaskId,
         videoSeconds: payload.payload?.seconds || payload.payload?.duration || 0,
         latencyMs,
         costUsd: 0,
@@ -610,6 +591,24 @@ export const createRun = async (userId, input) => {
         .update({ status: 'running', finished_at: null, error_msg: null })
         .eq('id', run.id)
 
+      await insertUsageEvent({
+        userId,
+        runId: run.id,
+        model: payload.model || payload.payload?.model,
+        apiName: providerAccess.apiName,
+        providerRequestId: imageTaskId,
+        serviceCredentialId: providerAccess.serviceCredentialId,
+        upstreamTaskId: imageTaskId,
+        imageCount: 0,
+        latencyMs,
+        costUsd: 0,
+        estimatedCostUsd: 0,
+        billedCostUsd: 0,
+        billingStatus: 'pending',
+        rawUsage: providerResponse?.raw || null,
+        eventType: 'image_task_created'
+      })
+
       return {
         runId: run.id,
         status: 'running',
@@ -635,6 +634,8 @@ export const createRun = async (userId, input) => {
       model: payload.model || payload.payload?.model,
       apiName: providerAccess.apiName,
       providerRequestId: enrichedUsage.requestId,
+      serviceCredentialId: providerAccess.serviceCredentialId,
+      upstreamTaskId: imageTaskId,
       inputTokens: enrichedUsage.usage.inputTokens || 0,
       outputTokens: enrichedUsage.usage.outputTokens || 0,
       imageCount,
@@ -708,7 +709,7 @@ export const createVideoGeneration = async (userId, payload) => {
 
 export const getVideoTask = async (_userId, taskId) => {
   await assertVideoTaskOwnership({ userId: _userId, taskId })
-  const providerAccess = await resolveUserProviderAccess(_userId)
+  const providerAccess = await resolveActiveUserServiceCredential(_userId)
   const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
   const rawResult = await providerVideoStatus(taskId, providerRequestOptions)
   const result = await persistVideoResultAsset(rawResult)
@@ -727,6 +728,8 @@ export const getVideoTask = async (_userId, taskId) => {
       billing_status: enrichedUsage.requestId ? 'billed' : 'estimated',
       provider_request_id: enrichedUsage.requestId || extractProviderTaskId(result) || taskId,
       api_name: providerAccess.apiName || null,
+      service_credential_id: providerAccess.serviceCredentialId || null,
+      upstream_task_id: extractProviderTaskId(result) || taskId,
       raw_usage: enrichedUsage.usage.rawUsage || result?.raw || null
     })
 
@@ -747,7 +750,7 @@ export const getVideoTask = async (_userId, taskId) => {
 
 export const getImageTask = async (_userId, taskId) => {
   await assertImageTaskOwnership({ userId: _userId, taskId })
-  const providerAccess = await resolveUserProviderAccess(_userId)
+  const providerAccess = await resolveActiveUserServiceCredential(_userId)
   const imageRunContext = await findImageRunContextByTask({ userId: _userId, taskId })
   const runId = imageRunContext.runId
   const run = runId ? await getRunById(_userId, runId).catch(() => null) : null
@@ -774,6 +777,8 @@ export const getImageTask = async (_userId, taskId) => {
         billing_status: enrichedUsage.requestId ? 'billed' : 'estimated',
         provider_request_id: enrichedUsage.requestId || extractProviderTaskId(result) || taskId,
         api_name: providerAccess.apiName || null,
+        service_credential_id: providerAccess.serviceCredentialId || null,
+        upstream_task_id: extractProviderTaskId(result) || taskId,
         raw_usage: enrichedUsage.usage.rawUsage || result?.raw || null
       }
       const usageEvent = await updateUsageEventByRunId(runId, usagePatch)
@@ -784,6 +789,8 @@ export const getImageTask = async (_userId, taskId) => {
           model: run?.model || '',
           apiName: providerAccess.apiName,
           providerRequestId: usagePatch.provider_request_id,
+          serviceCredentialId: providerAccess.serviceCredentialId,
+          upstreamTaskId: usagePatch.upstream_task_id,
           inputTokens: enrichedUsage.usage.inputTokens || 0,
           outputTokens: enrichedUsage.usage.outputTokens || 0,
           imageCount: Array.isArray(result?.data) ? result.data.length : 0,

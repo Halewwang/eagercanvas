@@ -5,7 +5,7 @@ import { env } from '../config/env.js'
 import { randomCode, randomToken, sha256 } from '../utils/crypto.js'
 import { HttpError } from '../utils/http.js'
 import { sendVerificationCodeEmail } from './email.service.js'
-import { resolveUserProviderAccess } from './admin-usage.service.js'
+import { getUserServiceStatus } from './service-access.service.js'
 
 const CODE_PURPOSES = {
   LOGIN: 'login',
@@ -188,9 +188,6 @@ const markLogin = async ({ userId }) => {
 }
 
 const buildUserPayload = async (user, profile) => {
-  const providerAccess = await resolveUserProviderAccess(user.id)
-  const assignedApiNames = Array.isArray(providerAccess?.assignedApiNames) ? providerAccess.assignedApiNames : []
-
   return {
     id: user.id,
     email: user.email,
@@ -199,8 +196,7 @@ const buildUserPayload = async (user, profile) => {
     createdAt: user.created_at,
     registeredAt: profile?.registered_at || null,
     lastLoginAt: profile?.last_login_at || null,
-    assignedApiName: providerAccess?.apiName || null,
-    assignedApiNames
+    serviceStatus: await getUserServiceStatus(user.id)
   }
 }
 

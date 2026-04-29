@@ -96,6 +96,9 @@ export const buildUsageEventPayload = ({
   estimatedCostUsd = 0,
   billedCostUsd = null,
   billingStatus = '',
+  serviceCredentialId = '',
+  upstreamTaskId = '',
+  clientRequestId = '',
   rawUsage = null
 }) => {
   const resolvedBilledCostUsd = billedCostUsd === null ? costUsd : billedCostUsd
@@ -118,6 +121,9 @@ export const buildUsageEventPayload = ({
     latency_ms: toNumber(latencyMs),
     api_name: String(apiName || '').trim() || null,
     provider_request_id: String(providerRequestId || '').trim() || null,
+    service_credential_id: String(serviceCredentialId || '').trim() || null,
+    upstream_task_id: String(upstreamTaskId || '').trim() || null,
+    client_request_id: String(clientRequestId || '').trim() || null,
     raw_usage: rawUsage && typeof rawUsage === 'object' ? rawUsage : null
   }
 }

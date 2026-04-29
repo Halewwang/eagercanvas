@@ -33,8 +33,8 @@
         </label>
 
         <label class="field-block field-block-full">
-          <span class="field-label ui-label">Assigned API</span>
-          <BaseInput :model-value="formData.assignedApiLabel" readonly />
+          <span class="field-label ui-label">Service Status</span>
+          <BaseInput :model-value="formData.serviceStatusLabel" readonly />
         </label>
       </section>
     </div>
@@ -76,7 +76,7 @@ const formData = reactive({
   profileId: '',
   email: '',
   userId: '',
-  assignedApiLabel: ''
+  serviceStatusLabel: ''
 })
 
 const avatarInitial = computed(() => (formData.profileId || formData.email || 'U').charAt(0).toUpperCase())
@@ -86,9 +86,11 @@ const syncForm = () => {
   formData.profileId = current.displayName || ''
   formData.email = current.email || ''
   formData.userId = current.id || ''
-  formData.assignedApiLabel = Array.isArray(current.assignedApiNames) && current.assignedApiNames.length
-    ? current.assignedApiNames.join(', ')
-    : 'Not assigned'
+  formData.serviceStatusLabel = current.serviceStatus === 'active'
+    ? 'Enabled'
+    : current.serviceStatus === 'disabled'
+      ? 'Disabled'
+      : 'Not enabled'
   avatarPreview.value = current.avatarUrl || ''
   hasAvatarChange.value = false
 }

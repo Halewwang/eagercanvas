@@ -33,6 +33,40 @@ export const deleteAdminUser = (userId) =>
     method: 'delete'
   })
 
+export const activateAdminUserService = (userId, payload = {}) =>
+  request({
+    url: `/admin/users/${encodeURIComponent(userId)}/service-access/activate`,
+    method: 'post',
+    data: payload
+  })
+
+export const disableAdminUserService = (userId, reason = '') =>
+  request({
+    url: `/admin/users/${encodeURIComponent(userId)}/service-access/disable`,
+    method: 'post',
+    data: { reason }
+  })
+
+export const resetAdminUserService = (userId) =>
+  request({
+    url: `/admin/users/${encodeURIComponent(userId)}/service-access/reset`,
+    method: 'post'
+  })
+
+export const updateAdminUserServiceLimits = (userId, payload = {}) =>
+  request({
+    url: `/admin/users/${encodeURIComponent(userId)}/service-access/limits`,
+    method: 'patch',
+    data: payload
+  })
+
+export const reconcileAdminBilling = (payload = {}) =>
+  request({
+    url: '/admin/billing/reconcile',
+    method: 'post',
+    data: payload
+  })
+
 export const assignAdminApiKeyToUser = (userId, apiName) =>
   request({
     url: '/admin/api-keys/assign',

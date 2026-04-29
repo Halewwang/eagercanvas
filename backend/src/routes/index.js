@@ -3,7 +3,7 @@ import { authRequired } from '../middleware/auth.js'
 import { asyncHandler } from '../utils/http.js'
 import { createChatCompletion, createImageGeneration, createVideoGeneration, getImageTask, getVideoTask } from '../services/runs.service.js'
 import { providerRemoveBackground } from '../services/provider.service.js'
-import { resolveUserProviderAccess } from '../services/admin-usage.service.js'
+import { resolveActiveUserServiceCredential } from '../services/service-access.service.js'
 import { adminRouter } from './admin.routes.js'
 import { authRouter } from './auth.routes.js'
 import { mediaLibraryRouter } from './media-library.routes.js'
@@ -43,7 +43,7 @@ apiRouter.post('/images/generations', authRequired, asyncHandler(async (req, res
 }))
 
 apiRouter.post('/images/remove-background', authRequired, asyncHandler(async (req, res) => {
-  const providerAccess = await resolveUserProviderAccess(req.user.id, req.body?.api_name || req.body?.apiName)
+  const providerAccess = await resolveActiveUserServiceCredential(req.user.id)
   const result = await providerRemoveBackground(
     req.body || {},
     providerAccess?.apiKey ? { apiKey: providerAccess.apiKey } : {}
