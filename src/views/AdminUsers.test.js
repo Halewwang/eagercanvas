@@ -43,3 +43,11 @@ test('admin user table hides deleted users from the default list', () => {
   assert.match(source, /option value="all">未删除/)
   assert.match(source, /filterStatus === 'all' \? status !== 'deleted' : status === filterStatus/)
 })
+
+test('admin dashboard keeps the usage trend compact and internally scrollable', () => {
+  assert.match(source, /ref="overviewSideRef"/)
+  assert.match(source, /:style="usageTrendCardStyle"/)
+  assert.match(source, /admin-usage-trend-scroll flex-1 space-y-3/)
+  assert.match(source, /ResizeObserver/)
+  assert.match(source, /\.admin-usage-trend-scroll[\s\S]*overflow-y: auto/)
+})

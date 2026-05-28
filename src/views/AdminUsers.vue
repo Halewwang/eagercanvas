@@ -98,7 +98,7 @@
             </div>
 
             <div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[1.5fr_1fr]">
-              <div class="ui-glass-card rounded-2xl p-4 md:p-5">
+              <div class="admin-usage-trend-card ui-glass-card rounded-2xl p-4 md:p-5" :style="usageTrendCardStyle">
                 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 class="text-lg font-medium text-white">用量趋势</h3>
@@ -113,7 +113,7 @@
                 <div v-else-if="usageSeries.length === 0" class="empty-notice">
                   暂无用量数据
                 </div>
-                <div v-else class="space-y-3">
+                <div v-else class="admin-usage-trend-scroll flex-1 space-y-3">
                   <div v-for="row in usageSeries" :key="row.date" class="grid grid-cols-[90px_1fr_80px] items-center gap-3">
                     <span class="text-xs text-white/55">{{ row.date }}</span>
                     <div class="h-2 overflow-hidden rounded bg-white/10">
@@ -124,7 +124,7 @@
                 </div>
               </div>
 
-              <div class="space-y-5">
+              <div ref="overviewSideRef" class="space-y-5">
                 <div class="ui-glass-card rounded-2xl p-4 md:p-5">
                   <h3 class="text-lg font-medium text-white">管理员会话</h3>
                   <div class="mt-4 space-y-3 text-sm">
@@ -510,10 +510,13 @@ const auth = useAuthStore()
 
 const adminShellRef = ref(null)
 const overviewRef = ref(null)
+const overviewSideRef = ref(null)
 const usersRef = ref(null)
 const serviceRef = ref(null)
 const auditRef = ref(null)
 const activeSection = ref('overview')
+const usageTrendHeight = ref('')
+let overviewSideResizeObserver = null
 
 const roleOptions = [
   { value: 'super_admin', label: '超级管理员' },
@@ -620,6 +623,7 @@ watch(navItems, (items) => {
 const isRefreshing = computed(() => loadingOverview.value || loadingUsers.value || loadingLogs.value || loading302.value)
 const loadingOverview = computed(() => loadingUsage.value)
 const nowLabel = computed(() => new Date().toLocaleDateString())
+const usageTrendCardStyle = computed(() => (usageTrendHeight.value ? { height: usageTrendHeight.value } : {}))
 
 const displayName = computed(() => {
   const name = String(auth.user.value?.displayName || '').trim()
@@ -769,6 +773,17 @@ const onMainScroll = () => {
     }
   }
   activeSection.value = candidate
+}
+
+const updateUsageTrendHeight = () => {
+  if (typeof window === 'undefined') return
+  const sideEl = overviewSideRef.value
+  if (!sideEl || !window.matchMedia('(min-width: 1280px)').matches) {
+    usageTrendHeight.value = ''
+    return
+  }
+  const nextHeight = Math.round(sideEl.getBoundingClientRect().height)
+  usageTrendHeight.value = nextHeight > 0 ? `${nextHeight}px` : ''
 }
 
 const setUserPage = (page) => {
@@ -1063,6 +1078,11 @@ const loadAll = async () => {
 onMounted(async () => {
   await loadAll()
   await nextTick()
+  updateUsageTrendHeight()
+  if (typeof ResizeObserver !== 'undefined' && overviewSideRef.value) {
+    overviewSideResizeObserver = new ResizeObserver(updateUsageTrendHeight)
+    overviewSideResizeObserver.observe(overviewSideRef.value)
+  }
   const preferredSection = sectionByRouteName[route.name] || 'overview'
   if (navItems.value.some((item) => item.key === preferredSection)) {
     scrollToSection(preferredSection, { updateRoute: false })
@@ -1073,6 +1093,7 @@ onMounted(async () => {
     }
   }
   window.addEventListener('scroll', onMainScroll, { passive: true })
+  window.addEventListener('resize', updateUsageTrendHeight, { passive: true })
 })
 
 watch(() => route.name, async (name) => {
@@ -1087,6 +1108,8 @@ watch(() => route.name, async (name) => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', onMainScroll)
+  window.removeEventListener('resize', updateUsageTrendHeight)
+  overviewSideResizeObserver?.disconnect()
 })
 </script>
 
@@ -1248,6 +1271,28 @@ onBeforeUnmount(() => {
   font-size: 24px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.94);
+}
+
+.admin-usage-trend-card {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.admin-usage-trend-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+}
+
+.admin-usage-trend-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin-usage-trend-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .empty-notice {
