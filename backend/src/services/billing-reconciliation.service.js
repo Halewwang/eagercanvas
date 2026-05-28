@@ -166,6 +166,52 @@ const loadMatchingContext = async (client, records) => {
   }
 }
 
+const upsertBillingRecordPayloads = async (client, payloads) => {
+  const rows = []
+  const requestPayloads = payloads.filter((item) => item.upstream_request_id)
+  const taskPayloads = payloads.filter((item) => !item.upstream_request_id && item.upstream_task_id)
+  const insertPayloads = payloads.filter((item) => !item.upstream_request_id && !item.upstream_task_id)
+
+  const upsertBatch = async (batch, onConflict) => {
+    if (!batch.length) return
+    const { data, error } = await client
+      .from('provider_billing_records')
+      .upsert(batch, { onConflict })
+      .select('id,usage_event_id,cost_amount,reconciliation_status')
+    if (error) throw new HttpError(500, error.message, 'BILLING_RECORD_UPSERT_FAILED')
+    rows.push(...(data || []))
+  }
+
+  await upsertBatch(requestPayloads, 'upstream_request_id')
+  await upsertBatch(taskPayloads, 'upstream_task_id')
+
+  if (insertPayloads.length) {
+    const { data, error } = await client
+      .from('provider_billing_records')
+      .insert(insertPayloads)
+      .select('id,usage_event_id,cost_amount,reconciliation_status')
+    if (error) throw new HttpError(500, error.message, 'BILLING_RECORD_INSERT_FAILED')
+    rows.push(...(data || []))
+  }
+
+  return rows
+}
+
+const shouldFetchNextRecordPage = (pagination, page) => {
+  if (!pagination || typeof pagination !== 'object') return false
+  const totalPages = Number(
+    pagination.total_pages ||
+    pagination.totalPages ||
+    pagination.last_page ||
+    pagination.lastPage ||
+    0
+  )
+  if (Number.isFinite(totalPages) && totalPages > page) return true
+  if (pagination.has_more === true || pagination.hasMore === true) return true
+  const nextPage = Number(pagination.next_page || pagination.nextPage || 0)
+  return Number.isFinite(nextPage) && nextPage > page
+}
+
 export const syncProviderBillingRecords = async ({ startTime, endTime, pageSize = 100 } = {}, deps = {}) => {
   const client = deps.supabaseClient || supabase
   const fetchRecords = deps.fetchRecords || get302ApiRecords
@@ -175,14 +221,22 @@ export const syncProviderBillingRecords = async ({ startTime, endTime, pageSize 
     throw new HttpError(400, 'Invalid billing sync time range', 'INVALID_BILLING_SYNC_RANGE')
   }
 
-  const response = await fetchRecords({
-    page: 1,
-    limit: Number(pageSize || 100),
-    start_time: Math.floor(start.getTime() / 1000),
-    end_time: Math.floor(end.getTime() / 1000)
-  })
-  const normalized = normalize302ApiRecordList(response)
-  const records = normalized.items.map(normalizeProviderBillingRecord)
+  const records = []
+  let page = 1
+  let keepFetching = true
+  while (keepFetching) {
+    const response = await fetchRecords({
+      page,
+      limit: Number(pageSize || 100),
+      start_time: Math.floor(start.getTime() / 1000),
+      end_time: Math.floor(end.getTime() / 1000)
+    })
+    const normalized = normalize302ApiRecordList(response)
+    records.push(...normalized.items.map(normalizeProviderBillingRecord))
+    keepFetching = shouldFetchNextRecordPage(normalized.pagination, page)
+    page += 1
+    if (page > 50) keepFetching = false
+  }
   const context = await loadMatchingContext(client, records)
 
   let matched = 0
@@ -200,11 +254,7 @@ export const syncProviderBillingRecords = async ({ startTime, endTime, pageSize 
     return { ok: true, fetched: 0, inserted: 0, updated: 0, matched: 0, unmatched: 0 }
   }
 
-  const { data, error } = await client
-    .from('provider_billing_records')
-    .upsert(payloads, { onConflict: 'upstream_request_id' })
-    .select('id,usage_event_id,cost_amount,reconciliation_status')
-  if (error) throw new HttpError(500, error.message, 'BILLING_RECORD_UPSERT_FAILED')
+  const data = await upsertBillingRecordPayloads(client, payloads)
 
   for (const row of data || []) {
     if (!row.usage_event_id) continue

@@ -25,3 +25,10 @@ test('admin user table keeps the service workflow focused', () => {
   assert.match(source, /待对账/)
   assert.doesNotMatch(source, /用户与角色/)
 })
+
+test('admin user table treats 302 official billing as the only cost source', () => {
+  assert.doesNotMatch(source, /本地估算/)
+  assert.doesNotMatch(source, /estimatedUsage/)
+  assert.doesNotMatch(source, /差异/)
+  assert.match(source, /item\.officialUsage\?\.totalCostAmount/)
+})
