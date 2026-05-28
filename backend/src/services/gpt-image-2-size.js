@@ -97,6 +97,9 @@ export const extractGptImage2TaskId = (response = {}) => {
   return String(candidates.find((value) => value !== undefined && value !== null && String(value).trim()) || '').trim()
 }
 
+export const buildGptImage2AsyncResultPath = (taskId = '') =>
+  `/v1/async_result?task_id=${encodeURIComponent(String(taskId || '').trim())}`
+
 export const isGptImage2PendingResult = (response = {}) => {
   const values = [
     response?.status,

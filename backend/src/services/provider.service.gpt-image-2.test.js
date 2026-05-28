@@ -71,7 +71,7 @@ test('GPT Image 2 status treats provider result pending as processing', async ()
   }
 
   assert.equal(requests.length, 1)
-  assert.match(requests[0], /\/async_result\?task_id=gpt-task-1$/)
+  assert.match(requests[0], /\/v1\/async_result\?task_id=gpt-task-1$/)
 })
 
 test('GPT Image 2 status treats official err pending body as processing', async () => {

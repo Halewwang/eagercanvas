@@ -2,7 +2,12 @@ import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 import sharp from 'sharp'
 import { attachProviderResponseMetadata } from './provider-response-metadata.js'
-import { buildGptImage2RequestBody, extractGptImage2TaskId, isGptImage2PendingResult } from './gpt-image-2-size.js'
+import {
+  buildGptImage2AsyncResultPath,
+  buildGptImage2RequestBody,
+  extractGptImage2TaskId,
+  isGptImage2PendingResult
+} from './gpt-image-2-size.js'
 
 const parseProviderBases = () => {
   const rawList = String(env.providerApiBaseUrls || '')
@@ -545,7 +550,7 @@ const pollGptImage2AsyncResult = async (taskId, attempts = 90, intervalMs = 5000
   for (let index = 0; index < attempts; index += 1) {
     let current
     try {
-      current = await callProvider(`/async_result?task_id=${encodeURIComponent(safeTaskId)}`, null, 'GET', requestOptions)
+      current = await callProvider(buildGptImage2AsyncResultPath(safeTaskId), null, 'GET', requestOptions)
     } catch (error) {
       if (isGptImage2PendingResult({
         status: error?.status,
@@ -598,7 +603,7 @@ const getGptImage2AsyncResult = async (taskId, requestOptions = {}) => {
 
   let current
   try {
-    current = await callProvider(`/async_result?task_id=${encodeURIComponent(safeTaskId)}`, null, 'GET', requestOptions)
+    current = await callProvider(buildGptImage2AsyncResultPath(safeTaskId), null, 'GET', requestOptions)
   } catch (error) {
     if (isGptImage2PendingResult({
       status: error?.status,

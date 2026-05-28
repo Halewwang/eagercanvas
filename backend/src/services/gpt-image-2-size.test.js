@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  buildGptImage2AsyncResultPath,
   buildGptImage2RequestBody,
   extractGptImage2TaskId,
   isGptImage2PendingResult,
@@ -69,4 +70,8 @@ test('recognizes GPT Image 2 pending async result responses', () => {
   assert.equal(isGptImage2PendingResult({ data: { status: 'queued' } }), true)
   assert.equal(isGptImage2PendingResult({ status: 'processing' }), true)
   assert.equal(isGptImage2PendingResult({ data: 'https://file.302.ai/result.png' }), false)
+})
+
+test('builds GPT Image 2 async result path under v1 namespace', () => {
+  assert.equal(buildGptImage2AsyncResultPath('task 1'), '/v1/async_result?task_id=task%201')
 })
