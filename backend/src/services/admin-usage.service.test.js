@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildAdminUserUsageView } from './admin-usage.service.js'
+import { buildAdminUserUsageView, loadUserApiKeyBillingInventory } from './admin-usage.service.js'
 
 test('buildAdminUserUsageView uses official 302 billing as the only cost source', () => {
   const [user] = buildAdminUserUsageView({
@@ -41,4 +41,52 @@ test('buildAdminUserUsageView uses official 302 billing as the only cost source'
   assert.equal(user.officialUsage.totalCostAmount, 2.5)
   assert.equal(user.estimatedUsage, undefined)
   assert.equal(user.reconciliation.diffAmount, 0)
+})
+
+test('loadUserApiKeyBillingInventory uses per-key detail cost over api key list cost', async () => {
+  const detailCalls = []
+  const inventory = await loadUserApiKeyBillingInventory(
+    [{ provider_api_name: 'eager_user_one', status: 'active' }],
+    {
+      listApiKeys: async () => ({
+        data: [
+          {
+            api_name: 'eager_user_one',
+            current_cost: 4848
+          }
+        ]
+      }),
+      getApiKey: async (apiName) => {
+        detailCalls.push(apiName)
+        return {
+          data: {
+            api_name: apiName,
+            current_cost: 12.34,
+            current_date_cost: 0.56
+          }
+        }
+      }
+    }
+  )
+
+  assert.deepEqual(detailCalls, ['eager_user_one'])
+  assert.equal(inventory.get('eager_user_one').current_cost, 12.34)
+  assert.equal(inventory.get('eager_user_one').current_date_cost, 0.56)
+})
+
+test('loadUserApiKeyBillingInventory does not use list cost when detail lookup fails', async () => {
+  const inventory = await loadUserApiKeyBillingInventory(
+    [{ provider_api_name: 'eager_user_one', status: 'active' }],
+    {
+      listApiKeys: async () => ({
+        data: [{ api_name: 'eager_user_one', current_cost: 4848 }]
+      }),
+      getApiKey: async () => {
+        throw new Error('detail unavailable')
+      }
+    }
+  )
+
+  assert.equal(inventory.get('eager_user_one').api_name, 'eager_user_one')
+  assert.equal(Object.hasOwn(inventory.get('eager_user_one'), 'current_cost'), false)
 })

@@ -1,6 +1,6 @@
 import { supabase } from '../config/supabase.js'
 import { invalidateUserAuthzCache } from './rbac.service.js'
-import { get302ApiKeys, get302RuntimeApiKeyByName, normalize302ApiKeyList } from './dashboard302.service.js'
+import { get302ApiKey, get302ApiKeys, get302RuntimeApiKeyByName, normalize302ApiKeyList } from './dashboard302.service.js'
 import { HttpError } from '../utils/http.js'
 import { disableUserServiceCredential, formatServiceCredentialForAdmin } from './service-access.service.js'
 
@@ -72,6 +72,57 @@ const loadActiveApiKeyInventory = async () => {
   } catch {
     return null
   }
+}
+
+const normalizeApiKeyDetail = (response = {}, fallbackApiName = '') => {
+  const payload = response?.data && typeof response.data === 'object' ? response.data : response
+  if (!payload || typeof payload !== 'object') return null
+  const apiName = readApiName(payload) || String(fallbackApiName || '').trim()
+  if (!apiName) return null
+  return {
+    ...payload,
+    api_name: apiName
+  }
+}
+
+export const loadUserApiKeyBillingInventory = async (credentials = [], deps = {}) => {
+  const listApiKeys = deps.listApiKeys || get302ApiKeys
+  const getApiKey = deps.getApiKey || get302ApiKey
+  let activeNames = null
+  let listInventory = new Map()
+
+  try {
+    const response = await listApiKeys()
+    const list = normalize302ApiKeyList(response)
+    listInventory = new Map(
+      list
+        .map((item) => [readApiName(item), item])
+        .filter(([apiName]) => !!apiName)
+    )
+    activeNames = new Set(listInventory.keys())
+  } catch {
+    activeNames = null
+  }
+
+  const apiNames = [...new Set(
+    (credentials || [])
+      .filter((item) => !['create_failed', 'deleted'].includes(String(item?.status || '')))
+      .map((item) => String(item?.provider_api_name || '').trim())
+      .filter(Boolean)
+      .filter((apiName) => !activeNames || activeNames.has(apiName))
+  )]
+
+  const entries = await Promise.all(apiNames.map(async (apiName) => {
+    try {
+      const detail = normalizeApiKeyDetail(await getApiKey(apiName), apiName)
+      if (detail) return [apiName, detail]
+    } catch {
+      // Fall back below to the list row so assignment filtering can still work.
+    }
+    return [apiName, { api_name: apiName }]
+  }))
+
+  return new Map(entries.filter(([apiName]) => !!apiName))
 }
 
 export const getUserAssignedApiKeys = async (userId) => {
@@ -398,7 +449,7 @@ export const buildAdminUserUsageView = ({
 }
 
 export const listUsersForAdmin = async () => {
-  const [usersRes, profilesRes, assignments, usageEventsRes, credentialsRes, billingRecordsRes, apiKeyInventory] = await Promise.all([
+  const [usersRes, profilesRes, assignments, usageEventsRes, credentialsRes, billingRecordsRes] = await Promise.all([
     supabase.from('users').select('*').order('created_at', { ascending: false }),
     supabase.from('user_profiles').select('user_id, display_name, registered_at, last_login_at'),
     loadAssignments(),
@@ -413,8 +464,7 @@ export const listUsersForAdmin = async () => {
     supabase
       .from('provider_billing_records')
       .select('user_id, service_credential_id, model, input_tokens, output_tokens, image_count, video_seconds, cost_amount, cost_currency, reconciliation_status, official_created_at')
-      .order('official_created_at', { ascending: false }),
-    loadActiveApiKeyInventory()
+      .order('official_created_at', { ascending: false })
   ])
 
   if (usersRes.error) throw new HttpError(500, usersRes.error.message, 'USERS_QUERY_FAILED')
@@ -423,6 +473,7 @@ export const listUsersForAdmin = async () => {
   if (credentialsRes.error && !isMissingRelation(credentialsRes.error)) throw new HttpError(500, credentialsRes.error.message, 'SERVICE_CREDENTIALS_QUERY_FAILED')
   if (billingRecordsRes.error && !isMissingRelation(billingRecordsRes.error)) throw new HttpError(500, billingRecordsRes.error.message, 'BILLING_RECORDS_QUERY_FAILED')
   const rolesMap = await loadRolesMap((usersRes.data || []).map((item) => item.id))
+  const apiKeyInventory = await loadUserApiKeyBillingInventory(credentialsRes.data || [])
   const activeApiKeyNames = apiKeyInventory ? new Set(apiKeyInventory.keys()) : null
 
   return buildAdminUserUsageView({

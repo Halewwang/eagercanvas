@@ -22,7 +22,6 @@ test('admin page separates user service operations from billing reconciliation',
 test('admin user table keeps the service workflow focused', () => {
   assert.match(source, /服务状态/)
   assert.match(source, /官方消耗/)
-  assert.match(source, /待对账/)
   assert.doesNotMatch(source, /用户与角色/)
 })
 
@@ -31,4 +30,11 @@ test('admin user table treats 302 official billing as the only cost source', () 
   assert.doesNotMatch(source, /estimatedUsage/)
   assert.doesNotMatch(source, /差异/)
   assert.match(source, /item\.officialUsage\?\.totalCostAmount/)
+})
+
+test('admin user table does not show pending reconciliation counts', () => {
+  assert.doesNotMatch(source, /待对账用户/)
+  assert.doesNotMatch(source, /待对账 \$/)
+  assert.doesNotMatch(source, /pendingBillingUsers/)
+  assert.doesNotMatch(source, /reconciliation\?\.pendingCount/)
 })

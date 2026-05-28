@@ -139,7 +139,6 @@
                   <h3 class="text-lg font-medium text-white">重点观察</h3>
                   <div class="mt-4 space-y-3 text-sm">
                     <div class="ui-info-line"><span>未开通服务用户</span><strong class="text-amber-100">{{ notEnabledActiveUsers.length }}</strong></div>
-                    <div class="ui-info-line"><span>待对账用户</span><strong class="text-amber-100">{{ pendingBillingUsers }}</strong></div>
                     <div class="ui-info-line"><span>已开通服务</span><strong>{{ activeServiceUsers }}</strong></div>
                   </div>
                   <div class="mt-4 space-y-2">
@@ -169,7 +168,7 @@
               </button>
             </div>
 
-            <div class="mb-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div class="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
               <div class="service-metric">
                 <p>服务开通率</p>
                 <strong>{{ serviceActivationRate }}%</strong>
@@ -177,10 +176,6 @@
               <div class="service-metric">
                 <p>待处理服务</p>
                 <strong>{{ notEnabledActiveUsers.length }}</strong>
-              </div>
-              <div class="service-metric">
-                <p>待对账用户</p>
-                <strong>{{ pendingBillingUsers }}</strong>
               </div>
               <div class="service-metric">
                 <p>当前显示</p>
@@ -251,9 +246,6 @@
                       <p class="mt-1 text-[11px] text-white/35">{{ topModelLabel(item) }}</p>
                     </td>
                     <td class="px-3 py-4">
-                      <p class="mt-1 text-[11px]" :class="item.usageMeta?.pendingBillingCount ? 'text-amber-200/80' : 'text-white/35'">
-                        {{ item.reconciliation?.pendingCount ? `待对账 ${item.reconciliation.pendingCount} 条` : '无待对账' }}
-                      </p>
                       <p class="mt-1 text-[11px]" :class="item.reconciliation?.unmatchedCount ? 'text-rose-200/80' : 'text-white/35'">
                         {{ item.reconciliation?.unmatchedCount ? `异常 ${item.reconciliation.unmatchedCount} 条` : '无异常账单' }}
                       </p>
@@ -685,10 +677,6 @@ const notEnabledActiveUsers = computed(() => {
     const serviceStatus = String(item.service?.serviceStatus || 'not_enabled')
     return status === 'active' && serviceStatus !== 'active'
   })
-})
-
-const pendingBillingUsers = computed(() => {
-  return users.value.filter((item) => Number(item?.reconciliation?.pendingCount || 0) > 0).length
 })
 
 const activeServiceUsers = computed(() => users.value.filter((item) => item.service?.serviceStatus === 'active').length)
