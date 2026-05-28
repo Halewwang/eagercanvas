@@ -30,6 +30,8 @@ test('admin user table treats 302 official billing as the only cost source', () 
   assert.doesNotMatch(source, /estimatedUsage/)
   assert.doesNotMatch(source, /差异/)
   assert.match(source, /item\.officialUsage\?\.totalCostAmount/)
+  assert.match(source, /formatUsageAmount\(item\.officialUsage\?\.totalCostAmount, item\.officialUsage\?\.currency/)
+  assert.doesNotMatch(source, /formatUsd/)
 })
 
 test('admin user table does not show pending reconciliation counts', () => {

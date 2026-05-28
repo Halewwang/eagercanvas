@@ -143,13 +143,13 @@
                   </div>
                   <div class="mt-4 space-y-2">
                     <p class="text-xs uppercase tracking-[0.12em] text-white/40">Top 消耗用户</p>
-                    <div v-if="topSpenders.length === 0" class="text-xs text-white/45">暂无归因成本数据</div>
+                    <div v-if="topSpenders.length === 0" class="text-xs text-white/45">暂无 key 用量数据</div>
                     <div v-for="item in topSpenders" :key="`spender-${item.id}`" class="insight-row">
                       <div>
                         <p class="text-sm text-white/88">{{ item.displayName || item.email || item.id }}</p>
                         <p class="text-[11px] text-white/45">{{ item.service?.serviceIdentifier || '-' }}</p>
                       </div>
-                      <strong>{{ formatUsd(item.officialUsage?.totalCostAmount, 2) }}</strong>
+                      <strong>{{ formatUsageAmount(item.officialUsage?.totalCostAmount, item.officialUsage?.currency, 3) }}</strong>
                     </div>
                   </div>
                 </div>
@@ -242,7 +242,7 @@
                     </td>
                     <td class="px-3 py-4 text-white/85">
                       <p>{{ item.officialUsage?.totalCalls || 0 }} 次</p>
-                      <p class="mt-1 text-xs text-white/45">{{ formatUsd(item.officialUsage?.totalCostAmount, 4) }} {{ item.officialUsage?.currency || 'USD' }}</p>
+                      <p class="mt-1 text-xs text-white/45">{{ formatUsageAmount(item.officialUsage?.totalCostAmount, item.officialUsage?.currency, 4) }}</p>
                       <p class="mt-1 text-[11px] text-white/35">{{ topModelLabel(item) }}</p>
                     </td>
                     <td class="px-3 py-4">
@@ -666,7 +666,10 @@ const cards = computed(() => [
   { label: '已开通服务', value: canReadUsers.value ? activeServiceUsers.value : '--', note: canReadUsers.value ? '当前可调用服务的用户数' : '缺少权限' }
 ])
 
-const formatUsd = (value, digits = 2) => Number(value || 0).toFixed(digits)
+const formatUsageAmount = (value, currency = 'USD', digits = 2) => {
+  const code = String(currency || 'USD').trim() || 'USD'
+  return `${Number(value || 0).toFixed(digits)} ${code}`
+}
 
 const topSpenders = computed(() => {
   return [...users.value]

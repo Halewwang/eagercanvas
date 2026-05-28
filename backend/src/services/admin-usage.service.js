@@ -1,6 +1,13 @@
 import { supabase } from '../config/supabase.js'
 import { invalidateUserAuthzCache } from './rbac.service.js'
-import { get302ApiKey, get302ApiKeys, get302RuntimeApiKeyByName, normalize302ApiKeyList } from './dashboard302.service.js'
+import {
+  get302ApiKey,
+  get302ApiKeyUsageByKey,
+  get302ApiKeys,
+  get302RuntimeApiKeyByName,
+  normalize302ApiKeyList,
+  normalize302ApiKeyUsage
+} from './dashboard302.service.js'
 import { HttpError } from '../utils/http.js'
 import { disableUserServiceCredential, formatServiceCredentialForAdmin } from './service-access.service.js'
 
@@ -43,19 +50,33 @@ const loadActiveApiKeyNames = async () => {
 
 const readApiName = (item = {}) => String(item?.api_name || item?.apiName || '').trim()
 
-const readKeyCost = (item = {}) => {
+const readRuntimeApiKey = (item = {}) => String(item?.api_key || item?.apiKey || item?.key || '').trim()
+
+const readCostCandidate = (value) => {
+  if (value === undefined || value === null || String(value).trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const readKeyUsageCost = (item = {}) => {
   const candidates = [
-    item?.current_cost,
-    item?.currentCost,
-    item?.cost,
-    item?.cost_usd,
-    item?.total_cost,
-    item?.totalCost
+    { value: item?.usage_total_cost, currency: item?.usage_currency },
+    { value: item?.usageTotalCost, currency: item?.usageCurrency },
+    { value: item?.usage?.total_cost, currency: item?.usage?.currency },
+    { value: item?.usage?.totalCost, currency: item?.usage?.currency },
+    { value: item?.usageLog?.total_cost, currency: item?.usageLog?.currency },
+    { value: item?.usageLog?.totalCost, currency: item?.usageLog?.currency },
+    { value: item?.usage_log?.total_cost, currency: item?.usage_log?.currency },
+    { value: item?.usage_log?.totalCost, currency: item?.usage_log?.currency }
   ]
-  for (const value of candidates) {
-    if (value === undefined || value === null || String(value).trim() === '') continue
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) return parsed
+  for (const candidate of candidates) {
+    const amount = readCostCandidate(candidate.value)
+    if (amount !== null) {
+      return {
+        amount,
+        currency: String(candidate.currency || item?.usage_currency || 'PTC').trim() || 'PTC'
+      }
+    }
   }
   return null
 }
@@ -85,9 +106,30 @@ const normalizeApiKeyDetail = (response = {}, fallbackApiName = '') => {
   }
 }
 
+const enrichApiKeyUsage = async (detail = {}, getApiKeyUsage, fallback = {}) => {
+  const runtimeApiKey = readRuntimeApiKey(detail) || readRuntimeApiKey(fallback)
+  if (!runtimeApiKey) return detail
+
+  try {
+    const usage = normalize302ApiKeyUsage(await getApiKeyUsage(runtimeApiKey))
+    if (usage.totalCost === null) return detail
+    return {
+      ...detail,
+      usage_total_cost: usage.totalCost,
+      usage_monthly_cost: usage.monthlyCost,
+      usage_daily_cost: usage.dailyCost,
+      usage_currency: usage.currency || 'PTC',
+      usage_cost_source: '302_usage_log'
+    }
+  } catch {
+    return detail
+  }
+}
+
 export const loadUserApiKeyBillingInventory = async (credentials = [], deps = {}) => {
   const listApiKeys = deps.listApiKeys || get302ApiKeys
   const getApiKey = deps.getApiKey || get302ApiKey
+  const getApiKeyUsage = deps.getApiKeyUsage || get302ApiKeyUsageByKey
   let activeNames = null
   let listInventory = new Map()
 
@@ -115,11 +157,13 @@ export const loadUserApiKeyBillingInventory = async (credentials = [], deps = {}
   const entries = await Promise.all(apiNames.map(async (apiName) => {
     try {
       const detail = normalizeApiKeyDetail(await getApiKey(apiName), apiName)
-      if (detail) return [apiName, detail]
+      if (detail) {
+        return [apiName, await enrichApiKeyUsage(detail, getApiKeyUsage, listInventory.get(apiName))]
+      }
     } catch {
       // Fall back below to the list row so assignment filtering can still work.
     }
-    return [apiName, { api_name: apiName }]
+    return [apiName, await enrichApiKeyUsage({ api_name: apiName }, getApiKeyUsage, listInventory.get(apiName))]
   }))
 
   return new Map(entries.filter(([apiName]) => !!apiName))
@@ -349,18 +393,19 @@ export const buildAdminUserUsageView = ({
   for (const row of credentials || []) {
     const apiName = String(row.provider_api_name || '').trim()
     if (!apiName || !apiKeyInventory?.has(apiName)) continue
-    const keyCost = readKeyCost(apiKeyInventory.get(apiName))
-    if (keyCost === null) continue
+    const keyUsageCost = readKeyUsageCost(apiKeyInventory.get(apiName))
+    if (!keyUsageCost) continue
+    const keyCost = keyUsageCost.amount
     const userId = row.user_id
     const official = officialUsageMap.get(userId) || {
       totalCalls: 0,
       totalCostAmount: 0,
-      currency: apiKeyInventory.get(apiName)?.currency || 'USD',
+      currency: keyUsageCost.currency,
       byModel: new Map()
     }
     official.totalCostAmount = Number(official.keyCostAmount || 0) + keyCost
     official.keyCostAmount = official.totalCostAmount
-    official.currency = apiKeyInventory.get(apiName)?.currency || official.currency || 'USD'
+    official.currency = keyUsageCost.currency || official.currency || 'PTC'
     officialUsageMap.set(userId, official)
 
     const usage = usageMap.get(userId) || {
@@ -380,6 +425,7 @@ export const buildAdminUserUsageView = ({
     }
     const byKey = meta.byApiKey.get(apiName) || { apiName, totalCalls: 0, totalCostUsd: 0 }
     byKey.totalCostUsd = keyCost
+    byKey.currency = keyUsageCost.currency
     meta.byApiKey.set(apiName, byKey)
     usageEventMetaMap.set(userId, meta)
   }

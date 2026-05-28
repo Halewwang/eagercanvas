@@ -7,6 +7,7 @@ import {
   buildDashboard302AuthHeaders,
   shouldRetry302DashboardWithNextKey,
   normalize302ApiKeyList,
+  normalize302ApiKeyUsage,
   normalize302ApiRecordList,
   normalizeDashboardRecord
 } from './dashboard302.service.js'
@@ -56,6 +57,23 @@ test('normalizes 302 api key list from documented data wrapper', () => {
   assert.equal(list.length, 1)
   assert.equal(list[0].api_name, 'team-a')
   assert.equal(list[0].api_key, 'sk-test')
+})
+
+test('normalizes 302 usage-log totals as PTC key cost', () => {
+  const usage = normalize302ApiKeyUsage({
+    data: {
+      total_cost: '4.848',
+      monthly_cost: 1.23,
+      daily_cost: 0.45
+    }
+  })
+
+  assert.deepEqual(usage, {
+    totalCost: 4.848,
+    monthlyCost: 1.23,
+    dailyCost: 0.45,
+    currency: 'PTC'
+  })
 })
 
 test('normalizes 302 api-record list when upstream wraps rows in data.items', () => {

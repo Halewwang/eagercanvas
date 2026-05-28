@@ -71,6 +71,15 @@ const parseResponse = async (response) => {
   }
 }
 
+const toNullableNumber = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null || String(value).trim() === '') continue
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
 const toFiniteNumber = (...values) => {
   for (const value of values) {
     if (value === undefined || value === null || String(value).trim() === '') continue
@@ -86,6 +95,18 @@ export const normalize302ApiKeyList = (payload = {}) => {
   if (Array.isArray(payload?.data?.items)) return payload.data.items
   if (Array.isArray(payload?.items)) return payload.items
   return []
+}
+
+export const normalize302ApiKeyUsage = (payload = {}) => {
+  const source = payload?.data && typeof payload.data === 'object' ? payload.data : payload
+  const currency = String(source?.currency || source?.cost_currency || 'PTC').trim() || 'PTC'
+
+  return {
+    totalCost: toNullableNumber(source?.total_cost, source?.totalCost, source?.total, source?.cost),
+    monthlyCost: toNullableNumber(source?.monthly_cost, source?.monthlyCost),
+    dailyCost: toNullableNumber(source?.daily_cost, source?.dailyCost),
+    currency
+  }
 }
 
 export const normalize302ApiRecordList = (payload = {}) => {
@@ -124,6 +145,17 @@ export const normalizeDashboardRecord = (record = {}) => {
       record.currentCost
     ),
     rawUsage: record
+  }
+}
+
+const get302ApiKeyAuthHeader = (apiKey = '') => {
+  const safeKey = String(apiKey || '').trim()
+  if (!safeKey) {
+    throw new HttpError(400, '302 API key is required', 'INVALID_302_API_KEY')
+  }
+  return {
+    safeKey,
+    authHeader: toBearerHeader(safeKey)
   }
 }
 
@@ -188,6 +220,50 @@ const call302Dashboard = async (path, options = {}) => {
   }
 }
 
+const call302ApiKeyUsage = async (path, options = {}) => {
+  const { params = null, apiKey = '' } = options
+  const { safeKey, authHeader } = get302ApiKeyAuthHeader(apiKey)
+  const controller = new AbortController()
+  const timeoutMs = Number(env.dashboard302TimeoutMs || env.providerTimeoutMs || 30000)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const url = new URL(`${resolveDashboard302BaseUrl(env.dashboard302ApiBaseUrl, env.providerApiBaseUrl)}${path}`)
+    if (params && typeof params === 'object') {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v === undefined || v === null || String(v).trim() === '') return
+        url.searchParams.set(k, String(v))
+      })
+    }
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        Authorization: authHeader,
+        'X-API-Key': safeKey,
+        'Content-Type': 'application/json'
+      },
+      signal: controller.signal
+    })
+
+    const data = await parseResponse(response)
+
+    if (!response.ok || data?.error) {
+      const message = data?.error?.message || data?.msg || data?.message || `302 usage-log request failed: ${response.status}`
+      throw new HttpError(response.ok ? 400 : response.status, message, 'DASHBOARD_302_USAGE_ERROR')
+    }
+
+    return assert302DashboardSuccess(data)
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new HttpError(504, '302 usage-log request timeout', 'DASHBOARD_302_TIMEOUT')
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export const get302Balance = () => call302Dashboard('/dashboard/balance')
 
 export const get302RecordByRequestId = (requestId) => {
@@ -204,6 +280,22 @@ export const get302ApiKey = (apiName) => {
   const safeName = String(apiName || '').trim()
   if (!safeName) throw new HttpError(400, 'apiName is required', 'INVALID_API_NAME')
   return call302Dashboard(`/dashboard/api_key/${encodeURIComponent(safeName)}`)
+}
+
+export const get302TokenIdForApiKey = (apiKey) =>
+  call302ApiKeyUsage('/gpt/api/token_id', {
+    apiKey,
+    params: { api_key: apiKey }
+  })
+
+export const get302ApiKeyUsageByKey = async (apiKey) => {
+  const tokenResponse = await get302TokenIdForApiKey(apiKey)
+  const tokenPayload = tokenResponse?.data && typeof tokenResponse.data === 'object' ? tokenResponse.data : tokenResponse
+  const tokenId = String(tokenPayload?.token_id || tokenPayload?.tokenId || tokenPayload?.id || '').trim()
+  if (!tokenId) {
+    throw new HttpError(502, '302 usage-log token id is missing', 'DASHBOARD_302_USAGE_TOKEN_MISSING')
+  }
+  return call302ApiKeyUsage(`/gpt/api/token/usage/${encodeURIComponent(tokenId)}`, { apiKey })
 }
 
 export const get302RuntimeApiKeyByName = async (apiName) => {
