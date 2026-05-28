@@ -319,7 +319,6 @@ const toTs = (value) => {
 }
 
 const getProjectActivityTs = (project) => Math.max(
-  toTs(project?.lastOpenedAt),
   toTs(project?.updatedAt),
   toTs(project?.createdAt)
 )
@@ -697,6 +696,7 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null,
   let localMetaSaved = false
   if (localIdx !== -1) {
     projects.value[localIdx] = next
+    projects.value = sortProjectsByActivity(projects.value)
     localDraftSaved = await saveProjectCanvasDraft(id, next.canvasData, {
       draftUpdatedAt: localUpdatedAt,
       baseRevision: getProjectBaseVersion(project, currentVersion),
@@ -754,6 +754,7 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null,
       const idx = projects.value.findIndex((p) => p.id === id)
       if (idx !== -1) {
         projects.value[idx] = mergedProject
+        projects.value = sortProjectsByActivity(projects.value)
       }
       const mergedDraftSaved = await saveProjectCanvasDraft(id, next.canvasData, {
         draftUpdatedAt: localUpdatedAt,
@@ -775,6 +776,7 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null,
     const idx = projects.value.findIndex((p) => p.id === id)
     if (idx !== -1) {
       projects.value[idx] = updatedProject
+      projects.value = sortProjectsByActivity(projects.value)
     }
     const remoteMetaSaved = saveLocalCache()
     const finalLocalSaved = localSaved || (remoteDraftSaved && remoteMetaSaved)
@@ -883,7 +885,7 @@ export const markProjectOpened = (id, openedAt = new Date().toISOString()) => {
   }
   const nextList = [...projects.value]
   nextList[index] = next
-  projects.value = sortProjectsByActivity(nextList)
+  projects.value = nextList
   saveLocalCache()
   return true
 }

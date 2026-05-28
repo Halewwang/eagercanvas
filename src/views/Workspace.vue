@@ -224,7 +224,6 @@ import {
   renameProject,
   duplicateProject,
   deleteProject,
-  markProjectOpened,
   refreshProjectById
 } from '@/stores/projects'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
@@ -370,7 +369,6 @@ const createBlankProject = async () => {
 
 const handlePrimaryClick = async (item) => {
   if (activeSection.value === 'projects') {
-    markProjectOpened(item.id)
     try {
       await refreshProjectById(item.id)
     } catch {
