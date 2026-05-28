@@ -97,7 +97,7 @@
               </article>
             </div>
 
-            <div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[1.5fr_1fr]">
+            <div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[1.5fr_1fr] xl:items-start">
               <div class="admin-usage-trend-card ui-glass-card rounded-2xl p-4 md:p-5" :style="usageTrendCardStyle">
                 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>

@@ -45,6 +45,7 @@ test('admin user table hides deleted users from the default list', () => {
 })
 
 test('admin dashboard keeps the usage trend compact and internally scrollable', () => {
+  assert.match(source, /xl:grid-cols-\[1\.5fr_1fr\] xl:items-start/)
   assert.match(source, /ref="overviewSideRef"/)
   assert.match(source, /:style="usageTrendCardStyle"/)
   assert.match(source, /admin-usage-trend-scroll flex-1 space-y-3/)
