@@ -38,3 +38,8 @@ test('admin user table does not show pending reconciliation counts', () => {
   assert.doesNotMatch(source, /pendingBillingUsers/)
   assert.doesNotMatch(source, /reconciliation\?\.pendingCount/)
 })
+
+test('admin user table hides deleted users from the default list', () => {
+  assert.match(source, /option value="all">未删除/)
+  assert.match(source, /filterStatus === 'all' \? status !== 'deleted' : status === filterStatus/)
+})

@@ -195,7 +195,7 @@
               <div>
                 <p class="mb-2 text-xs uppercase tracking-[0.12em] text-white/45">状态筛选</p>
                 <select v-model="userStatusFilter" class="ui-text-input">
-                  <option value="all">全部</option>
+                  <option value="all">未删除</option>
                   <option value="active">正常</option>
                   <option value="suspended">已暂停</option>
                   <option value="deleted">已删除</option>
@@ -697,7 +697,7 @@ const filteredUsers = computed(() => {
         item.displayName
       ].some((value) => String(value || '').toLowerCase().includes(keyword))
       const status = String(item.status || 'active')
-      const matchesStatus = filterStatus === 'all' || status === filterStatus
+      const matchesStatus = filterStatus === 'all' ? status !== 'deleted' : status === filterStatus
       return matchesKeyword && matchesStatus
     })
     .sort((a, b) => {
