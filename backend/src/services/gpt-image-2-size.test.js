@@ -45,7 +45,8 @@ test('builds GPT Image 2 request body with supported advanced params', () => {
     {
       model: 'gpt-image-2',
       prompt: 'A product shot',
-      size: '2160x3840',
+      size: '9:16',
+      resolution: '4k',
       quality: 'high',
       background: 'transparent',
       output_format: 'webp',
@@ -56,10 +57,22 @@ test('builds GPT Image 2 request body with supported advanced params', () => {
   )
 })
 
+test('keeps explicit GPT Image 2 custom size when no ratio is provided', () => {
+  assert.equal(
+    buildGptImage2RequestBody({
+      prompt: 'A product shot',
+      size: '3840x2160',
+      resolution: '4k'
+    }).size,
+    '3840x2160'
+  )
+})
+
 test('extracts GPT Image 2 async task ids from common response shapes', () => {
   assert.equal(extractGptImage2TaskId({ task_id: 'task-a' }), 'task-a')
   assert.equal(extractGptImage2TaskId({ data: { taskId: 'task-b' } }), 'task-b')
   assert.equal(extractGptImage2TaskId({ id: 'task-c' }), 'task-c')
+  assert.equal(extractGptImage2TaskId({ data: [{ task_id: 'task-d' }] }), 'task-d')
 })
 
 test('recognizes GPT Image 2 pending async result responses', () => {

@@ -59,14 +59,22 @@ const pickAllowed = (value, allowed, fallback) => {
 
 export const buildGptImage2RequestBody = (payload = {}) => {
   const outputFormat = pickAllowed(payload.output_format || payload.outputFormat, ['png', 'jpeg', 'webp'], 'png')
+  const resolution = normalizeGptImage2Resolution(payload.resolution)
+  const rawRatio = payload.ratio || payload.aspect_ratio
+  const hasRatio = rawRatio !== undefined && rawRatio !== null && String(rawRatio).trim() !== ''
+  const ratio = normalizeGptImage2Ratio(rawRatio)
+  const size = hasRatio
+    ? ratio
+    : resolveGptImage2Size({
+      ratio: rawRatio,
+      resolution,
+      size: payload.size
+    })
   const body = {
     model: 'gpt-image-2',
     prompt: String(payload.prompt || '').trim(),
-    size: resolveGptImage2Size({
-      ratio: payload.ratio || payload.aspect_ratio,
-      resolution: payload.resolution,
-      size: payload.size
-    }),
+    size,
+    resolution,
     quality: pickAllowed(payload.quality, ['auto', 'low', 'medium', 'high'], 'auto'),
     background: pickAllowed(payload.background, ['auto', 'opaque', 'transparent'], 'auto'),
     output_format: outputFormat,
@@ -88,6 +96,9 @@ export const extractGptImage2TaskId = (response = {}) => {
     response?.task_id,
     response?.taskId,
     response?.id,
+    response?.data?.[0]?.task_id,
+    response?.data?.[0]?.taskId,
+    response?.data?.[0]?.id,
     response?.data?.task_id,
     response?.data?.taskId,
     response?.data?.id,
