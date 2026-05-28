@@ -249,7 +249,6 @@
                       <p>{{ item.officialUsage?.totalCalls || 0 }} 次</p>
                       <p class="mt-1 text-xs text-white/45">{{ formatUsd(item.officialUsage?.totalCostAmount, 4) }} {{ item.officialUsage?.currency || 'USD' }}</p>
                       <p class="mt-1 text-[11px] text-white/35">{{ topModelLabel(item) }}</p>
-                      <p class="mt-1 text-[11px] text-white/35">本地估算 {{ formatUsd(item.estimatedUsage?.totalCostAmount || item.usage?.totalCostUsd, 4) }} USD</p>
                     </td>
                     <td class="px-3 py-4">
                       <p class="mt-1 text-[11px]" :class="item.usageMeta?.pendingBillingCount ? 'text-amber-200/80' : 'text-white/35'">
@@ -258,7 +257,6 @@
                       <p class="mt-1 text-[11px]" :class="item.reconciliation?.unmatchedCount ? 'text-rose-200/80' : 'text-white/35'">
                         {{ item.reconciliation?.unmatchedCount ? `异常 ${item.reconciliation.unmatchedCount} 条` : '无异常账单' }}
                       </p>
-                      <p class="mt-1 text-[11px] text-white/35">差异 {{ formatUsd(item.reconciliation?.diffAmount, 4) }} USD</p>
                       <p class="mt-1 text-[11px] text-white/35">最近活跃 {{ formatDateTime(item.usageMeta?.lastActivityAt) }}</p>
                     </td>
                     <td v-if="showUserActions" class="px-3 py-4">

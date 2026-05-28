@@ -36,13 +36,38 @@ const loadAssignments = async () => {
 }
 
 const loadActiveApiKeyNames = async () => {
+  const inventory = await loadActiveApiKeyInventory()
+  if (!inventory) return null
+  return new Set(inventory.keys())
+}
+
+const readApiName = (item = {}) => String(item?.api_name || item?.apiName || '').trim()
+
+const readKeyCost = (item = {}) => {
+  const candidates = [
+    item?.current_cost,
+    item?.currentCost,
+    item?.cost,
+    item?.cost_usd,
+    item?.total_cost,
+    item?.totalCost
+  ]
+  for (const value of candidates) {
+    if (value === undefined || value === null || String(value).trim() === '') continue
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+const loadActiveApiKeyInventory = async () => {
   try {
     const response = await get302ApiKeys()
     const list = normalize302ApiKeyList(response)
-    return new Set(
+    return new Map(
       list
-        .map((item) => String(item?.api_name || '').trim())
-        .filter(Boolean)
+        .map((item) => [readApiName(item), item])
+        .filter(([apiName]) => !!apiName)
     )
   } catch {
     return null
@@ -170,40 +195,23 @@ const toIsoDateEnd = (value) => {
   return val ? `${val}T23:59:59.999Z` : ''
 }
 
-export const listUsersForAdmin = async () => {
-  const [usersRes, profilesRes, dailyAggRes, assignments, usageEventsRes, credentialsRes, billingRecordsRes, activeApiKeyNames] = await Promise.all([
-    supabase.from('users').select('*').order('created_at', { ascending: false }),
-    supabase.from('user_profiles').select('user_id, display_name, registered_at, last_login_at'),
-    supabase.from('usage_daily_agg').select('user_id, total_calls, total_tokens, total_images, total_video_seconds, total_cost_usd'),
-    loadAssignments(),
-    supabase
-      .from('usage_events')
-      .select('user_id, api_name, cost_usd, estimated_cost_usd, billing_status, created_at')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('user_service_credentials')
-      .select('*')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('provider_billing_records')
-      .select('user_id, service_credential_id, model, cost_amount, cost_currency, reconciliation_status, official_created_at')
-      .order('official_created_at', { ascending: false }),
-    loadActiveApiKeyNames()
-  ])
-
-  if (usersRes.error) throw new HttpError(500, usersRes.error.message, 'USERS_QUERY_FAILED')
-  if (profilesRes.error) throw new HttpError(500, profilesRes.error.message, 'PROFILES_QUERY_FAILED')
-  if (dailyAggRes.error) throw new HttpError(500, dailyAggRes.error.message, 'USAGE_AGG_QUERY_FAILED')
-  if (usageEventsRes.error) throw new HttpError(500, usageEventsRes.error.message, 'USAGE_EVENTS_QUERY_FAILED')
-  if (credentialsRes.error && !isMissingRelation(credentialsRes.error)) throw new HttpError(500, credentialsRes.error.message, 'SERVICE_CREDENTIALS_QUERY_FAILED')
-  if (billingRecordsRes.error && !isMissingRelation(billingRecordsRes.error)) throw new HttpError(500, billingRecordsRes.error.message, 'BILLING_RECORDS_QUERY_FAILED')
-  const rolesMap = await loadRolesMap((usersRes.data || []).map((item) => item.id))
-
-  const profileMap = new Map((profilesRes.data || []).map((p) => [p.user_id, p]))
+export const buildAdminUserUsageView = ({
+  users = [],
+  profiles = [],
+  assignments = [],
+  usageEvents = [],
+  credentials = [],
+  billingRecords = [],
+  apiKeyInventory = null,
+  activeApiKeyNames = null,
+  rolesMap = new Map()
+} = {}) => {
+  const profileMap = new Map((profiles || []).map((p) => [p.user_id, p]))
 
   const usageMap = new Map()
-  for (const row of dailyAggRes.data || []) {
+  for (const row of billingRecords || []) {
     const key = row.user_id
+    if (!key) continue
     const current = usageMap.get(key) || {
       totalCalls: 0,
       totalTokens: 0,
@@ -211,17 +219,16 @@ export const listUsersForAdmin = async () => {
       totalVideoSeconds: 0,
       totalCostUsd: 0
     }
-
-    current.totalCalls += Number(row.total_calls || 0)
-    current.totalTokens += Number(row.total_tokens || 0)
-    current.totalImages += Number(row.total_images || 0)
-    current.totalVideoSeconds += Number(row.total_video_seconds || 0)
-    current.totalCostUsd += Number(row.total_cost_usd || 0)
+    current.totalCalls += 1
+    current.totalTokens += Number(row.input_tokens || 0) + Number(row.output_tokens || 0)
+    current.totalImages += Number(row.image_count || 0)
+    current.totalVideoSeconds += Number(row.video_seconds || 0)
+    current.totalCostUsd += Number(row.cost_amount || 0)
     usageMap.set(key, current)
   }
 
   const assignmentMap = new Map()
-  for (const row of assignments) {
+  for (const row of assignments || []) {
     const apiName = String(row.api_name || '').trim()
     if (!apiName) continue
     if (activeApiKeyNames && !activeApiKeyNames.has(apiName)) continue
@@ -231,23 +238,16 @@ export const listUsersForAdmin = async () => {
   }
 
   const usageEventMetaMap = new Map()
-  const usageEventTotalsMap = new Map()
-  for (const row of usageEventsRes.data || []) {
+  for (const row of usageEvents || []) {
     const key = row.user_id
     const current = usageEventMetaMap.get(key) || {
       lastActivityAt: null,
       pendingBillingCount: 0,
       byApiKey: new Map()
     }
-    const usageTotals = usageEventTotalsMap.get(key) || {
-      totalCostUsd: 0,
-      estimatedCostUsd: 0
-    }
 
     if (!current.lastActivityAt) current.lastActivityAt = row.created_at || null
     if (String(row.billing_status || '') === 'pending') current.pendingBillingCount += 1
-    usageTotals.totalCostUsd += Number(row.cost_usd || 0)
-    usageTotals.estimatedCostUsd += Number(row.estimated_cost_usd || row.cost_usd || 0)
 
     const apiName = String(row.api_name || '').trim()
     if (apiName && (!activeApiKeyNames || activeApiKeyNames.has(apiName))) {
@@ -256,17 +256,15 @@ export const listUsersForAdmin = async () => {
         totalCostUsd: 0,
         totalCalls: 0
       }
-      item.totalCostUsd += Number(row.cost_usd || 0)
       item.totalCalls += 1
       current.byApiKey.set(apiName, item)
     }
 
     usageEventMetaMap.set(key, current)
-    usageEventTotalsMap.set(key, usageTotals)
   }
 
   const credentialMap = new Map()
-  for (const row of credentialsRes.data || []) {
+  for (const row of credentials || []) {
     const list = credentialMap.get(row.user_id) || []
     list.push(row)
     credentialMap.set(row.user_id, list)
@@ -274,7 +272,7 @@ export const listUsersForAdmin = async () => {
 
   const officialUsageMap = new Map()
   const reconciliationMap = new Map()
-  for (const row of billingRecordsRes.data || []) {
+  for (const row of billingRecords || []) {
     const key = row.user_id
     if (!key) continue
     const official = officialUsageMap.get(key) || {
@@ -297,14 +295,72 @@ export const listUsersForAdmin = async () => {
     reconciliationMap.set(key, reconciliation)
   }
 
-  return (usersRes.data || []).map((user) => {
+  for (const row of credentials || []) {
+    const apiName = String(row.provider_api_name || '').trim()
+    if (!apiName || !apiKeyInventory?.has(apiName)) continue
+    const keyCost = readKeyCost(apiKeyInventory.get(apiName))
+    if (keyCost === null) continue
+    const userId = row.user_id
+    const official = officialUsageMap.get(userId) || {
+      totalCalls: 0,
+      totalCostAmount: 0,
+      currency: apiKeyInventory.get(apiName)?.currency || 'USD',
+      byModel: new Map()
+    }
+    official.totalCostAmount = Number(official.keyCostAmount || 0) + keyCost
+    official.keyCostAmount = official.totalCostAmount
+    official.currency = apiKeyInventory.get(apiName)?.currency || official.currency || 'USD'
+    officialUsageMap.set(userId, official)
+
+    const usage = usageMap.get(userId) || {
+      totalCalls: official.totalCalls,
+      totalTokens: 0,
+      totalImages: 0,
+      totalVideoSeconds: 0,
+      totalCostUsd: 0
+    }
+    usage.totalCostUsd = official.totalCostAmount
+    usageMap.set(userId, usage)
+
+    const meta = usageEventMetaMap.get(userId) || {
+      lastActivityAt: null,
+      pendingBillingCount: 0,
+      byApiKey: new Map()
+    }
+    const byKey = meta.byApiKey.get(apiName) || { apiName, totalCalls: 0, totalCostUsd: 0 }
+    byKey.totalCostUsd = keyCost
+    meta.byApiKey.set(apiName, byKey)
+    usageEventMetaMap.set(userId, meta)
+  }
+
+  return (users || []).map((user) => {
     const profile = profileMap.get(user.id)
     const usageMeta = usageEventMetaMap.get(user.id)
-    const credentials = credentialMap.get(user.id) || []
-    const latestCredential = credentials.find((item) => item.status === 'active') || credentials[0] || null
+    const userCredentials = credentialMap.get(user.id) || []
+    const latestCredential = userCredentials.find((item) => item.status === 'active') || userCredentials[0] || null
     const official = officialUsageMap.get(user.id)
-    const estimated = usageEventTotalsMap.get(user.id)
     const reconciliation = reconciliationMap.get(user.id) || { unmatchedCount: 0 }
+    const officialUsage = official
+      ? {
+          totalCalls: official.totalCalls,
+          totalCostAmount: Number(official.totalCostAmount || 0),
+          currency: official.currency || 'USD',
+          byModel: [...official.byModel.values()].sort((a, b) => Number(b.costAmount || 0) - Number(a.costAmount || 0))
+        }
+      : {
+          totalCalls: 0,
+          totalCostAmount: 0,
+          currency: 'USD',
+          byModel: []
+        }
+    const officialLocalUsage = usageMap.get(user.id) || {
+      totalCalls: 0,
+      totalTokens: 0,
+      totalImages: 0,
+      totalVideoSeconds: 0,
+      totalCostUsd: 0
+    }
+
     return {
       id: user.id,
       email: user.email,
@@ -317,37 +373,16 @@ export const listUsersForAdmin = async () => {
       registeredAt: profile?.registered_at || null,
       lastLoginAt: profile?.last_login_at || null,
       usage: {
-        ...(usageMap.get(user.id) || {
-          totalCalls: 0,
-          totalTokens: 0,
-          totalImages: 0,
-          totalVideoSeconds: 0,
-          totalCostUsd: 0
-        }),
-        totalCostUsd: Number(usageEventTotalsMap.get(user.id)?.totalCostUsd || 0)
+        ...officialLocalUsage,
+        totalCalls: officialUsage.totalCalls,
+        totalCostUsd: officialUsage.totalCostAmount
       },
       service: formatServiceCredentialForAdmin(latestCredential),
-      officialUsage: official
-        ? {
-            totalCalls: official.totalCalls,
-            totalCostAmount: Number(official.totalCostAmount || 0),
-            currency: official.currency || 'USD',
-            byModel: [...official.byModel.values()].sort((a, b) => Number(b.costAmount || 0) - Number(a.costAmount || 0))
-          }
-        : {
-            totalCalls: 0,
-            totalCostAmount: 0,
-            currency: 'USD',
-            byModel: []
-          },
-      estimatedUsage: {
-        totalCalls: Number(usageMap.get(user.id)?.totalCalls || 0),
-        totalCostAmount: Number(estimated?.estimatedCostUsd || estimated?.totalCostUsd || 0)
-      },
+      officialUsage,
       reconciliation: {
         pendingCount: Number(usageMeta?.pendingBillingCount || 0),
         unmatchedCount: Number(reconciliation.unmatchedCount || 0),
-        diffAmount: Number((official?.totalCostAmount || 0) - (estimated?.estimatedCostUsd || estimated?.totalCostUsd || 0))
+        diffAmount: 0
       },
       usageMeta: {
         lastActivityAt: usageMeta?.lastActivityAt || null,
@@ -359,6 +394,47 @@ export const listUsersForAdmin = async () => {
       assignedApiKeys: assignmentMap.get(user.id) || [],
       roles: rolesMap.get(user.id) || ['user']
     }
+  })
+}
+
+export const listUsersForAdmin = async () => {
+  const [usersRes, profilesRes, assignments, usageEventsRes, credentialsRes, billingRecordsRes, apiKeyInventory] = await Promise.all([
+    supabase.from('users').select('*').order('created_at', { ascending: false }),
+    supabase.from('user_profiles').select('user_id, display_name, registered_at, last_login_at'),
+    loadAssignments(),
+    supabase
+      .from('usage_events')
+      .select('user_id, api_name, cost_usd, estimated_cost_usd, billing_status, created_at')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('user_service_credentials')
+      .select('*')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('provider_billing_records')
+      .select('user_id, service_credential_id, model, input_tokens, output_tokens, image_count, video_seconds, cost_amount, cost_currency, reconciliation_status, official_created_at')
+      .order('official_created_at', { ascending: false }),
+    loadActiveApiKeyInventory()
+  ])
+
+  if (usersRes.error) throw new HttpError(500, usersRes.error.message, 'USERS_QUERY_FAILED')
+  if (profilesRes.error) throw new HttpError(500, profilesRes.error.message, 'PROFILES_QUERY_FAILED')
+  if (usageEventsRes.error) throw new HttpError(500, usageEventsRes.error.message, 'USAGE_EVENTS_QUERY_FAILED')
+  if (credentialsRes.error && !isMissingRelation(credentialsRes.error)) throw new HttpError(500, credentialsRes.error.message, 'SERVICE_CREDENTIALS_QUERY_FAILED')
+  if (billingRecordsRes.error && !isMissingRelation(billingRecordsRes.error)) throw new HttpError(500, billingRecordsRes.error.message, 'BILLING_RECORDS_QUERY_FAILED')
+  const rolesMap = await loadRolesMap((usersRes.data || []).map((item) => item.id))
+  const activeApiKeyNames = apiKeyInventory ? new Set(apiKeyInventory.keys()) : null
+
+  return buildAdminUserUsageView({
+    users: usersRes.data || [],
+    profiles: profilesRes.data || [],
+    assignments,
+    usageEvents: usageEventsRes.data || [],
+    credentials: credentialsRes.data || [],
+    billingRecords: billingRecordsRes.data || [],
+    apiKeyInventory,
+    activeApiKeyNames,
+    rolesMap
   })
 }
 

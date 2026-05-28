@@ -4,7 +4,8 @@ import test from 'node:test'
 import {
   buildBillingRecordPayload,
   normalizeProviderBillingRecord,
-  resolveBillingMatch
+  resolveBillingMatch,
+  syncProviderBillingRecords
 } from './billing-reconciliation.service.js'
 
 test('normalizeProviderBillingRecord extracts request, task, api name, model, usage, and cost', () => {
@@ -76,4 +77,144 @@ test('buildBillingRecordPayload never exposes raw service credential secrets', (
   assert.equal(payload.cost_amount, 0.2)
   assert.equal(Object.hasOwn(payload, 'api_key'), false)
   assert.equal(Object.hasOwn(payload, 'api_key_encrypted'), false)
+})
+
+test('syncProviderBillingRecords upserts task-only records by upstream task id', async () => {
+  const upsertCalls = []
+  const fakeSupabase = {
+    from(table) {
+      return {
+        select() {
+          return this
+        },
+        in(column) {
+          if (table === 'usage_events' && column === 'upstream_task_id') {
+            return Promise.resolve({
+              data: [
+                {
+                  id: 'usage-1',
+                  user_id: 'user-1',
+                  run_id: 'run-1',
+                  service_credential_id: 'cred-1',
+                  provider_request_id: null,
+                  upstream_task_id: 'task-only-1'
+                }
+              ],
+              error: null
+            })
+          }
+          return Promise.resolve({ data: [], error: null })
+        },
+        upsert(payloads, options) {
+          upsertCalls.push({ table, payloads, options })
+          return {
+            select: async () => ({
+              data: payloads.map((payload, index) => ({
+                id: `billing-${index + 1}`,
+                usage_event_id: payload.usage_event_id,
+                cost_amount: payload.cost_amount,
+                reconciliation_status: payload.reconciliation_status
+              })),
+              error: null
+            })
+          }
+        },
+        update() {
+          return {
+            eq: async () => ({ data: null, error: null })
+          }
+        }
+      }
+    }
+  }
+
+  await syncProviderBillingRecords(
+    { startTime: '2026-04-29T00:00:00.000Z', endTime: '2026-04-29T00:15:00.000Z' },
+    {
+      supabaseClient: fakeSupabase,
+      fetchRecords: async () => ({
+        data: {
+          items: [
+            {
+              task_id: 'task-only-1',
+              api_name: 'eager_user_a12b34c56d784e90',
+              cost: 0.2
+            }
+          ]
+        }
+      })
+    }
+  )
+
+  assert.equal(upsertCalls.length, 1)
+  assert.equal(upsertCalls[0].table, 'provider_billing_records')
+  assert.equal(upsertCalls[0].options.onConflict, 'upstream_task_id')
+  assert.equal(upsertCalls[0].payloads[0].upstream_request_id, null)
+  assert.equal(upsertCalls[0].payloads[0].upstream_task_id, 'task-only-1')
+})
+
+test('syncProviderBillingRecords fetches all dashboard record pages', async () => {
+  const fetchPages = []
+  const inserted = []
+  const fakeSupabase = {
+    from(table) {
+      return {
+        select() {
+          return this
+        },
+        in(column, values) {
+          if (table === 'user_service_credentials' && column === 'provider_api_name') {
+            return Promise.resolve({
+              data: values.map((apiName, index) => ({
+                id: `cred-${index + 1}`,
+                user_id: `user-${index + 1}`,
+                provider_api_name: apiName
+              })),
+              error: null
+            })
+          }
+          return Promise.resolve({ data: [], error: null })
+        },
+        upsert(payloads) {
+          inserted.push(...payloads)
+          return {
+            select: async () => ({
+              data: payloads.map((payload, index) => ({
+                id: `billing-${inserted.length + index}`,
+                usage_event_id: payload.usage_event_id,
+                cost_amount: payload.cost_amount,
+                reconciliation_status: payload.reconciliation_status
+              })),
+              error: null
+            })
+          }
+        },
+        update() {
+          return {
+            eq: async () => ({ data: null, error: null })
+          }
+        }
+      }
+    }
+  }
+
+  const result = await syncProviderBillingRecords(
+    { startTime: '2026-04-29T00:00:00.000Z', endTime: '2026-04-29T00:15:00.000Z', pageSize: 1 },
+    {
+      supabaseClient: fakeSupabase,
+      fetchRecords: async ({ page }) => {
+        fetchPages.push(page)
+        return {
+          data: {
+            items: [{ request_id: `req-${page}`, api_name: `eager_user_${page}`, cost: page }],
+            pagination: { page, total_pages: 2 }
+          }
+        }
+      }
+    }
+  )
+
+  assert.deepEqual(fetchPages, [1, 2])
+  assert.equal(result.fetched, 2)
+  assert.equal(inserted.length, 2)
 })

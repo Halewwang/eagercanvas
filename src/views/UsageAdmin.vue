@@ -173,7 +173,7 @@
                   <th class="py-2 pr-2">Last Login</th>
                   <th class="py-2 pr-2">Calls</th>
                   <th class="py-2 pr-2">Tokens</th>
-                  <th class="py-2 pr-2">Cost</th>
+                  <th class="py-2 pr-2">Official Cost</th>
                   <th class="py-2">Assigned Credentials</th>
                 </tr>
               </thead>
@@ -187,7 +187,7 @@
                   <td class="py-2 pr-2">{{ formatDateTime(user.lastLoginAt) }}</td>
                   <td class="py-2 pr-2">{{ user.usage?.totalCalls ?? 0 }}</td>
                   <td class="py-2 pr-2">{{ user.usage?.totalTokens ?? 0 }}</td>
-                  <td class="py-2 pr-2">{{ Number(user.usage?.totalCostUsd || 0).toFixed(4) }}</td>
+                  <td class="py-2 pr-2">{{ Number(user.officialUsage?.totalCostAmount || 0).toFixed(4) }}</td>
                   <td class="py-2">
                     <div class="flex flex-wrap gap-2">
                       <span
