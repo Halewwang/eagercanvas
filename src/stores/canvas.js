@@ -2,7 +2,7 @@
  * Canvas store | 画布状态管理
  * Manages nodes, edges and canvas state
  */
-import { ref, triggerRef } from 'vue'
+import { ref } from 'vue'
 import { updateProjectCanvas, getProjectCanvas } from './projects'
 import { canvasBroadcast } from './canvasBroadcast'
 import {
@@ -19,7 +19,7 @@ import {
   createCanvasContentSnapshot,
   recordCanvasPerf,
   shouldTriggerCanvasRemoteSync,
-  translateNodePositionsInPlace
+  translateNodePositions
 } from '@/utils/canvasInteraction'
 
 const isLocalPreviewHost = () => {
@@ -398,13 +398,11 @@ export const deleteGroupWithNodes = (groupIdToDelete) => {
   return true
 }
 
-export const translateNodesByIds = (nodeIds, delta, shouldSaveHistory = false, options = {}) => {
-  const movedCount = translateNodePositionsInPlace(nodes.value, nodeIds, delta, {
-    lookup: options.nodeLookup
-  })
+export const translateNodesByIds = (nodeIds, delta, shouldSaveHistory = false) => {
+  const { items, movedCount } = translateNodePositions(nodes.value, nodeIds, delta)
   if (!movedCount) return false
 
-  triggerRef(nodes)
+  nodes.value = items
 
   if (shouldSaveHistory) saveToHistory({ changeType: 'node-position' })
   return true

@@ -2,7 +2,12 @@
   <!-- Canvas page | 画布页面 -->
   <div ref="canvasShellRef" class="h-screen w-screen bg-[#080808]">
     <!-- Main canvas area | 主画布区域 -->
-    <div class="h-full relative overflow-hidden" @pointerdown.capture="handleCanvasPointerDownCapture">
+    <div
+      class="h-full relative overflow-hidden"
+      @pointerdown.capture="handleCanvasPointerDownCapture"
+      @mousedown.capture="handleCanvasPointerDownCapture"
+      @contextmenu.capture="handleCanvasContextMenu"
+    >
       <!-- Top capsules | 顶部胶囊菜单 -->
       <div class="absolute left-4 top-4 z-20 flex items-center gap-2">
         <div class="flora-panel rounded-full p-1.5">
@@ -74,7 +79,6 @@
         :max-zoom="2"
         :snap-to-grid="true"
         :snap-grid="[20, 20]"
-        selection-key-code="Shift"
         multi-selection-key-code="Shift"
         @connect="onConnect"
         @connect-start="onConnectStart"
@@ -84,6 +88,7 @@
         @node-drag-stop="onNodeDragStop"
         @nodes-change="onNodesChange"
         @pane-click="onPaneClick"
+        @pane-context-menu="onPaneContextMenu"
         @viewport-change="handleViewportChange"
         @edges-change="onEdgesChange"
         class="canvas-flow"
@@ -119,18 +124,35 @@
               pointerEvents: getGroupBoxPointerEvents()
             }"
           >
+            <template v-if="selectedGroupId === group.id">
+              <div
+                v-for="(hitRect, hitIndex) in getGroupBodyHitRectsForRender(group)"
+                :key="`${group.id}-body-hit-${hitIndex}`"
+                class="canvas-group-body-hit-zone"
+                :style="{
+                  left: `${hitRect.left}px`,
+                  top: `${hitRect.top}px`,
+                  width: `${hitRect.width}px`,
+                  height: `${hitRect.height}px`
+                }"
+                @pointerdown="handleGroupGripPointerDown(group, $event)"
+                @mousedown="handleGroupGripPointerDown(group, $event)"
+                @click.stop="selectGroup(group.id)"
+              />
+            </template>
             <button
               class="canvas-group-title"
               :class="{ 'is-selected': selectedGroupId === group.id }"
               @pointerdown="handleGroupGripPointerDown(group, $event)"
+              @mousedown="handleGroupGripPointerDown(group, $event)"
               @click.stop="selectGroup(group.id)"
             >
               {{ group.name }}
             </button>
-            <button class="canvas-group-edge top" @pointerdown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
-            <button class="canvas-group-edge right" @pointerdown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
-            <button class="canvas-group-edge bottom" @pointerdown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
-            <button class="canvas-group-edge left" @pointerdown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge top" @pointerdown="handleGroupGripPointerDown(group, $event)" @mousedown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge right" @pointerdown="handleGroupGripPointerDown(group, $event)" @mousedown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge bottom" @pointerdown="handleGroupGripPointerDown(group, $event)" @mousedown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
+            <button class="canvas-group-edge left" @pointerdown="handleGroupGripPointerDown(group, $event)" @mousedown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
           </div>
         </template>
 
@@ -548,13 +570,19 @@ import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 import {
+  findGroupBodyDragTarget,
+  getGroupBodyHitRects,
+  getFlowPointFromScreenPoint,
+  getGroupDragListenerNames,
   getGroupBoxPointerEvents,
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
   getSelectedGroupGripPointerAction,
   recordCanvasPerf,
-  shouldStartSelectedGroupBodyDrag
+  shouldAcceptGroupDragMove,
+  shouldMeasureGroupRects,
+  translateViewportRect
 } from '@/utils/canvasInteraction'
 import { isExpiredRemoteUrl } from '@/utils/media'
 import {
@@ -634,6 +662,7 @@ const showApiSettings = ref(false)
 const nodeCreateCount = ref(1)
 const nodeMenuMode = ref('toolbar')
 const nodeMenuScreenPosition = ref(null)
+const pendingPaneCreatePosition = ref(null)
 const pendingConnectMenuContext = ref(null)
 const suppressPaneClickUntil = ref(0)
 
@@ -662,8 +691,6 @@ let overlayTimeoutId = null
 let viewportSettleTimeoutId = null
 let nodeDragMoved = false
 let groupedNodeDragState = null
-let nodeLookupCache = new Map()
-let nodeLookupSignature = ''
 const {
   confirmDelete,
   confirmRename,
@@ -703,11 +730,15 @@ const nodeTypeOptions = [
 const nodeMenuTitle = computed(() =>
   nodeMenuMode.value === 'connect'
     ? 'Create And Link A Module'
+    : nodeMenuMode.value === 'pane'
+      ? 'Create Module'
     : 'Choose A Base Module'
 )
 const nodeMenuCopy = computed(() =>
   nodeMenuMode.value === 'connect'
     ? 'Release a loose connection anywhere on the canvas, then pick a module to create and link it from that spot.'
+    : nodeMenuMode.value === 'pane'
+      ? 'Pick a module type to place it at this canvas point.'
     : 'Pick a module type, then add between 1 and 5 modules at once.'
 )
 const nodeMenuStyle = computed(() => {
@@ -927,6 +958,20 @@ const renderedGroups = computed(() =>
 
 const selectedGroup = computed(() => groups.value.find((group) => group.id === selectedGroupId.value) || null)
 const selectedGroupMenuRect = computed(() => (selectedGroupId.value ? groupRects.value[selectedGroupId.value] || null : null))
+const selectedGroupBodyHitRects = computed(() => {
+  const group = selectedGroup.value
+  if (!group) return []
+
+  const groupRect = groupRects.value[group.id]
+  if (!groupRect) return []
+
+  const nodeById = getNodeLookup()
+  const nodeRects = (group.nodeIds || [])
+    .map((nodeId) => getNodeViewportRect(nodeById.get(nodeId)))
+    .filter(Boolean)
+
+  return getGroupBodyHitRects({ groupRect, nodeRects })
+})
 const multiSelectMenuRect = computed(() => {
   if (selectedGroupId.value) return null
   if (selectedNodeIds.value.length < 2) return null
@@ -1022,9 +1067,7 @@ const applyGroupedNodeDragDelta = (changes = []) => {
 
   state.appliedDeltaX = totalDeltaX
   state.appliedDeltaY = totalDeltaY
-  translateNodesByIds(followerNodeIds, { x: moveX, y: moveY }, false, {
-    nodeLookup: new Map(nodes.value.map((node) => [node.id, node]))
-  })
+  translateNodesByIds(followerNodeIds, { x: moveX, y: moveY }, false)
 }
 
 const selectGroup = (groupIdToSelect) => {
@@ -1033,6 +1076,10 @@ const selectGroup = (groupIdToSelect) => {
   showNodeMenu.value = false
   clearNodeMenuContext()
 }
+
+const getGroupBodyHitRectsForRender = (group) => (
+  selectedGroupId.value === group?.id ? selectedGroupBodyHitRects.value : []
+)
 
 const OVERLAY_PADDING_X = 24
 const OVERLAY_PADDING_TOP = 22
@@ -1198,16 +1245,7 @@ const mergeViewportRects = (rects) => {
   }
 }
 
-const getNodeLookupSignature = () => nodes.value.map((node) => node.id).join('|')
-
-const getNodeLookup = () => {
-  const signature = getNodeLookupSignature()
-  if (signature !== nodeLookupSignature) {
-    nodeLookupSignature = signature
-    nodeLookupCache = new Map(nodes.value.map((node) => [node.id, node]))
-  }
-  return nodeLookupCache
-}
+const getNodeLookup = () => new Map(nodes.value.map((node) => [node.id, node]))
 
 const updateOverlayRects = () => {
   overlayRafId = null
@@ -1238,6 +1276,8 @@ const updateOverlayRects = () => {
 
 const scheduleOverlayRectUpdate = (options = {}) => {
   const force = options.force === true
+  if (!shouldMeasureGroupRects({ isGroupDragging: !!groupDragState, force })) return
+
   const scheduleMode = force
     ? 'raf'
     : getOverlayScheduleMode({
@@ -1325,36 +1365,39 @@ const handleDeleteSelectedGroup = () => {
 }
 
 const startGroupDrag = (group, event) => {
+  if (groupDragState) return
   if (event.button !== 0) return
   event.preventDefault()
   event.stopPropagation()
   selectGroup(group.id)
   beginNodeDragInteraction()
   const isPointerEvent = String(event.type || '').startsWith('pointer')
+  const listenerNames = getGroupDragListenerNames()
   groupDragState = {
     groupId: group.id,
     nodeIds: [...group.nodeIds],
+    initialGroupRect: groupRects.value[group.id]
+      ? { ...groupRects.value[group.id] }
+      : null,
     startClientX: event.clientX,
     startClientY: event.clientY,
     lastDeltaX: 0,
     lastDeltaY: 0,
     didMove: false,
     pointerId: isPointerEvent ? event.pointerId : null,
-    moveEventName: isPointerEvent ? 'pointermove' : 'mousemove',
-    endEventName: isPointerEvent ? 'pointerup' : 'mouseup',
-    cancelEventName: isPointerEvent ? 'pointercancel' : null,
-    nodeLookup: new Map(nodes.value.map((node) => [node.id, node]))
+    moveEventNames: listenerNames.move,
+    endEventNames: listenerNames.end,
+    cancelEventNames: listenerNames.cancel
   }
-  window.addEventListener(groupDragState.moveEventName, handleGroupDragMove)
-  window.addEventListener(groupDragState.endEventName, stopGroupDrag)
-  if (groupDragState.cancelEventName) {
-    window.addEventListener(groupDragState.cancelEventName, stopGroupDrag)
-  }
-}
-
-const startSelectedGroupBodyDrag = (group, event) => {
-  if (selectedGroupId.value !== group.id) return
-  startGroupDrag(group, event)
+  groupDragState.moveEventNames.forEach((eventName) => {
+    window.addEventListener(eventName, handleGroupDragMove)
+  })
+  groupDragState.endEventNames.forEach((eventName) => {
+    window.addEventListener(eventName, stopGroupDrag)
+  })
+  groupDragState.cancelEventNames.forEach((eventName) => {
+    window.addEventListener(eventName, stopGroupDrag)
+  })
 }
 
 const handleGroupGripPointerDown = (group, event) => {
@@ -1365,12 +1408,7 @@ const handleGroupGripPointerDown = (group, event) => {
   const action = getSelectedGroupGripPointerAction({
     selected: selectedGroupId.value === group.id
   })
-  if (action === 'select') {
-    selectGroup(group.id)
-    return
-  }
-
-  startGroupDrag(group, event)
+  if (action === 'drag') startGroupDrag(group, event)
 }
 
 const shouldIgnoreGroupBodyDragTarget = (target) => {
@@ -1390,29 +1428,54 @@ const shouldIgnoreGroupBodyDragTarget = (target) => {
   ].join(',')))
 }
 
+const shouldIgnoreCanvasContextMenuTarget = (target) => {
+  if (!(target instanceof Element)) return false
+  return Boolean(target.closest([
+    '.canvas-group-title',
+    '.canvas-group-edge',
+    '.group-capsule-menu',
+    '.vue-flow__node',
+    '.vue-flow__edge',
+    '.vue-flow__handle',
+    'aside',
+    'button',
+    'input',
+    'textarea',
+    'select',
+    '[contenteditable="true"]'
+  ].join(',')))
+}
+
 const handleCanvasPointerDownCapture = (event) => {
-  if (event.button !== 0 || !selectedGroup.value) return
+  if (event.button !== 0) return
   if (shouldIgnoreGroupBodyDragTarget(event.target)) return
 
   const nodeById = getNodeLookup()
-  const nodeRects = (selectedGroup.value.nodeIds || [])
-    .map((nodeId) => getNodeViewportRect(nodeById.get(nodeId)))
-    .filter(Boolean)
+  const nodeRectsByGroup = Object.fromEntries(groups.value.map((group) => [
+    group.id,
+    (group.nodeIds || [])
+      .map((nodeId) => getNodeViewportRect(nodeById.get(nodeId)))
+      .filter(Boolean)
+  ]))
 
-  const shouldDragGroup = shouldStartSelectedGroupBodyDrag({
-    selected: true,
-    point: { x: event.clientX, y: event.clientY },
-    groupRect: groupRects.value[selectedGroup.value.id],
-    nodeRects
+  const targetGroup = findGroupBodyDragTarget({
+    groups: groups.value,
+    groupRects: groupRects.value,
+    nodeRectsByGroup,
+    point: { x: event.clientX, y: event.clientY }
   })
-  if (!shouldDragGroup) return
+  if (!targetGroup) return
 
-  startSelectedGroupBodyDrag(selectedGroup.value, event)
+  startGroupDrag(targetGroup, event)
 }
 
 const handleGroupDragMove = (event) => {
   if (!groupDragState) return
-  if (groupDragState.pointerId !== null && event.pointerId !== groupDragState.pointerId) return
+  if (!shouldAcceptGroupDragMove({
+    activePointerId: groupDragState.pointerId,
+    eventType: event.type,
+    eventPointerId: event.pointerId ?? null
+  })) return
   const zoom = viewport.value?.zoom || 1
   const nextDeltaX = (event.clientX - groupDragState.startClientX) / zoom
   const nextDeltaY = (event.clientY - groupDragState.startClientY) / zoom
@@ -1423,19 +1486,33 @@ const handleGroupDragMove = (event) => {
   groupDragState.didMove = true
   groupDragState.lastDeltaX = nextDeltaX
   groupDragState.lastDeltaY = nextDeltaY
-  translateNodesByIds(groupDragState.nodeIds, { x: moveX, y: moveY }, false, {
-    nodeLookup: groupDragState.nodeLookup
+  translateNodesByIds(groupDragState.nodeIds, { x: moveX, y: moveY }, false)
+  const nextGroupRect = translateViewportRect(groupDragState.initialGroupRect, {
+    x: event.clientX - groupDragState.startClientX,
+    y: event.clientY - groupDragState.startClientY
   })
-  scheduleOverlayRectUpdate()
+  if (!nextGroupRect) {
+    scheduleOverlayRectUpdate()
+    return
+  }
+
+  groupRects.value = {
+    ...groupRects.value,
+    [groupDragState.groupId]: nextGroupRect
+  }
 }
 
 const stopGroupDrag = () => {
   if (!groupDragState) return
-  window.removeEventListener(groupDragState.moveEventName, handleGroupDragMove)
-  window.removeEventListener(groupDragState.endEventName, stopGroupDrag)
-  if (groupDragState.cancelEventName) {
-    window.removeEventListener(groupDragState.cancelEventName, stopGroupDrag)
-  }
+  groupDragState.moveEventNames.forEach((eventName) => {
+    window.removeEventListener(eventName, handleGroupDragMove)
+  })
+  groupDragState.endEventNames.forEach((eventName) => {
+    window.removeEventListener(eventName, stopGroupDrag)
+  })
+  groupDragState.cancelEventNames.forEach((eventName) => {
+    window.removeEventListener(eventName, stopGroupDrag)
+  })
   const didMove = !!groupDragState?.didMove
   groupDragState = null
   endNodeDragInteraction({ saveHistory: didMove })
@@ -1445,6 +1522,7 @@ const stopGroupDrag = () => {
 const clearNodeMenuContext = () => {
   nodeMenuMode.value = 'toolbar'
   nodeMenuScreenPosition.value = null
+  pendingPaneCreatePosition.value = null
   pendingConnectMenuContext.value = null
 }
 
@@ -1456,15 +1534,13 @@ const toggleToolbarNodeMenu = () => {
   }
   nodeMenuMode.value = 'toolbar'
   nodeMenuScreenPosition.value = null
+  pendingPaneCreatePosition.value = null
   pendingConnectMenuContext.value = null
   showNodeMenu.value = true
 }
 
 const screenPointToFlowPoint = (point) => {
-  const zoom = viewport.value?.zoom || 1
-  const x = -((viewport.value?.x || 0) / zoom) + point.x / zoom
-  const y = -((viewport.value?.y || 0) / zoom) + point.y / zoom
-  return { x, y }
+  return getFlowPointFromScreenPoint(point, viewport.value)
 }
 
 const openConnectNodeMenu = (point, context) => {
@@ -1478,6 +1554,20 @@ const openConnectNodeMenu = (point, context) => {
     ...context,
     flowPosition: screenPointToFlowPoint(point)
   }
+  showNodeMenu.value = true
+}
+
+const openPaneNodeMenu = (point) => {
+  nodeMenuMode.value = 'pane'
+  nodeMenuScreenPosition.value = {
+    x: point.x + 12,
+    y: point.y - 12
+  }
+  pendingPaneCreatePosition.value = screenPointToFlowPoint(point)
+  pendingConnectMenuContext.value = null
+  suppressPaneClickUntil.value = Date.now() + 160
+  clearGroupSelection()
+  clearNodeSelection()
   showNodeMenu.value = true
 }
 
@@ -1515,6 +1605,28 @@ const addNewNode = async (type) => {
     setTimeout(() => {
       createdNodeIds.forEach((nodeId) => updateNodeInternals(nodeId))
       updateNodeInternals(context.nodeId)
+    }, 60)
+
+    showNodeMenu.value = false
+    clearNodeMenuContext()
+    return
+  }
+
+  if (pendingPaneCreatePosition.value) {
+    const createdNodeIds = []
+
+    for (let index = 0; index < nodeCreateCount.value; index += 1) {
+      const col = index % 2
+      const row = Math.floor(index / 2)
+      const newNodeId = addNode(type, {
+        x: pendingPaneCreatePosition.value.x + col * 120,
+        y: pendingPaneCreatePosition.value.y + row * 132
+      })
+      createdNodeIds.push(newNodeId)
+    }
+
+    setTimeout(() => {
+      createdNodeIds.forEach((nodeId) => updateNodeInternals(nodeId))
     }, 60)
 
     showNodeMenu.value = false
@@ -1879,6 +1991,27 @@ const onPaneClick = () => {
       openPortMenu: null
     }
   }))
+}
+
+const onPaneContextMenu = (event) => {
+  event?.preventDefault?.()
+  event?.stopPropagation?.()
+
+  const point = readPointer(event)
+  if (!point) return
+
+  openPaneNodeMenu(point)
+}
+
+const handleCanvasContextMenu = (event) => {
+  if (shouldIgnoreCanvasContextMenuTarget(event.target)) return
+  event?.preventDefault?.()
+  event?.stopPropagation?.()
+
+  const point = readPointer(event)
+  if (!point) return
+
+  openPaneNodeMenu(point)
 }
 
 const isTypingElement = (target) => {
@@ -2547,6 +2680,7 @@ onUnmounted(() => {
   position: absolute;
   left: 0;
   top: -44px;
+  z-index: 3;
   height: 32px;
   display: inline-flex;
   align-items: center;
@@ -2561,6 +2695,17 @@ onUnmounted(() => {
   pointer-events: auto;
   cursor: grab;
   user-select: none;
+  touch-action: none;
+}
+
+.canvas-group-body-hit-zone {
+  position: absolute;
+  z-index: 1;
+  background: transparent;
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
 }
 
 .canvas-group-title.is-selected {
@@ -2570,6 +2715,7 @@ onUnmounted(() => {
 
 .canvas-group-edge {
   position: absolute;
+  z-index: 2;
   border: none;
   background: transparent;
   pointer-events: auto;

@@ -3,13 +3,21 @@ import test from 'node:test'
 
 import {
   createCanvasContentSnapshot,
+  getGroupBodyHitRects,
+  findGroupBodyDragTarget,
+  getFlowPointFromScreenPoint,
+  getGroupDragListenerNames,
   getGroupBoxPointerEvents,
   getInteractionOverlayDelay,
   getNodeCapsuleScale,
   getOverlayScheduleMode,
   getSelectedGroupGripPointerAction,
+  translateViewportRect,
+  shouldAcceptGroupDragMove,
+  shouldMeasureGroupRects,
   shouldStartSelectedGroupBodyDrag,
   shouldTriggerCanvasRemoteSync,
+  translateNodePositions,
   translateNodePositionsInPlace
 } from './canvasInteraction.js'
 
@@ -46,6 +54,35 @@ test('group drag position updates mutate only targeted nodes without replacing t
   assert.deepEqual(moved.position, { x: 15, y: 16 })
 })
 
+test('immutable group drag position updates replace only moved node objects', () => {
+  const untouched = { id: 'node-a', position: { x: 0, y: 0 } }
+  const moved = { id: 'node-b', position: { x: 10, y: 20 } }
+  const nodes = [untouched, moved]
+
+  const result = translateNodePositions(nodes, ['node-b'], { x: 5, y: -4 })
+
+  assert.equal(result.movedCount, 1)
+  assert.notEqual(result.items, nodes)
+  assert.equal(result.items[0], untouched)
+  assert.notEqual(result.items[1], moved)
+  assert.deepEqual(untouched.position, { x: 0, y: 0 })
+  assert.deepEqual(moved.position, { x: 10, y: 20 })
+  assert.deepEqual(result.items[1].position, { x: 15, y: 16 })
+})
+
+test('group drag overlay translation preserves the original frame size', () => {
+  assert.deepEqual(translateViewportRect(
+    { left: 100, top: 80, width: 300, height: 200 },
+    { x: 45, y: -20 }
+  ), { left: 145, top: 60, width: 300, height: 200 })
+})
+
+test('group rect measurement pauses during group drag unless forced', () => {
+  assert.equal(shouldMeasureGroupRects({ isGroupDragging: false, force: false }), true)
+  assert.equal(shouldMeasureGroupRects({ isGroupDragging: true, force: false }), false)
+  assert.equal(shouldMeasureGroupRects({ isGroupDragging: true, force: true }), true)
+})
+
 test('group box overlay does not capture pointer events over grouped nodes', () => {
   assert.equal(getGroupBoxPointerEvents({ selected: false }), 'none')
   assert.equal(getGroupBoxPointerEvents({ selected: true }), 'none')
@@ -77,9 +114,91 @@ test('selected group body drag only starts from blank space inside the group rec
   }), false)
 })
 
-test('group grip pointer action selects first and only drags when already selected', () => {
-  assert.equal(getSelectedGroupGripPointerAction({ selected: false }), 'select')
+test('selected group body hit rects cover blank space without covering node rects', () => {
+  assert.deepEqual(getGroupBodyHitRects({
+    groupRect: { left: 100, top: 50, width: 100, height: 100 },
+    nodeRects: [{ left: 120, top: 70, right: 160, bottom: 100 }]
+  }), [
+    { left: 0, top: 0, width: 20, height: 100 },
+    { left: 20, top: 0, width: 40, height: 20 },
+    { left: 20, top: 50, width: 40, height: 50 },
+    { left: 60, top: 0, width: 40, height: 100 }
+  ])
+})
+
+test('group grip pointer action starts drag on the first gesture', () => {
+  assert.equal(getSelectedGroupGripPointerAction({ selected: false }), 'drag')
   assert.equal(getSelectedGroupGripPointerAction({ selected: true }), 'drag')
+})
+
+test('group body drag target is found from blank group space', () => {
+  const groups = [
+    { id: 'group-a', nodeIds: ['node-a'] },
+    { id: 'group-b', nodeIds: ['node-b'] }
+  ]
+  const groupRects = {
+    'group-a': { left: 100, top: 100, width: 240, height: 180 },
+    'group-b': { left: 160, top: 140, width: 240, height: 180 }
+  }
+  const nodeRectsByGroup = {
+    'group-b': [{ left: 180, top: 160, right: 260, bottom: 230 }]
+  }
+
+  assert.equal(findGroupBodyDragTarget({
+    groups,
+    groupRects,
+    nodeRectsByGroup,
+    point: { x: 310, y: 250 }
+  })?.id, 'group-b')
+
+  assert.equal(findGroupBodyDragTarget({
+    groups,
+    groupRects,
+    nodeRectsByGroup,
+    point: { x: 210, y: 190 }
+  })?.id, 'group-a')
+
+  assert.equal(findGroupBodyDragTarget({
+    groups,
+    groupRects,
+    nodeRectsByGroup,
+    point: { x: 40, y: 40 }
+  }), null)
+})
+
+test('screen point converts to flow point using viewport pan and zoom', () => {
+  assert.deepEqual(getFlowPointFromScreenPoint(
+    { x: 300, y: 180 },
+    { x: -100, y: -60, zoom: 2 }
+  ), { x: 200, y: 120 })
+})
+
+test('group drag listens to pointer and mouse events for fallback movement', () => {
+  assert.deepEqual(getGroupDragListenerNames(), {
+    move: ['pointermove', 'mousemove'],
+    end: ['pointerup', 'mouseup'],
+    cancel: ['pointercancel']
+  })
+})
+
+test('group drag accepts mousemove fallback after pointer start', () => {
+  assert.equal(shouldAcceptGroupDragMove({
+    activePointerId: 1,
+    eventType: 'pointermove',
+    eventPointerId: 2
+  }), false)
+
+  assert.equal(shouldAcceptGroupDragMove({
+    activePointerId: 1,
+    eventType: 'pointermove',
+    eventPointerId: 1
+  }), true)
+
+  assert.equal(shouldAcceptGroupDragMove({
+    activePointerId: 1,
+    eventType: 'mousemove',
+    eventPointerId: null
+  }), true)
 })
 
 test('remote sync is limited to content changes', () => {
