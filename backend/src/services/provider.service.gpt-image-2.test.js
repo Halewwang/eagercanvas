@@ -124,3 +124,38 @@ test('GPT Image 2 status returns completed image from async result', async () =>
     global.fetch = originalFetch
   }
 })
+
+test('GPT Image 2 status returns completed image from nested task result wrapper', async () => {
+  const originalFetch = global.fetch
+
+  global.fetch = async () => new Response(
+    JSON.stringify({
+      code: 200,
+      data: {
+        id: 'gpt-task-1',
+        status: 'completed',
+        progress: 100,
+        cost: 0.05279,
+        result: {
+          images: [
+            {
+              url: ['https://file.302.ai/gpt/imgs/wrapped-result.png']
+            }
+          ]
+        }
+      }
+    }),
+    {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    }
+  )
+
+  try {
+    const result = await providerImageStatus('gpt-task-1', { apiKey: 'sk-test', model: 'gpt-image-2' })
+    assert.equal(result.status, 'completed')
+    assert.equal(result.data[0].url, 'https://file.302.ai/gpt/imgs/wrapped-result.png')
+  } finally {
+    global.fetch = originalFetch
+  }
+})

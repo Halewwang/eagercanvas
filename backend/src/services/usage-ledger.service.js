@@ -75,6 +75,9 @@ const extractUsageObject = (payload = {}) => {
   if (payload?.usage && typeof payload.usage === 'object') return payload.usage
   if (payload?.data?.usage && typeof payload.data.usage === 'object') return payload.data.usage
   if (payload?.raw?.usage && typeof payload.raw.usage === 'object') return payload.raw.usage
+  if (payload?.raw?.data?.usage && typeof payload.raw.data.usage === 'object') return payload.raw.data.usage
+  if (payload?.raw?.result?.usage && typeof payload.raw.result.usage === 'object') return payload.raw.result.usage
+  if (payload?.raw?.data?.result?.usage && typeof payload.raw.data.result.usage === 'object') return payload.raw.data.result.usage
   return {}
 }
 
@@ -117,7 +120,9 @@ export const extractUsageSnapshot = (payload = {}) => {
       payload?.input_token,
       payload?.inputTokens,
       payload?.data?.input_token,
-      payload?.raw?.input_token
+      payload?.raw?.input_token,
+      payload?.raw?.data?.input_token,
+      payload?.raw?.data?.inputTokens
     ),
     outputTokens: pickFirstNumber(
       usage.completion_tokens,
@@ -125,7 +130,9 @@ export const extractUsageSnapshot = (payload = {}) => {
       payload?.output_token,
       payload?.outputTokens,
       payload?.data?.output_token,
-      payload?.raw?.output_token
+      payload?.raw?.output_token,
+      payload?.raw?.data?.output_token,
+      payload?.raw?.data?.outputTokens
     ),
     costUsd: pickFirstNumber(
       usage.total_cost,
@@ -135,7 +142,9 @@ export const extractUsageSnapshot = (payload = {}) => {
       payload?.data?.cost,
       payload?.data?.cost_usd,
       payload?.raw?.cost,
-      payload?.raw?.cost_usd
+      payload?.raw?.cost_usd,
+      payload?.raw?.data?.cost,
+      payload?.raw?.data?.cost_usd
     )
   }
 }

@@ -428,6 +428,10 @@ const pickFirstImageInput = (payload = {}) => {
 const normalizeImageResponse = (response = {}) => {
   const urls = []
   const pushUrl = (value, mime = 'image/png') => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => pushUrl(item, mime))
+      return
+    }
     if (!value) return
     const str = String(value).trim()
     if (!str) return
@@ -466,6 +470,8 @@ const normalizeImageResponse = (response = {}) => {
     ...(Array.isArray(response?.data) ? response.data : []),
     ...(Array.isArray(response?.data?.outputs) ? response.data.outputs : []),
     ...(Array.isArray(response?.data?.images) ? response.data.images : []),
+    ...(Array.isArray(response?.data?.result?.images) ? response.data.result.images : []),
+    ...(Array.isArray(response?.data?.task_result?.images) ? response.data.task_result.images : []),
     ...(Array.isArray(response?.data?.data) ? response.data.data : []),
     ...(Array.isArray(response?.images) ? response.images : []),
     ...(Array.isArray(response?.output) ? response.output : []),
