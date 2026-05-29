@@ -43,6 +43,8 @@ test('GPT Image 2 create returns async task without polling result endpoint', as
   assert.equal(requests.length, 1)
   assert.match(requests[0].url, /\/v1\/images\/generations\?async=true$/)
   assert.equal(requests[0].body.model, 'gpt-image-2')
+  assert.equal(requests[0].body.size, '1024x1024')
+  assert.equal(Object.hasOwn(requests[0].body, 'resolution'), false)
 })
 
 test('GPT Image 2 status treats provider result pending as processing', async () => {

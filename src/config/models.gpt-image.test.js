@@ -48,12 +48,14 @@ test('GPT Image 2 4K sizes obey max edge and total pixel limits', () => {
 
   assert.equal(landscape, '3840x2160')
   assert.equal(portrait, '2160x3840')
-  assert.equal(classic, '3528x2352')
-  assert.equal(ultraWide, '3840x1645')
+  assert.equal(classic, '3520x2352')
+  assert.equal(ultraWide, '3840x1648')
 
   for (const size of [landscape, portrait, classic, ultraWide]) {
     const [width, height] = size.split('x').map(Number)
     assert.ok(Math.max(width, height) <= 3840)
-    assert.ok(width * height <= 8_300_000)
+    assert.ok(width * height <= 8_294_400)
+    assert.equal(width % 16, 0)
+    assert.equal(height % 16, 0)
   }
 })

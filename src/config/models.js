@@ -74,7 +74,27 @@ export const GPT_IMAGE_2_BASE_SIZES = [
 ]
 
 const GPT_IMAGE_2_MAX_EDGE = 3840
-const GPT_IMAGE_2_MAX_PIXELS = 8300000
+const GPT_IMAGE_2_MAX_PIXELS = 8294400
+
+const alignToMultipleOf16 = (value) => Math.max(16, Math.round(Number(value || 0) / 16) * 16)
+
+const clampToGptImage2Limits = (width, height) => {
+    let safeWidth = alignToMultipleOf16(width)
+    let safeHeight = alignToMultipleOf16(height)
+
+    while (
+        Math.max(safeWidth, safeHeight) > GPT_IMAGE_2_MAX_EDGE ||
+        safeWidth * safeHeight > GPT_IMAGE_2_MAX_PIXELS
+    ) {
+        if (safeWidth >= safeHeight) {
+            safeWidth = Math.max(16, safeWidth - 16)
+        } else {
+            safeHeight = Math.max(16, safeHeight - 16)
+        }
+    }
+
+    return { width: safeWidth, height: safeHeight }
+}
 
 const scaleGptImage2Size = (base, resolution = '1k') => {
     const safeResolution = String(resolution || '1k').toLowerCase()
@@ -86,10 +106,7 @@ const scaleGptImage2Size = (base, resolution = '1k') => {
     const edgeScale = GPT_IMAGE_2_MAX_EDGE / Math.max(ratioWidth, ratioHeight)
     const pixelScale = Math.sqrt(GPT_IMAGE_2_MAX_PIXELS / (ratioWidth * ratioHeight))
     const scale = Math.min(edgeScale, pixelScale)
-    return {
-        width: Math.floor(ratioWidth * scale),
-        height: Math.floor(ratioHeight * scale)
-    }
+    return clampToGptImage2Limits(ratioWidth * scale, ratioHeight * scale)
 }
 
 export const resolveGptImage2Size = ({ ratio = '1:1', resolution = '1k' } = {}) => {

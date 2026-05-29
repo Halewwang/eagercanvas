@@ -29,13 +29,14 @@ test('supports Gemini-matching GPT Image 2 aspect ratios', () => {
   assert.equal(resolveGptImage2Size({ ratio: '3:4', resolution: '1k' }), '864x1152')
   assert.equal(resolveGptImage2Size({ ratio: '4:5', resolution: '1k' }), '896x1120')
   assert.equal(resolveGptImage2Size({ ratio: '5:4', resolution: '1k' }), '1120x896')
-  assert.equal(resolveGptImage2Size({ ratio: '21:9', resolution: '4k' }), '3840x1645')
+  assert.equal(resolveGptImage2Size({ ratio: '21:9', resolution: '4k' }), '3840x1648')
 })
 
 test('builds GPT Image 2 request body with supported advanced params', () => {
   assert.deepEqual(
     buildGptImage2RequestBody({
       prompt: 'A product shot',
+      size: '2160x3840',
       ratio: '9:16',
       resolution: '4k',
       quality: 'high',
@@ -45,8 +46,7 @@ test('builds GPT Image 2 request body with supported advanced params', () => {
     {
       model: 'gpt-image-2',
       prompt: 'A product shot',
-      size: '9:16',
-      resolution: '4k',
+      size: '2160x3840',
       quality: 'high',
       background: 'transparent',
       output_format: 'webp',
@@ -55,6 +55,17 @@ test('builds GPT Image 2 request body with supported advanced params', () => {
       output_compression: 100
     }
   )
+})
+
+test('maps GPT Image 2 ratio controls to 302 pixel size when no explicit size is provided', () => {
+  const body = buildGptImage2RequestBody({
+    prompt: 'A product shot',
+    ratio: '16:9',
+    resolution: '2k'
+  })
+
+  assert.equal(body.size, '2560x1440')
+  assert.equal(Object.hasOwn(body, 'resolution'), false)
 })
 
 test('keeps explicit GPT Image 2 custom size when no ratio is provided', () => {
@@ -66,6 +77,11 @@ test('keeps explicit GPT Image 2 custom size when no ratio is provided', () => {
     }).size,
     '3840x2160'
   )
+})
+
+test('normalizes explicit GPT Image 2 custom size to provider constraints', () => {
+  assert.equal(resolveGptImage2Size({ size: '3840x1645' }), '3840x1648')
+  assert.equal(resolveGptImage2Size({ size: '5000x5000' }), '2880x2880')
 })
 
 test('extracts GPT Image 2 async task ids from common response shapes', () => {
