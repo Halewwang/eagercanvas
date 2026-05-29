@@ -10,6 +10,7 @@ const MAX_LIMIT = 100
 
 const trimString = (value = '') => String(value || '').trim()
 const normalizeProjectId = (value = '') => trimString(value)
+const isInlineDataUrl = (value = '') => /^data:[^;,]+;base64,/i.test(trimString(value))
 const normalizeLimit = (value, fallback) => {
   const numeric = Number(value || fallback)
   if (!Number.isFinite(numeric)) return fallback
@@ -67,11 +68,15 @@ const normalizeAssetRecord = ({
   model = '',
   sourceNodeId = ''
 } = {}) => {
-  const safeUrl = trimString(url)
+  const rawUrl = trimString(url)
+  const rawPreviewUrl = trimString(previewUrl)
+  const safeUrl = isInlineDataUrl(rawUrl)
+    ? (isInlineDataUrl(rawPreviewUrl) ? '' : rawPreviewUrl)
+    : rawUrl
   if (!safeUrl) return null
 
   const safeKind = trimString(kind) || inferAssetKind({ fileType, fileName, url: safeUrl, runType })
-  const safePreviewUrl = trimString(previewUrl) || safeUrl
+  const safePreviewUrl = rawPreviewUrl && !isInlineDataUrl(rawPreviewUrl) ? rawPreviewUrl : safeUrl
 
   return {
     id: trimString(id),

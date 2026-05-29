@@ -8,6 +8,7 @@ const BUCKET_NAME = 'uploads'
 let bucketReady = false
 const UPLOAD_FILE_SIZE_LIMIT_BYTES = 150 * 1024 * 1024
 const REMOTE_FETCH_MAX_BYTES = UPLOAD_FILE_SIZE_LIMIT_BYTES
+const DATA_URL_MAX_BYTES = UPLOAD_FILE_SIZE_LIMIT_BYTES
 
 const contentTypeToExtension = (contentType = '') => {
   const safe = String(contentType || '').split(';')[0].trim().toLowerCase()
@@ -121,11 +122,41 @@ const uploadBufferFile = async ({ originalName, buffer, mimetype }) => {
   return { url: getPublicUrl(fileName) }
 }
 
+const parseDataUrl = (value = '') => {
+  const match = String(value || '').match(/^data:([^;,]+);base64,(.+)$/is)
+  if (!match) {
+    throw new HttpError(400, 'Inline asset data URL is invalid', 'UPLOAD_DATA_URL_INVALID')
+  }
+
+  const mimetype = String(match[1] || 'application/octet-stream').trim().toLowerCase()
+  const buffer = Buffer.from(String(match[2] || '').replace(/\s+/g, ''), 'base64')
+  if (!buffer.byteLength || buffer.byteLength > DATA_URL_MAX_BYTES) {
+    throw new HttpError(400, 'Inline asset is too large', 'UPLOAD_DATA_URL_TOO_LARGE')
+  }
+
+  return { buffer, mimetype }
+}
+
 export const uploadFile = async (file) => {
   return uploadBufferFile({
     originalName: file.originalname,
     buffer: file.buffer,
     mimetype: file.mimetype
+  })
+}
+
+export const uploadDataUrl = async ({ dataUrl, fileName = '' }) => {
+  const { buffer, mimetype } = parseDataUrl(dataUrl)
+  const derivedName = fileName || `asset${contentTypeToExtension(mimetype)}`
+  const safeName = sanitizeOriginalName(
+    path.extname(derivedName) ? derivedName : `${derivedName}${contentTypeToExtension(mimetype)}`,
+    `asset${contentTypeToExtension(mimetype)}`
+  )
+
+  return uploadBufferFile({
+    originalName: safeName,
+    buffer,
+    mimetype
   })
 }
 

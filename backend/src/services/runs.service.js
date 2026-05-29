@@ -9,7 +9,7 @@ import {
   providerImageStatus,
   providerVideoStatus
 } from './provider.service.js'
-import { uploadRemoteFile } from './upload.service.js'
+import { uploadDataUrl, uploadRemoteFile } from './upload.service.js'
 import { get302RecordByRequestId, normalizeDashboardRecord } from './dashboard302.service.js'
 import { resolveActiveUserServiceCredential } from './service-access.service.js'
 import {
@@ -63,6 +63,7 @@ const extractProviderVideoUrl = (result = {}) =>
   ''
 
 const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
+const isInlineDataUrl = (value = '') => /^data:image\/[^;,]+;base64,/i.test(String(value || '').trim())
 
 export const persistRemoteUrlIfNeeded = async (url, fileName) => {
   const raw = String(url || '').trim()
@@ -70,8 +71,15 @@ export const persistRemoteUrlIfNeeded = async (url, fileName) => {
   return uploadRemoteFile({ url: raw, fileName }).then((result) => String(result?.url || '').trim() || raw)
 }
 
+export const persistDataUrlIfNeeded = async (dataUrl, fileName) => {
+  const raw = String(dataUrl || '').trim()
+  if (!raw || !isInlineDataUrl(raw)) return raw
+  return uploadDataUrl({ dataUrl: raw, fileName }).then((result) => String(result?.url || '').trim() || raw)
+}
+
 export const persistImageResultAssets = async (result = {}, options = {}) => {
   const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
+  const persistDataUrl = options.persistDataUrl || persistDataUrlIfNeeded
   const entries = Array.isArray(result?.data) ? [...result.data] : []
   if (!entries.length) return result
 
@@ -80,10 +88,10 @@ export const persistImageResultAssets = async (result = {}, options = {}) => {
       const remoteUrl = String(entry?.url || '').trim()
       if (!remoteUrl) return entry
 
-      const persistedUrl = await persistRemoteUrl(
-        remoteUrl,
-        `generated-${Date.now()}-${index}.png`
-      ).catch(() => remoteUrl)
+      const fileName = `generated-${Date.now()}-${index}.png`
+      const persistedUrl = isInlineDataUrl(remoteUrl)
+        ? await persistDataUrl(remoteUrl, fileName).catch(() => remoteUrl)
+        : await persistRemoteUrl(remoteUrl, fileName).catch(() => remoteUrl)
 
       return {
         ...entry,
@@ -171,7 +179,7 @@ export const buildImageGenerationAssets = (result = {}, sourceNodeId = '') =>
   (Array.isArray(result?.data) ? result.data : [])
     .map((item, index) => {
       const url = String(item?.url || '').trim()
-      if (!url) return null
+      if (!url || isInlineDataUrl(url)) return null
       return {
         kind: 'image',
         url,

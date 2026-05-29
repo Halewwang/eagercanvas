@@ -11,6 +11,66 @@ const toNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+const RAW_USAGE_MAX_BYTES = 32 * 1024
+const RAW_USAGE_STRING_MAX_CHARS = 2048
+const INLINE_DATA_URL_RE = /^data:[^;,]+;base64,/i
+
+const jsonByteLength = (value) => Buffer.byteLength(JSON.stringify(value), 'utf8')
+
+const sanitizeStringForStorage = (value = '') => {
+  const raw = String(value)
+  if (INLINE_DATA_URL_RE.test(raw) || raw.length > RAW_USAGE_STRING_MAX_CHARS) {
+    return `[omitted ${raw.length} chars]`
+  }
+  return raw
+}
+
+const sanitizeJsonValueForStorage = (value) => {
+  if (typeof value === 'string') return sanitizeStringForStorage(value)
+  if (Array.isArray(value)) return value.slice(0, 20).map(sanitizeJsonValueForStorage)
+  if (!value || typeof value !== 'object') return value
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .slice(0, 80)
+      .map(([key, item]) => [key, sanitizeJsonValueForStorage(item)])
+  )
+}
+
+const pickText = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null) continue
+    const text = String(value).trim()
+    if (text) return sanitizeStringForStorage(text)
+  }
+  return ''
+}
+
+const buildRawUsageSummary = (rawUsage = {}, originalBytes = 0) => {
+  const source = rawUsage && typeof rawUsage === 'object' && !Array.isArray(rawUsage) ? rawUsage : {}
+  const summary = {
+    _sanitized: true,
+    _originalBytes: originalBytes,
+    _topLevelKeys: Object.keys(source).slice(0, 80)
+  }
+
+  const fields = {
+    id: pickText(source.id, source.data?.id, source.raw?.id),
+    request_id: pickText(source.request_id, source.requestId, source.data?.request_id, source.data?.requestId),
+    task_id: pickText(source.task_id, source.taskId, source.data?.task_id, source.data?.taskId),
+    status: pickText(source.status, source.data?.status, source.code, source.status_code),
+    model: pickText(source.model, source.model_name, source.data?.model, source.data?.model_name),
+    message: pickText(source.message, source.msg, source.error?.message, source.err),
+    created_at: pickText(source.created_at, source.createdAt, source.time, source.created_time)
+  }
+
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value) summary[key] = value
+  })
+
+  return summary
+}
+
 const extractUsageObject = (payload = {}) => {
   if (payload?.usage && typeof payload.usage === 'object') return payload.usage
   if (payload?.data?.usage && typeof payload.data.usage === 'object') return payload.data.usage
@@ -124,8 +184,30 @@ export const buildUsageEventPayload = ({
     service_credential_id: String(serviceCredentialId || '').trim() || null,
     upstream_task_id: String(upstreamTaskId || '').trim() || null,
     client_request_id: String(clientRequestId || '').trim() || null,
-    raw_usage: rawUsage && typeof rawUsage === 'object' ? rawUsage : null
+    raw_usage: sanitizeRawUsageForStorage(rawUsage)
   }
+}
+
+export const sanitizeRawUsageForStorage = (rawUsage = null) => {
+  if (!rawUsage || typeof rawUsage !== 'object') return null
+
+  const originalBytes = jsonByteLength(rawUsage)
+  const sanitizedValue = sanitizeJsonValueForStorage(rawUsage)
+  const sanitizedBytes = jsonByteLength(sanitizedValue)
+
+  if (originalBytes <= RAW_USAGE_MAX_BYTES && sanitizedBytes === originalBytes) {
+    return rawUsage
+  }
+
+  if (sanitizedBytes <= RAW_USAGE_MAX_BYTES) {
+    return {
+      _sanitized: true,
+      _originalBytes: originalBytes,
+      ...(Array.isArray(sanitizedValue) ? { items: sanitizedValue } : sanitizedValue)
+    }
+  }
+
+  return buildRawUsageSummary(rawUsage, originalBytes)
 }
 
 export const rebuildUsageDailyAggregateForUserDate = async (userId, dateValue) => {
