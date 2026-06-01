@@ -4,12 +4,14 @@ import test from 'node:test'
 import { nextTick, ref } from 'vue'
 
 const progressStateUrl = new URL('./useTextNodeProgressState.js', import.meta.url)
+const layoutUrl = new URL('../../../utils/imageNodeLayout.js', import.meta.url)
 const vueUrl = import.meta.resolve('vue')
 
 const loadProgressState = async () => {
   assert.ok(existsSync(progressStateUrl), 'useTextNodeProgressState.js should exist')
   const source = readFileSync(progressStateUrl, 'utf8')
     .replace("from 'vue'", `from '${vueUrl}'`)
+    .replace("from '@/utils/imageNodeLayout'", `from '${layoutUrl.href}'`)
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
 }
 

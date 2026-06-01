@@ -1,14 +1,12 @@
 import { computed, getCurrentInstance, onUnmounted, ref, watch } from 'vue'
+import {
+  getImageNodeFinishProgressNextValue,
+  getImageNodeProgressBarStyle,
+  getImageNodeProgressNextValue,
+  getImageNodeProgressPercent
+} from '@/utils/imageNodeLayout'
 
 const getDefaultWindow = () => (typeof window === 'undefined' ? null : window)
-const clampPercent = (value) => Math.max(0, Math.min(100, value))
-
-export const getTextNodeProgressNextValue = (value) => {
-  if (value < 70) return Math.min(value + 3, 98)
-  if (value < 90) return Math.min(value + 1.2, 98)
-  if (value < 98) return Math.min(value + 0.35, 98)
-  return Math.min(value, 98)
-}
 
 export const useTextNodeProgressState = ({
   clearIntervalFn = (timer) => getDefaultWindow()?.clearInterval(timer),
@@ -23,8 +21,8 @@ export const useTextNodeProgressState = ({
   const progressTimer = ref(null)
   const progressFinishTimer = ref(null)
 
-  const progressPercent = computed(() => Math.round(progressValue.value))
-  const progressBarStyle = computed(() => ({ width: `${clampPercent(progressValue.value)}%` }))
+  const progressPercent = computed(() => getImageNodeProgressPercent(progressValue.value))
+  const progressBarStyle = computed(() => getImageNodeProgressBarStyle(progressValue.value))
 
   const clearProgressTimers = () => {
     if (progressTimer.value) {
@@ -48,14 +46,14 @@ export const useTextNodeProgressState = ({
     progressValue.value = 0
     showProgress.value = true
     progressTimer.value = setIntervalFn(() => {
-      progressValue.value = getTextNodeProgressNextValue(progressValue.value)
+      progressValue.value = getImageNodeProgressNextValue(progressValue.value)
     }, 120)
   }
 
   const finishProgress = () => {
     clearProgressTimers()
     progressTimer.value = setIntervalFn(() => {
-      progressValue.value = Math.min(100, progressValue.value + 4.5)
+      progressValue.value = getImageNodeFinishProgressNextValue(progressValue.value)
       if (progressValue.value >= 100) {
         clearProgressTimers()
         progressFinishTimer.value = setTimeoutFn(() => {

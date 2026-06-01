@@ -100,7 +100,7 @@
 
     <VideoNodeUploadProgress v-if="showUploadProgress" :module-style="moduleStyle" :progress-style="uploadProgressStyle" />
 
-    <NodeBindingStatus :module-style="moduleStyle" :items="imageRoleStatusList" flush />
+    <NodeBindingStatus :module-style="moduleStyle" :items="imageRoleStatusList" />
   </div>
 </template>
 
