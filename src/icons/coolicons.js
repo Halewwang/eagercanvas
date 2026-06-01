@@ -38,6 +38,7 @@ import editPencil from '@iconify-icons/ci/edit-pencil-01'
 import color from '@iconify-icons/ci/color'
 import chevronRight from '@iconify-icons/ci/chevron-right'
 import search from '@iconify-icons/ci/search'
+import globe from '@iconify-icons/ci/globe'
 
 const wrap = (iconData) => ({
   name: 'CoolIconAdapter',
@@ -87,3 +88,4 @@ export const BrushOutline = wrap(editPencil)
 export const ColorWandOutline = wrap(color)
 export const ChevronForwardOutline = wrap(chevronRight)
 export const SearchOutline = wrap(search)
+export const GlobeOutline = wrap(globe)

@@ -1,5 +1,9 @@
 <template>
-  <button type="button" class="workspace-action-pill" @click="$emit('click')">
+  <button
+    type="button"
+    :class="['workspace-action-pill', `workspace-action-pill--${props.variant}`]"
+    @click="$emit('click')"
+  >
     <slot name="icon" />
     <span class="workspace-action-pill-label">
       <slot />
@@ -8,6 +12,13 @@
 </template>
 
 <script setup>
+const props = defineProps({
+  variant: {
+    type: String,
+    default: 'default'
+  }
+})
+
 defineEmits(['click'])
 </script>
 
@@ -30,6 +41,18 @@ defineEmits(['click'])
 .workspace-action-pill:hover {
   border-color: rgba(255, 255, 255, 0.28);
   background: rgba(18, 18, 18, 0.96);
+}
+
+.workspace-action-pill--primary {
+  border-color: #fff;
+  background: #fff;
+  color: #0d0e10;
+}
+
+.workspace-action-pill--primary:hover {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0d0e10;
 }
 
 .workspace-action-pill:focus,

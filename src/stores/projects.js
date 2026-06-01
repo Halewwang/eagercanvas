@@ -62,18 +62,18 @@ const getDraftStorage = () => {
   return userId ? getCanvasDraftStorage(userId) : null
 }
 
-const createLocalProjectRecord = (name = 'Untitled') => {
+const createLocalProjectRecord = (name = 'Untitled', options = {}) => {
   const now = new Date().toISOString()
   return {
     id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name,
-    thumbnail: '',
+    thumbnail: String(options.thumbnail || '').trim(),
     createdAt: now,
     updatedAt: now,
     lastOpenedAt: now,
     serverUpdatedAt: null,
     readState: 'local-only',
-    canvasData: cloneCanvasData(defaultCanvasData)
+    canvasData: cloneCanvasData(options.canvasData || defaultCanvasData)
   }
 }
 
@@ -465,6 +465,26 @@ export const createProject = async (name = 'Untitled') => {
   })
   saveLocalCache()
   return project.id
+}
+
+export const createLocalProjectFromTemplate = async (template = {}) => {
+  if (!BYPASS_AUTH_IN_DEV || !template) return null
+
+  const title = String(template.title || template.name || 'Untitled').trim() || 'Untitled'
+  const project = createLocalProjectRecord(title, {
+    canvasData: template.canvasData || defaultCanvasData,
+    thumbnail: template.coverUrl || template.thumbnail || ''
+  })
+
+  projects.value = [project, ...projects.value]
+  await saveProjectCanvasDraft(project.id, project.canvasData, {
+    draftUpdatedAt: project.updatedAt,
+    baseRevision: null,
+    remoteSynced: false,
+    status: CANVAS_SYNC_STATES.localPersisted
+  })
+  saveLocalCache()
+  return project
 }
 
 export const updateProject = async (id, data) => {
@@ -881,6 +901,7 @@ export const useProjectsStore = () => ({
   refreshProjectById,
   syncOfflineCanvasDrafts,
   createProject,
+  createLocalProjectFromTemplate,
   updateProject,
   updateProjectCanvas,
   getProjectCanvas,

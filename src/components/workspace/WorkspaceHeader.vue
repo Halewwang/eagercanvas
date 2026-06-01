@@ -11,7 +11,10 @@
         </template>
         Back Home
       </WorkspaceActionPill>
-      <WorkspaceActionPill @click="$emit('createProject')">
+      <WorkspaceActionPill
+        variant="primary"
+        @click="$emit('createProject')"
+      >
         <template #icon>
           <NIcon :size="16"><AddOutline /></NIcon>
         </template>

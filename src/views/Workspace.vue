@@ -29,11 +29,8 @@
         :describe-item="describeItem"
         :resolve-card-icon="resolveCardIcon"
         :project-menu-options="projectMenuOptions"
-        @create-project="createBlankProject"
         @primary-click="handlePrimaryClick"
         @project-menu-select="handleProjectMenuSelect"
-        @preview-template="openTemplatePreview"
-        @use-template="useTemplate"
       />
     </main>
 
@@ -56,10 +53,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  AddOutline,
   FolderOpenOutline,
+  ImageOutline,
   SparklesOutline,
-  GridOutline
+  GridOutline,
+  GlobeOutline
 } from '@/icons/coolicons'
 import {
   projects,
@@ -105,12 +103,12 @@ const refreshingProjectId = ref('')
 
 const navItems = [
   { key: 'projects', label: 'My Project', icon: FolderOpenOutline },
-  { key: 'featured', label: 'Share Templates', icon: SparklesOutline }
+  { key: 'featured', label: 'Share Templates', icon: GlobeOutline }
 ]
 
 const workspaceCardIcons = {
   project: FolderOpenOutline,
-  image: AddOutline,
+  image: ImageOutline,
   video: SparklesOutline,
   default: GridOutline
 }

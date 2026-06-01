@@ -46,3 +46,8 @@ test('usage page fails softly in local preview mode', () => {
   assert.match(usageViewSource, /onMounted\(async \(\) => \{\s*if \(isLocalPreviewMode\(\)\) return\s*try \{/s)
   assert.match(usageViewSource, /window\.\$message\?\.error\(getErrorMessage\(error, 'Failed to load usage dashboard'\)\)/)
 })
+
+test('usage page title uses the requested stronger heading weight', () => {
+  assert.match(usageViewSource, /<h1 class="text-3xl font-semibold">My Usage<\/h1>/)
+  assert.doesNotMatch(usageViewSource, /<h1 class="text-3xl font-light">My Usage<\/h1>/)
+})

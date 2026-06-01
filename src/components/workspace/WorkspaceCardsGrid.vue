@@ -1,20 +1,6 @@
 <template>
   <section class="cards-grid">
     <article
-      v-if="activeSection === 'projects'"
-      class="project-card create-card"
-      @click="$emit('createProject')"
-    >
-      <div class="card-media create-media">
-        <NIcon :size="44"><AddOutline /></NIcon>
-      </div>
-      <div class="card-body">
-        <h3>Blank Project</h3>
-        <p>Create a new blank project</p>
-      </div>
-    </article>
-
-    <article
       v-for="item in items"
       :key="item.id"
       class="project-card"
@@ -59,10 +45,6 @@
           <p>{{ describeItem(item) }}</p>
         </template>
 
-        <div v-if="activeSection !== 'projects'" class="card-actions" @click.stop>
-          <BaseButton size="sm" variant="ghost" @click="$emit('previewTemplate', item)">View</BaseButton>
-          <BaseButton size="sm" @click="$emit('useTemplate', item)">Use</BaseButton>
-        </div>
       </div>
     </article>
   </section>
@@ -70,8 +52,8 @@
 
 <script setup>
 import { NIcon } from 'naive-ui'
-import { AddOutline, EllipsisHorizontalOutline } from '@/icons/coolicons'
-import { BaseButton, BaseDropdown } from '@/components/ui'
+import { EllipsisHorizontalOutline } from '@/icons/coolicons'
+import { BaseDropdown } from '@/components/ui'
 
 defineProps({
   activeSection: {
@@ -97,11 +79,8 @@ defineProps({
 })
 
 defineEmits([
-  'createProject',
   'primaryClick',
-  'projectMenuSelect',
-  'previewTemplate',
-  'useTemplate'
+  'projectMenuSelect'
 ])
 </script>
 
@@ -119,11 +98,9 @@ defineEmits([
   gap: 14px;
 }
 
-.create-card {
-  gap: 14px;
-}
-
 .card-media {
+  position: relative;
+  isolation: isolate;
   aspect-ratio: 16 / 9;
   background:
     radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.035), transparent 48%),
@@ -134,11 +111,34 @@ defineEmits([
   border-radius: 24px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.24s ease, background-color 0.24s ease, transform 0.24s ease;
 }
 
-.project-card:hover .card-media {
-  border-color: rgba(255, 255, 255, 0.14);
+.card-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 34%),
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.08), transparent 56%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  transition: opacity 0.24s ease;
+}
+
+.project-card:hover .card-media,
+.project-card:focus-within .card-media {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.project-card:hover .card-media::after,
+.project-card:focus-within .card-media::after {
+  opacity: 1;
 }
 
 .card-media img {
@@ -148,14 +148,6 @@ defineEmits([
   display: block;
 }
 
-.create-media {
-  color: rgba(236, 238, 244, 0.45);
-  border-style: dashed;
-  background:
-    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.04), transparent 52%),
-    linear-gradient(180deg, #1a1b1e 0%, #151619 100%);
-}
-
 .project-media {
   background:
     radial-gradient(circle at 50% 24%, rgba(255, 255, 255, 0.02), transparent 46%),
@@ -163,6 +155,8 @@ defineEmits([
 }
 
 .fallback-icon {
+  position: relative;
+  z-index: 2;
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -172,6 +166,15 @@ defineEmits([
   justify-content: center;
   color: rgba(236, 238, 244, 0.7);
   background: rgba(255, 255, 255, 0.015);
+  transition: border-color 0.24s ease, background-color 0.24s ease, color 0.24s ease, transform 0.24s ease;
+}
+
+.project-card:hover .fallback-icon,
+.project-card:focus-within .fallback-icon {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .card-body {
@@ -271,11 +274,16 @@ defineEmits([
   flex-shrink: 0;
 }
 
-.card-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+@media (prefers-reduced-motion: reduce) {
+  .card-media,
+  .card-media::after,
+  .fallback-icon {
+    transition-duration: 0.01ms;
+  }
+
+  .project-card:hover .fallback-icon,
+  .project-card:focus-within .fallback-icon {
+    transform: none;
+  }
 }
 </style>

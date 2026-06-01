@@ -1,7 +1,8 @@
 <template>
   <aside class="workspace-sidebar">
     <div class="brand">
-      <img src="/project-logo.svg" alt="logo" class="brand-logo" />
+      <img :src="aioncraftWordmark" alt="AionCraft" class="brand-logo" />
+      <span class="brand-divider" aria-hidden="true"></span>
       <div class="brand-text">{{ workspaceBrand }}</div>
     </div>
 
@@ -50,6 +51,7 @@
 
 <script setup>
 import { NIcon } from 'naive-ui'
+import aioncraftWordmark from '@/assets/home-figma/aioncraft-wordmark.svg'
 
 defineProps({
   workspaceBrand: {
@@ -101,21 +103,29 @@ defineEmits([
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
   padding: 0 10px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .brand-logo {
-  width: 28px;
+  width: 93px;
+  height: 31px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.brand-divider {
+  width: 1px;
   height: 28px;
-  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .brand-text {
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.15;
   letter-spacing: -0.01em;
 }
 

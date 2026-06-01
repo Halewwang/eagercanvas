@@ -7,9 +7,17 @@ import {
   apiUnpublishProjectTemplate,
   apiUseSharedTemplate
 } from '@/api/workspace'
+import { createLocalProjectFromTemplate } from '@/stores/projects'
+import { isLocalPreviewEnabled } from '@/utils/localPreview'
+import {
+  getLocalPreviewTemplateById,
+  getLocalPreviewTemplates,
+  getLocalPreviewWorkspace
+} from './workspacePreviewData.js'
 
 export const currentWorkspace = ref(null)
 export const featuredTemplates = ref([])
+const BYPASS_AUTH_IN_DEV = isLocalPreviewEnabled()
 
 const normalizeWorkspace = (workspace) => {
   if (!workspace) return null
@@ -41,12 +49,23 @@ const normalizeTemplate = (template) => {
 }
 
 export const loadCurrentWorkspace = async () => {
+  if (BYPASS_AUTH_IN_DEV) {
+    currentWorkspace.value = getLocalPreviewWorkspace()
+    return currentWorkspace.value
+  }
+
   const response = await apiGetCurrentWorkspace()
   currentWorkspace.value = normalizeWorkspace(response?.data || null)
   return currentWorkspace.value
 }
 
 export const loadFeaturedTemplates = async () => {
+  if (BYPASS_AUTH_IN_DEV) {
+    currentWorkspace.value = getLocalPreviewWorkspace()
+    featuredTemplates.value = getLocalPreviewTemplates()
+    return featuredTemplates.value
+  }
+
   const response = await apiListFeaturedTemplates()
   currentWorkspace.value = normalizeWorkspace(response?.data?.workspace || null)
   featuredTemplates.value = Array.isArray(response?.data?.templates)
@@ -74,6 +93,12 @@ export const unpublishProjectTemplate = async (projectId) => {
 }
 
 export const useSharedTemplate = async (templateId) => {
+  if (BYPASS_AUTH_IN_DEV) {
+    const template = getLocalPreviewTemplateById(templateId)
+    currentWorkspace.value = getLocalPreviewWorkspace()
+    return createLocalProjectFromTemplate(template)
+  }
+
   const response = await apiUseSharedTemplate(templateId)
   currentWorkspace.value = normalizeWorkspace(response?.data?.workspace || null)
   return response?.data?.project || null

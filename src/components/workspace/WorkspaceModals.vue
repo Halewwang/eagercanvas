@@ -43,18 +43,27 @@
     @update:show="$emit('update:showTemplatePreview', $event)"
   >
     <div v-if="previewTemplate" class="template-preview">
-      <div class="template-preview-media">
+      <WorkspaceTemplateCanvasPreview
+        v-if="previewTemplate.canvasData"
+        :canvas-data="previewTemplate.canvasData"
+      />
+      <div v-else-if="previewTemplate.thumbnail || previewTemplate.cover || previewTemplate.coverUrl" class="template-preview-media">
         <img
-          v-if="previewTemplate.thumbnail || previewTemplate.cover || previewTemplate.coverUrl"
           :src="previewTemplate.thumbnail || previewTemplate.cover || previewTemplate.coverUrl"
           :alt="previewTemplate.title || previewTemplate.name"
         />
-        <div v-else class="template-preview-fallback">No cover</div>
       </div>
+      <WorkspaceTemplateCanvasPreview v-else :canvas-data="null" />
       <div class="template-preview-content">
-        <h3>{{ previewTemplate.title || previewTemplate.name }}</h3>
-        <p class="template-preview-owner">{{ String(previewTemplate.ownerDisplayName || '').trim() || 'Unknown user' }}</p>
-        <p class="template-preview-description">{{ String(previewTemplate.description || '').trim() || 'No description provided.' }}</p>
+        <div class="template-preview-copy">
+          <h3>{{ previewTemplate.title || previewTemplate.name }}</h3>
+          <p class="template-preview-owner">{{ String(previewTemplate.ownerDisplayName || '').trim() || 'Unknown user' }}</p>
+          <p class="template-preview-description">{{ String(previewTemplate.description || '').trim() || 'No description provided.' }}</p>
+        </div>
+        <div class="template-preview-stat" aria-label="Template node count">
+          <strong>{{ templateNodeCount }}</strong>
+          <span>{{ templateNodeCount === 1 ? 'Node' : 'Nodes' }}</span>
+        </div>
       </div>
     </div>
     <template #footer>
@@ -69,6 +78,8 @@
 <script setup>
 import { computed } from 'vue'
 import { BaseButton, BaseInput, BaseModal, BaseModalActions, BaseModalCopy } from '@/components/ui'
+import WorkspaceTemplateCanvasPreview from './WorkspaceTemplateCanvasPreview.vue'
+import { getWorkspaceTemplateNodeCount } from '@/utils/workspaceTemplatePreview'
 
 const props = defineProps({
   showRename: {
@@ -112,6 +123,8 @@ const renameValueModel = computed({
   get: () => props.renameValue,
   set: (value) => emit('update:renameValue', value)
 })
+
+const templateNodeCount = computed(() => getWorkspaceTemplateNodeCount(props.previewTemplate?.canvasData))
 </script>
 
 <style scoped>
@@ -137,20 +150,46 @@ const renameValueModel = computed({
   display: block;
 }
 
-.template-preview-fallback {
-  width: 100%;
-  height: 100%;
-  display: flex;
+.template-preview-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: center;
-  color: rgba(236, 238, 244, 0.6);
-  font-size: 14px;
+  gap: 18px;
 }
 
-.template-preview-content h3 {
+.template-preview-copy {
+  min-width: 0;
+}
+
+.template-preview-copy h3 {
   margin: 0;
   font-size: 18px;
   line-height: 1.25;
+}
+
+.template-preview-stat {
+  min-width: 88px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: none;
+  background: rgba(255, 255, 255, 0.035);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.template-preview-stat strong {
+  font-size: 22px;
+  line-height: 1;
+  color: #fff;
+}
+
+.template-preview-stat span {
+  font-size: 11px;
+  line-height: 1;
+  text-transform: uppercase;
+  color: rgba(236, 238, 244, 0.55);
 }
 
 .template-preview-owner {
@@ -164,5 +203,15 @@ const renameValueModel = computed({
   color: rgba(236, 238, 244, 0.66);
   font-size: 13px;
   line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .template-preview-content {
+    grid-template-columns: 1fr;
+  }
+
+  .template-preview-stat {
+    align-items: flex-start;
+  }
 }
 </style>

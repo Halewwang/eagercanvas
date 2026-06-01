@@ -3,7 +3,7 @@
     <div class="max-w-6xl mx-auto space-y-8">
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-3xl font-light">My Usage</h1>
+          <h1 class="text-3xl font-semibold">My Usage</h1>
           <p class="text-[var(--text-secondary)]">Personal calls, tokens and media output.</p>
         </div>
         <div class="flex items-center gap-2">
