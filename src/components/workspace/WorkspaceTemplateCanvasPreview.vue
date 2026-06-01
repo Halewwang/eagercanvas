@@ -1,47 +1,36 @@
 <template>
-  <div class="template-canvas-preview" :class="{ empty: nodeCount === 0 }">
-    <template v-if="nodeCount > 0">
-      <div class="template-canvas-grid"></div>
-      <div class="template-canvas-stage" aria-label="Template canvas preview">
-        <svg
-          v-if="previewEdges.length > 0"
-          class="template-canvas-edges"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <g v-for="edge in previewEdges" :key="edge.id">
-            <path class="template-canvas-edge" :d="edge.path" />
-            <circle class="template-canvas-edge-dot" :cx="edge.sourceDot.cx" :cy="edge.sourceDot.cy" r="0.28" />
-            <circle class="template-canvas-edge-dot" :cx="edge.targetDot.cx" :cy="edge.targetDot.cy" r="0.28" />
-          </g>
-        </svg>
-        <div
-          v-for="node in previewNodes"
-          :key="node.id"
-          class="template-canvas-node"
-          :class="[`template-canvas-node--${node.kind}`, `template-canvas-node-type--${node.type}`]"
-          :style="node.style"
-        >
-          <img v-if="node.mediaUrl" :src="node.mediaUrl" :alt="node.label" class="template-canvas-node-media" />
-          <p v-else-if="node.text" class="template-canvas-node-text">{{ node.text }}</p>
-          <template v-else>
-            <span>{{ node.type }}</span>
-            <strong>{{ node.label }}</strong>
-          </template>
-        </div>
+  <div class="template-canvas-preview" :class="{ empty: assetCount === 0 }">
+    <div
+      v-if="assetCount > 0"
+      class="template-asset-grid"
+      :class="`template-asset-grid--${gridSize}`"
+      :style="gridStyle"
+      aria-label="Template image asset preview"
+    >
+      <div
+        v-for="asset in previewAssets"
+        :key="asset.id"
+        class="template-asset-cell"
+      >
+        <img
+          :src="asset.url"
+          :alt="asset.label"
+          class="template-asset-image"
+          loading="lazy"
+          decoding="async"
+          fetchpriority="low"
+        />
       </div>
-    </template>
-    <div v-else class="template-canvas-empty">No nodes</div>
+    </div>
+    <div v-else class="template-canvas-empty">No image assets</div>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import {
-  getWorkspaceTemplateNodeCount,
-  getWorkspaceTemplatePreviewEdges,
-  getWorkspaceTemplatePreviewNodes
+  getWorkspaceTemplatePreviewAssets,
+  getWorkspaceTemplatePreviewGridSize
 } from '@/utils/workspaceTemplatePreview'
 
 const props = defineProps({
@@ -51,9 +40,12 @@ const props = defineProps({
   }
 })
 
-const nodeCount = computed(() => getWorkspaceTemplateNodeCount(props.canvasData))
-const previewNodes = computed(() => getWorkspaceTemplatePreviewNodes(props.canvasData))
-const previewEdges = computed(() => getWorkspaceTemplatePreviewEdges(props.canvasData))
+const previewAssets = computed(() => getWorkspaceTemplatePreviewAssets(props.canvasData))
+const assetCount = computed(() => previewAssets.value.length)
+const gridSize = computed(() => getWorkspaceTemplatePreviewGridSize(props.canvasData))
+const gridStyle = computed(() => ({
+  '--template-preview-grid-size': gridSize.value || 1
+}))
 </script>
 
 <style scoped>
@@ -65,104 +57,54 @@ const previewEdges = computed(() => getWorkspaceTemplatePreviewEdges(props.canva
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: linear-gradient(180deg, #101010 0%, #050505 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
 }
 
-.template-canvas-grid {
-  position: absolute;
-  inset: 0;
-  opacity: 0.38;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 34px 34px;
-}
-
-.template-canvas-stage {
-  position: absolute;
-  inset: 7%;
-}
-
-.template-canvas-edges {
-  position: absolute;
-  inset: 0;
+.template-asset-grid {
   width: 100%;
   height: 100%;
-  overflow: visible;
+  display: grid;
+  grid-template-columns: repeat(var(--template-preview-grid-size), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--template-preview-grid-size), minmax(0, 1fr));
+  gap: 8px;
 }
 
-.template-canvas-edge {
-  fill: none;
-  stroke: rgba(214, 219, 229, 0.34);
-  stroke-width: 0.16;
-  vector-effect: non-scaling-stroke;
+.template-asset-grid--6 {
+  gap: 5px;
 }
 
-.template-canvas-edge-dot {
-  fill: rgba(238, 241, 247, 0.82);
-  vector-effect: non-scaling-stroke;
+.template-asset-grid--9 {
+  gap: 3px;
 }
 
-.template-canvas-node {
-  position: absolute;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(16, 17, 20, 0.92);
-  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.22);
+.template-asset-cell {
+  min-width: 0;
+  min-height: 0;
+  border-radius: 8px;
   overflow: hidden;
+  background: #080808;
+  border: 1px solid rgba(255, 255, 255, 0.07);
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
 }
 
-.template-canvas-node--media {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: #060607;
+.template-asset-grid--6 .template-asset-cell {
+  border-radius: 5px;
 }
 
-.template-canvas-node--text {
-  padding: 4px 5px;
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(8, 9, 11, 0.9);
+.template-asset-grid--9 .template-asset-cell {
+  border-radius: 3px;
 }
 
-.template-canvas-node--config {
-  padding: 4px 5px;
-  border-color: rgba(120, 140, 170, 0.18);
-  background: rgba(9, 11, 15, 0.92);
-}
-
-.template-canvas-node-media {
+.template-asset-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
-}
-
-.template-canvas-node-text {
-  margin: 0;
-  color: rgba(238, 241, 247, 0.78);
-  font-size: 6px;
-  line-height: 1.25;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-}
-
-.template-canvas-node span {
-  color: rgba(236, 238, 244, 0.52);
-  font-size: 5px;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.template-canvas-node strong {
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 6px;
-  line-height: 1.15;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .template-canvas-empty {

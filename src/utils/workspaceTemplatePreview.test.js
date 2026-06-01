@@ -3,10 +3,10 @@ import test from 'node:test'
 
 const preview = await import('./workspaceTemplatePreview.js').catch(() => ({}))
 
-test('workspace template preview helpers count and fit all canvas nodes', () => {
+test('workspace template preview helpers extract capped image assets for grid previews', () => {
   assert.equal(typeof preview.getWorkspaceTemplateNodeCount, 'function')
-  assert.equal(typeof preview.getWorkspaceTemplatePreviewNodes, 'function')
-  assert.equal(typeof preview.getWorkspaceTemplatePreviewEdges, 'function')
+  assert.equal(typeof preview.getWorkspaceTemplatePreviewAssets, 'function')
+  assert.equal(typeof preview.getWorkspaceTemplatePreviewGridSize, 'function')
 
   const canvasData = {
     nodes: [
@@ -14,7 +14,11 @@ test('workspace template preview helpers count and fit all canvas nodes', () => 
         id: 'text-1',
         type: 'text',
         position: { x: 100, y: 120 },
-        data: { content: 'Opening scene prompt copy', label: 'Opening scene' }
+        data: {
+          content: 'Opening scene prompt copy',
+          label: 'Opening scene',
+          previewUrl: 'https://cdn.example.com/text-preview.jpg'
+        }
       },
       {
         id: 'image-1',
@@ -23,6 +27,15 @@ test('workspace template preview helpers count and fit all canvas nodes', () => 
         data: {
           label: 'Reference image',
           previewImageUrl: 'https://cdn.example.com/preview.jpg'
+        }
+      },
+      {
+        id: 'image-2',
+        type: 'image',
+        position: { x: 880, y: 260 },
+        data: {
+          label: 'Generated image',
+          url: 'https://cdn.example.com/full.jpg'
         }
       }
     ],
@@ -35,32 +48,33 @@ test('workspace template preview helpers count and fit all canvas nodes', () => 
     ]
   }
 
-  assert.equal(preview.getWorkspaceTemplateNodeCount(canvasData), 2)
-  const bounds = preview.getWorkspaceTemplatePreviewBounds(canvasData)
-  assert.ok(bounds.width >= 3000)
-  assert.ok(bounds.height >= 1700)
+  assert.equal(preview.getWorkspaceTemplateNodeCount(canvasData), 3)
 
-  const nodes = preview.getWorkspaceTemplatePreviewNodes(canvasData)
-  assert.equal(nodes.length, 2)
-  assert.equal(nodes[0].label, 'Opening scene')
-  assert.equal(nodes[0].kind, 'text')
-  assert.equal(nodes[0].text, 'Opening scene prompt copy')
-  assert.equal(nodes[1].label, 'Reference image')
-  assert.equal(nodes[1].kind, 'media')
-  assert.equal(nodes[1].mediaUrl, 'https://cdn.example.com/preview.jpg')
+  const assets = preview.getWorkspaceTemplatePreviewAssets(canvasData)
+  assert.equal(assets.length, 2)
+  assert.deepEqual(assets.map((asset) => asset.id), ['image-1', 'image-2'])
+  assert.equal(assets[0].label, 'Reference image')
+  assert.equal(assets[0].url, 'https://cdn.example.com/preview.jpg')
+  assert.equal(assets[1].url, 'https://cdn.example.com/full.jpg')
+  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(canvasData), 3)
+})
 
-  for (const node of nodes) {
-    assert.match(node.style.left, /%$/)
-    assert.match(node.style.top, /%$/)
-    assert.match(node.style.width, /%$/)
-    assert.match(node.style.height, /%$/)
-  }
-  assert.ok(Number.parseFloat(nodes[0].style.left) > 20)
+test('workspace template preview grid size steps through 3, 6, and 9 with an 81 asset cap', () => {
+  const buildCanvasData = (count) => ({
+    nodes: Array.from({ length: count }, (_, index) => ({
+      id: `image-${index}`,
+      type: 'image',
+      data: {
+        label: `Image ${index + 1}`,
+        previewImageUrl: `https://cdn.example.com/${index + 1}.jpg`
+      }
+    }))
+  })
 
-  const edges = preview.getWorkspaceTemplatePreviewEdges(canvasData)
-  assert.equal(edges.length, 1)
-  assert.equal(edges[0].id, 'edge-1')
-  assert.match(edges[0].path, /^M \d+(\.\d+)? \d+(\.\d+)? C /)
-  assert.ok(Number(edges[0].sourceDot.cx) >= 0)
-  assert.ok(Number(edges[0].targetDot.cx) <= 100)
+  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(0)), 0)
+  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(9)), 3)
+  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(10)), 6)
+  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(36)), 6)
+  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(37)), 9)
+  assert.equal(preview.getWorkspaceTemplatePreviewAssets(buildCanvasData(90)).length, 81)
 })
