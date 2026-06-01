@@ -1,5 +1,6 @@
-import { getStoredValue, removeStoredValue, request, setStoredValue } from '@/utils'
+import { getStoredValue, removeStoredValue, setStoredValue } from '@/utils'
 import { STORAGE_KEYS } from '@/utils/constants'
+import { apiRequest } from './_httpClient.js'
 
 const getAdminToken = () => getStoredValue(STORAGE_KEYS.USAGE_ADMIN_TOKEN)
 
@@ -10,7 +11,7 @@ const adminRequest = (config = {}) => {
     ...(token ? { 'X-Admin-Token': token } : {})
   }
 
-  return request({
+  return apiRequest({
     ...config,
     headers
   })
@@ -30,7 +31,7 @@ export const clearUsageAdminToken = () => {
 }
 
 export const usageAdminLogin = (payload) =>
-  request({
+  apiRequest({
     url: '/usage-admin/login',
     method: 'post',
     data: payload

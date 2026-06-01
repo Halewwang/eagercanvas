@@ -4,7 +4,7 @@
  */
 import { onBeforeUnmount, onMounted } from 'vue'
 import { NConfigProvider, darkTheme } from 'naive-ui'
-import { BaseToastViewport } from './components/ui'
+import { BaseToastViewport, ErrorBoundary, NetworkBanner } from './components/ui'
 import UpdatePrompt from './components/UpdatePrompt.vue'
 import { startAppVersionWatcher, stopAppVersionWatcher } from './utils/appVersion'
 
@@ -38,6 +38,11 @@ const themeOverrides = {
   }
 }
 
+const syncOfflineDrafts = async () => {
+  const { syncOfflineCanvasDrafts } = await import('./stores/projects')
+  return syncOfflineCanvasDrafts()
+}
+
 onMounted(() => {
   startAppVersionWatcher()
 })
@@ -49,9 +54,12 @@ onBeforeUnmount(() => {
 
 <template>
   <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides">
-    <BaseToastViewport />
-    <UpdatePrompt />
-    <router-view />
+    <ErrorBoundary>
+      <BaseToastViewport />
+      <NetworkBanner :sync-offline-drafts="syncOfflineDrafts" />
+      <UpdatePrompt />
+      <router-view />
+    </ErrorBoundary>
   </n-config-provider>
 </template>
 

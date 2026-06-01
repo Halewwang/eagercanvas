@@ -11,21 +11,30 @@ import {
   apiPatchProject
 } from '@/api/projects'
 import { useAuthStore } from '@/stores/auth'
-import { isPersistedUploadUrl } from '@/utils/media'
 import { getCanvasDraftStorage } from '@/stores/canvasDrafts'
 import { buildRevisionSavePayload, CANVAS_SYNC_STATES, isConflictError } from '@/stores/canvasSyncStatus'
 import { canvasBroadcast } from '@/stores/canvasBroadcast'
+import { syncOfflineCanvasDraftRecord } from './canvasOfflineSync.js'
+import { isLocalPreviewEnabled } from '@/utils/localPreview'
+import {
+  cloneProjectCanvasData as cloneCanvasData,
+  defaultCanvasData,
+  getProjectBaseVersion,
+  getProjectCanvasDataKey as getCanvasDataKey,
+  hasCanvasContent,
+  isPersistedProjectUploadUrl,
+  mapProjectFromApi,
+  mapProjectToApi,
+  resolveProjectThumbnail,
+  sortProjectsByActivity,
+  toProjectSummary
+} from './projectsData.js'
 
 const LEGACY_STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-cache'
 const STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-meta'
 const TOMBSTONE_KEY_PREFIX = 'ai-canvas-projects-deleted'
-const isLocalPreviewHost = () => {
-  if (typeof window === 'undefined') return false
-  const host = String(window.location.hostname || '').trim().toLowerCase()
-  return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
-}
-
-const BYPASS_AUTH_IN_DEV = (import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true') || isLocalPreviewHost()
+const BYPASS_AUTH_IN_DEV = isLocalPreviewEnabled()
+let offlineDraftSyncInFlight = null
 
 export const projects = ref([])
 export const projectsLoadState = ref({
@@ -34,15 +43,6 @@ export const projectsLoadState = ref({
   error: null,
   updatedAt: null
 })
-
-const defaultCanvasData = {
-  nodes: [],
-  edges: [],
-  viewport: { x: 100, y: 50, zoom: 0.8 }
-}
-
-const cloneCanvasData = (canvasData) => JSON.parse(JSON.stringify(canvasData || defaultCanvasData))
-const getCanvasDataKey = (canvasData) => JSON.stringify(canvasData || defaultCanvasData)
 
 const getUserScopedKey = (prefix) => {
   const { user, isAuthenticated } = useAuthStore()
@@ -76,83 +76,6 @@ const createLocalProjectRecord = (name = 'Untitled') => {
     canvasData: cloneCanvasData(defaultCanvasData)
   }
 }
-
-const mapProjectFromApi = (row) => ({
-  id: row.id,
-  name: row.name,
-  thumbnail: row.thumbnail_url || '',
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-  lastOpenedAt: null,
-  serverUpdatedAt: row.updated_at,
-  readState: 'remote',
-  canvasData: Object.prototype.hasOwnProperty.call(row || {}, 'canvas_json')
-    ? (row.canvas_json || { ...defaultCanvasData })
-    : undefined
-})
-
-const mapProjectToApi = (project) => ({
-  name: project.name,
-  canvasData: project.canvasData,
-  // Only persist stable public URLs as project thumbnail.
-  // Data URLs can break backend validation and autosave flow.
-  thumbnailUrl: isPersistedUploadUrl(String(project.thumbnail || ''))
-    ? String(project.thumbnail)
-    : null
-})
-
-const getNodeMediaUrl = (node) => {
-  const url = String(node?.data?.url || '').trim()
-  // Blob URLs are session-scoped and cannot survive refresh.
-  if (!url || url.startsWith('blob:')) return ''
-  if (!isPersistedUploadUrl(url)) return ''
-  return url
-}
-
-const getNodeUpdatedTs = (node) => {
-  const data = node?.data || {}
-  return Math.max(toTs(data.updatedAt), toTs(data.createdAt), 0)
-}
-
-const pickLatestNodeUrl = (list) => {
-  let latestNode = null
-  let latestTs = -1
-
-  for (const node of list) {
-    const url = getNodeMediaUrl(node)
-    if (!url) continue
-    const ts = getNodeUpdatedTs(node)
-    if (ts >= latestTs) {
-      latestTs = ts
-      latestNode = node
-    }
-  }
-
-  return latestNode ? getNodeMediaUrl(latestNode) : ''
-}
-
-const resolveProjectThumbnail = (canvasData, currentThumbnail = '') => {
-  const list = Array.isArray(canvasData?.nodes) ? canvasData.nodes : []
-  if (list.length === 0) return currentThumbnail || ''
-
-  const imageThumbnail = pickLatestNodeUrl(list.filter((node) => node?.type === 'image'))
-  if (imageThumbnail) return imageThumbnail
-
-  const videoThumbnail = pickLatestNodeUrl(list.filter((node) => node?.type === 'video'))
-  if (videoThumbnail) return videoThumbnail
-
-  return currentThumbnail || ''
-}
-
-const toProjectSummary = (project) => ({
-  id: project.id,
-  name: project.name,
-  thumbnail: project.thumbnail || '',
-  createdAt: project.createdAt || new Date().toISOString(),
-  updatedAt: project.updatedAt || new Date().toISOString(),
-  lastOpenedAt: project.lastOpenedAt || null,
-  serverUpdatedAt: project.serverUpdatedAt || null
-})
 
 const saveProjectCanvasDraft = async (id, canvasData, options = {}) => {
   const storage = getDraftStorage()
@@ -313,33 +236,6 @@ const forgetDeletedProject = (id) => {
   saveDeleteTombstones(tombstones)
 }
 
-const toTs = (value) => {
-  const ts = new Date(value || 0).getTime()
-  return Number.isFinite(ts) ? ts : 0
-}
-
-const getProjectActivityTs = (project) => Math.max(
-  toTs(project?.updatedAt),
-  toTs(project?.createdAt)
-)
-
-const sortProjectsByActivity = (list = []) =>
-  [...(Array.isArray(list) ? list : [])].sort((a, b) => {
-    const delta = getProjectActivityTs(b) - getProjectActivityTs(a)
-    if (delta !== 0) return delta
-    return toTs(b?.createdAt) - toTs(a?.createdAt)
-  })
-
-const hasCanvasContent = (canvasData) => {
-  const nodes = Array.isArray(canvasData?.nodes) ? canvasData.nodes.length : 0
-  const edges = Array.isArray(canvasData?.edges) ? canvasData.edges.length : 0
-  const groups = Array.isArray(canvasData?.groups) ? canvasData.groups.length : 0
-  return nodes > 0 || edges > 0 || groups > 0
-}
-
-const getProjectBaseVersion = (project, fallbackVersion = null) =>
-  String(project?.serverUpdatedAt || fallbackVersion || project?.updatedAt || '').trim() || null
-
 const shouldUseLocalCanvasDraft = (remote, draftRecord) => {
   const localCanvasData = draftRecord?.canvasData
   if (!hasCanvasContent(localCanvasData)) return false
@@ -377,7 +273,7 @@ const mergeRemoteProjectWithLocalDraft = (remote, local, { preferLocalDraft = tr
   const next = {
     ...remote,
     name: String(local.name || '').trim() || remote.name,
-    thumbnail: isPersistedUploadUrl(localThumbnail) ? localThumbnail : remote.thumbnail,
+    thumbnail: isPersistedProjectUploadUrl(localThumbnail) ? localThumbnail : remote.thumbnail,
     lastOpenedAt: local?.lastOpenedAt || remote?.lastOpenedAt || null,
     updatedAt: useLocalCanvasDraft
       ? (draftRecord?.draftUpdatedAt || local.updatedAt || remote.updatedAt)
@@ -803,6 +699,70 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null,
   }
 }
 
+export const syncOfflineCanvasDrafts = async () => {
+  if (offlineDraftSyncInFlight) return offlineDraftSyncInFlight
+
+  const runSync = async () => {
+    const { isAuthenticated } = useAuthStore()
+    const summary = {
+      attempted: 0,
+      synced: 0,
+      preserved: 0,
+      failed: 0,
+      skipped: 0
+    }
+
+    if (!isAuthenticated.value || BYPASS_AUTH_IN_DEV) {
+      return summary
+    }
+
+    const storage = getDraftStorage()
+    if (!storage) return summary
+
+    const draftRecords = await storage.hydrate()
+    let changed = false
+
+    for (const draftRecord of draftRecords) {
+      const projectId = String(draftRecord?.projectId || '')
+      const project = projects.value.find((item) => item.id === projectId)
+      if (!project) {
+        summary.skipped += 1
+        continue
+      }
+
+      summary.attempted += 1
+      const result = await syncOfflineCanvasDraftRecord({
+        project,
+        draftRecord,
+        patchProject: apiPatchProject,
+        saveDraft: (id, record) => saveProjectCanvasDraft(id, record.canvasData, record),
+        publishRemoteSynced: (message) => canvasBroadcast.publishRemoteSynced(message)
+      })
+
+      if (result.status === CANVAS_SYNC_STATES.synced) summary.synced += 1
+      else if (result.status === CANVAS_SYNC_STATES.localPersisted) summary.preserved += 1
+      else if (result.status === 'skipped') summary.skipped += 1
+      else summary.failed += 1
+
+      if (result.project && result.status !== 'skipped') {
+        projects.value = sortProjectsByActivity([
+          result.project,
+          ...projects.value.filter((item) => item.id !== projectId)
+        ])
+        changed = true
+      }
+    }
+
+    if (changed) saveLocalCache()
+    return summary
+  }
+
+  offlineDraftSyncInFlight = runSync().finally(() => {
+    offlineDraftSyncInFlight = null
+  })
+  return offlineDraftSyncInFlight
+}
+
 export const getProjectCanvas = (id) => {
   const project = projects.value.find((p) => p.id === id) || null
   const draftRecord = loadProjectCanvasDraftRecord(id)
@@ -919,6 +879,7 @@ export const useProjectsStore = () => ({
   loadProjects,
   loadCachedProjects,
   refreshProjectById,
+  syncOfflineCanvasDrafts,
   createProject,
   updateProject,
   updateProjectCanvas,
@@ -936,6 +897,7 @@ if (typeof window !== 'undefined') {
   window.__aiCanvasProjects = {
     projects,
     loadProjects,
+    syncOfflineCanvasDrafts,
     createProject,
     deleteProject
   }

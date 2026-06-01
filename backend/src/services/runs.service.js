@@ -1,17 +1,34 @@
 import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
-import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 import {
   providerChatCompletions,
+  providerChatCompletionsStream,
   providerCreateVideo,
   providerGenerateImage,
   providerImageStatus,
   providerVideoStatus
 } from './provider.service.js'
-import { uploadDataUrl, uploadRemoteFile } from './upload.service.js'
 import { get302RecordByRequestId, normalizeDashboardRecord } from './dashboard302.service.js'
 import { resolveActiveUserServiceCredential } from './service-access.service.js'
+import {
+  buildImageGenerationAssets,
+  buildVideoGenerationAssets,
+  extractProviderVideoUrl,
+  persistImageResultAssets,
+  persistVideoResultAsset,
+  resolveVideoSourceNodeId
+} from './run-assets.js'
+import {
+  assertImageTaskOwnership,
+  assertVideoTaskOwnership,
+  bindImageTaskOwnership,
+  bindVideoTaskOwnership,
+  findImageRunContextByTask,
+  findVideoRunContextByTask,
+  syncRunStatusFromImageTask,
+  syncRunStatusFromVideoTask
+} from './run-task-records.js'
 import {
   extractProviderRequestId,
   extractUsageSnapshot,
@@ -19,6 +36,16 @@ import {
   updateUsageEventByRunId
 } from './usage-ledger.service.js'
 import { upsertGeneratedMediaRecord } from './media-library.service.js'
+import { formatSseData, readChatCompletionSseStream } from '../utils/chat-sse.js'
+
+export {
+  buildImageGenerationAssets,
+  buildVideoGenerationAssets,
+  persistDataUrlIfNeeded,
+  persistImageResultAssets,
+  persistRemoteUrlIfNeeded,
+  persistVideoResultAsset
+} from './run-assets.js'
 
 const runSchema = z.object({
   type: z.enum(['chat', 'image', 'video']),
@@ -46,377 +73,6 @@ const extractProviderTaskId = (result = {}) => {
   ]
   const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
   return found ? String(found) : ''
-}
-
-const extractProviderVideoUrl = (result = {}) =>
-  result?.url ||
-  result?.video_url ||
-  result?.download?.url ||
-  result?.data?.url ||
-  result?.data?.video_url ||
-  result?.data?.download?.url ||
-  result?.raw?.url ||
-  result?.raw?.video_url ||
-  result?.raw?.download?.url ||
-  result?.raw?.task_result?.video_url ||
-  result?.raw?.task_result?.videos?.[0]?.url ||
-  ''
-
-const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
-const isInlineDataUrl = (value = '') => /^data:image\/[^;,]+;base64,/i.test(String(value || '').trim())
-
-export const persistRemoteUrlIfNeeded = async (url, fileName) => {
-  const raw = String(url || '').trim()
-  if (!raw || isPersistedUploadUrl(raw)) return raw
-  return uploadRemoteFile({ url: raw, fileName }).then((result) => String(result?.url || '').trim() || raw)
-}
-
-export const persistDataUrlIfNeeded = async (dataUrl, fileName) => {
-  const raw = String(dataUrl || '').trim()
-  if (!raw || !isInlineDataUrl(raw)) return raw
-  return uploadDataUrl({ dataUrl: raw, fileName }).then((result) => String(result?.url || '').trim() || raw)
-}
-
-export const persistImageResultAssets = async (result = {}, options = {}) => {
-  const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
-  const persistDataUrl = options.persistDataUrl || persistDataUrlIfNeeded
-  const entries = Array.isArray(result?.data) ? [...result.data] : []
-  if (!entries.length) return result
-
-  const persistedEntries = await Promise.all(
-    entries.map(async (entry, index) => {
-      const remoteUrl = String(entry?.url || '').trim()
-      if (!remoteUrl) return entry
-
-      const fileName = `generated-${Date.now()}-${index}.png`
-      const persistedUrl = isInlineDataUrl(remoteUrl)
-        ? await persistDataUrl(remoteUrl, fileName).catch(() => remoteUrl)
-        : await persistRemoteUrl(remoteUrl, fileName).catch(() => remoteUrl)
-
-      return {
-        ...entry,
-        url: persistedUrl
-      }
-    })
-  )
-
-  return {
-    ...result,
-    data: persistedEntries
-  }
-}
-
-export const persistVideoResultAsset = async (result = {}, options = {}) => {
-  const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
-  const rawUrl = String(extractProviderVideoUrl(result) || '').trim()
-  if (!rawUrl) return result
-
-  const persistedUrl = await persistRemoteUrl(
-    rawUrl,
-    `video-${Date.now()}.mp4`
-  ).catch(() => rawUrl)
-
-  const nextResult = {
-    ...result,
-    url: result?.url ? persistedUrl : result?.url,
-    video_url: result?.video_url ? persistedUrl : result?.video_url
-  }
-
-  if (nextResult?.data && typeof nextResult.data === 'object') {
-    nextResult.data = {
-      ...nextResult.data,
-      url: nextResult.data?.url ? persistedUrl : nextResult.data?.url,
-      video_url: nextResult.data?.video_url ? persistedUrl : nextResult.data?.video_url,
-      task_result: nextResult.data?.task_result
-        ? {
-            ...nextResult.data.task_result,
-            video_url: nextResult.data.task_result?.video_url ? persistedUrl : nextResult.data.task_result?.video_url,
-            videos: Array.isArray(nextResult.data.task_result?.videos)
-              ? nextResult.data.task_result.videos.map((video, index) =>
-                  index === 0 ? { ...video, url: persistedUrl } : video
-                )
-              : nextResult.data.task_result?.videos
-          }
-        : nextResult.data?.task_result
-    }
-  }
-
-  if (nextResult?.task_result && typeof nextResult.task_result === 'object') {
-    nextResult.task_result = {
-      ...nextResult.task_result,
-      video_url: nextResult.task_result?.video_url ? persistedUrl : nextResult.task_result?.video_url,
-      videos: Array.isArray(nextResult.task_result?.videos)
-        ? nextResult.task_result.videos.map((video, index) =>
-            index === 0 ? { ...video, url: persistedUrl } : video
-          )
-        : nextResult.task_result?.videos
-    }
-  }
-
-  if (nextResult?.raw && typeof nextResult.raw === 'object') {
-    nextResult.raw = {
-      ...nextResult.raw,
-      url: nextResult.raw?.url ? persistedUrl : nextResult.raw?.url,
-      video_url: nextResult.raw?.video_url ? persistedUrl : nextResult.raw?.video_url,
-      task_result: nextResult.raw?.task_result
-        ? {
-            ...nextResult.raw.task_result,
-            video_url: nextResult.raw.task_result?.video_url ? persistedUrl : nextResult.raw.task_result?.video_url,
-            videos: Array.isArray(nextResult.raw.task_result?.videos)
-              ? nextResult.raw.task_result.videos.map((video, index) =>
-                  index === 0 ? { ...video, url: persistedUrl } : video
-                )
-              : nextResult.raw.task_result?.videos
-          }
-        : nextResult.raw?.task_result
-    }
-  }
-
-  return nextResult
-}
-
-export const buildImageGenerationAssets = (result = {}, sourceNodeId = '') =>
-  (Array.isArray(result?.data) ? result.data : [])
-    .map((item, index) => {
-      const url = String(item?.url || '').trim()
-      if (!url || isInlineDataUrl(url)) return null
-      return {
-        kind: 'image',
-        url,
-        previewUrl: url,
-        fileName: `generated-${index + 1}.png`,
-        fileType: 'image/png',
-        origin: 'generation',
-        ...(sourceNodeId ? { sourceNodeId } : {})
-      }
-    })
-    .filter(Boolean)
-
-const resolveVideoSourceNodeId = (...candidates) => {
-  for (const candidate of candidates) {
-    const value = String(
-      candidate?.sourceNodeId ||
-      candidate?.source_node_id ||
-      ''
-    ).trim()
-    if (value) return value
-  }
-  return ''
-}
-
-export const buildVideoGenerationAssets = (result = {}, sourceNodeId = '') => {
-  const url = String(extractProviderVideoUrl(result) || '').trim()
-  if (!url) return []
-  const safeSourceNodeId = resolveVideoSourceNodeId(result, { sourceNodeId })
-  return [{
-    kind: 'video',
-    url,
-    previewUrl: url,
-    fileName: 'generated-video.mp4',
-    fileType: 'video/mp4',
-    origin: 'generation',
-    ...(safeSourceNodeId ? { sourceNodeId: safeSourceNodeId } : {})
-  }]
-}
-
-const bindVideoTaskOwnership = async ({ userId, runId, taskId, sourceNodeId = '' }) => {
-  if (!taskId) return
-  const safeSourceNodeId = String(sourceNodeId || '').trim()
-  const { error } = await supabase.from('audit_logs').insert({
-    user_id: userId,
-    action: 'video.task.created',
-    metadata: {
-      run_id: runId,
-      task_id: taskId,
-      ...(safeSourceNodeId ? { source_node_id: safeSourceNodeId } : {})
-    }
-  })
-  if (error) {
-    console.warn('[video] bind task ownership failed', error.message)
-  }
-}
-
-const bindImageTaskOwnership = async ({ userId, runId, taskId, model = '' }) => {
-  if (!taskId) return
-  const { error } = await supabase.from('audit_logs').insert({
-    user_id: userId,
-    action: 'image.task.created',
-    metadata: {
-      run_id: runId,
-      task_id: taskId,
-      model: String(model || '').trim()
-    }
-  })
-  if (error) {
-    console.warn('[image] bind task ownership failed', error.message)
-  }
-}
-
-const assertImageTaskOwnership = async ({ userId, taskId }) => {
-  const { data, error } = await supabase
-    .from('audit_logs')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('action', 'image.task.created')
-    .contains('metadata', { task_id: String(taskId) })
-    .limit(1)
-
-  if (error) {
-    throw new HttpError(500, error.message, 'TASK_OWNERSHIP_CHECK_FAILED')
-  }
-
-  if (!Array.isArray(data) || data.length === 0) {
-    throw new HttpError(404, 'Image task not found', 'IMAGE_TASK_NOT_FOUND')
-  }
-}
-
-const assertVideoTaskOwnership = async ({ userId, taskId }) => {
-  const { data, error } = await supabase
-    .from('audit_logs')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('action', 'video.task.created')
-    .contains('metadata', { task_id: String(taskId) })
-    .limit(1)
-
-  if (error) {
-    throw new HttpError(500, error.message, 'TASK_OWNERSHIP_CHECK_FAILED')
-  }
-
-  if (!Array.isArray(data) || data.length === 0) {
-    if (env.nodeEnv !== 'production') {
-      console.warn('[video] task ownership record missing in non-production', { userId, taskId })
-      return
-    }
-    throw new HttpError(404, 'Video task not found', 'VIDEO_TASK_NOT_FOUND')
-  }
-}
-
-const findImageRunIdByTask = async ({ userId, taskId }) => {
-  const { data, error } = await supabase
-    .from('audit_logs')
-    .select('metadata')
-    .eq('user_id', userId)
-    .eq('action', 'image.task.created')
-    .contains('metadata', { task_id: String(taskId) })
-    .order('created_at', { ascending: false })
-    .limit(1)
-
-  if (error) {
-    console.warn('[image] resolve run by task failed', error.message)
-    return ''
-  }
-
-  const runId = data?.[0]?.metadata?.run_id
-  return runId ? String(runId) : ''
-}
-
-const findImageRunContextByTask = async ({ userId, taskId }) => {
-  const { data, error } = await supabase
-    .from('audit_logs')
-    .select('metadata')
-    .eq('user_id', userId)
-    .eq('action', 'image.task.created')
-    .contains('metadata', { task_id: String(taskId) })
-    .order('created_at', { ascending: false })
-    .limit(1)
-
-  if (error) {
-    console.warn('[image] resolve run context by task failed', error.message)
-    return { runId: '', model: '' }
-  }
-
-  const metadata = data?.[0]?.metadata || {}
-  return {
-    runId: metadata?.run_id ? String(metadata.run_id) : '',
-    model: metadata?.model ? String(metadata.model) : ''
-  }
-}
-
-const findVideoRunContextByTask = async ({ userId, taskId }) => {
-  const { data, error } = await supabase
-    .from('audit_logs')
-    .select('metadata')
-    .eq('user_id', userId)
-    .eq('action', 'video.task.created')
-    .contains('metadata', { task_id: String(taskId) })
-    .order('created_at', { ascending: false })
-    .limit(1)
-
-  if (error) {
-    console.warn('[video] resolve run by task failed', error.message)
-    return { runId: '', sourceNodeId: '' }
-  }
-
-  const runId = data?.[0]?.metadata?.run_id
-  const sourceNodeId = data?.[0]?.metadata?.source_node_id
-  return {
-    runId: runId ? String(runId) : '',
-    sourceNodeId: sourceNodeId ? String(sourceNodeId) : ''
-  }
-}
-
-const syncRunStatusFromImageTask = async ({ userId, runId, taskResult }) => {
-  if (!runId || !taskResult) return
-  const status = String(taskResult?.status || '').toLowerCase()
-  const hasAsset = Array.isArray(taskResult?.data) && taskResult.data.length > 0
-
-  let nextStatus = 'running'
-  if (hasAsset || ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished'].includes(status)) {
-    nextStatus = 'completed'
-  } else if (['failed', 'error', 'cancelled', 'canceled', 'failure'].includes(status)) {
-    nextStatus = 'failed'
-  }
-
-  const payload = { status: nextStatus }
-  if (nextStatus === 'completed' || nextStatus === 'failed') {
-    payload.finished_at = new Date().toISOString()
-    payload.error_msg = nextStatus === 'failed' ? (taskResult?.message || 'Image task failed') : null
-  }
-
-  const { error } = await supabase
-    .from('workflow_runs')
-    .update(payload)
-    .eq('id', runId)
-    .eq('user_id', userId)
-
-  if (error) {
-    console.warn('[image] sync run status failed', error.message)
-  }
-}
-
-const syncRunStatusFromVideoTask = async ({ userId, runId, taskResult }) => {
-  if (!runId || !taskResult) return
-  const status = String(taskResult?.status || '').toLowerCase()
-  const hasVideo = !!extractProviderVideoUrl(taskResult)
-
-  let nextStatus = ''
-  if (hasVideo || ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished'].includes(status)) {
-    nextStatus = 'completed'
-  } else if (['failed', 'error', 'cancelled', 'canceled', 'failure'].includes(status)) {
-    nextStatus = 'failed'
-  } else {
-    nextStatus = 'running'
-  }
-
-  const payload = {
-    status: nextStatus
-  }
-
-  if (nextStatus === 'completed' || nextStatus === 'failed') {
-    payload.finished_at = new Date().toISOString()
-    payload.error_msg = nextStatus === 'failed' ? (taskResult?.message || 'Video task failed') : null
-  }
-
-  const { error } = await supabase
-    .from('workflow_runs')
-    .update(payload)
-    .eq('id', runId)
-    .eq('user_id', userId)
-
-  if (error) {
-    console.warn('[video] sync run status failed', error.message)
-  }
 }
 
 const enrichUsageWith302Record = async (providerResponse = {}, fallbackUsage = {}) => {
@@ -705,6 +361,119 @@ export const getRunById = async (userId, runId) => {
 
 export const createChatCompletion = async (userId, payload) => {
   return createRun(userId, { type: 'chat', payload, model: payload.model })
+}
+
+const getHeaderValue = (headers, ...names) => {
+  for (const name of names) {
+    const value = headers?.get?.(name)
+    if (value) return value
+  }
+  return ''
+}
+
+export const streamChatCompletion = async (userId, payload, { onEvent = () => {} } = {}) => {
+  const parsed = runSchema.parse({ type: 'chat', payload, model: payload.model })
+  const providerAccess = await resolveActiveUserServiceCredential(userId)
+  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
+
+  const startedAt = Date.now()
+  const { data: run, error: runInsertError } = await supabase
+    .from('workflow_runs')
+    .insert({
+      user_id: userId,
+      project_id: null,
+      type: parsed.type,
+      status: 'running',
+      started_at: new Date().toISOString()
+    })
+    .select('*')
+    .single()
+
+  if (runInsertError) throw new HttpError(500, runInsertError.message, 'RUN_CREATE_FAILED')
+
+  let response
+  let content = ''
+  let usage = null
+  let finishReason = ''
+  let doneSent = false
+
+  try {
+    response = await providerChatCompletionsStream(parsed.payload, providerRequestOptions)
+    for await (const event of readChatCompletionSseStream(response)) {
+      if (event.type === 'done') {
+        onEvent(formatSseData('[DONE]'))
+        doneSent = true
+        continue
+      }
+
+      if (event.delta) content += event.delta
+      if (event.usage) usage = event.usage
+      if (event.finishReason) finishReason = event.finishReason
+      onEvent(formatSseData(event.payload))
+    }
+
+    if (!doneSent) {
+      onEvent(formatSseData('[DONE]'))
+    }
+
+    const latencyMs = Date.now() - startedAt
+    const requestId = getHeaderValue(response.headers, 'x-request-id', 'x-requestid', 'cf-aigw-request-id')
+    const providerResponse = {
+      id: requestId || undefined,
+      choices: [
+        {
+          message: { role: 'assistant', content },
+          finish_reason: finishReason || 'stop'
+        }
+      ],
+      usage: usage || undefined,
+      raw: {
+        request_id: requestId || undefined,
+        streamed: true,
+        usage: usage || undefined
+      }
+    }
+    const baseUsage = extractUsageSnapshot(providerResponse)
+    const enrichedUsage = await enrichUsageWith302Record(providerResponse, baseUsage)
+
+    await supabase
+      .from('workflow_runs')
+      .update({ status: 'completed', finished_at: new Date().toISOString() })
+      .eq('id', run.id)
+
+    await insertUsageEvent({
+      userId,
+      runId: run.id,
+      model: parsed.model || parsed.payload?.model,
+      apiName: providerAccess.apiName,
+      providerRequestId: enrichedUsage.requestId || requestId,
+      serviceCredentialId: providerAccess.serviceCredentialId,
+      inputTokens: enrichedUsage.usage.inputTokens || 0,
+      outputTokens: enrichedUsage.usage.outputTokens || 0,
+      latencyMs,
+      costUsd: enrichedUsage.usage.costUsd || 0,
+      estimatedCostUsd: baseUsage.costUsd || 0,
+      billedCostUsd: enrichedUsage.usage.costUsd || 0,
+      billingStatus: enrichedUsage.requestId ? 'billed' : (requestId ? 'pending' : 'estimated'),
+      rawUsage: enrichedUsage.usage.rawUsage || providerResponse.raw,
+      eventType: parsed.type
+    })
+
+    return {
+      runId: run.id,
+      status: 'completed',
+      result: {
+        ...providerResponse,
+        run_id: run.id
+      }
+    }
+  } catch (err) {
+    await supabase
+      .from('workflow_runs')
+      .update({ status: 'failed', finished_at: new Date().toISOString(), error_msg: err.message })
+      .eq('id', run.id)
+    throw err
+  }
 }
 
 export const createImageGeneration = async (userId, payload) => {

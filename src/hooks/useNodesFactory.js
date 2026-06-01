@@ -3,12 +3,17 @@
  * Handles node creation logic from workflows and manual actions
  */
 import { nextTick } from 'vue'
-import { addNode, addEdge, nodes, updateNode } from '@/stores/canvas'
+import { storeToRefs } from 'pinia'
+import { useCanvasStore } from '@/stores/canvas'
+import { pinia } from '@/stores/pinia'
 import { translateLabel, WORKFLOW_NAME_MAP } from '@/config/labels'
 import { notifier } from '@/utils/notifier'
 import { edgeStrategy } from '@/services/edgeStrategy'
 
 export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
+  const canvasStore = useCanvasStore(pinia)
+  const { nodes } = storeToRefs(canvasStore)
+  const { addNode, addEdge, updateNode } = canvasStore
   
   /**
    * Calculate viewport center position

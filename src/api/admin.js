@@ -1,148 +1,148 @@
-import { request } from '@/utils'
+import { apiRequest } from './_httpClient.js'
 
 export const getAdminSession = () =>
-  request({
+  apiRequest({
     url: '/admin/session',
     method: 'get',
     silentErrorToast: true
   })
 
 export const getAdminUsers = () =>
-  request({
+  apiRequest({
     url: '/admin/users',
     method: 'get'
   })
 
 export const updateAdminUserRoles = (userId, roleCodes) =>
-  request({
+  apiRequest({
     url: `/admin/users/${encodeURIComponent(userId)}/roles`,
     method: 'patch',
     data: { roleCodes }
   })
 
 export const updateAdminUserStatus = (userId, status, reason = '') =>
-  request({
+  apiRequest({
     url: `/admin/users/${encodeURIComponent(userId)}/status`,
     method: 'patch',
     data: { status, reason }
   })
 
 export const deleteAdminUser = (userId) =>
-  request({
+  apiRequest({
     url: `/admin/users/${encodeURIComponent(userId)}`,
     method: 'delete'
   })
 
 export const activateAdminUserService = (userId, payload = {}) =>
-  request({
+  apiRequest({
     url: `/admin/users/${encodeURIComponent(userId)}/service-access/activate`,
     method: 'post',
     data: payload
   })
 
 export const disableAdminUserService = (userId, reason = '') =>
-  request({
+  apiRequest({
     url: `/admin/users/${encodeURIComponent(userId)}/service-access/disable`,
     method: 'post',
     data: { reason }
   })
 
 export const resetAdminUserService = (userId) =>
-  request({
+  apiRequest({
     url: `/admin/users/${encodeURIComponent(userId)}/service-access/reset`,
     method: 'post'
   })
 
 export const updateAdminUserServiceLimits = (userId, payload = {}) =>
-  request({
+  apiRequest({
     url: `/admin/users/${encodeURIComponent(userId)}/service-access/limits`,
     method: 'patch',
     data: payload
   })
 
 export const reconcileAdminBilling = (payload = {}) =>
-  request({
+  apiRequest({
     url: '/admin/billing/reconcile',
     method: 'post',
     data: payload
   })
 
 export const assignAdminApiKeyToUser = (userId, apiName) =>
-  request({
+  apiRequest({
     url: '/admin/api-keys/assign',
     method: 'post',
     data: { userId, apiName }
   })
 
 export const unassignAdminApiKeyFromUser = (userId, apiName) =>
-  request({
+  apiRequest({
     url: '/admin/api-keys/assign',
     method: 'delete',
     data: { userId, apiName }
   })
 
 export const getAdminAuditLogs = (params) =>
-  request({
+  apiRequest({
     url: '/admin/audit-logs',
     method: 'get',
     params
   })
 
 export const getAdminUsageSummary = (params) =>
-  request({
+  apiRequest({
     url: '/admin/usage/summary',
     method: 'get',
     params
   })
 
 export const getAdminUsageTimeseries = (params) =>
-  request({
+  apiRequest({
     url: '/admin/usage/timeseries',
     method: 'get',
     params
   })
 
 export const getAdmin302Balance = () =>
-  request({
+  apiRequest({
     url: '/admin/302/balance',
     method: 'get'
   })
 
 export const getAdmin302Record = (requestId) =>
-  request({
+  apiRequest({
     url: `/admin/302/record/${encodeURIComponent(requestId)}`,
     method: 'get'
   })
 
 export const getAdmin302ApiRecord = (params) =>
-  request({
+  apiRequest({
     url: '/admin/302/api-record',
     method: 'get',
     params
   })
 
 export const getAdmin302ApiKeys = () =>
-  request({
+  apiRequest({
     url: '/admin/302/api-keys',
     method: 'get'
   })
 
 export const createAdmin302ApiKey = (payload) =>
-  request({
+  apiRequest({
     url: '/admin/302/api-keys',
     method: 'post',
     data: payload
   })
 
 export const updateAdmin302ApiKey = (apiName, payload) =>
-  request({
+  apiRequest({
     url: `/admin/302/api-keys/${encodeURIComponent(apiName)}`,
     method: 'put',
     data: payload
   })
 
 export const deleteAdmin302ApiKey = (apiName) =>
-  request({
+  apiRequest({
     url: `/admin/302/api-keys/${encodeURIComponent(apiName)}`,
     method: 'delete'
   })

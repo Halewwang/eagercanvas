@@ -23,7 +23,7 @@ Compatibility endpoints used by current frontend workflow:
 - `GET /api/v1/videos/:taskId`
 
 ## Setup
-1. Copy `.env.example` to `.env` and fill values.
+1. Copy `.env.example` to `.env.local` or `.env` and fill values. Keep real env files local only. The backend loads `.env.local` before `.env`, while shell/Vercel-provided environment variables keep highest priority.
 2. Run SQL files in order on your Supabase Postgres:
    - `../supabase/001_init.sql`
    - `../supabase/002_auth_registration.sql`

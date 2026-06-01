@@ -40,17 +40,17 @@
     </div>
 
     <template #footer>
-      <div class="ui-modal-actions">
+      <BaseModalActions>
         <BaseButton variant="ghost" @click="showModal = false">Cancel</BaseButton>
         <BaseButton :loading="saving" :disabled="saving" @click="handleSave">{{ saving ? 'Saving...' : 'Save changes' }}</BaseButton>
-      </div>
+      </BaseModalActions>
     </template>
   </BaseModal>
 </template>
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { BaseButton, BaseInput, BaseModal } from '@/components/ui'
+import { BaseButton, BaseInput, BaseModal, BaseModalActions } from '@/components/ui'
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils'
 import { notifier } from '@/utils/notifier'

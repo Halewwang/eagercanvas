@@ -3,7 +3,8 @@
  */
 
 import { ref, computed, watch } from 'vue'
-import { getStoredValue, setBaseUrl as setRequestBaseUrl, setStoredValue } from '@/utils'
+import { setApiBaseUrl as setRequestBaseUrl } from '@/api/_httpClient.js'
+import { getStoredValue, setStoredValue } from '@/utils'
 import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from '@/utils'
 
 const BYPASS_AUTH_IN_DEV = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'

@@ -1,221 +1,65 @@
 <template>
   <div class="workspace-shell">
-    <aside class="workspace-sidebar">
-      <div class="brand">
-        <img src="/project-logo.svg" alt="logo" class="brand-logo" />
-        <div class="brand-text">{{ workspaceBrand }}</div>
-      </div>
-
-      <section class="sidebar-group">
-        <div class="sidebar-group-title">Workspace</div>
-        <nav class="nav-menu">
-          <button
-            v-for="item in navItems"
-            :key="item.key"
-            class="nav-item"
-            :class="{ active: activeSection === item.key }"
-            @click="activeSection = item.key"
-          >
-            <n-icon :size="16"><component :is="item.icon" /></n-icon>
-            <span>{{ item.label }}</span>
-          </button>
-        </nav>
-      </section>
-
-      <div class="sidebar-account">
-        <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
-        <template v-if="isAuthenticated">
-          <button
-            class="account-profile"
-            @click="triggerAvatarUpload"
-            title="Upload avatar"
-          >
-            <div class="account-avatar">
-              <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" />
-              <span v-else>{{ avatarInitial }}</span>
-            </div>
-            <div class="account-meta">
-              <strong>{{ user?.displayName || 'Workspace Member' }}</strong>
-              <span>{{ user?.email }}</span>
-            </div>
-          </button>
-          <div class="account-actions">
-            <button class="account-action-btn" @click="router.push('/usage')">Usage</button>
-            <button class="account-action-btn" @click="handleLogout">Logout</button>
-          </div>
-        </template>
-        <template v-else>
-          <div class="account-actions">
-            <button class="account-action-btn" @click="router.push({ path: '/', query: { auth: 'login', redirect: '/workspace' } })">Login</button>
-            <button class="account-action-btn account-action-btn-primary" @click="router.push({ path: '/', query: { auth: 'register', redirect: '/workspace' } })">Register</button>
-          </div>
-        </template>
-      </div>
-
-    </aside>
+    <WorkspaceSidebar
+      v-model:active-section="activeSection"
+      :workspace-brand="workspaceBrand"
+      :nav-items="navItems"
+      :is-authenticated="isAuthenticated"
+      :user="user"
+      :avatar-initial="avatarInitial"
+      @upload-avatar="triggerAvatarUpload"
+      @usage="router.push('/usage')"
+      @logout="handleLogout"
+      @login="router.push({ path: '/', query: { auth: 'login', redirect: '/workspace' } })"
+      @register="router.push({ path: '/', query: { auth: 'register', redirect: '/workspace' } })"
+    />
+    <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
 
     <main class="workspace-main">
-      <header class="main-header">
-        <div>
-          <h1>{{ sectionTitle }}</h1>
-          <p>{{ sectionDescription }}</p>
-        </div>
-        <div class="header-actions">
-          <button class="ui-action-pill" @click="router.push('/')">
-            <n-icon :size="18"><GridOutline /></n-icon>
-            <span class="ui-action-pill-label">Back Home</span>
-          </button>
-          <button class="ui-action-pill" @click="createBlankProject">
-            <n-icon :size="16"><AddOutline /></n-icon>
-            <span class="ui-action-pill-label">New Project</span>
-          </button>
-        </div>
-      </header>
+      <WorkspaceHeader
+        :title="sectionTitle"
+        :description="sectionDescription"
+        @back-home="router.push('/')"
+        @create-project="createBlankProject"
+      />
 
-      <section class="cards-grid">
-        <article
-          v-if="activeSection === 'projects'"
-          class="project-card create-card"
-          @click="createBlankProject"
-        >
-          <div class="card-media create-media">
-            <n-icon :size="44"><AddOutline /></n-icon>
-          </div>
-          <div class="card-body">
-            <h3>Blank Project</h3>
-            <p>Create a new blank project</p>
-          </div>
-        </article>
-
-        <article
-          v-for="item in sectionItems"
-          :key="item.id"
-          class="project-card"
-          @click="handlePrimaryClick(item)"
-        >
-          <div class="card-media" :class="{ 'project-media': activeSection === 'projects' }">
-            <template v-if="item.thumbnail || item.cover || item.coverUrl">
-              <img :src="item.thumbnail || item.cover || item.coverUrl" :alt="item.title || item.name" />
-            </template>
-            <template v-else>
-              <div class="fallback-icon">
-                <n-icon :size="28"><component :is="resolveCardIcon(item)" /></n-icon>
-              </div>
-            </template>
-          </div>
-
-          <div class="card-body">
-            <template v-if="activeSection === 'projects'">
-              <div class="project-meta-row">
-                <div class="project-meta-main">
-                  <h3>{{ item.name }}</h3>
-                  <p>{{ describeItem(item) }}</p>
-                </div>
-                <div @click.stop>
-                  <BaseDropdown
-                    placement="bottom-end"
-                    :options="projectMenuOptions(item)"
-                    @select="(key) => handleProjectMenuSelect(key, item)"
-                  >
-                    <button class="menu-btn project-menu-btn" type="button">
-                      <n-icon :size="16"><EllipsisHorizontalOutline /></n-icon>
-                    </button>
-                  </BaseDropdown>
-                </div>
-              </div>
-            </template>
-            <template v-else>
-              <div class="title-row">
-                <h3>{{ item.title || item.name }}</h3>
-                <span v-if="activeSection === 'featured'" class="badge">Public</span>
-              </div>
-              <p>{{ describeItem(item) }}</p>
-            </template>
-
-            <div v-if="activeSection !== 'projects'" class="card-actions" @click.stop>
-              <BaseButton size="sm" variant="ghost" @click="openTemplatePreview(item)">View</BaseButton>
-              <BaseButton size="sm" @click="useTemplate(item)">Use</BaseButton>
-            </div>
-          </div>
-        </article>
-      </section>
+      <WorkspaceCardsGrid
+        :active-section="activeSection"
+        :items="sectionItems"
+        :describe-item="describeItem"
+        :resolve-card-icon="resolveCardIcon"
+        :project-menu-options="projectMenuOptions"
+        @create-project="createBlankProject"
+        @primary-click="handlePrimaryClick"
+        @project-menu-select="handleProjectMenuSelect"
+        @preview-template="openTemplatePreview"
+        @use-template="useTemplate"
+      />
     </main>
 
-    <BaseModal
-      v-model:show="showRenameModal"
-      title="Rename project"
-      description="Update the project name shown in your workspace."
-      size="sm"
-    >
-      <BaseInput
-        v-model="renameValue"
-        placeholder="Enter project name"
-        @keyup.enter="confirmRename"
-      />
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton variant="ghost" @click="showRenameModal = false">Cancel</BaseButton>
-          <BaseButton @click="confirmRename">Save</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-
-    <BaseModal
-      v-model:show="showDeleteModal"
-      title="Delete project"
-      description="This action permanently removes the project from your workspace."
-      size="sm"
-    >
-      <p class="ui-body ui-modal-copy">Delete "{{ deleteTargetName }}"? This action cannot be undone.</p>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton variant="ghost" @click="showDeleteModal = false">Cancel</BaseButton>
-          <BaseButton variant="danger" @click="confirmDelete">Delete</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-
-    <BaseModal
-      v-model:show="showTemplatePreviewModal"
-      title="Template Preview"
-      description="View template details without copying it into your projects."
-      size="md"
-    >
-      <div v-if="previewTemplate" class="template-preview">
-        <div class="template-preview-media">
-          <img
-            v-if="previewTemplate.thumbnail || previewTemplate.cover || previewTemplate.coverUrl"
-            :src="previewTemplate.thumbnail || previewTemplate.cover || previewTemplate.coverUrl"
-            :alt="previewTemplate.title || previewTemplate.name"
-          />
-          <div v-else class="template-preview-fallback">No cover</div>
-        </div>
-        <div class="template-preview-content">
-          <h3>{{ previewTemplate.title || previewTemplate.name }}</h3>
-          <p class="template-preview-owner">{{ String(previewTemplate.ownerDisplayName || '').trim() || 'Unknown user' }}</p>
-          <p class="template-preview-description">{{ String(previewTemplate.description || '').trim() || 'No description provided.' }}</p>
-        </div>
-      </div>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton variant="ghost" @click="closeTemplatePreview">Close</BaseButton>
-          <BaseButton :disabled="!previewTemplate" @click="useTemplateFromPreview">Use</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
+    <WorkspaceModals
+      v-model:show-rename="showRenameModal"
+      v-model:show-delete="showDeleteModal"
+      v-model:show-template-preview="showTemplatePreviewModal"
+      v-model:rename-value="renameValue"
+      :delete-target-name="deleteTargetName"
+      :preview-template="previewTemplate"
+      @confirm-rename="confirmRename"
+      @confirm-delete="confirmDelete"
+      @close-template-preview="closeTemplatePreview"
+      @use-template-from-preview="useTemplateFromPreview"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NIcon } from 'naive-ui'
 import {
   AddOutline,
   FolderOpenOutline,
   SparklesOutline,
-  GridOutline,
-  EllipsisHorizontalOutline
+  GridOutline
 } from '@/icons/coolicons'
 import {
   projects,
@@ -226,8 +70,19 @@ import {
   deleteProject,
   refreshProjectById
 } from '@/stores/projects'
-import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
+import WorkspaceCardsGrid from '@/components/workspace/WorkspaceCardsGrid.vue'
+import WorkspaceHeader from '@/components/workspace/WorkspaceHeader.vue'
+import WorkspaceModals from '@/components/workspace/WorkspaceModals.vue'
+import WorkspaceSidebar from '@/components/workspace/WorkspaceSidebar.vue'
 import { getErrorMessage } from '@/utils'
+import {
+  describeWorkspaceItem,
+  getWorkspaceBrand,
+  getWorkspaceCardIconKey,
+  getWorkspaceSectionDescription,
+  getWorkspaceSectionTitle,
+  getWorkspaceProjectMenuOptions
+} from '@/utils/workspaceDisplay'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useAuthStore } from '@/stores/auth'
 import { notifier } from '@/utils/notifier'
@@ -253,6 +108,13 @@ const navItems = [
   { key: 'featured', label: 'Share Templates', icon: SparklesOutline }
 ]
 
+const workspaceCardIcons = {
+  project: FolderOpenOutline,
+  image: AddOutline,
+  video: SparklesOutline,
+  default: GridOutline
+}
+
 const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange } = useAvatarUpload({
   user,
   updateProfile,
@@ -270,55 +132,34 @@ const {
   useSharedTemplate
 } = useWorkspaceStore()
 
-const workspaceBrand = computed(() => {
-  const displayName = String(user.value?.displayName || '').trim()
-  if (displayName) return `${displayName} Workspace`
-  const userId = String(user.value?.id || '').trim()
-  if (userId) return `${userId} Workspace`
-  return currentWorkspace.value?.name || 'Shared Workspace'
-})
+const workspaceBrand = computed(() => getWorkspaceBrand({
+  user: user.value,
+  currentWorkspace: currentWorkspace.value
+}))
 
-const sectionTitle = computed(() => {
-  if (activeSection.value === 'featured') return 'Share Templates'
-  return 'My Project'
-})
+const sectionTitle = computed(() => getWorkspaceSectionTitle(activeSection.value))
 
-const sectionDescription = computed(() => {
-  if (activeSection.value === 'featured') {
-    return 'Templates published by workspace members. Using one creates a full copy in your own projects.'
-  }
-  return 'Project cover is shown as 16:9. Manage project actions from the menu.'
-})
+const sectionDescription = computed(() => getWorkspaceSectionDescription(activeSection.value))
 
 const sectionItems = computed(() => {
   if (activeSection.value === 'featured') return featuredTemplates.value
   return projects.value
 })
 
-const describeItem = (item) => {
-  if (activeSection.value === 'projects') return `Updated ${formatDate(item.updatedAt)}`
-  const owner = String(item?.ownerDisplayName || '').trim()
-  const detail = String(item?.description || '').trim()
-  if (owner && detail) return `${owner} · ${detail}`
-  if (owner) return owner
-  return detail || 'Template'
-}
+const describeItem = (item) => describeWorkspaceItem({
+  activeSection: activeSection.value,
+  item
+})
 
 const resolveCardIcon = (item) => {
-  if (activeSection.value === 'projects') return FolderOpenOutline
-  if (item.icon === 'ImageOutline') return AddOutline
-  if (item.icon === 'VideocamOutline') return SparklesOutline
-  return GridOutline
+  const iconKey = getWorkspaceCardIconKey({
+    activeSection: activeSection.value,
+    item
+  })
+  return workspaceCardIcons[iconKey] || workspaceCardIcons.default
 }
 
-const projectMenuOptions = () => [
-  { label: 'Refresh from cloud', key: 'refresh-cloud' },
-  { label: 'Copy project link', key: 'copy-link' },
-  { label: 'Rename project', key: 'rename' },
-  { label: 'Duplicate project', key: 'duplicate' },
-  { type: 'divider', key: 'divider-1' },
-  { label: 'Delete project', key: 'delete' }
-]
+const projectMenuOptions = getWorkspaceProjectMenuOptions
 
 const copyText = async (text) => {
   try {
@@ -460,23 +301,24 @@ const confirmDelete = async () => {
   notifier.success('Project deleted')
 }
 
-const formatDate = (date) => {
-  if (!date) return 'just now'
-  const d = new Date(date)
-  const now = new Date()
-  const diff = now - d
-  if (diff < 60000) return 'just now'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)} minutes ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)} days ago`
-  return `${d.getMonth() + 1}/${d.getDate()}`
+const loadWorkspaceSurfaces = async () => {
+  try {
+    await loadCurrentWorkspace()
+  } catch {
+    currentWorkspace.value = null
+  }
+
+  try {
+    await loadFeaturedTemplates()
+  } catch {
+    featuredTemplates.value = []
+  }
 }
 
 onMounted(async () => {
   await bootstrapAuth()
   await initProjectsStore()
-  await loadCurrentWorkspace()
-  await loadFeaturedTemplates()
+  await loadWorkspaceSurfaces()
 })
 </script>
 
@@ -491,440 +333,13 @@ onMounted(async () => {
   grid-template-columns: 272px 1fr;
 }
 
-.workspace-sidebar {
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 24px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  background: rgba(255, 255, 255, 0.015);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.brand-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-}
-
-.brand-text {
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: -0.01em;
-}
-
-.nav-menu {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.sidebar-group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.sidebar-group-title {
-  padding: 0 12px;
-  color: rgba(236, 238, 244, 0.45);
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.nav-item {
-  height: 42px;
-  border: none;
-  background: transparent;
-  color: rgba(236, 238, 244, 0.72);
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 12px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.nav-item.active {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-
-.sidebar-account {
-  margin-top: auto;
-  padding: 14px 10px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.account-profile {
-  width: 100%;
-  border: none;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 18px;
-  padding: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.account-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.account-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.account-meta {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.account-meta strong {
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-}
-
-.account-meta span {
-  font-size: 12px;
-  color: rgba(236, 238, 244, 0.58);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.account-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.account-action-btn {
-  height: 40px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(236, 238, 244, 0.85);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-}
-
-.account-action-btn:hover {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-}
-
-.account-action-btn-primary {
-  background: rgba(255, 255, 255, 0.9);
-  color: #0d0e10;
-}
-
-.account-action-btn-primary:hover {
-  background: #fff;
-  color: #0d0e10;
-}
-
 .workspace-main {
   padding: 28px;
-}
-
-.main-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding-bottom: 20px;
-  margin-bottom: 22px;
-}
-
-.main-header h1 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.main-header p {
-  margin: 10px 0 0;
-  color: rgba(236, 238, 244, 0.65);
-  font-size: 13px;
-  line-height: 1.55;
-  max-width: 560px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 22px;
-}
-
-.project-card {
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.create-card {
-  gap: 14px;
-}
-
-.card-media {
-  aspect-ratio: 16 / 9;
-  background:
-    radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.035), transparent 48%),
-    linear-gradient(180deg, #18191c 0%, #141518 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 24px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
-}
-
-.project-card:hover .card-media {
-  border-color: rgba(255, 255, 255, 0.14);
-}
-
-.card-media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.create-media {
-  color: rgba(236, 238, 244, 0.45);
-  border-style: dashed;
-  background:
-    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.04), transparent 52%),
-    linear-gradient(180deg, #1a1b1e 0%, #151619 100%);
-}
-
-.project-media {
-  background:
-    radial-gradient(circle at 50% 24%, rgba(255, 255, 255, 0.02), transparent 46%),
-    linear-gradient(180deg, #111214 0%, #0d0e10 100%);
-}
-
-.fallback-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(236, 238, 244, 0.7);
-  background: rgba(255, 255, 255, 0.015);
-}
-
-.card-body {
-  padding: 0;
-}
-
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.title-row h3 {
-  margin: 0;
-  font-size: 15px;
-  flex: 1;
-}
-
-.badge {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: rgba(240, 241, 243, 0.88);
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 999px;
-  font-size: 11px;
-  padding: 3px 9px;
-}
-
-.badge.mine {
-  border-color: rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.88);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.menu-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: rgba(236, 238, 244, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  outline: none;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.menu-btn:hover {
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
-}
-
-.menu-btn:focus,
-.menu-btn:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
-.card-body p {
-  margin: 8px 0 0;
-  color: rgba(236, 238, 244, 0.65);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.project-meta-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.project-meta-main {
-  min-width: 0;
-}
-
-.project-meta-main h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-meta-main p {
-  margin: 6px 0 0;
-  color: rgba(236, 238, 244, 0.65);
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.project-menu-btn {
-  margin-top: -2px;
-  flex-shrink: 0;
-}
-
-.card-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.template-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.template-preview-media {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(180deg, #16171a 0%, #111215 100%);
-}
-
-.template-preview-media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.template-preview-fallback {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(236, 238, 244, 0.6);
-  font-size: 14px;
-}
-
-.template-preview-content h3 {
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.25;
-}
-
-.template-preview-owner {
-  margin: 6px 0 0;
-  color: rgba(236, 238, 244, 0.78);
-  font-size: 13px;
-}
-
-.template-preview-description {
-  margin: 10px 0 0;
-  color: rgba(236, 238, 244, 0.66);
-  font-size: 13px;
-  line-height: 1.5;
 }
 
 @media (max-width: 900px) {
   .workspace-shell {
     grid-template-columns: 1fr;
-  }
-
-  .workspace-sidebar {
-    border-right: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 }
 </style>

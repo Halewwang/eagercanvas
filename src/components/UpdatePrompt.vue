@@ -29,10 +29,10 @@
       </p>
     </div>
     <template #footer>
-      <div class="ui-modal-actions">
+      <BaseModalActions>
         <BaseButton variant="ghost" :disabled="refreshing" @click="dismissAppUpdate">Later</BaseButton>
         <BaseButton :loading="refreshing" @click="refreshApp">Refresh now</BaseButton>
-      </div>
+      </BaseModalActions>
     </template>
   </BaseModal>
 </template>
@@ -40,8 +40,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { BaseButton, BaseModal } from '@/components/ui'
-import { currentProjectId, flushSave } from '@/stores/canvas'
+import { BaseButton, BaseModal, BaseModalActions } from '@/components/ui'
 import { appVersionState, dismissAppUpdate } from '@/utils/appVersion'
 
 const route = useRoute()
@@ -53,14 +52,24 @@ const showBanner = computed(() => appVersionState.updateAvailable && isCanvasRou
 const currentBuildLabel = computed(() => appVersionState.currentBuildId || 'current')
 const latestBuildLabel = computed(() => appVersionState.latestBuildId || '')
 
+const flushCanvasBeforeRefresh = async () => {
+  if (!isCanvasRoute.value) return
+
+  const { useCanvasStore } = await import('@/stores/canvas')
+  const canvasStore = useCanvasStore()
+  const currentProjectId = canvasStore.currentProjectId?.value ?? canvasStore.currentProjectId
+
+  if (currentProjectId) {
+    await canvasStore.flushSave().catch(() => false)
+  }
+}
+
 const refreshApp = async () => {
   if (refreshing.value) return
 
   refreshing.value = true
   try {
-    if (isCanvasRoute.value && currentProjectId.value) {
-      await flushSave().catch(() => false)
-    }
+    await flushCanvasBeforeRefresh()
   } finally {
     window.location.reload()
   }

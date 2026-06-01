@@ -1,43 +1,22 @@
 <template>
   <div class="text-node-wrapper node-shell-wrapper" @mouseenter="showCapsule = true" @mouseleave="showCapsule = false">
-    <div class="node-meta-row" @mousedown="handleMetaMouseDown">
-      <n-icon :size="16" class="meta-icon"><TextOutline /></n-icon>
-      <span class="meta-title">Text</span>
-    </div>
+    <NodeMetaRow label="Text" :icon="TextOutline" @mousedown="handleMetaMouseDown" />
 
-    <div v-show="showNodeCapsule" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
-      <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
-        <div class="capsule-group">
-          <BaseDropdown :options="chatModelDropdownOptions" :selected-key="localChatModel" compact @select="setChatModel">
-            <button class="capsule-select">{{ displayChatModel }}</button>
-          </BaseDropdown>
-        </div>
-
-        <div class="capsule-divider" />
-
-        <div class="capsule-group">
-          <button class="capsule-icon" @click="handleDuplicate" title="Duplicate">
-            <n-icon :size="14"><CopyOutline /></n-icon>
-          </button>
-          <button class="capsule-icon" @click="handleDelete" title="Delete">
-            <n-icon :size="14"><TrashOutline /></n-icon>
-          </button>
-        </div>
-      </div>
-      <div class="capsule-inner capsule-generate" :class="{ 'capsule-inner-selected': isSelected }">
-        <button v-if="!isGenerating" class="capsule-icon capsule-icon-solid capsule-create" @click="handleGenerateText" title="Create">
-          <img :src="createIcon" alt="" class="capsule-create-graphic" />
-          <span class="capsule-create-label">Create</span>
-        </button>
-        <button v-if="!isGenerating" class="capsule-icon" @click="handleRegenerateText" title="Regenerate">
-          <n-icon :size="14"><RefreshOutline /></n-icon>
-        </button>
-        <button v-if="isGenerating" class="capsule-icon capsule-icon-solid capsule-create" @click="handleStopGeneration" title="Stop">
-          <n-icon :size="14"><CloseCircleOutline /></n-icon>
-          <span class="capsule-create-label">Stop</span>
-        </button>
-      </div>
-    </div>
+    <TextNodeCapsuleMenu
+      v-show="showNodeCapsule"
+      :capsule-style="capsuleStyle"
+      :selected="isSelected"
+      :chat-model-options="chatModelDropdownOptions"
+      :selected-chat-model="localChatModel"
+      :display-chat-model="displayChatModel"
+      :generating="isGenerating"
+      @select-chat-model="setChatModel"
+      @duplicate="handleDuplicate"
+      @delete="handleDelete"
+      @create="handleGenerateText"
+      @regenerate="handleRegenerateText"
+      @stop="handleStopGeneration"
+    />
 
     <div
       class="text-node rounded-2xl relative transition-all duration-200 overflow-visible"
@@ -48,11 +27,7 @@
       :style="moduleStyle"
     >
       <div class="module-stage" :style="stageStyle">
-        <div v-if="showProgress" class="module-progress-shell rounded-[14px]">
-          <div class="module-progress-track"></div>
-          <div class="module-progress-bar" :style="progressBarStyle"></div>
-          <div class="module-progress-label">Generating text... {{ progressPercent }}%</div>
-        </div>
+        <TextNodeGenerationProgress v-if="showProgress" :bar-style="progressBarStyle" :percent="progressPercent" />
         <div v-else class="text-area-wrap">
           <textarea
             v-model="content"
@@ -65,51 +40,34 @@
         </div>
       </div>
 
-      <Handle type="source" :position="Position.Right" id="right" :class="['node-handle-plus', 'node-handle-plus-right', { 'node-handle-plus-visible': showHandles }]" />
-      <Handle type="target" :position="Position.Left" id="left" :class="['node-handle-plus', 'node-handle-plus-left', { 'node-handle-plus-visible': showHandles }]" />
+      <NodeFlowHandles :show-handles="showHandles" />
     </div>
-    <BaseModal
+    <TextNodeErrorModal
       v-model:show="showErrorModal"
-      title="Text Module Error"
-      size="sm"
-    >
-      <p class="ui-body ui-modal-copy whitespace-pre-wrap">{{ data.error }}</p>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton @click="closeErrorModal">Close</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-    <div class="binding-status-wrap">
-      <div class="binding-status-row">
-        <div v-if="connectedTargets.length > 0" class="binding-status-pill binding-status-pill-active">
-          Linked to {{ connectedTargets.length }} module{{ connectedTargets.length > 1 ? 's' : '' }}
-        </div>
-        <div v-else class="binding-status-pill binding-status-pill-idle">
-          Not linked
-        </div>
-        <div
-          class="binding-status-pill"
-          :class="hasIncomingImage ? 'binding-status-pill-active' : 'binding-status-pill-idle'"
-        >
-          Image
-        </div>
-      </div>
-    </div>
+      :error-message="data.error"
+      @close="closeErrorModal"
+    />
+    <NodeBindingStatus :items="textInputStatusList" :module-style="moduleStyle" />
   </div>
 </template>
 
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NIcon } from 'naive-ui'
-import { BaseButton, BaseDropdown, BaseModal } from '@/components/ui'
-import { CloseCircleOutline, CopyOutline, RefreshOutline, TextOutline, TrashOutline } from '@/icons/coolicons'
-import { duplicateNode, edges, nodes, removeNode, updateNode } from '@/stores/canvas'
-import { useChat } from '@/hooks'
+import { computed, ref, watch } from 'vue'
+import { useVueFlow } from '@vue-flow/core'
+import { storeToRefs } from 'pinia'
+import NodeBindingStatus from './NodeBindingStatus.vue'
+import NodeFlowHandles from './NodeFlowHandles.vue'
+import NodeMetaRow from './NodeMetaRow.vue'
+import TextNodeCapsuleMenu from './text/TextNodeCapsuleMenu.vue'
+import TextNodeErrorModal from './text/TextNodeErrorModal.vue'
+import TextNodeGenerationProgress from './text/TextNodeGenerationProgress.vue'
+import { useTextNodeProgressState } from './text/useTextNodeProgressState.js'
+import { TextOutline } from '@/icons/coolicons'
+import { useCanvasStore } from '@/stores/canvas'
+import { pinia } from '@/stores/pinia'
+import { useChat } from '@/hooks/api/useChatApi.js'
 import { chatModelOptions, DEFAULT_CHAT_MODEL } from '@/stores/models'
 import { getErrorMessage } from '@/utils'
-import createIcon from '@/assets/create-icon.svg'
 
 const props = defineProps({
   id: String,
@@ -118,16 +76,15 @@ const props = defineProps({
 })
 
 const { updateNodeInternals } = useVueFlow()
+const canvasStore = useCanvasStore(pinia)
+const { edges, nodes } = storeToRefs(canvasStore)
+const { duplicateNode, removeNode, updateNode } = canvasStore
 
 const showCapsule = ref(false)
 const isGenerating = ref(false)
 const showErrorModal = ref(false)
 const content = ref(props.data?.content || '')
 const localChatModel = ref(props.data?.model || 'gemini-2.5-flash')
-const progressValue = ref(0)
-const showProgress = ref(false)
-const progressTimer = ref(null)
-const progressFinishTimer = ref(null)
 const isSelected = computed(() => !!props.selected || !!props.data?.selected)
 const showNodeCapsule = computed(() => !props.data?.suppressCapsule && (showCapsule.value || isSelected.value))
 const showHandles = computed(() => showCapsule.value || isSelected.value)
@@ -141,6 +98,24 @@ const incomingImageNodes = computed(() =>
     .filter((node) => node?.type === 'image' && String(node?.data?.url || node?.data?.base64 || '').trim())
 )
 const hasIncomingImage = computed(() => incomingImageNodes.value.length > 0)
+const textInputStatusList = computed(() => [
+  connectedTargets.value.length > 0
+    ? {
+        key: 'linked',
+        label: `Linked to ${connectedTargets.value.length} module${connectedTargets.value.length > 1 ? 's' : ''}`,
+        active: true
+      }
+    : {
+        key: 'not-linked',
+        label: 'Not linked',
+        active: false
+      },
+  {
+    key: 'image',
+    label: 'Image',
+    active: hasIncomingImage.value
+  }
+])
 const VISION_ANALYSIS_MODEL = 'gemini-2.5-flash'
 const IMAGE_JSON_SCHEMA = {
   summary: 'short description of the image',
@@ -195,69 +170,19 @@ watch(() => props.data?.error, (newVal) => {
 
 const stageStyle = computed(() => ({ width: '360px', height: '240px' }))
 const moduleStyle = computed(() => ({ width: '362px' }))
-const progressPercent = computed(() => Math.round(progressValue.value))
-const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
+const {
+  progressBarStyle,
+  progressPercent,
+  resetProgress,
+  showProgress
+} = useTextNodeProgressState({
+  error: () => props.data?.error,
+  loading: () => props.data?.loading
+})
 const capsuleStyle = {
   transform: 'translateX(-50%) scale(var(--node-capsule-scale, 1))',
   transformOrigin: 'top center'
 }
-
-const clearProgressTimers = () => {
-  if (progressTimer.value) {
-    clearInterval(progressTimer.value)
-    progressTimer.value = null
-  }
-  if (progressFinishTimer.value) {
-    clearTimeout(progressFinishTimer.value)
-    progressFinishTimer.value = null
-  }
-}
-
-const startProgress = () => {
-  clearProgressTimers()
-  progressValue.value = 0
-  showProgress.value = true
-  progressTimer.value = setInterval(() => {
-    if (progressValue.value < 70) progressValue.value += 3
-    else if (progressValue.value < 90) progressValue.value += 1.2
-    else if (progressValue.value < 98) progressValue.value += 0.35
-    progressValue.value = Math.min(progressValue.value, 98)
-  }, 120)
-}
-
-const finishProgress = () => {
-  clearProgressTimers()
-  progressTimer.value = setInterval(() => {
-    progressValue.value = Math.min(100, progressValue.value + 4.5)
-    if (progressValue.value >= 100) {
-      clearProgressTimers()
-      progressFinishTimer.value = setTimeout(() => {
-        showProgress.value = false
-        progressValue.value = 0
-      }, 120)
-    }
-  }, 16)
-}
-
-watch(
-  () => props.data?.loading,
-  (loadingNow) => {
-    if (loadingNow) {
-      startProgress()
-      return
-    }
-    if (props.data?.error) {
-      clearProgressTimers()
-      showProgress.value = false
-      progressValue.value = 0
-      return
-    }
-    if (showProgress.value) finishProgress()
-  },
-  { immediate: true }
-)
-
-onUnmounted(() => clearProgressTimers())
 
 const updateContent = () => {
   updateNode(props.id, { content: content.value })
@@ -359,12 +284,9 @@ const runTextGeneration = async (isRegenerate = false) => {
   }
 }
 const handleStopGeneration = () => {
-  // Clear timers and reset UI
-  clearProgressTimers()
-  showProgress.value = false
-  progressValue.value = 0
+  resetProgress()
   isGenerating.value = false
-  
+
   // Reset node state
   updateNode(props.id, { loading: false, error: 'Generation stopped' })
   window.$message?.info('Generation stopped')

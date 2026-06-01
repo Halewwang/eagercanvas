@@ -1,0 +1,183 @@
+import assert from 'node:assert/strict'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { test } from 'node:test'
+
+const workspaceSource = readFileSync(new URL('./Workspace.vue', import.meta.url), 'utf8')
+const styleSource = readFileSync(new URL('../style.css', import.meta.url), 'utf8')
+
+function readWorkspaceComponentSource(name) {
+  const path = fileURLToPath(new URL(`../components/workspace/${name}.vue`, import.meta.url))
+  return existsSync(path) ? readFileSync(path, 'utf8') : ''
+}
+
+function readWorkspaceUtilsSource(name) {
+  const path = fileURLToPath(new URL(`../utils/${name}.js`, import.meta.url))
+  return existsSync(path) ? readFileSync(path, 'utf8') : ''
+}
+
+test('workspace view delegates the main header to a focused component', () => {
+  const headerSource = readWorkspaceComponentSource('WorkspaceHeader')
+  const actionPillSource = readWorkspaceComponentSource('WorkspaceActionPill')
+
+  assert.match(workspaceSource, /import WorkspaceHeader from '@\/components\/workspace\/WorkspaceHeader\.vue'/)
+  assert.equal([...workspaceSource.matchAll(/<WorkspaceHeader\b/g)].length, 1)
+  assert.match(workspaceSource, /:title="sectionTitle"/)
+  assert.match(workspaceSource, /:description="sectionDescription"/)
+  assert.match(workspaceSource, /@back-home="router\.push\('\/'\)"/)
+  assert.match(workspaceSource, /@create-project="createBlankProject"/)
+  assert.doesNotMatch(workspaceSource, /import WorkspaceActionPill/)
+  assert.doesNotMatch(workspaceSource, /<WorkspaceActionPill[\s>]/)
+  assert.doesNotMatch(workspaceSource, /<header class="main-header"/)
+  assert.doesNotMatch(workspaceSource, /\.main-header\s*\{/)
+  assert.doesNotMatch(workspaceSource, /\.header-actions\s*\{/)
+  assert.doesNotMatch(workspaceSource, /ui-action-pill/)
+  assert.doesNotMatch(styleSource, /\.ui-action-pill(?:\s|\.|:|\{)/)
+
+  assert.match(headerSource, /import WorkspaceActionPill from '\.\/WorkspaceActionPill\.vue'/)
+  assert.match(headerSource, /<header class="main-header">/)
+  assert.match(headerSource, /\{\{ title \}\}/)
+  assert.match(headerSource, /\{\{ description \}\}/)
+  assert.match(headerSource, /@click="\$emit\('backHome'\)"/)
+  assert.match(headerSource, /@click="\$emit\('createProject'\)"/)
+  assert.match(headerSource, /defineEmits\(\['backHome', 'createProject'\]\)/)
+  assert.match(headerSource, /\.main-header\s*\{/)
+  assert.match(headerSource, /\.header-actions\s*\{/)
+  assert.match(actionPillSource, /class="workspace-action-pill"/)
+  assert.match(actionPillSource, /class="workspace-action-pill-label"/)
+  assert.match(actionPillSource, /defineEmits\(\['click'\]\)/)
+  assert.match(actionPillSource, /\.workspace-action-pill\s*\{[^}]*display:\s*inline-flex/s)
+  assert.match(actionPillSource, /\.workspace-action-pill-label\s*\{[^}]*font-size:\s*15px/s)
+})
+
+test('workspace view delegates sidebar navigation and account chrome to a focused component', () => {
+  const sidebarSource = readWorkspaceComponentSource('WorkspaceSidebar')
+
+  assert.match(workspaceSource, /import WorkspaceSidebar from '@\/components\/workspace\/WorkspaceSidebar\.vue'/)
+  assert.equal([...workspaceSource.matchAll(/<WorkspaceSidebar\b/g)].length, 1)
+  assert.match(workspaceSource, /v-model:active-section="activeSection"/)
+  assert.match(workspaceSource, /:workspace-brand="workspaceBrand"/)
+  assert.match(workspaceSource, /:nav-items="navItems"/)
+  assert.match(workspaceSource, /:is-authenticated="isAuthenticated"/)
+  assert.match(workspaceSource, /:user="user"/)
+  assert.match(workspaceSource, /:avatar-initial="avatarInitial"/)
+  assert.match(workspaceSource, /@upload-avatar="triggerAvatarUpload"/)
+  assert.match(workspaceSource, /@logout="handleLogout"/)
+  assert.doesNotMatch(workspaceSource, /<aside class="workspace-sidebar"/)
+  assert.doesNotMatch(workspaceSource, /\.workspace-sidebar\s*\{/)
+  assert.doesNotMatch(workspaceSource, /\.sidebar-account\s*\{/)
+  assert.doesNotMatch(workspaceSource, /\.account-action-btn\s*\{/)
+
+  assert.match(sidebarSource, /<aside class="workspace-sidebar">/)
+  assert.match(sidebarSource, /v-for="item in navItems"/)
+  assert.match(sidebarSource, /:class="\{ active: activeSection === item\.key \}"/)
+  assert.match(sidebarSource, /@click="\$emit\('update:activeSection', item\.key\)"/)
+  assert.match(sidebarSource, /@click="\$emit\('uploadAvatar'\)"/)
+  assert.match(sidebarSource, /@click="\$emit\('usage'\)"/)
+  assert.match(sidebarSource, /@click="\$emit\('logout'\)"/)
+  assert.match(sidebarSource, /@click="\$emit\('login'\)"/)
+  assert.match(sidebarSource, /@click="\$emit\('register'\)"/)
+  assert.match(sidebarSource, /defineEmits\(\[\s*'update:activeSection'/s)
+  assert.match(sidebarSource, /\.workspace-sidebar\s*\{/)
+  assert.match(sidebarSource, /\.account-action-btn-primary:hover\s*\{/)
+})
+
+test('workspace view delegates project and template cards to a focused component', () => {
+  const cardsGridSource = readWorkspaceComponentSource('WorkspaceCardsGrid')
+
+  assert.match(workspaceSource, /import WorkspaceCardsGrid from '@\/components\/workspace\/WorkspaceCardsGrid\.vue'/)
+  assert.equal([...workspaceSource.matchAll(/<WorkspaceCardsGrid\b/g)].length, 1)
+  assert.match(workspaceSource, /:active-section="activeSection"/)
+  assert.match(workspaceSource, /:items="sectionItems"/)
+  assert.match(workspaceSource, /:describe-item="describeItem"/)
+  assert.match(workspaceSource, /:resolve-card-icon="resolveCardIcon"/)
+  assert.match(workspaceSource, /:project-menu-options="projectMenuOptions"/)
+  assert.match(workspaceSource, /@create-project="createBlankProject"/)
+  assert.match(workspaceSource, /@primary-click="handlePrimaryClick"/)
+  assert.match(workspaceSource, /@project-menu-select="handleProjectMenuSelect"/)
+  assert.match(workspaceSource, /@preview-template="openTemplatePreview"/)
+  assert.match(workspaceSource, /@use-template="useTemplate"/)
+  assert.doesNotMatch(workspaceSource, /<section class="cards-grid"/)
+  assert.doesNotMatch(workspaceSource, /\.cards-grid\s*\{/)
+  assert.doesNotMatch(workspaceSource, /\.project-card\s*\{/)
+  assert.doesNotMatch(workspaceSource, /\.project-meta-row\s*\{/)
+
+  assert.match(cardsGridSource, /import \{ BaseButton, BaseDropdown \} from '@\/components\/ui'/)
+  assert.match(cardsGridSource, /<section class="cards-grid">/)
+  assert.match(cardsGridSource, /v-if="activeSection === 'projects'"/)
+  assert.match(cardsGridSource, /@click="\$emit\('createProject'\)"/)
+  assert.match(cardsGridSource, /v-for="item in items"/)
+  assert.match(cardsGridSource, /@click="\$emit\('primaryClick', item\)"/)
+  assert.match(cardsGridSource, /:options="projectMenuOptions\(item\)"/)
+  assert.match(cardsGridSource, /@select="\(key\) => \$emit\('projectMenuSelect', key, item\)"/)
+  assert.match(cardsGridSource, /@click="\$emit\('previewTemplate', item\)"/)
+  assert.match(cardsGridSource, /@click="\$emit\('useTemplate', item\)"/)
+  assert.match(cardsGridSource, /defineEmits\(\[\s*'createProject'/s)
+  assert.match(cardsGridSource, /\.cards-grid\s*\{/)
+  assert.match(cardsGridSource, /\.project-meta-row\s*\{/)
+})
+
+test('workspace view delegates project and template modals to a focused component', () => {
+  const modalsSource = readWorkspaceComponentSource('WorkspaceModals')
+
+  assert.match(workspaceSource, /import WorkspaceModals from '@\/components\/workspace\/WorkspaceModals\.vue'/)
+  assert.equal([...workspaceSource.matchAll(/<WorkspaceModals\b/g)].length, 1)
+  assert.match(workspaceSource, /v-model:show-rename="showRenameModal"/)
+  assert.match(workspaceSource, /v-model:show-delete="showDeleteModal"/)
+  assert.match(workspaceSource, /v-model:show-template-preview="showTemplatePreviewModal"/)
+  assert.match(workspaceSource, /v-model:rename-value="renameValue"/)
+  assert.match(workspaceSource, /:delete-target-name="deleteTargetName"/)
+  assert.match(workspaceSource, /:preview-template="previewTemplate"/)
+  assert.match(workspaceSource, /@confirm-rename="confirmRename"/)
+  assert.match(workspaceSource, /@confirm-delete="confirmDelete"/)
+  assert.match(workspaceSource, /@close-template-preview="closeTemplatePreview"/)
+  assert.match(workspaceSource, /@use-template-from-preview="useTemplateFromPreview"/)
+  assert.doesNotMatch(workspaceSource, /<BaseModal/)
+  assert.doesNotMatch(workspaceSource, /import \{ BaseButton, BaseInput, BaseModal, BaseModalActions, BaseModalCopy \}/)
+  assert.doesNotMatch(workspaceSource, /\.template-preview\s*\{/)
+  assert.doesNotMatch(workspaceSource, /\.template-preview-media\s*\{/)
+
+  assert.match(modalsSource, /import \{ computed \} from 'vue'/)
+  assert.match(modalsSource, /import \{ BaseButton, BaseInput, BaseModal, BaseModalActions, BaseModalCopy \} from '@\/components\/ui'/)
+  assert.match(modalsSource, /title="Rename project"/)
+  assert.match(modalsSource, /title="Delete project"/)
+  assert.match(modalsSource, /title="Template Preview"/)
+  assert.match(modalsSource, /v-model="renameValueModel"/)
+  assert.match(modalsSource, /BaseModalCopy>Delete "\{\{ deleteTargetName \}\}"/)
+  assert.match(modalsSource, /@click="\$emit\('confirmRename'\)"/)
+  assert.match(modalsSource, /@click="\$emit\('confirmDelete'\)"/)
+  assert.match(modalsSource, /@click="\$emit\('closeTemplatePreview'\)"/)
+  assert.match(modalsSource, /@click="\$emit\('useTemplateFromPreview'\)"/)
+  assert.match(modalsSource, /emit\('update:renameValue', value\)/)
+  assert.match(modalsSource, /\.template-preview\s*\{/)
+  assert.match(modalsSource, /\.template-preview-description\s*\{/)
+})
+
+test('workspace view delegates display copy and card derivation to workspace display helpers', () => {
+  const displaySource = readWorkspaceUtilsSource('workspaceDisplay')
+
+  assert.match(workspaceSource, /import \{[\s\S]*getWorkspaceBrand[\s\S]*getWorkspaceSectionTitle[\s\S]*getWorkspaceProjectMenuOptions[\s\S]*\} from '@\/utils\/workspaceDisplay'/)
+  assert.match(workspaceSource, /getWorkspaceBrand\(\{[\s\S]*user: user\.value[\s\S]*currentWorkspace: currentWorkspace\.value[\s\S]*\}\)/)
+  assert.match(workspaceSource, /getWorkspaceSectionTitle\(activeSection\.value\)/)
+  assert.match(workspaceSource, /getWorkspaceSectionDescription\(activeSection\.value\)/)
+  assert.match(workspaceSource, /describeWorkspaceItem\(\{[\s\S]*activeSection: activeSection\.value[\s\S]*item[\s\S]*\}\)/)
+  assert.match(workspaceSource, /getWorkspaceCardIconKey\(\{[\s\S]*activeSection: activeSection\.value[\s\S]*item[\s\S]*\}\)/)
+  assert.match(workspaceSource, /const projectMenuOptions = getWorkspaceProjectMenuOptions/)
+  assert.doesNotMatch(workspaceSource, /const formatDate =/)
+  assert.doesNotMatch(workspaceSource, /const projectMenuOptions = \(\) => \[/)
+  assert.doesNotMatch(workspaceSource, /Templates published by workspace members/)
+
+  assert.match(displaySource, /export const getWorkspaceBrand/)
+  assert.match(displaySource, /export const getWorkspaceSectionTitle/)
+  assert.match(displaySource, /export const getWorkspaceSectionDescription/)
+  assert.match(displaySource, /export const describeWorkspaceItem/)
+  assert.match(displaySource, /export const getWorkspaceCardIconKey/)
+  assert.match(displaySource, /export const getWorkspaceProjectMenuOptions/)
+})
+
+test('workspace cloud surfaces fail softly so local projects remain accessible', () => {
+  assert.match(workspaceSource, /const loadWorkspaceSurfaces = async \(\) => \{/)
+  assert.match(workspaceSource, /try\s*\{\s*await loadCurrentWorkspace\(\)\s*\}\s*catch/s)
+  assert.match(workspaceSource, /try\s*\{\s*await loadFeaturedTemplates\(\)\s*\}\s*catch/s)
+  assert.match(workspaceSource, /await initProjectsStore\(\)[\s\S]*await loadWorkspaceSurfaces\(\)/)
+})

@@ -2,27 +2,96 @@
  * Chat API | 对话 API
  */
 
-import { request, getBaseUrl, fetchWithAuth } from '@/utils'
+import { apiRequest, fetchWithApiAuth, getApiBaseUrl } from './_httpClient.js'
 
 // 对话补全
 export const chatCompletions = (data) =>
-  request({
+  apiRequest({
     url: `/chat/completions`,
     method: 'post',
     data
   })
 
 // 流式对话补全
+export const extractChatStreamDelta = (payload = {}) => {
+  const candidates = [
+    payload?.choices?.[0]?.delta?.content,
+    payload?.choices?.[0]?.message?.content,
+    payload?.choices?.[0]?.text,
+    payload?.delta?.content,
+    payload?.text
+  ]
+  const found = candidates.find((value) => typeof value === 'string' && value.length > 0)
+  return found || ''
+}
+
+export const parseChatStreamEvent = (rawEvent = '') => {
+  const data = String(rawEvent || '')
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trimStart())
+    .join('\n')
+    .trim()
+
+  if (!data || data === '[DONE]') return []
+
+  let payload
+  try {
+    payload = JSON.parse(data)
+  } catch {
+    throw new Error('Invalid chat stream event')
+  }
+
+  const errorMessage = payload?.error?.message || payload?.message
+  if (errorMessage) {
+    throw new Error(String(errorMessage))
+  }
+
+  const delta = extractChatStreamDelta(payload)
+  return delta ? [delta] : []
+}
+
+export async function* readChatCompletionStream(response) {
+  const reader = response?.body?.getReader?.()
+  if (!reader) {
+    throw new Error('Chat stream response is not readable')
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  const flushEvents = function* () {
+    let match = buffer.match(/\r?\n\r?\n/)
+    while (match?.index !== undefined) {
+      const event = buffer.slice(0, match.index)
+      buffer = buffer.slice(match.index + match[0].length)
+      yield* parseChatStreamEvent(event)
+      match = buffer.match(/\r?\n\r?\n/)
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    yield* flushEvents()
+  }
+
+  buffer += decoder.decode()
+  if (buffer.trim()) {
+    yield* parseChatStreamEvent(buffer)
+  }
+}
+
 export const streamChatCompletions = async function* (data, signal) {
-  const baseUrl = getBaseUrl()
-  
-  const response = await fetchWithAuth(`${baseUrl}/chat/completions`, {
+  const baseUrl = getApiBaseUrl()
+
+  const response = await fetchWithApiAuth(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    // Backend currently returns JSON. Force non-stream to avoid empty parsed chunks.
-    body: JSON.stringify({ ...data, stream: false }),
+    body: JSON.stringify({ ...data, stream: true }),
     signal
   })
 
@@ -38,70 +107,7 @@ export const streamChatCompletions = async function* (data, signal) {
     throw new Error(message)
   }
 
-  const extractTextFromContent = (content) => {
-    if (typeof content === 'string') return content
-    if (!Array.isArray(content)) return ''
-    for (const item of content) {
-      if (typeof item === 'string' && item.trim()) return item
-      if (typeof item?.text === 'string' && item.text.trim()) return item.text
-      if (typeof item?.content === 'string' && item.content.trim()) return item.content
-    }
-    return ''
-  }
-
-  const extractText = (payload) => {
-    if (!payload) return ''
-    if (typeof payload === 'string') return payload
-
-    const candidates = [
-      payload?.choices?.[0]?.message?.content,
-      payload?.choices?.[0]?.delta?.content,
-      payload?.choices?.[0]?.text,
-      payload?.data?.choices?.[0]?.message?.content,
-      payload?.data?.choices?.[0]?.text,
-      payload?.message,
-      payload?.result?.message,
-      payload?.result?.content,
-      payload?.data?.result?.message,
-      payload?.data?.result?.content,
-      payload?.output_text,
-      payload?.data?.output_text,
-      payload?.result?.text,
-      payload?.data?.result?.text,
-      payload?.raw
-    ]
-    for (const value of candidates) {
-      const direct = extractTextFromContent(value)
-      if (direct) return direct
-    }
-    if (Array.isArray(payload?.output)) {
-      for (const item of payload.output) {
-        const text = extractTextFromContent(item?.content)
-        if (text) return text
-        if (typeof item?.text === 'string' && item.text.trim()) return item.text
-      }
-    }
-    if (Array.isArray(payload?.data?.output)) {
-      for (const item of payload.data.output) {
-        const text = extractTextFromContent(item?.content)
-        if (text) return text
-      }
-    }
-    return ''
-  }
-
-  const contentType = String(response.headers.get('content-type') || '').toLowerCase()
-  if (contentType.includes('application/json')) {
-    const payload = await response.json()
-    const text = extractText(payload)
-
-    if (text) yield text
-    return
-  }
-
-  // Fallback for plain text response body.
-  const textBody = await response.text()
-  if (textBody && textBody.trim()) {
-    yield textBody.trim()
+  for await (const chunk of readChatCompletionStream(response)) {
+    yield chunk
   }
 }

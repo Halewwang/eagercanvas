@@ -48,19 +48,19 @@
       </div>
     </div>
     <template #footer>
-      <div class="ui-modal-actions">
+      <BaseModalActions>
         <BaseButton variant="ghost" @click="handleClose">Cancel</BaseButton>
         <BaseButton :disabled="verifying" :loading="verifying" @click="handleSubmit">
           {{ verifying ? (isRegister ? 'Registering...' : 'Signing in...') : (isRegister ? 'Verify & Register' : 'Verify & Sign In') }}
         </BaseButton>
-      </div>
+      </BaseModalActions>
     </template>
   </BaseModal>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { BaseButton, BaseInput, BaseModal } from '@/components/ui'
+import { BaseButton, BaseInput, BaseModal, BaseModalActions } from '@/components/ui'
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils'
 import { notifier } from '@/utils/notifier'

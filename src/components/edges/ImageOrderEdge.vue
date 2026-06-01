@@ -35,11 +35,14 @@
 <script setup>
 import { computed } from 'vue'
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, useVueFlow } from '@vue-flow/core'
+import { storeToRefs } from 'pinia'
 import { BaseDropdown } from '@/components/ui'
-import { edges } from '@/stores/canvas'
+import { useCanvasStore } from '@/stores/canvas'
+import { pinia } from '@/stores/pinia'
 
 // Get VueFlow instance | 获取 VueFlow 实例
 const { updateEdgeData } = useVueFlow()
+const { edges } = storeToRefs(useCanvasStore(pinia))
 
 const props = defineProps({
   id: String,

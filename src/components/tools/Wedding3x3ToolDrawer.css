@@ -1,0 +1,561 @@
+.wedding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  pointer-events: none;
+  background: transparent;
+}
+
+.wedding-float {
+  position: absolute;
+  top: 88px;
+  right: 24px;
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100vh - 228px);
+  bottom: 140px;
+  pointer-events: auto;
+}
+
+.wedding-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 100%;
+  overflow: hidden;
+  padding: 14px 14px 12px;
+  border-radius: 28px;
+  border: 1px solid rgba(143, 143, 143, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 28%),
+    rgba(12, 13, 15, 0.96);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
+}
+
+.wedding-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(143, 143, 143, 0.12);
+  background: linear-gradient(180deg, rgba(17, 18, 20, 0.98) 0%, rgba(14, 15, 18, 0.98) 100%);
+}
+
+.wedding-scroll {
+  max-height: calc(100vh - 320px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.wedding-section {
+  padding: 18px 18px 20px;
+}
+
+.wedding-section-first {
+  padding-top: 20px;
+}
+
+.wedding-section-last {
+  padding-bottom: 18px;
+}
+
+.section-divider {
+  height: 1px;
+  margin: 0 18px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.section-heading-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title {
+  color: #e7eaef;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  line-height: 1.3;
+}
+
+.section-note {
+  color: #717b88;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.section-actions,
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.input-preview-card {
+  margin-bottom: 30px;
+}
+
+.reference-controls {
+  display: grid;
+  gap: 18px;
+}
+
+.field-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.field-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.option-field,
+:deep(.option-field) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.option-field-full,
+:deep(.option-field-full) {
+  grid-column: 1 / -1;
+}
+
+:deep(.dropdown-field-root) {
+  display: block;
+  width: 100%;
+}
+
+.option-label,
+:deep(.option-label) {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: #8993a0;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+}
+
+.option-label-text,
+:deep(.option-label-text) {
+  color: inherit;
+}
+
+.required-indicator,
+:deep(.required-indicator) {
+  color: #ff8f8f;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.required-hint,
+:deep(.required-hint) {
+  color: #6f7884;
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+}
+
+.text-input,
+:deep(.field-select-trigger),
+:deep(.multi-autocomplete-shell) {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(11, 12, 15, 0.98) 0%, rgba(15, 17, 21, 0.98) 100%);
+  color: #eceff2;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.text-input {
+  padding: 0 14px;
+}
+
+.text-input:focus,
+:deep(.multi-autocomplete-shell:hover),
+:deep(.multi-autocomplete-shell-open),
+:deep(.field-select-trigger:hover),
+:deep(.field-select-trigger:focus-visible) {
+  border-color: rgba(226, 229, 235, 0.24);
+  background: rgba(17, 19, 24, 0.98);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+:deep(.autocomplete-shell) {
+  position: relative;
+}
+
+:deep(.field-select-trigger) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+:deep(.field-select-text) {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+:deep(.field-select-value) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:deep(.field-select-description) {
+  color: #7f8894;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:deep(.field-select-placeholder .field-select-value) {
+  color: #7f8894;
+}
+
+:deep(.field-select-caret) {
+  flex: 0 0 auto;
+  color: #7f8894;
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.18s ease;
+}
+
+:deep(.field-select-caret-open) {
+  transform: rotate(180deg);
+}
+
+:deep(.autocomplete-popover) {
+  margin-top: 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(14, 16, 19, 0.98);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.32);
+  overflow: hidden;
+}
+
+:deep(.autocomplete-search-row) {
+  padding: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+:deep(.autocomplete-search-input),
+:deep(.multi-autocomplete-input) {
+  width: 100%;
+  min-width: 80px;
+  border: 0;
+  background: transparent;
+  color: #eef2f6;
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+}
+
+:deep(.autocomplete-search-input::placeholder),
+:deep(.multi-autocomplete-input::placeholder) {
+  color: #77818d;
+}
+
+:deep(.autocomplete-options) {
+  display: grid;
+  gap: 4px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+}
+
+:deep(.autocomplete-option),
+:deep(.autocomplete-create-option) {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #edf1f6;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+:deep(.autocomplete-option) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+}
+
+:deep(.autocomplete-option:hover),
+:deep(.autocomplete-option-active),
+:deep(.autocomplete-create-option:hover) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:deep(.autocomplete-option-copy) {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+:deep(.autocomplete-option-label) {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+:deep(.autocomplete-option-description) {
+  color: #7f8894;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+:deep(.autocomplete-option-check) {
+  flex: 0 0 auto;
+  color: #f2f4f7;
+  font-size: 13px;
+}
+
+:deep(.autocomplete-create-option) {
+  display: block;
+  margin: 0 8px 8px;
+  padding: 11px 12px;
+  color: #cfd6df;
+}
+
+:deep(.autocomplete-empty) {
+  padding: 14px 12px 16px;
+  color: #77818d;
+  font-size: 12px;
+  text-align: center;
+}
+
+:deep(.multi-autocomplete-shell) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: text;
+}
+
+:deep(.multi-autocomplete-input) {
+  flex: 1 1 120px;
+}
+
+:deep(.field-meta-row) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+:deep(.field-meta-copy) {
+  color: #77818d;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.segment-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(9, 10, 13, 0.96);
+}
+
+.segment-button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #929ca8;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.segment-button-active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f3f5f8;
+}
+
+.input-preview-frame {
+  position: relative;
+  overflow: hidden;
+  min-height: 210px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0b0c10;
+}
+
+.input-preview-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 210px;
+  object-fit: cover;
+}
+
+.input-preview-empty {
+  min-height: 210px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #7c8591;
+  font-size: 12px;
+}
+
+:deep(.tag-pill) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(24, 27, 33, 0.95);
+  color: #eff3f8;
+  font-size: 12px;
+}
+
+:deep(.tag-pill-label) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:deep(.tag-pill-remove) {
+  border: 0;
+  background: transparent;
+  color: #9da6b2;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.preview-heading {
+  margin-top: 16px;
+}
+
+.preview-box {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(9, 10, 13, 0.96);
+  overflow: auto;
+}
+
+.preview-box-json {
+  max-height: 132px;
+}
+
+.preview-box-prompt {
+  max-height: 220px;
+}
+
+.preview-code {
+  margin: 0;
+  padding: 12px 14px;
+  color: #d6dce6;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.preview-code-prompt {
+  font-family: inherit;
+}
+
+.validation-box {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 110, 110, 0.2);
+  background: rgba(95, 17, 17, 0.18);
+}
+
+.validation-item {
+  color: #ffb7b7;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.tool-secondary-btn,
+.tool-primary-btn {
+  min-width: 96px;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+
+.tool-secondary-btn {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #d6dce6;
+}
+
+.tool-primary-btn {
+  border: 1px solid rgba(226, 229, 235, 0.18);
+  background: #f0f2f5;
+  color: #090b0d;
+  font-weight: 600;
+}
+
+.tool-primary-btn:disabled,
+.tool-secondary-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .wedding-float {
+    top: 72px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+    bottom: 128px;
+    max-height: calc(100vh - 212px);
+  }
+
+  .field-grid-two {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,3 +1,5 @@
+import { getImageRatioFromDimensions as resolveImageRatioFromDimensions } from './imageDimensions.js'
+
 export const INTERACTION_OVERLAY_DELAY_MS = 80
 export const CANVAS_PERF_LOG_STORAGE_KEY = 'eager-canvas:perf'
 
@@ -188,9 +190,264 @@ export const getFlowPointFromScreenPoint = (point = {}, viewport = {}) => {
   }
 }
 
+export const getImageRatioFromDimensions = resolveImageRatioFromDimensions
+
+export const getCanvasLibraryInsertPosition = ({
+  viewport = {},
+  shellSize = {},
+  nodeCount = 0
+} = {}) => {
+  const shellWidth = Number(shellSize?.width)
+  const shellHeight = Number(shellSize?.height)
+  const width = shellWidth > 0 ? shellWidth : 1440
+  const height = shellHeight > 0 ? shellHeight : 900
+  const count = Math.max(Math.trunc(Number(nodeCount) || 0), 0)
+  const flowPoint = getFlowPointFromScreenPoint({
+    x: Math.round(width * 0.56),
+    y: Math.round(height * 0.42)
+  }, viewport)
+
+  return {
+    x: flowPoint.x - 140 + (count % 3) * 34,
+    y: flowPoint.y - 100 + (count % 4) * 28
+  }
+}
+
+export const getCanvasNodeGridPosition = ({
+  origin = {},
+  index = 0,
+  columns = 2,
+  gapX = 120,
+  gapY = 132
+} = {}) => {
+  const safeIndex = Math.max(Math.trunc(Number(index) || 0), 0)
+  const safeColumns = Math.max(Math.trunc(Number(columns) || 2), 1)
+  const originX = Number(origin?.x) || 0
+  const originY = Number(origin?.y) || 0
+
+  return {
+    x: originX + (safeIndex % safeColumns) * (Number(gapX) || 0),
+    y: originY + Math.floor(safeIndex / safeColumns) * (Number(gapY) || 0)
+  }
+}
+
+export const getConnectMenuEdgeParams = (context = null, createdNodeId = '') => {
+  if (!context?.nodeId || !createdNodeId) return null
+
+  if (context.handleType === 'source') {
+    return {
+      source: context.nodeId,
+      target: createdNodeId,
+      sourceHandle: context.handleId || 'right',
+      targetHandle: 'left'
+    }
+  }
+
+  return {
+    source: createdNodeId,
+    target: context.nodeId,
+    sourceHandle: 'right',
+    targetHandle: context.handleId || 'left'
+  }
+}
+
+export const getLocalImageInjectPosition = ({ nodeCount = 0 } = {}) =>
+  getCanvasNodeGridPosition({
+    origin: { x: 220, y: 180 },
+    index: Math.max(Math.trunc(Number(nodeCount) || 0), 0),
+    columns: 3,
+    gapX: 120,
+    gapY: 60
+  })
+
+export const createLocalImageNodeData = ({
+  dataUrl = '',
+  file = {},
+  dimensions = {}
+} = {}) => {
+  const width = Number(dimensions?.width || 0)
+  const height = Number(dimensions?.height || 0)
+
+  return {
+    url: dataUrl,
+    base64: dataUrl,
+    fileName: file.name,
+    fileType: file.type || 'image/png',
+    label: 'Image',
+    ratio: getImageRatioFromDimensions(width, height),
+    size: width && height ? `${width}x${height}` : '',
+    loading: false,
+    error: ''
+  }
+}
+
 export const getNodeCapsuleScale = (zoom = 1) => {
   const safeZoom = Math.max(Number(zoom) || 1, 0.01)
   return Math.min(1.06, Math.max(0.82, 1 / safeZoom))
+}
+
+const OVERLAY_PADDING_X = 24
+const OVERLAY_PADDING_TOP = 22
+const OVERLAY_PADDING_BOTTOM = 22
+const NODE_SHELL_TOP_PADDING = 88
+const CONFIG_NODE_TOP_PADDING = 20
+const DEFAULT_NODE_SIZE = { width: 320, height: 240 }
+const TEXT_NODE_SIZE = { width: 362, height: 330 }
+const CONFIG_NODE_SIZES = {
+  imageConfig: { width: 300, height: 240 },
+  videoConfig: { width: 300, height: 330 },
+  llmConfig: { width: 370, height: 300 }
+}
+
+const IMAGE_RATIO_SIZES = {
+  '1:1': { width: 320, height: 320 },
+  '3:2': { width: 360, height: 240 },
+  '2:3': { width: 240, height: 360 },
+  '16:9': { width: 420, height: 236 },
+  '9:16': { width: 260, height: 462 },
+  '4:3': { width: 360, height: 270 },
+  '3:4': { width: 280, height: 373 },
+  '4:5': { width: 280, height: 350 },
+  '5:4': { width: 350, height: 280 },
+  '21:9': { width: 420, height: 180 }
+}
+
+const VIDEO_RATIO_SIZES = {
+  '16:9': { width: 420, height: 236 },
+  '9:16': { width: 260, height: 462 },
+  '7:4': { width: 420, height: 240 },
+  '4:7': { width: 240, height: 420 },
+  '4:3': { width: 360, height: 270 },
+  '3:4': { width: 280, height: 373 },
+  '1:1': { width: 320, height: 320 }
+}
+
+const parsePixelSize = (value) => {
+  const parsed = Number.parseFloat(String(value || '').replace('px', ''))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+const ratioFromSize = (sizeKey, fallback = '1:1') => {
+  const [width, height] = String(sizeKey || '').split('x').map(Number)
+  if (!width || !height) return fallback
+  const ratio = width / height
+  if (Math.abs(ratio - 1) < 0.03) return '1:1'
+  if (Math.abs(ratio - 3 / 2) < 0.04) return '3:2'
+  if (Math.abs(ratio - 2 / 3) < 0.04) return '2:3'
+  if (Math.abs(ratio - 16 / 9) < 0.04) return '16:9'
+  if (Math.abs(ratio - 9 / 16) < 0.04) return '9:16'
+  if (Math.abs(ratio - 4 / 3) < 0.04) return '4:3'
+  if (Math.abs(ratio - 3 / 4) < 0.04) return '3:4'
+  if (Math.abs(ratio - 4 / 5) < 0.04) return '4:5'
+  if (Math.abs(ratio - 5 / 4) < 0.04) return '5:4'
+  return `${width}:${height}`
+}
+
+const fitCustomRatio = (ratio, maxWidth, maxHeight, fallbackSize) => {
+  const [width, height] = String(ratio || '').split(':').map(Number)
+  if (!width || !height) return fallbackSize
+  const scale = Math.min(maxWidth / width, maxHeight / height)
+  return {
+    width: Math.round(width * scale),
+    height: Math.round(height * scale)
+  }
+}
+
+export const getMediaNodeStageSize = (node) => {
+  const data = node?.data || {}
+  if (node?.type === 'video') {
+    const ratio = data.ratio || ratioFromSize(data.size, '16:9')
+    return VIDEO_RATIO_SIZES[ratio] || VIDEO_RATIO_SIZES['16:9']
+  }
+
+  const ratio = data.ratio || ratioFromSize(data.size, '1:1')
+  return IMAGE_RATIO_SIZES[ratio] || fitCustomRatio(ratio, 420, 462, IMAGE_RATIO_SIZES['1:1'])
+}
+
+export const getFallbackNodeSize = (node) => {
+  if (node?.type === 'text') return TEXT_NODE_SIZE
+  if (node?.type === 'image' || node?.type === 'video') {
+    const stageSize = getMediaNodeStageSize(node)
+    return {
+      width: stageSize.width + 2,
+      height: stageSize.height + NODE_SHELL_TOP_PADDING + 2
+    }
+  }
+  if (CONFIG_NODE_SIZES[node?.type]) {
+    const size = CONFIG_NODE_SIZES[node.type]
+    return {
+      width: size.width,
+      height: size.height + CONFIG_NODE_TOP_PADDING
+    }
+  }
+  return DEFAULT_NODE_SIZE
+}
+
+export const getNodeSize = (node) => {
+  const candidates = [
+    node?.dimensions,
+    node?.measured,
+    {
+      width: node?.width,
+      height: node?.height
+    },
+    {
+      width: parsePixelSize(node?.style?.width),
+      height: parsePixelSize(node?.style?.height)
+    }
+  ]
+
+  const measured = candidates.find((item) => Number(item?.width) > 0 && Number(item?.height) > 0)
+  if (measured) {
+    return {
+      width: Number(measured.width),
+      height: Number(measured.height)
+    }
+  }
+
+  return getFallbackNodeSize(node)
+}
+
+export const getNodePosition = (node) => {
+  const position = node?.computedPosition || node?.positionAbsolute || node?.position || {}
+  return {
+    x: Number(position.x) || 0,
+    y: Number(position.y) || 0
+  }
+}
+
+export const getNodeViewportRect = (node, viewport = {}) => {
+  if (!node) return null
+  const zoom = Math.max(Number(viewport?.zoom) || 1, 0.01)
+  const viewportX = Number(viewport?.x) || 0
+  const viewportY = Number(viewport?.y) || 0
+  const position = getNodePosition(node)
+  const size = getNodeSize(node)
+  const left = viewportX + position.x * zoom
+  const top = viewportY + position.y * zoom
+  const width = size.width * zoom
+  const height = size.height * zoom
+
+  return {
+    left,
+    top,
+    right: left + width,
+    bottom: top + height
+  }
+}
+
+export const mergeViewportRects = (rects = []) => {
+  if (!rects.length) return null
+  const left = Math.min(...rects.map((rect) => rect.left)) - OVERLAY_PADDING_X
+  const top = Math.min(...rects.map((rect) => rect.top)) - OVERLAY_PADDING_TOP
+  const right = Math.max(...rects.map((rect) => rect.right)) + OVERLAY_PADDING_X
+  const bottom = Math.max(...rects.map((rect) => rect.bottom)) + OVERLAY_PADDING_BOTTOM
+  return {
+    left,
+    top,
+    width: right - left,
+    height: bottom - top
+  }
 }
 
 export const translateNodePositionsInPlace = (

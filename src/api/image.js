@@ -2,7 +2,7 @@
  * Image API | 图片生成 API
  */
 
-import { request } from '@/utils'
+import { apiRequest } from './_httpClient.js'
 
 const IMAGE_REQUEST_TIMEOUT_MS = 180000
 
@@ -10,7 +10,7 @@ const IMAGE_REQUEST_TIMEOUT_MS = 180000
 export const generateImage = (data, options = {}) => {
   const { requestType = 'json', endpoint = '/images/generations', timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
   
-  return request({
+  return apiRequest({
     url: endpoint,
     method: 'post',
     data,
@@ -22,7 +22,7 @@ export const generateImage = (data, options = {}) => {
 export const createImageGenerationRun = (data, options = {}) => {
   const { timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
 
-  return request({
+  return apiRequest({
     url: '/runs',
     method: 'post',
     data: {
@@ -38,7 +38,7 @@ export const createImageGenerationRun = (data, options = {}) => {
 export const getImageGenerationTask = (taskId, options = {}) => {
   const { timeout = IMAGE_REQUEST_TIMEOUT_MS, ...requestOptions } = options
 
-  return request({
+  return apiRequest({
     url: `/images/${encodeURIComponent(String(taskId || '').trim())}`,
     method: 'get',
     timeout,
@@ -51,7 +51,7 @@ export const getImageGenerationTask = (taskId, options = {}) => {
 export const removeBackground = (data, options = {}) => {
   const { timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
 
-  return request({
+  return apiRequest({
     url: '/images/remove-background',
     method: 'post',
     data,

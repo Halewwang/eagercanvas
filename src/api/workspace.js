@@ -1,28 +1,28 @@
-import { request } from '@/utils'
+import { apiRequest } from './_httpClient.js'
 
 export const apiGetCurrentWorkspace = () =>
-  request({
+  apiRequest({
     url: '/workspace/current',
     method: 'get',
     silentNetworkErrorToast: true
   })
 
 export const apiListFeaturedTemplates = () =>
-  request({
+  apiRequest({
     url: '/workspace/current/templates',
     method: 'get',
     silentNetworkErrorToast: true
   })
 
 export const apiGetProjectTemplateStatus = (projectId) =>
-  request({
+  apiRequest({
     url: `/workspace/current/projects/${projectId}/template`,
     method: 'get',
     silentNetworkErrorToast: true
   })
 
 export const apiPublishProjectTemplate = (projectId, payload) =>
-  request({
+  apiRequest({
     url: `/workspace/current/projects/${projectId}/template`,
     method: 'put',
     data: payload,
@@ -30,14 +30,14 @@ export const apiPublishProjectTemplate = (projectId, payload) =>
   })
 
 export const apiUnpublishProjectTemplate = (projectId) =>
-  request({
+  apiRequest({
     url: `/workspace/current/projects/${projectId}/template`,
     method: 'delete',
     silentNetworkErrorToast: true
   })
 
 export const apiUseSharedTemplate = (templateId) =>
-  request({
+  apiRequest({
     url: `/workspace/current/templates/${templateId}/use`,
     method: 'post',
     silentNetworkErrorToast: true

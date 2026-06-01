@@ -1,0 +1,152 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { test } from 'node:test'
+
+import {
+  cloneProjectCanvasData,
+  defaultCanvasData,
+  getProjectBaseVersion,
+  getProjectCanvasDataKey,
+  hasCanvasContent,
+  mapProjectFromApi,
+  mapProjectToApi,
+  resolveProjectThumbnail,
+  sortProjectsByActivity,
+  toProjectSummary
+} from './projectsData.js'
+
+const persistedUrl = (name) => `https://cdn.example.com/storage/v1/object/public/uploads/${name}`
+
+test('project data helpers preserve API mapping and thumbnail sanitization', () => {
+  const remoteWithCanvas = mapProjectFromApi({
+    id: 'project-1',
+    name: 'Remote Project',
+    thumbnail_url: 'https://example.com/thumb.png',
+    created_at: '2026-05-01T00:00:00.000Z',
+    updated_at: '2026-05-02T00:00:00.000Z',
+    canvas_json: null
+  })
+
+  assert.deepEqual(remoteWithCanvas, {
+    id: 'project-1',
+    name: 'Remote Project',
+    thumbnail: 'https://example.com/thumb.png',
+    createdAt: '2026-05-01T00:00:00.000Z',
+    updatedAt: '2026-05-02T00:00:00.000Z',
+    lastOpenedAt: null,
+    serverUpdatedAt: '2026-05-02T00:00:00.000Z',
+    readState: 'remote',
+    canvasData: { ...defaultCanvasData }
+  })
+
+  assert.equal(
+    mapProjectFromApi({
+      id: 'project-2',
+      name: 'Remote Without Canvas',
+      created_at: '2026-05-01T00:00:00.000Z',
+      updated_at: '2026-05-02T00:00:00.000Z'
+    }).canvasData,
+    undefined
+  )
+
+  assert.deepEqual(mapProjectToApi({
+    name: 'Local Project',
+    canvasData: { nodes: [{ id: 'n1' }] },
+    thumbnail: persistedUrl('thumb.png')
+  }), {
+    name: 'Local Project',
+    canvasData: { nodes: [{ id: 'n1' }] },
+    thumbnailUrl: persistedUrl('thumb.png')
+  })
+
+  assert.equal(mapProjectToApi({ name: 'Draft', thumbnail: 'blob:local-preview' }).thumbnailUrl, null)
+  assert.equal(mapProjectToApi({ name: 'Remote Temporary', thumbnail: 'https://example.com/tmp.png' }).thumbnailUrl, null)
+})
+
+test('project data helpers preserve canvas cloning, summary, content, and version behavior', () => {
+  const canvasData = {
+    nodes: [{ id: 'node-1', data: { text: 'hello' } }],
+    edges: [],
+    viewport: { x: 1, y: 2, zoom: 0.7 }
+  }
+  const cloned = cloneProjectCanvasData(canvasData)
+
+  assert.deepEqual(cloned, canvasData)
+  assert.notEqual(cloned, canvasData)
+  assert.notEqual(cloned.nodes, canvasData.nodes)
+  assert.equal(getProjectCanvasDataKey(canvasData), JSON.stringify(canvasData))
+  assert.equal(hasCanvasContent({ nodes: [] }), false)
+  assert.equal(hasCanvasContent({ groups: [{ id: 'group-1' }] }), true)
+  assert.equal(getProjectBaseVersion({ serverUpdatedAt: 'server', updatedAt: 'local' }, 'fallback'), 'server')
+  assert.equal(getProjectBaseVersion({ updatedAt: 'local' }, 'fallback'), 'fallback')
+  assert.equal(getProjectBaseVersion({ updatedAt: 'local' }), 'local')
+  assert.equal(getProjectBaseVersion({}), null)
+
+  assert.deepEqual(toProjectSummary({
+    id: 'project-1',
+    name: 'Untitled',
+    thumbnail: '',
+    serverUpdatedAt: '2026-05-02T00:00:00.000Z'
+  }, '2026-05-03T00:00:00.000Z'), {
+    id: 'project-1',
+    name: 'Untitled',
+    thumbnail: '',
+    createdAt: '2026-05-03T00:00:00.000Z',
+    updatedAt: '2026-05-03T00:00:00.000Z',
+    lastOpenedAt: null,
+    serverUpdatedAt: '2026-05-02T00:00:00.000Z'
+  })
+})
+
+test('project thumbnail resolution keeps image priority and ignores transient media', () => {
+  const imageUrl = persistedUrl('image-new.png')
+  const olderImageUrl = persistedUrl('image-old.png')
+  const videoUrl = persistedUrl('video-new.mp4')
+
+  assert.equal(resolveProjectThumbnail({
+    nodes: [
+      { type: 'image', data: { url: olderImageUrl, updatedAt: '2026-05-01T00:00:00.000Z' } },
+      { type: 'video', data: { url: videoUrl, updatedAt: '2026-05-04T00:00:00.000Z' } },
+      { type: 'image', data: { url: 'blob:local-preview', updatedAt: '2026-05-05T00:00:00.000Z' } },
+      { type: 'image', data: { url: imageUrl, updatedAt: '2026-05-03T00:00:00.000Z' } }
+    ]
+  }, 'current-thumb'), imageUrl)
+
+  assert.equal(resolveProjectThumbnail({
+    nodes: [
+      { type: 'image', data: { url: 'https://example.com/tmp.png', updatedAt: '2026-05-05T00:00:00.000Z' } },
+      { type: 'video', data: { url: videoUrl, updatedAt: '2026-05-04T00:00:00.000Z' } }
+    ]
+  }, 'current-thumb'), videoUrl)
+
+  assert.equal(resolveProjectThumbnail({ nodes: [] }, 'current-thumb'), 'current-thumb')
+})
+
+test('project activity sorting ignores last-opened timestamps', () => {
+  const sorted = sortProjectsByActivity([
+    {
+      id: 'old-activity',
+      createdAt: '2026-05-01T00:00:00.000Z',
+      updatedAt: '2026-05-01T00:00:00.000Z',
+      lastOpenedAt: '2026-06-01T00:00:00.000Z'
+    },
+    {
+      id: 'new-activity',
+      createdAt: '2026-05-02T00:00:00.000Z',
+      updatedAt: '2026-05-02T00:00:00.000Z',
+      lastOpenedAt: '2026-05-02T00:00:00.000Z'
+    }
+  ])
+
+  assert.deepEqual(sorted.map((item) => item.id), ['new-activity', 'old-activity'])
+})
+
+test('projects store delegates pure project data helpers to projectsData', () => {
+  const source = readFileSync(new URL('./projects.js', import.meta.url), 'utf8')
+
+  assert.match(source, /from '\.\/projectsData\.js'/)
+  assert.doesNotMatch(source, /const defaultCanvasData =/)
+  assert.doesNotMatch(source, /const mapProjectFromApi =/)
+  assert.doesNotMatch(source, /const resolveProjectThumbnail =/)
+  assert.doesNotMatch(source, /const sortProjectsByActivity =/)
+})

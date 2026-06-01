@@ -126,7 +126,12 @@
 
 <script setup>
 import { Teleport, computed, ref, watch } from 'vue'
-import { useVideoGeneration } from '@/hooks/useApi'
+import { useVideoGeneration } from '@/hooks/api/useVideoApi.js'
+import {
+  createVideoEnhanceApplyPayload,
+  createVideoEnhancePendingPayload,
+  runVideoEnhancement
+} from './VideoEnhanceGeneration.js'
 
 const props = defineProps({
   show: Boolean,
@@ -184,51 +189,6 @@ const compressionOptions = [
 
 const ratioLabel = computed(() => String(props.ratio || '16:9').trim() || '16:9')
 
-const parseRatio = (ratioValue = '16:9') => {
-  const [width, height] = String(ratioValue || '16:9').split(':').map(Number)
-  if (!width || !height) return { width: 16, height: 9 }
-  return { width, height }
-}
-
-const buildResolutionSize = (ratioValue, resolutionValue) => {
-  const longEdgeMap = {
-    '1080p': 1920,
-    '2k': 2560,
-    '4k': 3840
-  }
-
-  const { width, height } = parseRatio(ratioValue)
-  const longEdge = longEdgeMap[String(resolutionValue || '4k').trim().toLowerCase()] || 3840
-  const ratio = width / height
-
-  if (ratio >= 1) {
-    return {
-      width: longEdge,
-      height: Math.max(2, Math.round(longEdge / ratio / 2) * 2)
-    }
-  }
-
-  return {
-    width: Math.max(2, Math.round(longEdge * ratio / 2) * 2),
-    height: longEdge
-  }
-}
-
-const buildOutput = () => {
-  const targetSize = buildResolutionSize(ratioLabel.value, selectedResolution.value)
-  const frameRate = Number(selectedFrameRate.value)
-
-  return {
-    frameRate: Number.isFinite(frameRate) && frameRate > 0 ? frameRate : 30,
-    audioTransfer: 'Copy',
-    audioCodec: 'AAC',
-    videoEncoder: selectedEncoder.value,
-    videoProfile: 'Main',
-    dynamicCompressionLevel: selectedCompression.value,
-    resolution: targetSize
-  }
-}
-
 watch(
   () => props.videoUrl,
   (value) => {
@@ -259,46 +219,27 @@ const applyEnhancement = async () => {
 
   applying.value = true
   try {
-    const payload = {
-      tool: 'enhance',
-      file: videoSource.value,
+    const controls = {
       model: selectedModel.value,
-      filters: [{ model: selectedModel.value }],
-      output: buildOutput()
+      resolution: selectedResolution.value,
+      frameRate: selectedFrameRate.value,
+      videoEncoder: selectedEncoder.value,
+      dynamicCompressionLevel: selectedCompression.value
     }
 
-    emit('pending', {
-      targetMode: 'new',
-      fileType: 'video/mp4',
-      meta: {
-        tool: 'video-enhance',
-        model: selectedModel.value,
-        resolution: selectedResolution.value,
-        frameRate: selectedFrameRate.value,
-        videoEncoder: selectedEncoder.value,
-        dynamicCompressionLevel: selectedCompression.value
-      }
+    emit('pending', createVideoEnhancePendingPayload(controls))
+
+    const nextUrl = await runVideoEnhancement({
+      videoGen,
+      ...controls,
+      file: videoSource.value,
+      ratio: ratioLabel.value
     })
 
-    const result = await videoGen.generate(payload)
-    const nextUrl = String(result?.url || result?.video_url || '').trim()
-    if (!nextUrl) {
-      throw new Error('No video output from provider')
-    }
-
-    emit('apply', {
-      targetMode: 'new',
-      url: nextUrl,
-      fileType: 'video/mp4',
-      meta: {
-        tool: 'video-enhance',
-        model: selectedModel.value,
-        resolution: selectedResolution.value,
-        frameRate: selectedFrameRate.value,
-        videoEncoder: selectedEncoder.value,
-        dynamicCompressionLevel: selectedCompression.value
-      }
-    })
+    emit('apply', createVideoEnhanceApplyPayload({
+      ...controls,
+      url: nextUrl
+    }))
   } catch (error) {
     emit('error', {
       message: error?.message || 'Video enhancement failed'
@@ -310,283 +251,4 @@ const applyEnhancement = async () => {
 }
 </script>
 
-<style scoped>
-.multi-angle-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  pointer-events: none;
-  background: transparent;
-}
-
-.multi-angle-float {
-  position: absolute;
-  top: 88px;
-  right: 24px;
-  width: min(468px, calc(100vw - 48px));
-  max-height: calc(100vh - 112px);
-  pointer-events: auto;
-}
-
-.multi-angle-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  max-height: 100%;
-  overflow: hidden;
-  padding: 16px 16px 14px;
-  border-radius: 24px;
-  border: 1px solid rgba(143, 143, 143, 0.14);
-  background: rgba(12, 13, 15, 0.96);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
-}
-
-.multi-angle-panel {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-  border-radius: 20px;
-  border: 1px solid rgba(143, 143, 143, 0.12);
-  background: #111214;
-}
-
-.multi-angle-panel-scroll {
-  max-height: calc(100vh - 226px);
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-
-.multi-angle-section {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 16px 16px 18px;
-  background: transparent;
-}
-
-.multi-angle-section-first {
-  padding-top: 18px;
-}
-
-.multi-angle-section-last {
-  padding-bottom: 16px;
-}
-
-.section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.section-title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(219, 223, 230, 0.84);
-}
-
-.section-divider {
-  height: 1px;
-  margin: 0 16px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.video-preview-card {
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(24, 27, 32, 0.96), rgba(10, 12, 16, 0.98));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 14px;
-}
-
-.video-preview-frame {
-  overflow: hidden;
-  border-radius: 18px;
-  aspect-ratio: 16 / 9;
-  background: #060709;
-}
-
-.video-preview-media {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.video-preview-empty {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(214, 219, 226, 0.46);
-  font-size: 13px;
-}
-
-.input-options-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.option-field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.option-label {
-  font-size: 12px;
-  color: rgba(210, 214, 221, 0.72);
-}
-
-.option-select {
-  width: 100%;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: #eff2f6;
-  padding: 10px 12px;
-  font-size: 13px;
-  outline: none;
-}
-
-.compact-select {
-  min-width: 148px;
-}
-
-.manual-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.setting-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.manual-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #eef1f5;
-}
-
-.manual-help {
-  font-size: 12px;
-  color: rgba(205, 210, 219, 0.6);
-}
-
-.meta-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.camera-meta-pill {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.camera-meta-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(195, 200, 209, 0.58);
-}
-
-.camera-meta-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: #eff2f6;
-}
-
-.drawer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-top: 14px;
-}
-
-.footer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.tool-secondary-btn,
-.tool-primary-btn {
-  border: 0;
-  border-radius: 999px;
-  padding: 11px 18px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.18s ease, opacity 0.18s ease;
-}
-
-.tool-secondary-btn {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(235, 239, 245, 0.82);
-}
-
-.tool-primary-btn {
-  background: linear-gradient(135deg, #f3f5f8, #d6dae2);
-  color: #0a0b0f;
-}
-
-.tool-primary-btn:disabled,
-.tool-secondary-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.52;
-}
-
-@media (max-width: 720px) {
-  .multi-angle-float {
-    top: 72px;
-    right: 12px;
-    width: min(468px, calc(100vw - 24px));
-    max-height: calc(100vh - 88px);
-  }
-
-  .multi-angle-shell {
-    padding: 12px 12px 10px;
-    border-radius: 20px;
-  }
-
-  .input-options-grid,
-  .meta-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .setting-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .compact-select {
-    width: 100%;
-  }
-
-  .multi-angle-panel-scroll {
-    max-height: calc(100vh - 182px);
-  }
-}
-</style>
+<style scoped src="./VideoEnhanceToolDrawer.css"></style>

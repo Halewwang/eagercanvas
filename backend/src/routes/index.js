@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { authRequired } from '../middleware/auth.js'
 import { asyncHandler } from '../utils/http.js'
-import { createChatCompletion, createImageGeneration, createVideoGeneration, getImageTask, getVideoTask } from '../services/runs.service.js'
+import { createChatCompletion, createImageGeneration, createVideoGeneration, getImageTask, getVideoTask, streamChatCompletion } from '../services/runs.service.js'
 import { providerRemoveBackground } from '../services/provider.service.js'
 import { resolveActiveUserServiceCredential } from '../services/service-access.service.js'
 import { adminRouter } from './admin.routes.js'
@@ -33,6 +33,18 @@ apiRouter.use('/upload', uploadRouter)
 
 // Compatibility endpoints for existing frontend hooks
 apiRouter.post('/chat/completions', authRequired, asyncHandler(async (req, res) => {
+  if (req.body?.stream) {
+    res.status(200)
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    await streamChatCompletion(req.user.id, req.body, {
+      onEvent: (event) => res.write(event)
+    })
+    res.end()
+    return
+  }
+
   const run = await createChatCompletion(req.user.id, req.body)
   res.json(run.result)
 }))

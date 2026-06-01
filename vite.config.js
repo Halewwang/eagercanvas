@@ -50,7 +50,10 @@ export default defineConfig({
   plugins: [vue(), appVersionPlugin()],
   define: {
     __APP_BUILD_ID__: JSON.stringify(buildInfo.buildId),
-    __APP_BUILD_TIME__: JSON.stringify(buildInfo.builtAt)
+    __APP_BUILD_TIME__: JSON.stringify(buildInfo.builtAt),
+    __VUE_OPTIONS_API__: false,
+    __VUE_PROD_DEVTOOLS__: false,
+    __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false
   },
   resolve: {
     alias: {
@@ -66,8 +69,26 @@ export default defineConfig({
     }
   },
   build: {
+    minify: 'terser',
+    modulePreload: {
+      polyfill: false
+    },
+    terserOptions: {
+      module: true,
+      compress: {
+        passes: 3,
+        pure_funcs: ['console.debug']
+      },
+      mangle: {
+        toplevel: true
+      },
+      format: {
+        comments: false
+      }
+    },
     rollupOptions: {
       output: {
+        hoistTransitiveImports: false,
         manualChunks
       }
     }

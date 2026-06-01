@@ -1,7 +1,7 @@
-import { request } from '@/utils'
+import { apiRequest } from './_httpClient.js'
 
 export const getMediaAssets = (params = {}) =>
-  request({
+  apiRequest({
     url: '/media-library/assets',
     method: 'get',
     params,
@@ -9,7 +9,7 @@ export const getMediaAssets = (params = {}) =>
   })
 
 export const getGenerationHistory = (params = {}) =>
-  request({
+  apiRequest({
     url: '/media-library/history',
     method: 'get',
     params,

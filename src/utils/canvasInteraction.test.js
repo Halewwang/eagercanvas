@@ -3,15 +3,24 @@ import test from 'node:test'
 
 import {
   createCanvasContentSnapshot,
+  getCanvasLibraryInsertPosition,
+  getCanvasNodeGridPosition,
+  getConnectMenuEdgeParams,
+  getLocalImageInjectPosition,
   getGroupBodyHitRects,
   findGroupBodyDragTarget,
   getFlowPointFromScreenPoint,
   getGroupDragListenerNames,
   getGroupBoxPointerEvents,
   getInteractionOverlayDelay,
+  getImageRatioFromDimensions,
+  createLocalImageNodeData,
   getNodeCapsuleScale,
+  getNodeSize,
+  getNodeViewportRect,
   getOverlayScheduleMode,
   getSelectedGroupGripPointerAction,
+  mergeViewportRects,
   translateViewportRect,
   shouldAcceptGroupDragMove,
   shouldMeasureGroupRects,
@@ -171,6 +180,160 @@ test('screen point converts to flow point using viewport pan and zoom', () => {
     { x: 300, y: 180 },
     { x: -100, y: -60, zoom: 2 }
   ), { x: 200, y: 120 })
+})
+
+test('canvas library insert position targets the visible workspace with cyclic node offsets', () => {
+  assert.deepEqual(getCanvasLibraryInsertPosition({
+    viewport: { x: -100, y: -60, zoom: 2 },
+    shellSize: { width: 1000, height: 700 },
+    nodeCount: 5
+  }), { x: 258, y: 105 })
+
+  assert.deepEqual(getCanvasLibraryInsertPosition({
+    viewport: {},
+    shellSize: { width: 0, height: 0 },
+    nodeCount: 0
+  }), { x: 666, y: 278 })
+})
+
+test('canvas node grid position keeps menu-created nodes in the existing staggered layout', () => {
+  assert.deepEqual(getCanvasNodeGridPosition({
+    origin: { x: 50, y: 80 },
+    index: 3
+  }), { x: 170, y: 212 })
+
+  assert.deepEqual(getCanvasNodeGridPosition({
+    origin: { x: 0, y: 0 },
+    index: 4,
+    gapX: 88,
+    gapY: 118
+  }), { x: 0, y: 236 })
+})
+
+test('connect menu edge params preserve source and target handle direction', () => {
+  assert.deepEqual(getConnectMenuEdgeParams({
+    nodeId: 'source-node',
+    handleId: 'right-output',
+    handleType: 'source'
+  }, 'created-node'), {
+    source: 'source-node',
+    target: 'created-node',
+    sourceHandle: 'right-output',
+    targetHandle: 'left'
+  })
+
+  assert.deepEqual(getConnectMenuEdgeParams({
+    nodeId: 'target-node',
+    handleId: 'left-input',
+    handleType: 'target'
+  }, 'created-node'), {
+    source: 'created-node',
+    target: 'target-node',
+    sourceHandle: 'right',
+    targetHandle: 'left-input'
+  })
+
+  assert.equal(getConnectMenuEdgeParams(null, 'created-node'), null)
+})
+
+test('local image injection position keeps the existing three-column stagger', () => {
+  assert.deepEqual(getLocalImageInjectPosition({ nodeCount: 0 }), { x: 220, y: 180 })
+  assert.deepEqual(getLocalImageInjectPosition({ nodeCount: 4 }), { x: 340, y: 240 })
+  assert.deepEqual(getLocalImageInjectPosition({ nodeCount: 8 }), { x: 460, y: 300 })
+})
+
+test('local image node data preserves injected file metadata and inferred dimensions', () => {
+  assert.deepEqual(createLocalImageNodeData({
+    dataUrl: 'data:image/png;base64,abc',
+    file: { name: 'source.png', type: 'image/png' },
+    dimensions: { width: 1920, height: 1080 }
+  }), {
+    url: 'data:image/png;base64,abc',
+    base64: 'data:image/png;base64,abc',
+    fileName: 'source.png',
+    fileType: 'image/png',
+    label: 'Image',
+    ratio: '16:9',
+    size: '1920x1080',
+    loading: false,
+    error: ''
+  })
+
+  assert.equal(createLocalImageNodeData({
+    dataUrl: 'data:image/jpeg;base64,abc',
+    file: { name: 'fallback.jpg', type: '' },
+    dimensions: { width: 0, height: 720 }
+  }).fileType, 'image/png')
+})
+
+test('image dimensions map to existing canvas ratio keys before falling back to custom dimensions', () => {
+  assert.equal(getImageRatioFromDimensions(2048, 2048), '1:1')
+  assert.equal(getImageRatioFromDimensions(1920, 1080), '16:9')
+  assert.equal(getImageRatioFromDimensions(1080, 1920), '9:16')
+  assert.equal(getImageRatioFromDimensions(1500, 1000), '3:2')
+  assert.equal(getImageRatioFromDimensions(1000, 1500), '2:3')
+  assert.equal(getImageRatioFromDimensions(1200, 800), '3:2')
+  assert.equal(getImageRatioFromDimensions(997, 333), '997:333')
+  assert.equal(getImageRatioFromDimensions(0, 333), '1:1')
+})
+
+test('node viewport rect helper preserves canvas fallback sizing', () => {
+  assert.deepEqual(getNodeSize({ type: 'text' }), { width: 362, height: 330 })
+  assert.deepEqual(getNodeSize({
+    type: 'image',
+    data: { ratio: '16:9' }
+  }), { width: 422, height: 326 })
+  assert.deepEqual(getNodeSize({
+    type: 'image',
+    data: { ratio: '7:3' }
+  }), { width: 422, height: 270 })
+  assert.deepEqual(getNodeSize({
+    type: 'videoConfig'
+  }), { width: 300, height: 350 })
+  assert.deepEqual(getNodeSize({
+    type: 'image',
+    dimensions: { width: 512, height: 384 },
+    data: { ratio: '1:1' }
+  }), { width: 512, height: 384 })
+})
+
+test('node viewport rect helper converts flow nodes into screen rects', () => {
+  assert.deepEqual(getNodeViewportRect({
+    type: 'image',
+    position: { x: 50, y: 30 },
+    data: { ratio: '16:9' }
+  }, { x: -100, y: 20, zoom: 2 }), {
+    left: 0,
+    top: 80,
+    right: 844,
+    bottom: 732
+  })
+
+  assert.deepEqual(getNodeViewportRect({
+    type: 'text',
+    computedPosition: { x: 10, y: 20 }
+  }, { x: 5, y: -10, zoom: 0.5 }), {
+    left: 10,
+    top: 0,
+    right: 191,
+    bottom: 165
+  })
+
+  assert.equal(getNodeViewportRect(null, { x: 0, y: 0, zoom: 1 }), null)
+})
+
+test('overlay rect merging preserves canvas overlay padding', () => {
+  assert.deepEqual(mergeViewportRects([
+    { left: 100, top: 80, right: 200, bottom: 180 },
+    { left: 240, top: 120, right: 300, bottom: 260 }
+  ]), {
+    left: 76,
+    top: 58,
+    width: 248,
+    height: 224
+  })
+
+  assert.equal(mergeViewportRects([]), null)
 })
 
 test('group drag listens to pointer and mouse events for fallback movement', () => {

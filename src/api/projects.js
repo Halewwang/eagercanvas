@@ -1,4 +1,4 @@
-import { request } from '@/utils'
+import { apiRequest } from './_httpClient.js'
 
 const transientStatuses = new Set([408, 425, 429, 500, 502, 503, 504])
 
@@ -24,7 +24,7 @@ const withRetry = async (fn, { retries = 2, delayMs = 250 } = {}) => {
 }
 
 export const apiListProjects = () =>
-  request({
+  apiRequest({
     url: '/projects',
     method: 'get',
     silentNetworkErrorToast: true
@@ -32,7 +32,7 @@ export const apiListProjects = () =>
 
 export const apiCreateProject = (payload) =>
   withRetry(() =>
-    request({
+    apiRequest({
       url: '/projects',
       method: 'post',
       data: payload,
@@ -41,7 +41,7 @@ export const apiCreateProject = (payload) =>
   )
 
 export const apiGetProject = (id) =>
-  request({
+  apiRequest({
     url: `/projects/${id}`,
     method: 'get',
     silentNetworkErrorToast: true
@@ -49,7 +49,7 @@ export const apiGetProject = (id) =>
 
 export const apiPatchProject = (id, payload) =>
   withRetry(() =>
-    request({
+    apiRequest({
       url: `/projects/${id}`,
       method: 'patch',
       data: payload,
@@ -59,7 +59,7 @@ export const apiPatchProject = (id, payload) =>
 
 export const apiDeleteProject = (id) =>
   withRetry(() =>
-    request({
+    apiRequest({
       url: `/projects/${id}`,
       method: 'delete',
       silentNetworkErrorToast: true

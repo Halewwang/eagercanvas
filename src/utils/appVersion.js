@@ -17,6 +17,8 @@ const state = reactive({
 let pollTimer = null
 let started = false
 
+const shouldLogVersionCheckFailure = () => import.meta.env?.PROD === true
+
 const readDismissedBuildId = () => {
   try {
     return sessionStorage.getItem(DISMISSED_KEY) || ''
@@ -73,7 +75,9 @@ export const checkForAppUpdate = async () => {
     const manifest = await fetchVersionManifest()
     return applyManifest(manifest)
   } catch (error) {
-    console.warn('App version check skipped:', error?.message || error)
+    if (shouldLogVersionCheckFailure()) {
+      console.warn('App version check skipped:', error?.message || error)
+    }
     return state.updateAvailable
   } finally {
     state.checking = false

@@ -1,14 +1,14 @@
-import { request } from '@/utils'
+import { apiRequest } from './_httpClient.js'
 
 export const sendLoginCode = (email) =>
-  request({
+  apiRequest({
     url: '/auth/send-code',
     method: 'post',
     data: { email }
   })
 
 export const verifyLoginCode = (email, code) =>
-  request({
+  apiRequest({
     url: '/auth/verify-code',
     method: 'post',
     data: { email, code },
@@ -16,14 +16,14 @@ export const verifyLoginCode = (email, code) =>
   })
 
 export const sendRegisterCode = (email) =>
-  request({
+  apiRequest({
     url: '/auth/register/send-code',
     method: 'post',
     data: { email }
   })
 
 export const verifyRegisterCode = (email, code, displayName) =>
-  request({
+  apiRequest({
     url: '/auth/register/verify-code',
     method: 'post',
     data: { email, code, displayName },
@@ -31,27 +31,27 @@ export const verifyRegisterCode = (email, code, displayName) =>
   })
 
 export const refreshSession = () =>
-  request({
+  apiRequest({
     url: '/auth/refresh',
     method: 'post',
     withCredentials: true
   })
 
 export const logoutSession = () =>
-  request({
+  apiRequest({
     url: '/auth/logout',
     method: 'post',
     withCredentials: true
   })
 
 export const getMe = () =>
-  request({
+  apiRequest({
     url: '/auth/me',
     method: 'get'
   })
 
 export const patchProfile = (payload) =>
-  request({
+  apiRequest({
     url: '/auth/profile',
     method: 'patch',
     data: payload

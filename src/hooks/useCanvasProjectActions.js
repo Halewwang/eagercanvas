@@ -1,5 +1,5 @@
-import { computed, ref } from 'vue'
 import { deleteProject, duplicateProject, projects, renameProject } from '@/stores/projects'
+import { useCanvasProjectUiState } from './useCanvasProjectUiState.js'
 
 export const useCanvasProjectActions = ({
   route,
@@ -10,48 +10,39 @@ export const useCanvasProjectActions = ({
   unpublishProjectTemplate,
   currentWorkspace
 }) => {
-  const showRenameModal = ref(false)
-  const showDeleteModal = ref(false)
-  const showShareModal = ref(false)
-  const renameValue = ref('')
-  const isTemplatePublished = ref(false)
-  const shareTemplateName = ref('')
-  const shareTemplateDescription = ref('')
-  const shareDialogLoading = ref(false)
-  const shareActionLoading = ref(false)
-  const lastPublishedAt = ref('')
-
-  const projectName = computed(() => {
-    const project = projects.value.find((item) => item.id === route.params.id)
-    return project?.name || 'Untitled'
+  const uiState = useCanvasProjectUiState({
+    route,
+    projects,
+    currentWorkspace
   })
-
-  const projectOptions = [
-    { label: 'Rename', key: 'rename' },
-    { label: 'Duplicate', key: 'duplicate' },
-    { label: 'Delete', key: 'delete' }
-  ]
+  const {
+    applySharedTemplateRemoval,
+    applySharedTemplateSave,
+    applyShareTemplateStatus,
+    closeDeleteModal,
+    closeRenameModal,
+    finishShareDialog,
+    isTemplatePublished,
+    openDeleteModal,
+    openRenameModal,
+    openShareDialog: openShareModal,
+    projectName,
+    renameValue,
+    setShareActionLoading,
+    shareTemplateDescription,
+    shareTemplateName
+  } = uiState
 
   const openShareDialog = async () => {
-    shareDialogLoading.value = true
-    shareTemplateName.value = projectName.value
-    shareTemplateDescription.value = ''
-    lastPublishedAt.value = ''
-    isTemplatePublished.value = false
-    showShareModal.value = true
+    openShareModal()
 
     try {
       const template = await getProjectTemplateStatus(route.params.id)
-      if (template) {
-        isTemplatePublished.value = template.isPublished
-        shareTemplateName.value = template.title || projectName.value
-        shareTemplateDescription.value = template.description || ''
-        lastPublishedAt.value = template.updatedAt || template.publishedAt || ''
-      }
+      applyShareTemplateStatus(template)
     } catch {
       // Keep fallback values when template status is unavailable.
     } finally {
-      shareDialogLoading.value = false
+      finishShareDialog()
     }
   }
 
@@ -59,18 +50,17 @@ export const useCanvasProjectActions = ({
     const projectId = route.params.id
     if (!projectId) return
 
-    shareActionLoading.value = true
+    setShareActionLoading(true)
     try {
       const wasPublished = isTemplatePublished.value
       const template = await publishProjectTemplate(projectId, {
         title: shareTemplateName.value || projectName.value || 'Untitled',
         description: shareTemplateDescription.value || ''
       })
-      isTemplatePublished.value = !!template?.isPublished
-      lastPublishedAt.value = template?.updatedAt || template?.publishedAt || ''
+      applySharedTemplateSave(template)
       notifier.success(wasPublished ? 'Template updated' : 'Template published to workspace')
     } finally {
-      shareActionLoading.value = false
+      setShareActionLoading(false)
     }
   }
 
@@ -78,14 +68,13 @@ export const useCanvasProjectActions = ({
     const projectId = route.params.id
     if (!projectId) return
 
-    shareActionLoading.value = true
+    setShareActionLoading(true)
     try {
       await unpublishProjectTemplate(projectId)
-      isTemplatePublished.value = false
-      lastPublishedAt.value = ''
+      applySharedTemplateRemoval()
       notifier.success('Template unpublished')
     } finally {
-      shareActionLoading.value = false
+      setShareActionLoading(false)
     }
   }
 
@@ -93,8 +82,7 @@ export const useCanvasProjectActions = ({
     const projectId = route.params.id
     switch (key) {
       case 'rename':
-        renameValue.value = projectName.value
-        showRenameModal.value = true
+        openRenameModal()
         break
       case 'duplicate': {
         if (!projectId) return
@@ -108,7 +96,7 @@ export const useCanvasProjectActions = ({
         break
       }
       case 'delete':
-        showDeleteModal.value = true
+        openDeleteModal()
         break
     }
   }
@@ -119,38 +107,26 @@ export const useCanvasProjectActions = ({
       await renameProject(projectId, renameValue.value.trim())
       notifier.success('Project renamed')
     }
-    showRenameModal.value = false
+    closeRenameModal()
   }
 
   const confirmDelete = async () => {
     const projectId = route.params.id
     if (!projectId) return
-    showDeleteModal.value = false
+    closeDeleteModal()
     await deleteProject(projectId)
     notifier.success('Project deleted')
     router.push('/')
   }
 
   return {
+    ...uiState,
     confirmDelete,
     confirmRename,
     handleProjectAction,
-    isTemplatePublished,
-    lastPublishedAt,
     openShareDialog,
-    projectName,
-    projectOptions,
-    renameValue,
     removeSharedTemplate,
-    saveSharedTemplate,
-    shareActionLoading,
-    shareDialogLoading,
-    shareTemplateDescription,
-    shareTemplateName,
-    showDeleteModal,
-    showRenameModal,
-    showShareModal,
-    workspaceName: computed(() => currentWorkspace.value?.name || 'Shared Workspace')
+    saveSharedTemplate
   }
 }
 

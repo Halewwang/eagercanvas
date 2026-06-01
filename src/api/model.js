@@ -2,11 +2,11 @@
  * Model API | 模型 API
  */
 
-import { request } from '@/utils'
+import { apiRequest } from './_httpClient.js'
 
 // 分页查询模型列表
 export const getModelPage = (params) =>
-  request({
+  apiRequest({
     url: `/model/page`,
     method: 'get',
     params: { enable: true, size: 1000, current: 1, ...params }
@@ -20,7 +20,7 @@ export const getModelsByType = async (type) => {
 
 // 根据全称获取模型详情
 export const getModelByFullName = (fullName) =>
-  request({
+  apiRequest({
     url: `/model/fullName`,
     method: 'get',
     params: { fullName }
@@ -28,7 +28,7 @@ export const getModelByFullName = (fullName) =>
 
 // 获取所有模型类型
 export const getModelTypes = () =>
-  request({
+  apiRequest({
     url: `/model/types`,
     method: 'get'
   })

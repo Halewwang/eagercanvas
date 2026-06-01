@@ -74,6 +74,9 @@ create index if not exists idx_provider_billing_records_user_created
 create index if not exists idx_provider_billing_records_credential_created
   on public.provider_billing_records(service_credential_id, official_created_at desc);
 
+create unique index if not exists idx_provider_billing_records_upstream_task_id_unique
+  on public.provider_billing_records(upstream_task_id);
+
 create index if not exists idx_provider_billing_records_provider_api_name_created
   on public.provider_billing_records(provider_api_name, official_created_at desc);
 

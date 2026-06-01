@@ -2,133 +2,51 @@
   <!-- Video config node wrapper | 视频配置节点包裹层 -->
   <div class="video-config-node-wrapper relative" @mouseenter="showActions = true" @mouseleave="showActions = false">
     <!-- Video config node | 视频配置节点 -->
-    <div class="video-config-node bg-[#0f0f0f] rounded-2xl border min-w-[300px] transition-all duration-200"
-      :class="data.selected ? 'border-[#8f8f8f]' : 'border-transparent'">
+    <ConfigNodeShell :selected="data.selected" class="video-config-node min-w-[300px]">
       <!-- Header | 头部 -->
-      <div class="flex items-center justify-between px-3 py-2 border-b border-[rgba(143,143,143,0.28)]">
-        <span class="text-sm font-medium text-[#d7dbe3]">{{ data.label || 'Video Gen' }}</span>
-        <div class="flex items-center gap-1">
-          <button @click="handleDelete" class="p-1 hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors">
-            <n-icon :size="14">
-              <TrashOutline />
-            </n-icon>
-          </button>
-        </div>
-      </div>
+      <ConfigNodeHeader :label="data.label || 'Video Gen'" @delete="handleDelete" />
 
       <!-- Config options | 配置选项 -->
-      <div class="p-3 space-y-3">
+      <ConfigNodeContent>
         <!-- Model selector | Model选择 -->
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Model</span>
-          <BaseDropdown :options="modelOptions" compact @select="handleModelSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ displayModelName }}
-              <n-icon :size="12"><ChevronDownOutline /></n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow label="Model" :options="modelOptions" icon="down" @select="handleModelSelect">
+          {{ displayModelName }}
+        </ConfigNodeDropdownRow>
 
         <!-- Aspect ratio selector | 宽高比选择 -->
-        <div v-if="inputProfile.allowRatio" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Ratio</span>
-          <BaseDropdown :options="ratioOptions" compact @select="handleRatioSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ localRatio }}
-              <n-icon :size="12">
-                <ChevronForwardOutline />
-              </n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow v-if="inputProfile.allowRatio" label="Ratio" :options="ratioOptions" @select="handleRatioSelect">
+          {{ localRatio }}
+        </ConfigNodeDropdownRow>
 
-        <div v-if="inputProfile.allowSize && sizeOptions.length > 0" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Size</span>
-          <BaseDropdown :options="sizeOptions" compact @select="handleSizeSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ displaySize }}
-              <n-icon :size="12">
-                <ChevronForwardOutline />
-              </n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow v-if="inputProfile.allowSize && sizeOptions.length > 0" label="Size" :options="sizeOptions" @select="handleSizeSelect">
+          {{ displaySize }}
+        </ConfigNodeDropdownRow>
 
-        <div v-if="inputProfile.allowResolution && resolutionOptions.length > 0" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Resolution</span>
-          <BaseDropdown :options="resolutionOptions" compact @select="handleResolutionSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ displayResolution }}
-              <n-icon :size="12">
-                <ChevronForwardOutline />
-              </n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow v-if="inputProfile.allowResolution && resolutionOptions.length > 0" label="Resolution" :options="resolutionOptions" @select="handleResolutionSelect">
+          {{ displayResolution }}
+        </ConfigNodeDropdownRow>
 
-        <div v-if="inputProfile.allowMode && modeOptions.length > 0" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Mode</span>
-          <BaseDropdown :options="modeOptions" compact @select="handleModeSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ displayMode }}
-              <n-icon :size="12">
-                <ChevronForwardOutline />
-              </n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow v-if="inputProfile.allowMode && modeOptions.length > 0" label="Mode" :options="modeOptions" @select="handleModeSelect">
+          {{ displayMode }}
+        </ConfigNodeDropdownRow>
 
-        <div v-if="inputProfile.allowType && typeOptions.length > 0" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Type</span>
-          <BaseDropdown :options="typeOptions" compact @select="handleTypeSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ displayType }}
-              <n-icon :size="12">
-                <ChevronForwardOutline />
-              </n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow v-if="inputProfile.allowType && typeOptions.length > 0" label="Type" :options="typeOptions" @select="handleTypeSelect">
+          {{ displayType }}
+        </ConfigNodeDropdownRow>
 
-        <div v-if="inputProfile.allowAudioToggle && supportsAudioToggle" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Audio</span>
-          <BaseDropdown :options="audioOptions" compact @select="handleAudioSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ displayAudio }}
-              <n-icon :size="12">
-                <ChevronForwardOutline />
-              </n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow v-if="inputProfile.allowAudioToggle && supportsAudioToggle" label="Audio" :options="audioOptions" @select="handleAudioSelect">
+          {{ displayAudio }}
+        </ConfigNodeDropdownRow>
 
         <!-- Duration selector | Duration选择 -->
-        <div v-if="inputProfile.allowDuration" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Duration</span>
-          <BaseDropdown :options="durationOptions" compact @select="handleDurationSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ localDuration }}s
-              <n-icon :size="12">
-                <ChevronForwardOutline />
-              </n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow v-if="inputProfile.allowDuration" label="Duration" :options="durationOptions" @select="handleDurationSelect">
+          {{ localDuration }}s
+        </ConfigNodeDropdownRow>
 
         <!-- Connected inputs indicator | 连接输入指示 -->
-        <div
-          class="flex flex-wrap items-center gap-2 text-xs text-[#8f939e] py-1 border-t border-[rgba(143,143,143,0.28)]">
-          <span
-            v-for="item in connectionStatusItems"
-            :key="item.key"
-            class="px-3 py-1 rounded-full"
-            :class="item.active ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
-            {{ item.label }}
-          </span>
-        </div>
+        <ConfigNodeConnectionStatus :items="connectionStatusItems" :wrap="true" />
         <!-- Generate button | 生成按钮 -->
-        <button @click="handleGenerate" :disabled="loading || !isConfigured"
-          class="flora-button-primary w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        <ConfigNodePrimaryActionButton @click="handleGenerate" :disabled="loading || !isConfigured" emphasized>
           <n-spin v-if="loading" :size="14" />
           <template v-else>
             <n-icon :size="16">
@@ -136,32 +54,19 @@
             </n-icon>
             Generate Video
           </template>
-        </button>
+        </ConfigNodePrimaryActionButton>
 
         <!-- Error message | 错误信息 -->
-        <div v-if="error" class="text-xs text-red-500 mt-2">
-          {{ error.message || 'Generation failed' }}
-        </div>
+        <ConfigNodeErrorMessage :error="error" />
 
-      </div>
+      </ConfigNodeContent>
 
       <!-- Handles | 连接点 -->
-      <Handle type="target" :position="Position.Left" id="left" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
-      <Handle type="source" :position="Position.Right" id="right" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
-    </div>
+      <ConfigNodeHandles />
+    </ConfigNodeShell>
 
     <!-- Hover action buttons | 悬浮操作按钮 -->
-    <!-- Top right - Copy button | 右上角 - Copy按钮 -->
-    <div v-show="showActions" class="absolute -top-5 right-0 z-[1000]">
-      <button @click="handleDuplicate"
-        class="action-btn group p-2 rounded-lg transition-all border border-[rgba(143,143,143,0.32)] flex items-center gap-0 hover:gap-1.5 w-max">
-        <n-icon :size="16" class="text-[#c9ccd2]">
-          <CopyOutline />
-        </n-icon>
-        <span
-          class="text-xs text-[#c9ccd2] max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
-      </button>
-    </div>
+    <ConfigNodeHoverActions :visible="showActions" wide @duplicate="handleDuplicate" />
   </div>
 </template>
 
@@ -170,17 +75,28 @@
  * Video config node component | 视频配置节点组件
  * Configuration panel for video generation with API integration
  */
-import { ref, computed, watch, onMounted } from 'vue'
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
-import { BaseDropdown } from '@/components/ui'
-import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline } from '@/icons/coolicons'
-import { useVideoGeneration, useApiConfig } from '@/hooks'
-import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, saveProject, currentProjectId } from '@/stores/canvas'
+import { storeToRefs } from 'pinia'
+import { VideocamOutline } from '@/icons/coolicons'
+import { useVideoGeneration } from '@/hooks/api/useVideoApi.js'
+import { useApiConfig } from '@/hooks/useApiConfig'
+import { useCanvasStore } from '@/stores/canvas'
+import { pinia } from '@/stores/pinia'
 import { videoModelOptions, getModelRatioOptions, getModelDurationOptions, getModelConfig, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveSeedanceGenerationType, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_DURATION, resolveVideoModelKey } from '@/stores/models'
 import { persistMediaUrl } from '@/utils/media'
 import { getVisibleVideoConnectionStatusItems } from '@/utils/videoPreview'
 import { edgeStrategy, resolveNodeInputs } from '@/services/edgeStrategy'
+import ConfigNodeConnectionStatus from './config/ConfigNodeConnectionStatus.vue'
+import ConfigNodeContent from './config/ConfigNodeContent.vue'
+import ConfigNodeDropdownRow from './config/ConfigNodeDropdownRow.vue'
+import ConfigNodeErrorMessage from './config/ConfigNodeErrorMessage.vue'
+import ConfigNodeHandles from './config/ConfigNodeHandles.vue'
+import ConfigNodeHeader from './config/ConfigNodeHeader.vue'
+import ConfigNodeHoverActions from './config/ConfigNodeHoverActions.vue'
+import ConfigNodePrimaryActionButton from './config/ConfigNodePrimaryActionButton.vue'
+import ConfigNodeShell from './config/ConfigNodeShell.vue'
 
 const props = defineProps({
   id: String,
@@ -189,12 +105,15 @@ const props = defineProps({
 
 // Vue Flow instance | Vue Flow 实例
 const { updateNodeInternals } = useVueFlow()
+const canvasStore = useCanvasStore(pinia)
+const { currentProjectId, edges, nodes } = storeToRefs(canvasStore)
+const { updateNode, removeNode, duplicateNode, addNode, addEdge, saveProject } = canvasStore
 
 // API config hook | API 配置 hook
 const { isConfigured } = useApiConfig()
 
 // Video generation hook | Video Gen hook
-const { loading, error, status, video: generatedVideo, progress, generate } = useVideoGeneration()
+const { loading, error, status, video: generatedVideo, progress, generate, stop } = useVideoGeneration()
 
 // Hover state | 悬浮状态
 const showActions = ref(false)
@@ -736,6 +655,8 @@ watch(
   },
   { immediate: true }
 )
+
+onUnmounted(() => stop())
 
 </script>
 

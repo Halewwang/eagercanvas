@@ -10,56 +10,15 @@ import {
 } from '@/api/admin'
 import { getErrorMessage } from '@/utils'
 import { notifier } from '@/utils/notifier'
-
-const createEmptyKeyForm = () => ({
-  api_name: '',
-  allow_save_logs: false,
-  allow_custom_model: false,
-  allow_manage_key: false,
-  limit_cost: 0,
-  limit_daily_cost: 0,
-  expired_on: 0
-})
-
-const buildDraft = (item) => ({
-  api_name: item.api_name,
-  allow_save_logs: !!item.allow_save_logs,
-  allow_custom_model: !!item.allow_custom_model,
-  allow_manage_key: !!item.allow_manage_key,
-  limit_cost: Number(item.limit_cost || 0),
-  limit_daily_cost: Number(item.limit_daily_cost || 0),
-  expired_on: Number(item.expired_on || 0)
-})
-
-const toUnixSeconds = (value) => {
-  if (!value) return undefined
-  const ts = Date.parse(value)
-  return Number.isFinite(ts) ? Math.floor(ts / 1000) : undefined
-}
-
-const is502ServiceError = (error) => {
-  const status = Number(error?.response?.status || error?.status || 0)
-  return [500, 502, 503, 504].includes(status)
-}
-
-const toServiceNotice = (fallback, error) => {
-  const message = getErrorMessage(error, fallback)
-  if (is502ServiceError(error)) {
-    return 'Eager 服务暂时不可用，已跳过该区块的数据加载。其他后台功能仍可正常使用。'
-  }
-  return message
-}
-
-const prefixNotice = (scope, message) => {
-  const safeScope = String(scope || '').trim()
-  const safeMessage = String(message || '').trim()
-  if (!safeScope || !safeMessage) return safeMessage
-  return `${safeScope}：${safeMessage}`
-}
-
-const resetCreateKeyForm = (form) => {
-  Object.assign(form, createEmptyKeyForm())
-}
+import {
+  buildAdminServiceKeyDraft,
+  createAdminServiceKeyForm,
+  getAdminServiceNoticeMessage,
+  prefixAdminServiceNotice,
+  resetAdminServiceKeyForm,
+  toAdminServiceUnixSeconds,
+  updateAdminLog302Query
+} from './useAdminServiceOpsCore.js'
 
 export const useAdminServiceOps = ({
   canReadUsage,
@@ -83,7 +42,7 @@ export const useAdminServiceOps = ({
   const creatingApiKey = ref(false)
   const updatingKeys = ref({})
   const deletingKeys = ref({})
-  const createKeyForm = reactive(createEmptyKeyForm())
+  const createKeyForm = reactive(createAdminServiceKeyForm())
 
   const loading302 = computed(
     () => loadingBalance.value || loadingRecord.value || loadingApiLogs.value || loadingKeys.value
@@ -106,9 +65,9 @@ export const useAdminServiceOps = ({
       return { ok: true }
     } catch (error) {
       balance.value = ''
-      const message = toServiceNotice('加载 Eager 服务余额失败', error)
+      const message = getAdminServiceNoticeMessage('加载 Eager 服务余额失败', error, getErrorMessage)
       if (!silent && !error?.__handled) notifier.error(message)
-      return { ok: false, message: prefixNotice('账户余额', message), error }
+      return { ok: false, message: prefixAdminServiceNotice('账户余额', message), error }
     } finally {
       loadingBalance.value = false
     }
@@ -136,20 +95,22 @@ export const useAdminServiceOps = ({
       const rsp = await getAdmin302ApiRecord({
         page: log302Query.page,
         limit: log302Query.limit,
-        start_time: toUnixSeconds(log302Query.start),
-        end_time: toUnixSeconds(log302Query.end)
+        start_time: toAdminServiceUnixSeconds(log302Query.start),
+        end_time: toAdminServiceUnixSeconds(log302Query.end)
       })
       apiLogs.value = Array.isArray(rsp?.data?.items) ? rsp.data.items : []
       return { ok: true }
     } catch (error) {
       apiLogs.value = []
-      const message = toServiceNotice('加载服务调用日志失败', error)
+      const message = getAdminServiceNoticeMessage('加载服务调用日志失败', error, getErrorMessage)
       if (!silent && !error?.__handled) notifier.error(message)
-      return { ok: false, message: prefixNotice('服务调用日志', message), error }
+      return { ok: false, message: prefixAdminServiceNotice('服务调用日志', message), error }
     } finally {
       loadingApiLogs.value = false
     }
   }
+
+  const updateLog302Query = (key, value) => updateAdminLog302Query(log302Query, key, value)
 
   const loadApiKeys = async ({ silent = false } = {}) => {
     if (!canManageApiKeys.value && !canAssignApiKeys.value) return
@@ -159,15 +120,15 @@ export const useAdminServiceOps = ({
       const list = Array.isArray(rsp?.data) ? rsp.data : []
       apiKeys.value = list
       const drafts = {}
-      for (const item of list) drafts[item.api_name] = buildDraft(item)
+      for (const item of list) drafts[item.api_name] = buildAdminServiceKeyDraft(item)
       keyDrafts.value = drafts
       return { ok: true }
     } catch (error) {
       apiKeys.value = []
       keyDrafts.value = {}
-      const message = toServiceNotice('加载服务凭证失败', error)
+      const message = getAdminServiceNoticeMessage('加载服务凭证失败', error, getErrorMessage)
       if (!silent && !error?.__handled) notifier.error(message)
-      return { ok: false, message: prefixNotice('服务凭证', message), error }
+      return { ok: false, message: prefixAdminServiceNotice('服务凭证', message), error }
     } finally {
       loadingKeys.value = false
     }
@@ -182,7 +143,7 @@ export const useAdminServiceOps = ({
     try {
       await createAdmin302ApiKey({ ...createKeyForm, api_name: createKeyForm.api_name.trim() })
       notifier.success('服务凭证创建成功')
-      resetCreateKeyForm(createKeyForm)
+      resetAdminServiceKeyForm(createKeyForm)
       await loadApiKeys()
     } catch (error) {
       if (!error?.__handled) notifier.error(getErrorMessage(error, '创建服务凭证失败'))
@@ -263,6 +224,7 @@ export const useAdminServiceOps = ({
     recordRequestId,
     removeApiKey,
     serviceLoadNotice,
+    updateLog302Query,
     updateApiKey,
     updatingKeys,
     log302Query

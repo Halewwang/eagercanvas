@@ -8,66 +8,19 @@
       @mousedown.capture="handleCanvasPointerDownCapture"
       @contextmenu.capture="handleCanvasContextMenu"
     >
-      <!-- Top capsules | 顶部胶囊菜单 -->
-      <div class="absolute left-4 top-4 z-20 flex items-center gap-2">
-        <div class="flora-panel rounded-full p-1.5">
-          <button
-            @click="goWorkspace"
-            class="ui-pill-button"
-            title="Workspace"
-          >
-            <n-icon :size="18"><ChevronBackOutline /></n-icon>
-            <span class="text-sm font-medium">Workspace</span>
-          </button>
-        </div>
-        <div class="flora-panel rounded-full p-1.5">
-          <BaseDropdown :options="projectOptions" compact @select="handleProjectAction">
-            <button class="ui-pill-button ui-pill-button--compact">
-              <span class="text-sm font-medium">{{ projectName }}</span>
-              <n-icon :size="16"><ChevronDownOutline /></n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
-      </div>
+      <CanvasTopControls
+        :project-options="projectOptions"
+        :project-name="projectName"
+        :sync-indicator="syncIndicator"
+        :show-remote-refresh-control="showRemoteRefreshControl"
+        :remote-refresh-action="remoteRefreshAction"
+        @workspace="goWorkspace"
+        @project-action="handleProjectAction"
+        @remote-refresh="openRemoteRefreshModal"
+        @share="openShareDialog"
+      />
 
-      <div class="absolute right-4 top-4 z-20 flex items-center gap-2">
-        <div
-          v-if="syncIndicator"
-          class="flora-panel canvas-sync-pill rounded-full px-3 py-2"
-          :title="syncIndicator.title"
-        >
-          <div class="flex items-center gap-2 text-xs font-medium">
-            <span
-              class="h-2 w-2 rounded-full"
-              :class="syncIndicator.dotClass"
-            />
-            <span>{{ syncIndicator.label }}</span>
-            <button
-              v-if="showRemoteRefreshControl"
-              class="canvas-sync-refresh-btn"
-              :disabled="remoteRefreshAction === 'refresh'"
-              title="Refresh from cloud"
-              @click.stop="openRemoteRefreshModal"
-            >
-              <n-icon :size="13"><RefreshOutline /></n-icon>
-              <span>{{ remoteRefreshAction === 'refresh' ? 'Refreshing' : 'Refresh cloud' }}</span>
-            </button>
-          </div>
-        </div>
-        <div class="flora-panel rounded-full p-1.5">
-          <button
-            @click="openShareDialog"
-            class="ui-pill-button"
-            title="Share"
-          >
-            <n-icon :size="16"><CopyOutline /></n-icon>
-            <span class="text-sm font-medium">Share</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Vue Flow canvas | Vue Flow 画布 -->
-      <VueFlow
+      <CanvasFlowStage
         :key="flowKey"
         v-model:nodes="nodes"
         v-model:edges="edges"
@@ -75,11 +28,7 @@
         :node-types="nodeTypes"
         :edge-types="edgeTypes"
         :default-viewport="canvasViewport"
-        :min-zoom="0.1"
-        :max-zoom="2"
-        :snap-to-grid="true"
-        :snap-grid="[20, 20]"
-        multi-selection-key-code="Shift"
+        :canvas-flow-style="canvasFlowStyle"
         @connect="onConnect"
         @connect-start="onConnectStart"
         @connect-end="onConnectEnd"
@@ -91,409 +40,107 @@
         @pane-context-menu="onPaneContextMenu"
         @viewport-change="handleViewportChange"
         @edges-change="onEdgesChange"
-        class="canvas-flow"
-        :style="canvasFlowStyle"
       />
 
-      <div class="group-overlay-layer">
-        <div
-          v-if="multiSelectMenuRect"
-          class="capsule-menu group-capsule-menu"
-          :style="{
-            left: `${multiSelectMenuRect.left + multiSelectMenuRect.width / 2}px`,
-            top: `${Math.max(20, multiSelectMenuRect.top - 54)}px`
-          }"
-        >
-          <div class="capsule-inner capsule-inner-selected">
-            <button class="capsule-icon capsule-icon-solid capsule-create group-primary-btn" @click="handleCreateGroup" title="Group">
-              <n-icon :size="14"><AppsOutline /></n-icon>
-              <span class="capsule-create-label">Group</span>
-            </button>
-          </div>
-        </div>
+      <CanvasGroupOverlay
+        :multi-select-menu-rect="multiSelectMenuRect"
+        :rendered-groups="renderedGroups"
+        :selected-group-id="selectedGroupId"
+        :selected-group-menu-rect="selectedGroupMenuRect"
+        :group-body-hit-rects-by-id="groupBodyHitRectsById"
+        :group-box-pointer-events="getGroupBoxPointerEvents()"
+        @create-group="handleCreateGroup"
+        @group-grip-pointer-down="handleGroupGripPointerDown"
+        @select-group="selectGroup"
+        @rename-group="openRenameGroupModal"
+        @duplicate-selected-group="handleDuplicateSelectedGroup"
+        @ungroup-selected-group="handleUngroupSelectedGroup"
+        @delete-selected-group="handleDeleteSelectedGroup"
+      />
 
-        <template v-for="group in renderedGroups" :key="group.id">
-          <div
-            class="canvas-group-box"
-            :class="{ 'is-selected': selectedGroupId === group.id }"
-            :style="{
-              left: `${group.rect.left}px`,
-              top: `${group.rect.top}px`,
-              width: `${group.rect.width}px`,
-              height: `${group.rect.height}px`,
-              pointerEvents: getGroupBoxPointerEvents()
-            }"
-          >
-            <template v-if="selectedGroupId === group.id">
-              <div
-                v-for="(hitRect, hitIndex) in getGroupBodyHitRectsForRender(group)"
-                :key="`${group.id}-body-hit-${hitIndex}`"
-                class="canvas-group-body-hit-zone"
-                :style="{
-                  left: `${hitRect.left}px`,
-                  top: `${hitRect.top}px`,
-                  width: `${hitRect.width}px`,
-                  height: `${hitRect.height}px`
-                }"
-                @pointerdown="handleGroupGripPointerDown(group, $event)"
-                @mousedown="handleGroupGripPointerDown(group, $event)"
-                @click.stop="selectGroup(group.id)"
-              />
-            </template>
-            <button
-              class="canvas-group-title"
-              :class="{ 'is-selected': selectedGroupId === group.id }"
-              @pointerdown="handleGroupGripPointerDown(group, $event)"
-              @mousedown="handleGroupGripPointerDown(group, $event)"
-              @click.stop="selectGroup(group.id)"
-            >
-              {{ group.name }}
-            </button>
-            <button class="canvas-group-edge top" @pointerdown="handleGroupGripPointerDown(group, $event)" @mousedown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
-            <button class="canvas-group-edge right" @pointerdown="handleGroupGripPointerDown(group, $event)" @mousedown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
-            <button class="canvas-group-edge bottom" @pointerdown="handleGroupGripPointerDown(group, $event)" @mousedown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
-            <button class="canvas-group-edge left" @pointerdown="handleGroupGripPointerDown(group, $event)" @mousedown="handleGroupGripPointerDown(group, $event)" @click.stop="selectGroup(group.id)" />
-          </div>
-        </template>
+      <CanvasToolbar
+        :can-undo="canUndo()"
+        :can-redo="canRedo()"
+        :show-local-inject-button="showLocalInjectButton"
+        :user="user"
+        :avatar-initial="avatarInitial"
+        @add-node="toggleToolbarNodeMenu"
+        @open-library="showMediaLibraryPanel = true"
+        @undo="undo"
+        @redo="redo"
+        @open-api-settings="showApiSettings = true"
+        @inject-image="triggerLocalImageInject"
+        @upload-avatar="triggerAvatarUpload"
+      />
+      <input ref="localInjectInputRef" type="file" accept="image/*" class="hidden" @change="handleLocalImageInject" />
+      <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
 
-        <div
-          v-if="selectedGroupMenuRect"
-          class="capsule-menu group-capsule-menu"
-          :style="{
-            left: `${selectedGroupMenuRect.left + selectedGroupMenuRect.width / 2}px`,
-            top: `${Math.max(20, selectedGroupMenuRect.top - 54)}px`
-          }"
-        >
-          <div class="capsule-inner capsule-inner-selected">
-            <div class="capsule-group">
-              <button class="capsule-icon" @click="openRenameGroupModal" title="Rename">
-                <n-icon :size="14"><CreateOutline /></n-icon>
-              </button>
-              <button class="capsule-icon" @click="handleDuplicateSelectedGroup" title="Duplicate Group">
-                <n-icon :size="14"><CopyOutline /></n-icon>
-              </button>
-              <button class="capsule-icon" @click="handleUngroupSelectedGroup" title="Ungroup">
-                <n-icon :size="14"><RemoveOutline /></n-icon>
-              </button>
-              <button class="capsule-icon group-danger-icon" @click="handleDeleteSelectedGroup" title="Delete Group">
-                <n-icon :size="14"><TrashOutline /></n-icon>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CanvasNodeMenu
+        :show="showNodeMenu"
+        :mode="nodeMenuMode"
+        :menu-style="nodeMenuStyle"
+        :title="nodeMenuTitle"
+        :copy="nodeMenuCopy"
+        :node-types="nodeTypeOptions"
+        :count="nodeCreateCount"
+        @select-node-type="addNewNode"
+        @decrease-count="decreaseNodeCount"
+        @increase-count="increaseNodeCount"
+      />
 
-      <!-- Left toolbar | 左侧工具栏 -->
-      <aside class="flora-panel absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 p-2 rounded-[36px] z-20 w-[64px]">
-        <button 
-          @click="toggleToolbarNodeMenu"
-          class="ui-toolbar-button ui-toolbar-button--round canvas-primary-tool"
-          title="Add Node"
-        >
-          <n-icon :size="20"><AddOutline /></n-icon>
-        </button>
-        <button
-          @click="showMediaLibraryPanel = true"
-          class="ui-toolbar-button"
-          title="Asset Library"
-        >
-          <n-icon :size="20"><ImageOutline /></n-icon>
-        </button>
-        <button
-          @click="undo"
-          :disabled="!canUndo()"
-          class="ui-toolbar-button"
-          title="Undo"
-        >
-          <n-icon :size="20"><ArrowUndoOutline /></n-icon>
-        </button>
-        <button 
-          @click="redo"
-          :disabled="!canRedo()"
-          class="ui-toolbar-button"
-          title="Redo"
-        >
-          <n-icon :size="20"><ArrowRedoOutline /></n-icon>
-        </button>
-        <button
-          @click="showApiSettings = true"
-          class="ui-toolbar-button text-white"
-          title="API Settings"
-        >
-          <n-icon :size="20"><SettingsOutline /></n-icon>
-        </button>
-        <button
-          v-if="showLocalInjectButton"
-          @click="triggerLocalImageInject"
-          class="ui-toolbar-button text-white"
-          title="Inject Image"
-        >
-          <n-icon :size="20"><ImageOutline /></n-icon>
-        </button>
-        <div class="w-full h-px bg-[var(--border-color)] my-1"></div>
-        <button
-          @click="triggerAvatarUpload"
-          class="ui-toolbar-button ui-toolbar-button--round mt-auto overflow-hidden border border-[var(--border-color)] bg-[var(--bg-secondary)]"
-          title="Upload avatar"
-        >
-          <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" class="w-full h-full object-cover" />
-          <span v-else class="text-xs">{{ avatarInitial }}</span>
-        </button>
-        <input ref="localInjectInputRef" type="file" accept="image/*" class="hidden" @change="handleLocalImageInject" />
-        <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
-      </aside>
-
-      <!-- Node menu popup | 节点菜单弹窗 -->
-      <div v-if="showNodeMenu" class="flora-panel absolute rounded-[22px] p-6 z-30 w-[338px] border border-[rgba(143,143,143,0.24)] bg-[rgba(18,18,18,0.96)] backdrop-blur-xl" :style="nodeMenuStyle">
-        <div v-if="nodeMenuMode !== 'connect'" class="node-menu-header">
-          <div>
-            <div class="node-menu-eyebrow">ADD MODULE</div>
-            <h3 class="node-menu-title">{{ nodeMenuTitle }}</h3>
-            <p class="node-menu-copy">{{ nodeMenuCopy }}</p>
-          </div>
-        </div>
-        <div class="node-menu-list">
-          <button
-            v-for="nodeType in nodeTypeOptions"
-            :key="nodeType.type"
-            @click="addNewNode(nodeType.type)"
-            class="node-menu-item"
-          >
-            <div class="node-menu-item-icon">
-              <n-icon :size="16" class="text-[#f3f4f6]"><component :is="nodeType.icon" /></n-icon>
-            </div>
-            <div class="node-menu-item-copy">
-              <span class="node-menu-item-title">{{ nodeType.name }}</span>
-              <span class="node-menu-item-description">{{ nodeType.description }}</span>
-            </div>
-          </button>
-        </div>
-        <div class="node-menu-quantity">
-          <div>
-            <div class="node-menu-quantity-label">Quantity</div>
-            <div class="node-menu-quantity-note">Default 1, up to 5 modules</div>
-          </div>
-          <div class="node-menu-stepper">
-            <button class="node-menu-stepper-btn" @click="decreaseNodeCount" :disabled="nodeCreateCount <= 1">-</button>
-            <span class="node-menu-stepper-value">{{ nodeCreateCount }}</span>
-            <button class="node-menu-stepper-btn" @click="increaseNodeCount" :disabled="nodeCreateCount >= 5">+</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Bottom controls | 底部控制 -->
-      <div class="flora-panel absolute bottom-4 left-4 z-20 flex items-center gap-2 rounded-full p-1.5">
-        <button 
-          @click="fitView({ padding: 0.2 })" 
-          class="ui-icon-button"
-          title="Fit View"
-        >
-          <n-icon :size="16"><LocateOutline /></n-icon>
-        </button>
-        <div class="canvas-zoom-pill flex h-9 items-center gap-1 rounded-full px-2">
-          <button @click="zoomOut" class="ui-icon-button !h-8 !w-8">
-            <n-icon :size="14"><RemoveOutline /></n-icon>
-          </button>
-          <span class="flex min-w-[48px] items-center justify-center text-xs font-medium leading-none">{{ Math.round(viewport.zoom * 100) }}%</span>
-          <button @click="zoomIn" class="ui-icon-button !h-8 !w-8">
-            <n-icon :size="14"><AddOutline /></n-icon>
-          </button>
-        </div>
-      </div>
+      <CanvasZoomControls
+        :zoom-percent="Math.round(viewport.zoom * 100)"
+        @fit-view="fitView({ padding: 0.2 })"
+        @zoom-out="zoomOut"
+        @zoom-in="zoomIn"
+      />
 
     </div>
 
-    <!-- API Settings Modal | API 设置弹窗 -->
-    <ApiSettings v-model:show="showApiSettings" />
-
-    <!-- Rename Modal | 重命名弹窗 -->
-    <BaseModal
-      v-model:show="showRenameModal"
-      title="Rename project"
-      description="Update the project name shown in the canvas."
-      size="sm"
-    >
-      <BaseInput v-model="renameValue" placeholder="Enter project name" />
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton variant="ghost" @click="showRenameModal = false">Cancel</BaseButton>
-          <BaseButton @click="confirmRename">Save</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-
-    <!-- Delete Confirm Modal | 删除确认弹窗 -->
-    <BaseModal
-      v-model:show="showDeleteModal"
-      title="Delete project"
-      description="This action permanently removes the current canvas project."
-      size="sm"
-    >
-      <p class="ui-body ui-modal-copy">Delete "{{ projectName }}"? This action cannot be undone.</p>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton variant="ghost" @click="showDeleteModal = false">Cancel</BaseButton>
-          <BaseButton variant="danger" @click="confirmDelete">Delete</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-
-    <BaseModal
-      v-model:show="showGroupRenameModal"
-      title="Rename group"
-      description="Update the selected group label."
-      size="sm"
-    >
-      <BaseInput v-model="groupRenameValue" placeholder="Enter group name" @keyup.enter="confirmRenameGroup" />
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton variant="ghost" @click="showGroupRenameModal = false">Cancel</BaseButton>
-          <BaseButton @click="confirmRenameGroup">Save</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-
-    <BaseModal
-      v-model:show="showConflictModal"
-      title="Sync conflict"
-      description="This canvas has newer changes elsewhere. Choose how to continue."
-      size="md"
-      :close-on-overlay="false"
-    >
-      <p class="ui-body ui-modal-copy">
-        Your current canvas is still saved on this device. Nothing has been cleared.
-      </p>
-      <template #footer>
-        <div class="ui-modal-actions conflict-actions">
-          <BaseButton
-            variant="ghost"
-            :disabled="!!conflictAction"
-            @click="cancelConflictResolution"
-          >
-            Cancel
-          </BaseButton>
-          <BaseButton
-            variant="secondary"
-            :loading="conflictAction === 'copy'"
-            :disabled="!!conflictAction && conflictAction !== 'copy'"
-            @click="saveConflictAsCopy"
-          >
-            Save as copy
-          </BaseButton>
-          <BaseButton
-            variant="secondary"
-            :loading="conflictAction === 'refresh'"
-            :disabled="!!conflictAction && conflictAction !== 'refresh'"
-            @click="refreshRemoteConflict"
-          >
-            Refresh remote
-          </BaseButton>
-          <BaseButton
-            variant="danger"
-            :loading="conflictAction === 'overwrite'"
-            :disabled="!!conflictAction && conflictAction !== 'overwrite'"
-            @click="overwriteRemoteConflict"
-          >
-            Overwrite remote
-          </BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-
-    <BaseModal
-      v-model:show="showRemoteRefreshModal"
-      title="Refresh from cloud"
-      description="Load the latest saved cloud canvas for this project."
-      size="sm"
-      :close-on-overlay="remoteRefreshAction !== 'refresh'"
-    >
-      <p class="ui-body ui-modal-copy">
-        Local draft changes on this device will be replaced by the cloud version.
-      </p>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton
-            variant="ghost"
-            :disabled="remoteRefreshAction === 'refresh'"
-            @click="showRemoteRefreshModal = false"
-          >
-            Cancel
-          </BaseButton>
-          <BaseButton
-            :loading="remoteRefreshAction === 'refresh'"
-            @click="confirmRemoteRefresh"
-          >
-            Refresh cloud
-          </BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-
-    <MediaLibraryPanel
-      v-model:show="showMediaLibraryPanel"
+    <CanvasAuxiliaryPanels
+      v-model:show-api-settings="showApiSettings"
+      v-model:show-media-library="showMediaLibraryPanel"
       :project-id="currentCanvasProjectId"
       @insert-asset="handleInsertLibraryAsset"
     />
 
-    <BaseModal
+    <CanvasProjectModals
+      v-model:show-rename="showRenameModal"
+      v-model:show-delete="showDeleteModal"
+      v-model:show-group-rename="showGroupRenameModal"
+      v-model:rename-value="renameValue"
+      v-model:group-rename-value="groupRenameValue"
+      :project-name="projectName"
+      @confirm-rename="confirmRename"
+      @confirm-delete="confirmDelete"
+      @confirm-rename-group="confirmRenameGroup"
+    />
+
+    <CanvasSyncModals
+      v-model:show-conflict="showConflictModal"
+      v-model:show-remote-refresh="showRemoteRefreshModal"
+      :conflict-action="conflictAction"
+      :remote-refresh-action="remoteRefreshAction"
+      @cancel-conflict="cancelConflictResolution"
+      @save-conflict-copy="saveConflictAsCopy"
+      @refresh-conflict="refreshRemoteConflict"
+      @overwrite-conflict="overwriteRemoteConflict"
+      @confirm-remote-refresh="confirmRemoteRefresh"
+    />
+
+    <CanvasShareModal
       v-model:show="showShareModal"
-      title="Share To Workspace"
-      description="Publish this project as a reusable template so other workspace members can copy the full canvas."
-      size="sm"
-    >
-      <div class="share-panel">
-        <section class="share-section">
-          <div class="share-heading">
-            <h3>Workspace</h3>
-            <p>{{ workspaceName }}</p>
-          </div>
-        </section>
-
-        <section class="share-section share-form-section">
-          <div class="share-heading">
-            <h3>Template Details</h3>
-            <p>Other members will see this in Featured Templates and can create their own copy from it.</p>
-          </div>
-          <BaseInput v-model="shareTemplateName" placeholder="Template title" />
-          <textarea
-            v-model="shareTemplateDescription"
-            placeholder="Template description"
-            rows="4"
-            class="share-textarea ui-body"
-          />
-        </section>
-
-        <section class="share-section">
-          <div class="share-heading">
-            <h3>Status</h3>
-            <p v-if="shareDialogLoading">Loading current publish status...</p>
-            <p v-else-if="isTemplatePublished">
-              Published to Featured Templates<span v-if="lastPublishedAt"> · Updated {{ new Date(lastPublishedAt).toLocaleString() }}</span>
-            </p>
-            <p v-else>Not published yet.</p>
-          </div>
-        </section>
-      </div>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton variant="ghost" @click="showShareModal = false">Close</BaseButton>
-          <BaseButton
-            v-if="isTemplatePublished"
-            variant="secondary"
-            :loading="shareActionLoading"
-            @click="removeSharedTemplate"
-          >
-            Unpublish
-          </BaseButton>
-          <BaseButton
-            :loading="shareActionLoading || shareDialogLoading"
-            @click="saveSharedTemplate"
-          >
-            {{ isTemplatePublished ? 'Update Template' : 'Publish Template' }}
-          </BaseButton>
-        </div>
-      </template>
-    </BaseModal>
+      v-model:template-name="shareTemplateName"
+      v-model:template-description="shareTemplateDescription"
+      :workspace-name="workspaceName"
+      :status-loading="shareDialogLoading"
+      :published="isTemplatePublished"
+      :last-published-at="lastPublishedAt"
+      :action-loading="shareActionLoading"
+      @close="showShareModal = false"
+      @unpublish="removeSharedTemplate"
+      @save="saveSharedTemplate"
+    />
   </div>
 </template>
 
@@ -502,99 +149,54 @@
  * Canvas view component | 画布视图组件
  * Main infinite canvas with Vue Flow integration
  */
-import { ref, computed, onMounted, onUnmounted, watch, nextTick, markRaw } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { VueFlow, useVueFlow } from '@vue-flow/core'
-import { NIcon } from 'naive-ui'
-import { 
-  AppsOutline,
-  ChevronBackOutline,
-  ChevronDownOutline,
-  CloseOutline,
-  CopyOutline,
-  CreateOutline,
-  SettingsOutline,
-  AddOutline,
-  ImageOutline,
-  TextOutline,
-  TrashOutline,
-  VideocamOutline,
-  ArrowUndoOutline,
-  ArrowRedoOutline,
-  LocateOutline,
-  RemoveOutline,
-  RefreshOutline
-} from '@/icons/coolicons'
-import {
-  nodes,
-  edges,
-  groups,
-  addEdge,
-  addNode,
-  beginCanvasZoomInteraction,
-  beginNodeDragInteraction,
-  createGroup,
-  deleteGroupWithNodes,
-  duplicateGroup,
-  endCanvasZoomInteraction,
-  endNodeDragInteraction,
-  flushSave,
-  hasPendingCanvasChanges,
-  isCanvasZooming,
-  isNodeDragging,
-  resetCanvasSession,
-  canvasViewport,
-  projectSaveState,
-  updateViewport,
-  undo,
-  redo,
-  canUndo,
-  canRedo,
-  loadProject,
-  manualSaveHistory,
-  removeNodesByIds,
-  renameGroup,
-  translateNodesByIds,
-  ungroup
-} from '@/stores/canvas'
+import { useVueFlow } from '@vue-flow/core'
+import { storeToRefs } from 'pinia'
+import { useCanvasStore } from '@/stores/canvas'
+import { pinia } from '@/stores/pinia'
 import { loadAllModels } from '@/stores/models'
 import { useNodesFactory } from '@/hooks'
 import { useAvatarUpload } from '@/hooks/useAvatarUpload'
+import { useCanvasConnectionInteraction } from '@/hooks/useCanvasConnectionInteraction.js'
+import { useCanvasGroupActions } from '@/hooks/useCanvasGroupActions.js'
+import { useCanvasGroupDrag } from '@/hooks/useCanvasGroupDrag.js'
+import { useCanvasNodeDragInteraction } from '@/hooks/useCanvasNodeDragInteraction.js'
+import { useCanvasNodeMenuState } from '@/hooks/useCanvasNodeMenuState.js'
+import { useCanvasOverlayRects } from '@/hooks/useCanvasOverlayRects.js'
 import { useCanvasProjectActions } from '@/hooks/useCanvasProjectActions'
+import { useCanvasRouteLifecycle } from '@/hooks/useCanvasRouteLifecycle.js'
+import { useCanvasSelectionInteraction } from '@/hooks/useCanvasSelectionInteraction.js'
+import { useCanvasSyncResolution } from '@/hooks/useCanvasSyncResolution.js'
+import { useCanvasViewportInteraction } from '@/hooks/useCanvasViewportInteraction.js'
 import { edgeStrategy, isConnectionValid } from '@/services/edgeStrategy'
 import { notifier } from '@/utils/notifier'
-import { getWorkflowById } from '@/config/workflows'
-import { getMediaAssets } from '@/api'
 import { duplicateProject, getProjectCanvas, initProjectsStore, loadCachedProjects, projects, refreshProjectById } from '@/stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { BaseButton, BaseDropdown, BaseInput, BaseModal } from '@/components/ui'
 import {
-  findGroupBodyDragTarget,
-  getGroupBodyHitRects,
+  getCanvasLibraryInsertPosition,
+  getCanvasNodeGridPosition,
+  getConnectMenuEdgeParams,
   getFlowPointFromScreenPoint,
-  getGroupDragListenerNames,
   getGroupBoxPointerEvents,
-  getInteractionOverlayDelay,
-  getNodeCapsuleScale,
-  getOverlayScheduleMode,
-  getSelectedGroupGripPointerAction,
-  recordCanvasPerf,
-  shouldAcceptGroupDragMove,
-  shouldMeasureGroupRects,
-  translateViewportRect
+  getLocalImageInjectPosition,
+  createLocalImageNodeData
 } from '@/utils/canvasInteraction'
 import { isExpiredRemoteUrl } from '@/utils/media'
-import {
-  recoverMissingNodeMedia,
-  shouldApplyRemoteProjectSnapshot,
-  shouldShowRemoteRefreshControl,
-  shouldUseCachedProjectBeforeRemote
-} from '@/utils/canvasSync'
+import { isLocalPreviewEnabled } from '@/utils/localPreview'
 
-// API Settings component | API 设置组件
-import ApiSettings from '@/components/ApiSettings.vue'
-import MediaLibraryPanel from '@/components/MediaLibraryPanel.vue'
+// Canvas feature components | 画布功能组件
+import CanvasAuxiliaryPanels from '@/components/canvas/CanvasAuxiliaryPanels.vue'
+import CanvasFlowStage from '@/components/canvas/CanvasFlowStage.vue'
+import CanvasGroupOverlay from '@/components/canvas/CanvasGroupOverlay.vue'
+import CanvasNodeMenu from '@/components/canvas/CanvasNodeMenu.vue'
+import CanvasProjectModals from '@/components/canvas/CanvasProjectModals.vue'
+import CanvasShareModal from '@/components/canvas/CanvasShareModal.vue'
+import CanvasSyncModals from '@/components/canvas/CanvasSyncModals.vue'
+import CanvasToolbar from '@/components/canvas/CanvasToolbar.vue'
+import CanvasTopControls from '@/components/canvas/CanvasTopControls.vue'
+import CanvasZoomControls from '@/components/canvas/CanvasZoomControls.vue'
 
 // Initialize models on page load | 页面加载时初始化模型
 onMounted(() => {
@@ -603,6 +205,42 @@ onMounted(() => {
 
 // Vue Flow instance | Vue Flow 实例
 const { viewport, zoomIn, zoomOut, fitView, updateNodeInternals } = useVueFlow()
+const canvasStore = useCanvasStore(pinia)
+const {
+  nodes,
+  edges,
+  groups,
+  canvasViewport,
+  isCanvasZooming,
+  isNodeDragging,
+  projectSaveState
+} = storeToRefs(canvasStore)
+const {
+  addEdge,
+  addNode,
+  beginCanvasZoomInteraction,
+  beginNodeDragInteraction,
+  canRedo,
+  canUndo,
+  createGroup,
+  deleteGroupWithNodes,
+  duplicateGroup,
+  endCanvasZoomInteraction,
+  endNodeDragInteraction,
+  flushSave,
+  hasPendingCanvasChanges,
+  loadProject,
+  manualSaveHistory,
+  redo,
+  refreshCanvasCollectionRefs,
+  removeNodesByIds,
+  renameGroup,
+  resetCanvasSession,
+  translateNodesByIds,
+  undo,
+  ungroup,
+  updateViewport
+} = canvasStore
 const canvasShellRef = ref(null)
 const localInjectInputRef = ref(null)
 
@@ -623,7 +261,7 @@ import DefaultEdge from '@/components/edges/DefaultEdge.vue'
 
 const router = useRouter()
 const route = useRoute()
-const { user, updateProfile } = useAuthStore()
+const { user, updateProfile, bootstrapAuth } = useAuthStore()
 const {
   currentWorkspace,
   getProjectTemplateStatus,
@@ -655,42 +293,17 @@ const edgeTypes = {
 }
 
 // UI state | UI状态
-const showNodeMenu = ref(false)
 const isMobile = ref(false)
 const showGrid = ref(true)
 const showApiSettings = ref(false)
-const nodeCreateCount = ref(1)
-const nodeMenuMode = ref('toolbar')
-const nodeMenuScreenPosition = ref(null)
-const pendingPaneCreatePosition = ref(null)
-const pendingConnectMenuContext = ref(null)
-const suppressPaneClickUntil = ref(0)
 
 // Flow key for forcing re-render on project switch | 项目切换时强制重新渲染的 key
 const flowKey = ref(Date.now())
 const showMediaLibraryPanel = ref(false)
-const showLocalInjectButton = computed(() => {
-  if (typeof window === 'undefined') return false
-  const host = String(window.location.hostname || '').trim().toLowerCase()
-  return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0'
-})
+const showLocalInjectButton = computed(() => isLocalPreviewEnabled())
 const selectedGroupId = ref(null)
-const groupRects = ref({})
-const multiSelectRect = ref(null)
-const showGroupRenameModal = ref(false)
-const groupRenameTargetId = ref('')
-const groupRenameValue = ref('')
-const showConflictModal = ref(false)
-const conflictAction = ref('')
-const showRemoteRefreshModal = ref(false)
-const remoteRefreshAction = ref('')
 
-let groupDragState = null
-let overlayRafId = null
-let overlayTimeoutId = null
-let viewportSettleTimeoutId = null
-let nodeDragMoved = false
-let groupedNodeDragState = null
+let isGroupDragging = () => false
 const {
   confirmDelete,
   confirmRename,
@@ -721,855 +334,181 @@ const {
   currentWorkspace
 })
 
-// Node type options for menu | 节点类型菜单选项
-const nodeTypeOptions = [
-  { type: 'text', name: 'Text', icon: TextOutline, description: 'Write prompts, scripts, and supporting copy.' },
-  { type: 'image', name: 'Image', icon: ImageOutline, description: 'Generate, preview, and upload still images.' },
-  { type: 'video', name: 'Video', icon: VideocamOutline, description: 'Generate videos with connected visual inputs.' }
-]
-const nodeMenuTitle = computed(() =>
-  nodeMenuMode.value === 'connect'
-    ? 'Create And Link A Module'
-    : nodeMenuMode.value === 'pane'
-      ? 'Create Module'
-    : 'Choose A Base Module'
-)
-const nodeMenuCopy = computed(() =>
-  nodeMenuMode.value === 'connect'
-    ? 'Release a loose connection anywhere on the canvas, then pick a module to create and link it from that spot.'
-    : nodeMenuMode.value === 'pane'
-      ? 'Pick a module type to place it at this canvas point.'
-    : 'Pick a module type, then add between 1 and 5 modules at once.'
-)
-const nodeMenuStyle = computed(() => {
-  if (nodeMenuScreenPosition.value) {
-    const x = Math.max(92, Math.min(window.innerWidth - 334, nodeMenuScreenPosition.value.x))
-    const y = Math.max(18, Math.min(window.innerHeight - 340, nodeMenuScreenPosition.value.y))
-    return {
-      left: `${x}px`,
-      top: `${y}px`
-    }
-  }
-  return {
-    left: '90px',
-    top: '50%',
-    transform: 'translateY(-50%)'
-  }
+const currentCanvasProjectId = computed(() => {
+  const value = String(route.params.id || '').trim()
+  return value && value !== 'new' ? value : ''
 })
-
-const buildCanvasFlowStyle = (sourceViewport = viewport.value) => {
-  const zoom = Math.max(Number(sourceViewport?.zoom) || 1, 0.01)
-  const baseGap = 20
-  const minGap = 12
-  const scaledGap = Math.max(baseGap * zoom, minGap)
-  const gridOpacity = Math.max(0.02, Math.min(0.05, 0.05 * Math.pow(zoom, 0.85)))
-  const rawX = Number(sourceViewport?.x) || 0
-  const rawY = Number(sourceViewport?.y) || 0
-  const offsetX = ((rawX % scaledGap) + scaledGap) % scaledGap
-  const offsetY = ((rawY % scaledGap) + scaledGap) % scaledGap
-
-  return {
-    '--node-capsule-scale': `${getNodeCapsuleScale(zoom)}`,
-    '--canvas-grid-image': showGrid.value
-      ? `radial-gradient(rgba(255,255,255,${gridOpacity}) 1px, transparent 1px)`
-      : 'none',
-    '--canvas-grid-size': `${scaledGap}px ${scaledGap}px`,
-    '--canvas-grid-position': `${offsetX}px ${offsetY}px`
-  }
-}
-
-const settledCanvasFlowStyle = ref(buildCanvasFlowStyle())
-const canvasFlowStyle = computed(() => {
-  if (isCanvasZooming.value) {
-    return settledCanvasFlowStyle.value
-  }
-
-  const nextStyle = buildCanvasFlowStyle()
-  settledCanvasFlowStyle.value = nextStyle
-  return nextStyle
-})
-
-const syncIndicator = computed(() => {
-  if (!currentCanvasProjectId.value) return null
-
-  const state = projectSaveState.value || {}
-  const status = String(state.status || 'idle')
-
-  if (status === 'dirty') {
-    return {
-      label: 'Unsaved',
-      title: 'Changes are waiting to be saved on this device.',
-      dotClass: 'bg-amber-400'
-    }
-  }
-
-  if (status === 'syncing') {
-    return {
-      label: 'Syncing...',
-      title: 'Changes are being uploaded to the cloud.',
-      dotClass: 'bg-amber-400'
-    }
-  }
-
-  if (status === 'conflict') {
-    return {
-      label: 'Sync conflict',
-      title: 'Another device has newer changes. Refresh before editing further.',
-      dotClass: 'bg-rose-400'
-    }
-  }
-
-  if (status === 'synced' && state.remoteSynced === true) {
-    return {
-      label: 'Synced',
-      title: 'This canvas is synced to the cloud.',
-      dotClass: 'bg-emerald-400'
-    }
-  }
-
-  if (status === 'synced') {
-    return {
-      label: 'Saved locally',
-      title: 'Changes are saved on this device. Cloud sync has not completed.',
-      dotClass: 'bg-amber-400'
-    }
-  }
-
-  if (status === 'localPersisted' || status === 'offline') {
-    return {
-      label: status === 'offline' ? 'Offline saved' : 'Saved locally',
-      title: 'Changes are saved on this device. Cloud sync has not completed.',
-      dotClass: 'bg-amber-400'
-    }
-  }
-
-  if (status === 'failed') {
-    return {
-      label: 'Save failed',
-      title: 'The latest changes could not be saved. Keep this page open and try again.',
-      dotClass: 'bg-rose-400'
-    }
-  }
-
-  return null
-})
-
-const showRemoteRefreshControl = computed(() => shouldShowRemoteRefreshControl(projectSaveState.value))
-
-watch(
-  () => projectSaveState.value?.status,
-  (status) => {
-    if (status === 'conflict') {
-      showConflictModal.value = true
-    }
-  }
-)
-
-const cancelConflictResolution = () => {
-  if (conflictAction.value) return
-  showConflictModal.value = false
-}
-
-const refreshRemoteConflict = async () => {
-  const projectId = String(currentCanvasProjectId.value || route.params.id || '')
-  if (!projectId || conflictAction.value) return
-  conflictAction.value = 'refresh'
-  try {
-    await refreshProjectById(projectId, { preferLocalDraft: false })
-    await loadProjectById(projectId)
-    showConflictModal.value = false
-    notifier.success('Remote version loaded')
-  } catch (error) {
-    notifier.error(error?.message || 'Refresh failed')
-  } finally {
-    conflictAction.value = ''
-  }
-}
-
-const overwriteRemoteConflict = async () => {
-  if (conflictAction.value) return
-  conflictAction.value = 'overwrite'
-  try {
-    const saved = await flushSave({ forceRemoteOverwrite: true })
-    if (saved && projectSaveState.value?.status !== 'conflict') {
-      showConflictModal.value = false
-      notifier.success('Remote version overwritten')
-    }
-  } catch (error) {
-    notifier.error(error?.message || 'Overwrite failed')
-  } finally {
-    conflictAction.value = ''
-  }
-}
-
-const openRemoteRefreshModal = () => {
-  if (remoteRefreshAction.value) return
-  showRemoteRefreshModal.value = true
-}
-
-const confirmRemoteRefresh = async () => {
-  const projectId = String(currentCanvasProjectId.value || route.params.id || '')
-  if (!projectId || remoteRefreshAction.value) return
-  remoteRefreshAction.value = 'refresh'
-  try {
-    await refreshProjectById(projectId, { preferLocalDraft: false })
-    await loadProjectById(projectId)
-    showRemoteRefreshModal.value = false
-    notifier.success('Cloud canvas refreshed')
-  } catch (error) {
-    notifier.error(error?.message || 'Refresh failed')
-  } finally {
-    remoteRefreshAction.value = ''
-  }
-}
-
-const saveConflictAsCopy = async () => {
-  const projectId = String(currentCanvasProjectId.value || route.params.id || '')
-  if (!projectId || conflictAction.value) return
-  conflictAction.value = 'copy'
-  try {
-    const newId = await duplicateProject(projectId)
-    if (!newId) {
-      notifier.error('Save copy failed')
-      return
-    }
-    showConflictModal.value = false
-    notifier.success('Saved as copy')
-    router.push(`/canvas/${newId}`)
-  } catch (error) {
-    notifier.error(error?.message || 'Save copy failed')
-  } finally {
-    conflictAction.value = ''
-  }
-}
-
-const selectedNodeIds = computed(() =>
-  nodes.value.filter((node) => node.selected || node.data?.selected).map((node) => node.id)
-)
-
-const renderedGroups = computed(() =>
-  groups.value
-    .map((group) => ({
-      ...group,
-      rect: groupRects.value[group.id]
-    }))
-    .filter((group) => group.rect)
-)
-
-const selectedGroup = computed(() => groups.value.find((group) => group.id === selectedGroupId.value) || null)
-const selectedGroupMenuRect = computed(() => (selectedGroupId.value ? groupRects.value[selectedGroupId.value] || null : null))
-const selectedGroupBodyHitRects = computed(() => {
-  const group = selectedGroup.value
-  if (!group) return []
-
-  const groupRect = groupRects.value[group.id]
-  if (!groupRect) return []
-
-  const nodeById = getNodeLookup()
-  const nodeRects = (group.nodeIds || [])
-    .map((nodeId) => getNodeViewportRect(nodeById.get(nodeId)))
-    .filter(Boolean)
-
-  return getGroupBodyHitRects({ groupRect, nodeRects })
-})
-const multiSelectMenuRect = computed(() => {
-  if (selectedGroupId.value) return null
-  if (selectedNodeIds.value.length < 2) return null
-  return multiSelectRect.value
-})
-const isCanvasInteracting = computed(() => isNodeDragging.value || isCanvasZooming.value)
-
-const clearNodeSelection = () => {
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    selected: false,
-    data: {
-      ...(node.data || {}),
-      selected: false,
-      openPortMenu: null
-    }
-  }))
-}
-
-const clearGroupSelection = () => {
-  selectedGroupId.value = null
-}
-
-const findGroupByNodeId = (nodeId) => {
-  if (!nodeId) return null
-  return groups.value.find((group) => (group.nodeIds || []).includes(nodeId)) || null
-}
-
-const startGroupedNodeDrag = (nodeId) => {
-  const group = findGroupByNodeId(nodeId)
-  if (!group) {
-    groupedNodeDragState = null
-    return
-  }
-
-  const groupNodeIds = Array.from(new Set(group.nodeIds || []))
-  if (groupNodeIds.length < 2) {
-    groupedNodeDragState = null
-    return
-  }
-
-  const startPositions = new Map()
-  groupNodeIds.forEach((id) => {
-    const node = nodes.value.find((item) => item.id === id)
-    if (!node) return
-    startPositions.set(id, {
-      x: Number(node.position?.x) || 0,
-      y: Number(node.position?.y) || 0
-    })
-  })
-
-  if (!startPositions.has(nodeId)) {
-    groupedNodeDragState = null
-    return
-  }
-
-  groupedNodeDragState = {
-    groupId: group.id,
-    anchorId: nodeId,
-    nodeIds: groupNodeIds,
-    startPositions,
-    appliedDeltaX: 0,
-    appliedDeltaY: 0
-  }
-}
-
-const applyGroupedNodeDragDelta = (changes = []) => {
-  const state = groupedNodeDragState
-  if (!state) return
-  const positionChanges = (Array.isArray(changes) ? changes : [])
-    .filter((change) => change?.type === 'position' && change?.id && change?.position)
-  if (!positionChanges.length) return
-
-  const movedNodeIds = new Set(positionChanges.map((change) => change.id))
-  const siblingMovedByVueFlow = state.nodeIds.some(
-    (id) => id !== state.anchorId && movedNodeIds.has(id)
-  )
-  if (siblingMovedByVueFlow) return
-
-  const anchorChange = positionChanges.find((change) => change.id === state.anchorId)
-  if (!anchorChange) return
-  const startPosition = state.startPositions.get(state.anchorId)
-  if (!startPosition) return
-
-  const totalDeltaX = (Number(anchorChange.position?.x) || 0) - startPosition.x
-  const totalDeltaY = (Number(anchorChange.position?.y) || 0) - startPosition.y
-  const moveX = totalDeltaX - state.appliedDeltaX
-  const moveY = totalDeltaY - state.appliedDeltaY
-  if (!moveX && !moveY) return
-
-  const followerNodeIds = state.nodeIds.filter((id) => id !== state.anchorId)
-  if (!followerNodeIds.length) return
-
-  state.appliedDeltaX = totalDeltaX
-  state.appliedDeltaY = totalDeltaY
-  translateNodesByIds(followerNodeIds, { x: moveX, y: moveY }, false)
-}
-
-const selectGroup = (groupIdToSelect) => {
-  clearNodeSelection()
-  selectedGroupId.value = groupIdToSelect
-  showNodeMenu.value = false
-  clearNodeMenuContext()
-}
-
-const getGroupBodyHitRectsForRender = (group) => (
-  selectedGroupId.value === group?.id ? selectedGroupBodyHitRects.value : []
-)
-
-const OVERLAY_PADDING_X = 24
-const OVERLAY_PADDING_TOP = 22
-const OVERLAY_PADDING_BOTTOM = 22
-const NODE_SHELL_TOP_PADDING = 88
-const CONFIG_NODE_TOP_PADDING = 20
-const DEFAULT_NODE_SIZE = { width: 320, height: 240 }
-const TEXT_NODE_SIZE = { width: 362, height: 330 }
-const CONFIG_NODE_SIZES = {
-  imageConfig: { width: 300, height: 240 },
-  videoConfig: { width: 300, height: 330 },
-  llmConfig: { width: 370, height: 300 }
-}
-
-const IMAGE_RATIO_SIZES = {
-  '1:1': { width: 320, height: 320 },
-  '3:2': { width: 360, height: 240 },
-  '2:3': { width: 240, height: 360 },
-  '16:9': { width: 420, height: 236 },
-  '9:16': { width: 260, height: 462 },
-  '4:3': { width: 360, height: 270 },
-  '3:4': { width: 280, height: 373 },
-  '4:5': { width: 280, height: 350 },
-  '5:4': { width: 350, height: 280 },
-  '21:9': { width: 420, height: 180 }
-}
-
-const VIDEO_RATIO_SIZES = {
-  '16:9': { width: 420, height: 236 },
-  '9:16': { width: 260, height: 462 },
-  '7:4': { width: 420, height: 240 },
-  '4:7': { width: 240, height: 420 },
-  '4:3': { width: 360, height: 270 },
-  '3:4': { width: 280, height: 373 },
-  '1:1': { width: 320, height: 320 }
-}
-
-const parsePixelSize = (value) => {
-  const parsed = Number.parseFloat(String(value || '').replace('px', ''))
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
-}
-
-const ratioFromSize = (sizeKey, fallback = '1:1') => {
-  const [width, height] = String(sizeKey || '').split('x').map(Number)
-  if (!width || !height) return fallback
-  const ratio = width / height
-  if (Math.abs(ratio - 1) < 0.03) return '1:1'
-  if (Math.abs(ratio - 3 / 2) < 0.04) return '3:2'
-  if (Math.abs(ratio - 2 / 3) < 0.04) return '2:3'
-  if (Math.abs(ratio - 16 / 9) < 0.04) return '16:9'
-  if (Math.abs(ratio - 9 / 16) < 0.04) return '9:16'
-  if (Math.abs(ratio - 4 / 3) < 0.04) return '4:3'
-  if (Math.abs(ratio - 3 / 4) < 0.04) return '3:4'
-  if (Math.abs(ratio - 4 / 5) < 0.04) return '4:5'
-  if (Math.abs(ratio - 5 / 4) < 0.04) return '5:4'
-  return `${width}:${height}`
-}
-
-const fitCustomRatio = (ratio, maxWidth, maxHeight, fallbackSize) => {
-  const [width, height] = String(ratio || '').split(':').map(Number)
-  if (!width || !height) return fallbackSize
-  const scale = Math.min(maxWidth / width, maxHeight / height)
-  return {
-    width: Math.round(width * scale),
-    height: Math.round(height * scale)
-  }
-}
-
-const getMediaNodeStageSize = (node) => {
-  const data = node?.data || {}
-  if (node?.type === 'video') {
-    const ratio = data.ratio || ratioFromSize(data.size, '16:9')
-    return VIDEO_RATIO_SIZES[ratio] || VIDEO_RATIO_SIZES['16:9']
-  }
-
-  const ratio = data.ratio || ratioFromSize(data.size, '1:1')
-  return IMAGE_RATIO_SIZES[ratio] || fitCustomRatio(ratio, 420, 462, IMAGE_RATIO_SIZES['1:1'])
-}
-
-const getFallbackNodeSize = (node) => {
-  if (node?.type === 'text') return TEXT_NODE_SIZE
-  if (node?.type === 'image' || node?.type === 'video') {
-    const stageSize = getMediaNodeStageSize(node)
-    return {
-      width: stageSize.width + 2,
-      height: stageSize.height + NODE_SHELL_TOP_PADDING + 2
-    }
-  }
-  if (CONFIG_NODE_SIZES[node?.type]) {
-    const size = CONFIG_NODE_SIZES[node.type]
-    return {
-      width: size.width,
-      height: size.height + CONFIG_NODE_TOP_PADDING
-    }
-  }
-  return DEFAULT_NODE_SIZE
-}
-
-const getNodeSize = (node) => {
-  const candidates = [
-    node?.dimensions,
-    node?.measured,
-    {
-      width: node?.width,
-      height: node?.height
-    },
-    {
-      width: parsePixelSize(node?.style?.width),
-      height: parsePixelSize(node?.style?.height)
-    }
-  ]
-
-  const measured = candidates.find((item) => Number(item?.width) > 0 && Number(item?.height) > 0)
-  if (measured) {
-    return {
-      width: Number(measured.width),
-      height: Number(measured.height)
-    }
-  }
-
-  return getFallbackNodeSize(node)
-}
-
-const getNodePosition = (node) => {
-  const position = node?.computedPosition || node?.positionAbsolute || node?.position || {}
-  return {
-    x: Number(position.x) || 0,
-    y: Number(position.y) || 0
-  }
-}
-
-const getNodeViewportRect = (node) => {
-  if (!node) return null
-  const zoom = Math.max(Number(viewport.value?.zoom) || 1, 0.01)
-  const viewportX = Number(viewport.value?.x) || 0
-  const viewportY = Number(viewport.value?.y) || 0
-  const position = getNodePosition(node)
-  const size = getNodeSize(node)
-  const left = viewportX + position.x * zoom
-  const top = viewportY + position.y * zoom
-  const width = size.width * zoom
-  const height = size.height * zoom
-
-  return {
-    left,
-    top,
-    right: left + width,
-    bottom: top + height
-  }
-}
-
-const mergeViewportRects = (rects) => {
-  if (!rects.length) return null
-  const left = Math.min(...rects.map((rect) => rect.left)) - OVERLAY_PADDING_X
-  const top = Math.min(...rects.map((rect) => rect.top)) - OVERLAY_PADDING_TOP
-  const right = Math.max(...rects.map((rect) => rect.right)) + OVERLAY_PADDING_X
-  const bottom = Math.max(...rects.map((rect) => rect.bottom)) + OVERLAY_PADDING_BOTTOM
-  return {
-    left,
-    top,
-    width: right - left,
-    height: bottom - top
-  }
-}
-
-const getNodeLookup = () => new Map(nodes.value.map((node) => [node.id, node]))
-
-const updateOverlayRects = () => {
-  overlayRafId = null
-  if (!canvasShellRef.value) return
-  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
-  const nextGroupRects = {}
-  const nodeById = getNodeLookup()
-
-  groups.value.forEach((group) => {
-    const memberRects = (group.nodeIds || [])
-      .map((nodeId) => getNodeViewportRect(nodeById.get(nodeId)))
-      .filter(Boolean)
-    const merged = mergeViewportRects(memberRects)
-    if (merged) nextGroupRects[group.id] = merged
-  })
-
-  const selectedRects = selectedNodeIds.value
-    .map((nodeId) => getNodeViewportRect(nodeById.get(nodeId)))
-    .filter(Boolean)
-
-  groupRects.value = nextGroupRects
-  multiSelectRect.value = selectedNodeIds.value.length >= 2 ? mergeViewportRects(selectedRects) : null
-  recordCanvasPerf('overlay-rects', startedAt, {
-    nodeCount: nodes.value.length,
-    groupCount: groups.value.length
-  })
-}
-
-const scheduleOverlayRectUpdate = (options = {}) => {
-  const force = options.force === true
-  if (!shouldMeasureGroupRects({ isGroupDragging: !!groupDragState, force })) return
-
-  const scheduleMode = force
-    ? 'raf'
-    : getOverlayScheduleMode({
-        isDragging: isNodeDragging.value,
-        isZooming: isCanvasZooming.value
-      })
-  const delay = scheduleMode === 'delayed'
-    ? getInteractionOverlayDelay({ isInteracting: true })
-    : 0
-
-  if (overlayTimeoutId && delay === 0) {
-    clearTimeout(overlayTimeoutId)
-    overlayTimeoutId = null
-  }
-
-  if (delay > 0) {
-    if (overlayTimeoutId) return
-    overlayTimeoutId = setTimeout(() => {
-      overlayTimeoutId = null
-      nextTick(() => {
-        if (overlayRafId) cancelAnimationFrame(overlayRafId)
-        overlayRafId = requestAnimationFrame(updateOverlayRects)
-      })
-    }, delay)
-    return
-  }
-
-  if (overlayRafId) cancelAnimationFrame(overlayRafId)
-  nextTick(() => {
-    overlayRafId = requestAnimationFrame(updateOverlayRects)
-  })
-}
-
-const handleCreateGroup = () => {
-  if (selectedNodeIds.value.length < 2) return
-  const groupId = createGroup(selectedNodeIds.value)
-  if (!groupId) return
-  clearNodeSelection()
-  selectedGroupId.value = groupId
-  notifier.success('Group created')
-  scheduleOverlayRectUpdate()
-}
-
-const openRenameGroupModal = () => {
-  if (!selectedGroup.value) return
-  groupRenameTargetId.value = selectedGroup.value.id
-  groupRenameValue.value = selectedGroup.value.name || ''
-  showGroupRenameModal.value = true
-}
-
-const confirmRenameGroup = () => {
-  if (!groupRenameTargetId.value) return
-  const ok = renameGroup(groupRenameTargetId.value, groupRenameValue.value)
-  if (!ok) return
-  showGroupRenameModal.value = false
-  notifier.success('Group renamed')
-  scheduleOverlayRectUpdate()
-}
-
-const handleDuplicateSelectedGroup = () => {
-  if (!selectedGroupId.value) return
-  const newGroupId = duplicateGroup(selectedGroupId.value, { x: 60, y: 60 })
-  if (!newGroupId) return
-  selectedGroupId.value = newGroupId
-  notifier.success('Group duplicated')
-  scheduleOverlayRectUpdate()
-}
-
-const handleUngroupSelectedGroup = () => {
-  if (!selectedGroupId.value) return
-  const ok = ungroup(selectedGroupId.value)
-  if (!ok) return
-  selectedGroupId.value = null
-  notifier.success('Group removed')
-  scheduleOverlayRectUpdate()
-}
-
-const handleDeleteSelectedGroup = () => {
-  if (!selectedGroupId.value) return
-  const ok = deleteGroupWithNodes(selectedGroupId.value)
-  if (!ok) return
-  selectedGroupId.value = null
-  notifier.success('Group deleted')
-  scheduleOverlayRectUpdate()
-}
-
-const startGroupDrag = (group, event) => {
-  if (groupDragState) return
-  if (event.button !== 0) return
-  event.preventDefault()
-  event.stopPropagation()
-  selectGroup(group.id)
-  beginNodeDragInteraction()
-  const isPointerEvent = String(event.type || '').startsWith('pointer')
-  const listenerNames = getGroupDragListenerNames()
-  groupDragState = {
-    groupId: group.id,
-    nodeIds: [...group.nodeIds],
-    initialGroupRect: groupRects.value[group.id]
-      ? { ...groupRects.value[group.id] }
-      : null,
-    startClientX: event.clientX,
-    startClientY: event.clientY,
-    lastDeltaX: 0,
-    lastDeltaY: 0,
-    didMove: false,
-    pointerId: isPointerEvent ? event.pointerId : null,
-    moveEventNames: listenerNames.move,
-    endEventNames: listenerNames.end,
-    cancelEventNames: listenerNames.cancel
-  }
-  groupDragState.moveEventNames.forEach((eventName) => {
-    window.addEventListener(eventName, handleGroupDragMove)
-  })
-  groupDragState.endEventNames.forEach((eventName) => {
-    window.addEventListener(eventName, stopGroupDrag)
-  })
-  groupDragState.cancelEventNames.forEach((eventName) => {
-    window.addEventListener(eventName, stopGroupDrag)
-  })
-}
-
-const handleGroupGripPointerDown = (group, event) => {
-  if (event.button !== 0) return
-  event.preventDefault()
-  event.stopPropagation()
-
-  const action = getSelectedGroupGripPointerAction({
-    selected: selectedGroupId.value === group.id
-  })
-  if (action === 'drag') startGroupDrag(group, event)
-}
-
-const shouldIgnoreGroupBodyDragTarget = (target) => {
-  if (!(target instanceof Element)) return false
-  return Boolean(target.closest([
-    '.canvas-group-title',
-    '.canvas-group-edge',
-    '.group-capsule-menu',
-    '.vue-flow__node',
-    '.vue-flow__edge',
-    '.vue-flow__handle',
-    'button',
-    'input',
-    'textarea',
-    'select',
-    '[contenteditable="true"]'
-  ].join(',')))
-}
-
-const shouldIgnoreCanvasContextMenuTarget = (target) => {
-  if (!(target instanceof Element)) return false
-  return Boolean(target.closest([
-    '.canvas-group-title',
-    '.canvas-group-edge',
-    '.group-capsule-menu',
-    '.vue-flow__node',
-    '.vue-flow__edge',
-    '.vue-flow__handle',
-    'aside',
-    'button',
-    'input',
-    'textarea',
-    'select',
-    '[contenteditable="true"]'
-  ].join(',')))
-}
-
-const handleCanvasPointerDownCapture = (event) => {
-  if (event.button !== 0) return
-  if (shouldIgnoreGroupBodyDragTarget(event.target)) return
-
-  const nodeById = getNodeLookup()
-  const nodeRectsByGroup = Object.fromEntries(groups.value.map((group) => [
-    group.id,
-    (group.nodeIds || [])
-      .map((nodeId) => getNodeViewportRect(nodeById.get(nodeId)))
-      .filter(Boolean)
-  ]))
-
-  const targetGroup = findGroupBodyDragTarget({
-    groups: groups.value,
-    groupRects: groupRects.value,
-    nodeRectsByGroup,
-    point: { x: event.clientX, y: event.clientY }
-  })
-  if (!targetGroup) return
-
-  startGroupDrag(targetGroup, event)
-}
-
-const handleGroupDragMove = (event) => {
-  if (!groupDragState) return
-  if (!shouldAcceptGroupDragMove({
-    activePointerId: groupDragState.pointerId,
-    eventType: event.type,
-    eventPointerId: event.pointerId ?? null
-  })) return
-  const zoom = viewport.value?.zoom || 1
-  const nextDeltaX = (event.clientX - groupDragState.startClientX) / zoom
-  const nextDeltaY = (event.clientY - groupDragState.startClientY) / zoom
-  const moveX = nextDeltaX - groupDragState.lastDeltaX
-  const moveY = nextDeltaY - groupDragState.lastDeltaY
-  if (!moveX && !moveY) return
-
-  groupDragState.didMove = true
-  groupDragState.lastDeltaX = nextDeltaX
-  groupDragState.lastDeltaY = nextDeltaY
-  translateNodesByIds(groupDragState.nodeIds, { x: moveX, y: moveY }, false)
-  const nextGroupRect = translateViewportRect(groupDragState.initialGroupRect, {
-    x: event.clientX - groupDragState.startClientX,
-    y: event.clientY - groupDragState.startClientY
-  })
-  if (!nextGroupRect) {
-    scheduleOverlayRectUpdate()
-    return
-  }
-
-  groupRects.value = {
-    ...groupRects.value,
-    [groupDragState.groupId]: nextGroupRect
-  }
-}
-
-const stopGroupDrag = () => {
-  if (!groupDragState) return
-  groupDragState.moveEventNames.forEach((eventName) => {
-    window.removeEventListener(eventName, handleGroupDragMove)
-  })
-  groupDragState.endEventNames.forEach((eventName) => {
-    window.removeEventListener(eventName, stopGroupDrag)
-  })
-  groupDragState.cancelEventNames.forEach((eventName) => {
-    window.removeEventListener(eventName, stopGroupDrag)
-  })
-  const didMove = !!groupDragState?.didMove
-  groupDragState = null
-  endNodeDragInteraction({ saveHistory: didMove })
-  scheduleOverlayRectUpdate({ force: true })
-}
-
-const clearNodeMenuContext = () => {
-  nodeMenuMode.value = 'toolbar'
-  nodeMenuScreenPosition.value = null
-  pendingPaneCreatePosition.value = null
-  pendingConnectMenuContext.value = null
-}
-
-const toggleToolbarNodeMenu = () => {
-  if (showNodeMenu.value && nodeMenuMode.value === 'toolbar') {
-    showNodeMenu.value = false
-    clearNodeMenuContext()
-    return
-  }
-  nodeMenuMode.value = 'toolbar'
-  nodeMenuScreenPosition.value = null
-  pendingPaneCreatePosition.value = null
-  pendingConnectMenuContext.value = null
-  showNodeMenu.value = true
-}
 
 const screenPointToFlowPoint = (point) => {
   return getFlowPointFromScreenPoint(point, viewport.value)
 }
 
-const openConnectNodeMenu = (point, context) => {
-  nodeMenuMode.value = 'connect'
-  nodeMenuScreenPosition.value = {
-    x: point.x + 12,
-    y: point.y - 12
-  }
-  suppressPaneClickUntil.value = Date.now() + 160
-  pendingConnectMenuContext.value = {
-    ...context,
-    flowPosition: screenPointToFlowPoint(point)
-  }
-  showNodeMenu.value = true
-}
+let selectionInteraction = null
+const clearNodeSelectionForNodeMenu = () => selectionInteraction?.clearNodeSelection()
+const clearGroupSelectionForNodeMenu = () => selectionInteraction?.clearGroupSelection()
 
-const openPaneNodeMenu = (point) => {
-  nodeMenuMode.value = 'pane'
-  nodeMenuScreenPosition.value = {
-    x: point.x + 12,
-    y: point.y - 12
-  }
-  pendingPaneCreatePosition.value = screenPointToFlowPoint(point)
-  pendingConnectMenuContext.value = null
-  suppressPaneClickUntil.value = Date.now() + 160
-  clearGroupSelection()
-  clearNodeSelection()
-  showNodeMenu.value = true
-}
+const {
+  clearNodeMenuContext,
+  decreaseNodeCount,
+  increaseNodeCount,
+  nodeCreateCount,
+  nodeMenuCopy,
+  nodeMenuMode,
+  nodeMenuStyle,
+  nodeMenuTitle,
+  nodeTypeOptions,
+  openConnectNodeMenu,
+  openPaneNodeMenu,
+  pendingConnectMenuContext,
+  pendingPaneCreatePosition,
+  showNodeMenu,
+  suppressPaneClickUntil,
+  toggleToolbarNodeMenu
+} = useCanvasNodeMenuState({
+  getFlowPointFromScreenPoint: screenPointToFlowPoint,
+  clearGroupSelection: clearGroupSelectionForNodeMenu,
+  clearNodeSelection: clearNodeSelectionForNodeMenu
+})
+
+selectionInteraction = useCanvasSelectionInteraction({
+  nodes,
+  edges,
+  groups,
+  selectedGroupId,
+  showNodeMenu,
+  suppressPaneClickUntil,
+  clearNodeMenuContext,
+  handleDeleteSelectedGroup: () => handleDeleteSelectedGroup(),
+  manualSaveHistory,
+  removeNodesByIds
+})
+
+const {
+  selectedGroup,
+  selectedNodeIds,
+  clearGroupSelection,
+  clearNodeSelection,
+  handleGlobalKeydown,
+  onNodeClick,
+  onPaneClick,
+  syncNodeSelectedState
+} = selectionInteraction
+
+const {
+  groupBodyHitRectsById,
+  groupRects,
+  multiSelectMenuRect,
+  renderedGroups,
+  selectedGroupMenuRect,
+  cleanupOverlayRectUpdates,
+  scheduleOverlayRectUpdate
+} = useCanvasOverlayRects({
+  canvasShellRef,
+  groups,
+  isCanvasZooming,
+  isGroupDragging: () => isGroupDragging(),
+  isNodeDragging,
+  nodes,
+  selectedGroupId,
+  selectedNodeIds,
+  viewport
+})
+const isCanvasInteracting = computed(() => isNodeDragging.value || isCanvasZooming.value)
+
+const {
+  canvasFlowStyle,
+  clearViewportSettleTimer,
+  handleViewportChange
+} = useCanvasViewportInteraction({
+  viewport,
+  isCanvasZooming,
+  showGrid,
+  beginCanvasZoomInteraction,
+  endCanvasZoomInteraction,
+  updateViewport,
+  scheduleOverlayRectUpdate
+})
+
+const {
+  confirmRenameGroup,
+  groupRenameValue,
+  handleCreateGroup,
+  handleDeleteSelectedGroup,
+  handleDuplicateSelectedGroup,
+  handleUngroupSelectedGroup,
+  openRenameGroupModal,
+  selectGroup,
+  showGroupRenameModal
+} = useCanvasGroupActions({
+  groups,
+  selectedGroupId,
+  selectedNodeIds,
+  showNodeMenu,
+  clearNodeMenuContext,
+  clearNodeSelection,
+  createGroup,
+  renameGroup,
+  duplicateGroup,
+  ungroup,
+  deleteGroupWithNodes,
+  notify: notifier,
+  scheduleOverlayRectUpdate
+})
+
+const groupDrag = useCanvasGroupDrag({
+  groups,
+  nodes,
+  groupRects,
+  selectedGroupId,
+  viewport,
+  selectGroup,
+  beginNodeDragInteraction,
+  endNodeDragInteraction,
+  refreshCanvasCollectionRefs,
+  translateNodesByIds,
+  scheduleOverlayRectUpdate
+})
+isGroupDragging = groupDrag.isGroupDragging
+const {
+  handleCanvasPointerDownCapture,
+  handleGroupGripPointerDown,
+  stopGroupDrag
+} = groupDrag
+
+const {
+  onNodeDragStart,
+  onNodeDragStop,
+  onNodesChange
+} = useCanvasNodeDragInteraction({
+  nodes,
+  groups,
+  selectedNodeIds,
+  isNodeDragging,
+  beginNodeDragInteraction,
+  endNodeDragInteraction,
+  translateNodesByIds,
+  syncNodeSelectedState,
+  clearGroupSelection,
+  scheduleOverlayRectUpdate
+})
+
+const {
+  handleCanvasContextMenu,
+  onConnect,
+  onConnectEnd,
+  onConnectStart,
+  onEdgesChange,
+  onPaneContextMenu,
+} = useCanvasConnectionInteraction({
+  addEdge,
+  edgeStrategy,
+  isConnectionValid,
+  manualSaveHistory,
+  refreshCanvasCollectionRefs,
+  notify: notifier,
+  openConnectNodeMenu,
+  openPaneNodeMenu
+})
 
 // Add new node | 添加新节点
 const addNewNode = async (type) => {
@@ -1578,28 +517,14 @@ const addNewNode = async (type) => {
     const createdNodeIds = []
 
     for (let index = 0; index < nodeCreateCount.value; index += 1) {
-      const col = index % 2
-      const row = Math.floor(index / 2)
-      const newNodeId = addNode(type, {
-        x: context.flowPosition.x + col * 120,
-        y: context.flowPosition.y + row * 132
-      })
+      const newNodeId = addNode(type, getCanvasNodeGridPosition({
+        origin: context.flowPosition,
+        index
+      }))
       createdNodeIds.push(newNodeId)
 
-      const params = context.handleType === 'source'
-        ? {
-            source: context.nodeId,
-            target: newNodeId,
-            sourceHandle: context.handleId || 'right',
-            targetHandle: 'left'
-          }
-        : {
-            source: newNodeId,
-            target: context.nodeId,
-            sourceHandle: 'right',
-            targetHandle: context.handleId || 'left'
-          }
-      addEdge(edgeStrategy.resolve(params))
+      const params = getConnectMenuEdgeParams(context, newNodeId)
+      if (params) addEdge(edgeStrategy.resolve(params))
     }
 
     setTimeout(() => {
@@ -1616,12 +541,10 @@ const addNewNode = async (type) => {
     const createdNodeIds = []
 
     for (let index = 0; index < nodeCreateCount.value; index += 1) {
-      const col = index % 2
-      const row = Math.floor(index / 2)
-      const newNodeId = addNode(type, {
-        x: pendingPaneCreatePosition.value.x + col * 120,
-        y: pendingPaneCreatePosition.value.y + row * 132
-      })
+      const newNodeId = addNode(type, getCanvasNodeGridPosition({
+        origin: pendingPaneCreatePosition.value,
+        index
+      }))
       createdNodeIds.push(newNodeId)
     }
 
@@ -1635,23 +558,14 @@ const addNewNode = async (type) => {
   }
 
   for (let index = 0; index < nodeCreateCount.value; index += 1) {
-    const col = index % 2
-    const row = Math.floor(index / 2)
-    await nodesFactory.addNewNode(type, {
-      x: col * 88,
-      y: row * 118
-    })
+    await nodesFactory.addNewNode(type, getCanvasNodeGridPosition({
+      index,
+      gapX: 88,
+      gapY: 118
+    }))
   }
   showNodeMenu.value = false
   clearNodeMenuContext()
-}
-
-const increaseNodeCount = () => {
-  nodeCreateCount.value = Math.min(5, nodeCreateCount.value + 1)
-}
-
-const decreaseNodeCount = () => {
-  nodeCreateCount.value = Math.max(1, nodeCreateCount.value - 1)
 }
 
 const readImageFileAsDataUrl = (file) =>
@@ -1677,22 +591,6 @@ const readImageDimensions = (file) =>
     img.src = objectUrl
   })
 
-const ratioFromDimensions = (width, height) => {
-  if (!width || !height) return '1:1'
-  const ratio = width / height
-  if (Math.abs(ratio - 1) < 0.05) return '1:1'
-  if (Math.abs(ratio - 16 / 9) < 0.05) return '16:9'
-  if (Math.abs(ratio - 9 / 16) < 0.05) return '9:16'
-  if (Math.abs(ratio - 3 / 2) < 0.05) return '3:2'
-  if (Math.abs(ratio - 2 / 3) < 0.05) return '2:3'
-  if (Math.abs(ratio - 4 / 3) < 0.05) return '4:3'
-  if (Math.abs(ratio - 3 / 4) < 0.05) return '3:4'
-  if (Math.abs(ratio - 4 / 5) < 0.05) return '4:5'
-  if (Math.abs(ratio - 5 / 4) < 0.05) return '5:4'
-  if (Math.abs(ratio - 21 / 9) < 0.05) return '21:9'
-  return `${width}:${height}`
-}
-
 const triggerLocalImageInject = () => {
   if (!localInjectInputRef.value) return
   localInjectInputRef.value.value = ''
@@ -1709,23 +607,11 @@ const handleLocalImageInject = async (event) => {
       readImageDimensions(file)
     ])
 
-    const width = Number(dimensions?.width || 0)
-    const height = Number(dimensions?.height || 0)
-    const ratio = ratioFromDimensions(width, height)
-    const nodeId = addNode('image', {
-      x: 220 + (nodes.value.length % 3) * 120,
-      y: 180 + Math.floor(nodes.value.length / 3) * 60
-    }, {
-      url: dataUrl,
-      base64: dataUrl,
-      fileName: file.name,
-      fileType: file.type || 'image/png',
-      label: 'Image',
-      ratio,
-      size: width && height ? `${width}x${height}` : '',
-      loading: false,
-      error: ''
-    })
+    const nodeId = addNode(
+      'image',
+      getLocalImageInjectPosition({ nodeCount: nodes.value.length }),
+      createLocalImageNodeData({ dataUrl, file, dimensions })
+    )
 
     await nextTick()
     updateNodeInternals(nodeId)
@@ -1738,27 +624,17 @@ const handleLocalImageInject = async (event) => {
   }
 }
 
-const currentCanvasProjectId = computed(() => {
-  const value = String(route.params.id || '').trim()
-  return value && value !== 'new' ? value : ''
-})
-
 const getLibraryInsertPosition = () => {
   const shell = canvasShellRef.value
   const fallbackWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
   const fallbackHeight = typeof window === 'undefined' ? 900 : window.innerHeight
   const width = Number(shell?.clientWidth || fallbackWidth)
   const height = Number(shell?.clientHeight || fallbackHeight)
-  const flowPoint = screenPointToFlowPoint({
-    x: Math.round(width * 0.56),
-    y: Math.round(height * 0.42)
+  return getCanvasLibraryInsertPosition({
+    viewport: viewport.value,
+    shellSize: { width, height },
+    nodeCount: nodes.value.length
   })
-  const offsetX = (nodes.value.length % 3) * 34
-  const offsetY = (nodes.value.length % 4) * 28
-  return {
-    x: flowPoint.x - 140 + offsetX,
-    y: flowPoint.y - 100 + offsetY
-  }
 }
 
 const handleInsertLibraryAsset = async (asset = {}) => {
@@ -1797,367 +673,10 @@ const handleInsertLibraryAsset = async (asset = {}) => {
   }
 }
 
-// Handle connection | 处理连接
-const onConnect = (params) => {
-  if (pendingConnect.value) {
-    connectSucceeded.value = true
-  }
-  if (!isConnectionValid(params)) {
-    notifier.warning('This connection is not supported for the selected modules')
-    return
-  }
-  const edge = edgeStrategy.resolve(params)
-  addEdge(edge)
-}
-
-const pendingConnect = ref(null)
-const connectSucceeded = ref(false)
-
-const readPointer = (eventLike) => {
-  if (!eventLike) return null
-  const rawEvent = eventLike?.event || eventLike
-  if (rawEvent.touches?.length) {
-    return { x: rawEvent.touches[0].clientX, y: rawEvent.touches[0].clientY }
-  }
-  if (rawEvent.changedTouches?.length) {
-    return { x: rawEvent.changedTouches[0].clientX, y: rawEvent.changedTouches[0].clientY }
-  }
-  const x = rawEvent.clientX ?? rawEvent.x ?? rawEvent.pageX
-  const y = rawEvent.clientY ?? rawEvent.y ?? rawEvent.pageY
-  if (typeof x === 'number' && typeof y === 'number') return { x, y }
-  return null
-}
-
-const onConnectStart = (params) => {
-  const nodeId = params?.nodeId
-  const handleId = params?.handleId
-  const handleType = params?.handleType
-  if (!nodeId || !handleId || !handleType) {
-    pendingConnect.value = null
-    return
-  }
-  pendingConnect.value = {
-    nodeId,
-    handleId,
-    handleType,
-    startPoint: readPointer(params?.event)
-  }
-  connectSucceeded.value = false
-}
-
-const onConnectEnd = (event) => {
-  const current = pendingConnect.value
-  if (!current) return
-
-  const releasePoint = readPointer(event)
-  const shouldOpenMenu = !connectSucceeded.value && releasePoint
-
-  pendingConnect.value = null
-  connectSucceeded.value = false
-
-  if (shouldOpenMenu) {
-    openConnectNodeMenu(releasePoint, current)
-  }
-}
-
-// Keep runtime selected flag in node.data synchronized with VueFlow selected state.
-const syncNodeSelectedState = () => {
-  const multiSelected = nodes.value.filter((node) => !!node.selected).map((node) => node.id)
-  const multiSelectedSet = new Set(multiSelected)
-  const selectedGroupNodeIds = new Set(
-    selectedGroup.value?.nodeIds?.filter((nodeId) => !multiSelectedSet.has(nodeId)) || []
-  )
-
-  const nextNodes = nodes.value.map((node) => {
-    const selected = !!node.selected
-    const current = !!node.data?.selected
-    const suppressCapsule = multiSelected.length >= 2
-      ? multiSelectedSet.has(node.id)
-      : selectedGroupNodeIds.has(node.id)
-    const currentSuppressCapsule = !!node.data?.suppressCapsule
-    if (selected === current && suppressCapsule === currentSuppressCapsule) return node
-    return {
-      ...node,
-      data: {
-        ...(node.data || {}),
-        selected,
-        suppressCapsule
-      }
-    }
-  })
-  if (nextNodes.some((node, index) => node !== nodes.value[index])) {
-    nodes.value = nextNodes
-  }
-}
-
-// Handle node click | 处理节点点击
-const onNodeClick = () => {
-  clearGroupSelection()
-  showNodeMenu.value = false
-  clearNodeMenuContext()
-}
-
-// Handle node changes | 处理节点变化（包含多选/框选）
-const onNodeDragStart = (_, node) => {
-  nodeDragMoved = false
-  startGroupedNodeDrag(node?.id)
-  beginNodeDragInteraction()
-}
-
-const onNodeDragStop = () => {
-  endNodeDragInteraction({ saveHistory: nodeDragMoved })
-  nodeDragMoved = false
-  groupedNodeDragState = null
-  scheduleOverlayRectUpdate({ force: true })
-}
-
-const isPositionOnlyChangeBatch = (changes = []) =>
-  Array.isArray(changes) &&
-  changes.length > 0 &&
-  changes.every((change) => change?.type === 'position' && !('selected' in change) && !('selecting' in change))
-
-const onNodesChange = (changes = []) => {
-  const positionOnlyChanges = isPositionOnlyChangeBatch(changes)
-
-  if (
-    isNodeDragging.value &&
-    Array.isArray(changes) &&
-    changes.some((change) => change?.type === 'position')
-  ) {
-    nodeDragMoved = true
-    applyGroupedNodeDragDelta(changes)
-  }
-
-  nextTick(() => {
-    if (!positionOnlyChanges) {
-      syncNodeSelectedState()
-      if (selectedNodeIds.value.length > 0) {
-        clearGroupSelection()
-      }
-    }
-    scheduleOverlayRectUpdate()
-  })
-}
-
-// Handle viewport change | 处理视口变化
-const handleViewportChange = (newViewport) => {
-  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
-  beginCanvasZoomInteraction()
-  updateViewport(newViewport, { persist: false })
-  scheduleOverlayRectUpdate()
-  recordCanvasPerf('viewport-change', startedAt, {
-    zoom: Number(newViewport?.zoom || 0)
-  })
-
-  if (viewportSettleTimeoutId) {
-    clearTimeout(viewportSettleTimeoutId)
-  }
-
-  viewportSettleTimeoutId = setTimeout(() => {
-    viewportSettleTimeoutId = null
-    updateViewport({ ...(viewport.value || newViewport) }, { persist: true })
-    endCanvasZoomInteraction()
-    scheduleOverlayRectUpdate({ force: true })
-  }, 220)
-}
-
-// Handle edges change | 处理边变化
-const onEdgesChange = (changes) => {
-  // Check if any edge is being removed | 检查是否有边被删除
-  const hasRemoval = changes.some(change => change.type === 'remove')
-  
-  if (hasRemoval) {
-    // Trigger history save after edge removal | 边删除后触发历史保存
-    nextTick(() => {
-      manualSaveHistory()
-    })
-  }
-}
-
-// Handle pane click | 处理画布点击
-const onPaneClick = () => {
-  if (Date.now() < suppressPaneClickUntil.value) {
-    return
-  }
-  clearGroupSelection()
-  showNodeMenu.value = false
-  clearNodeMenuContext()
-  nodes.value = nodes.value.map((node) => ({
-    ...node,
-    selected: false,
-    data: {
-      ...(node.data || {}),
-      selected: false,
-      openPortMenu: null
-    }
-  }))
-}
-
-const onPaneContextMenu = (event) => {
-  event?.preventDefault?.()
-  event?.stopPropagation?.()
-
-  const point = readPointer(event)
-  if (!point) return
-
-  openPaneNodeMenu(point)
-}
-
-const handleCanvasContextMenu = (event) => {
-  if (shouldIgnoreCanvasContextMenuTarget(event.target)) return
-  event?.preventDefault?.()
-  event?.stopPropagation?.()
-
-  const point = readPointer(event)
-  if (!point) return
-
-  openPaneNodeMenu(point)
-}
-
-const isTypingElement = (target) => {
-  if (!target) return false
-  const el = target
-  const tag = String(el.tagName || '').toLowerCase()
-  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
-  return !!el.closest?.('[contenteditable="true"]')
-}
-
-const removeSelectedElements = () => {
-  const selectedNodeIds = new Set(
-    nodes.value.filter((node) => node.selected || node.data?.selected).map((node) => node.id)
-  )
-  const selectedEdgeIds = new Set(edges.value.filter((edge) => edge.selected).map((edge) => edge.id))
-  if (selectedNodeIds.size === 0 && selectedEdgeIds.size === 0) return
-
-  removeNodesByIds(Array.from(selectedNodeIds), false)
-  edges.value = edges.value.filter((edge) => !selectedEdgeIds.has(edge.id))
-  manualSaveHistory()
-}
-
-const handleGlobalKeydown = (event) => {
-  if (isTypingElement(event.target)) return
-  if (event.key !== 'Delete' && event.key !== 'Backspace') return
-  if (selectedGroupId.value) {
-    event.preventDefault()
-    handleDeleteSelectedGroup()
-    return
-  }
-  removeSelectedElements()
-}
-
 const goWorkspace = () => {
   flushSave()
   router.push('/workspace')
 }
-
-// Check if mobile | 检测是否移动端
-const checkMobile = () => {
-  isMobile.value = window.innerWidth < 768
-}
-
-const recoverBlankMediaNodes = async (projectId) => {
-  const id = String(projectId || '').trim()
-  if (!id || id === 'new') return
-
-  const response = await getMediaAssets({ projectId: id, limit: 100 })
-  const items = Array.isArray(response?.items) ? response.items : []
-  if (items.length === 0) return
-
-  const recovery = recoverMissingNodeMedia({
-    nodes: nodes.value,
-    edges: edges.value,
-    assets: items,
-    now: Date.now()
-  })
-
-  if (recovery.restoredCount === 0) return
-
-  nodes.value = recovery.nodes
-  await nextTick()
-  recovery.restoredNodeIds.forEach((nodeId) => updateNodeInternals(nodeId))
-  await flushSave()
-}
-
-// Load project by ID | 根据ID加载项目
-const loadProjectById = async (projectId) => {
-  // Update flow key to force VueFlow re-render | 更新 key 强制 VueFlow 重新渲染
-  flowKey.value = Date.now()
-  
-  if (projectId && projectId !== 'new') {
-    loadProject(projectId)
-    try {
-      await recoverBlankMediaNodes(projectId)
-    } catch (error) {
-      console.warn('Blank media recovery skipped:', error?.message || error)
-    }
-  } else {
-    // New project - detach from the previous project before clearing canvas.
-    // 新建/空白画布先解绑旧项目，避免后续 flushSave 把空画布写回旧项目。
-    resetCanvasSession()
-  }
-}
-
-const ensureProjectSnapshot = async (projectId) => {
-  const id = String(projectId || '')
-  if (!id || id === 'new') {
-    await loadProjectById(id)
-    return
-  }
-
-  try {
-    await refreshProjectById(id)
-  } catch {
-    // Fall back to any locally cached draft when detail refresh is unavailable.
-  }
-
-  if (!shouldApplyRemoteProjectSnapshot({
-    refreshedProjectId: id,
-    activeRouteProjectId: String(route.params.id || ''),
-    currentCanvasProjectId: currentCanvasProjectId.value,
-    hasPendingCanvasChanges: hasPendingCanvasChanges()
-  })) {
-    return
-  }
-
-  await loadProjectById(id)
-}
-
-const applyPendingWorkflowTemplate = async () => {
-  const raw = sessionStorage.getItem('ai-canvas-workflow-template')
-  if (!raw) return
-
-  sessionStorage.removeItem('ai-canvas-workflow-template')
-
-  let payload = null
-  try {
-    payload = JSON.parse(raw)
-  } catch {
-    return
-  }
-
-  const workflowId = String(payload?.workflowId || '')
-  if (!workflowId || nodes.value.length > 0) return
-
-  const workflow = getWorkflowById(workflowId)
-  if (!workflow) return
-
-  await nodesFactory.createFromWorkflow(workflow, {})
-}
-
-// Watch for route changes | 监听路由变化
-watch(
-  () => route.params.id,
-  async (newId, oldId) => {
-    if (newId && newId !== oldId) {
-      // Save current project before switching | 切换前保存当前项目
-      if (oldId) {
-        await flushSave()
-      }
-      // Load new project | 加载新项目
-      await ensureProjectSnapshot(newId)
-    }
-  }
-)
 
 watch([nodes, groups], () => {
   scheduleOverlayRectUpdate()
@@ -2170,687 +689,54 @@ watch(selectedGroupId, (groupId) => {
   scheduleOverlayRectUpdate()
 })
 
-const handlePageHide = () => {
-  flushSave()
-}
-
-const handleVisibilityChange = () => {
-  if (document.visibilityState === 'hidden') {
-    flushSave()
-  }
-}
-
-// Initialize | 初始化
-onMounted(async () => {
-  checkMobile()
-  window.addEventListener('resize', checkMobile)
-  window.addEventListener('resize', scheduleOverlayRectUpdate)
-  window.addEventListener('pagehide', handlePageHide)
-  window.addEventListener('keydown', handleGlobalKeydown)
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-
-  const routeProjectId = String(route.params.id || '')
-  await loadCachedProjects()
-  const cachedCanvasData = routeProjectId && routeProjectId !== 'new'
-    ? getProjectCanvas(routeProjectId)
-    : null
-  const hasWarmProject = shouldUseCachedProjectBeforeRemote({
-    projectId: routeProjectId,
-    cachedCanvasData
-  })
-
-  if (routeProjectId === 'new' || hasWarmProject) {
-    loadProjectById(route.params.id)
-  }
-
-  const projectsReady = initProjectsStore()
-
-  if (!hasWarmProject) {
-    await projectsReady
-    await ensureProjectSnapshot(route.params.id)
-  } else if (routeProjectId && routeProjectId !== 'new') {
-    projectsReady.then(() => refreshProjectById(routeProjectId)).then((project) => {
-      if (!shouldApplyRemoteProjectSnapshot({
-        refreshedProjectId: project?.id || routeProjectId,
-        activeRouteProjectId: String(route.params.id || ''),
-        currentCanvasProjectId: currentCanvasProjectId.value,
-        hasPendingCanvasChanges: hasPendingCanvasChanges()
-      })) return
-      if (!project?.canvasData) return
-      loadProjectById(routeProjectId)
-    }).catch(() => {
-      // Fall back to local cache when remote detail refresh is unavailable.
-    })
-  }
-
-  await nextTick()
-  await applyPendingWorkflowTemplate()
-  scheduleOverlayRectUpdate()
+const { loadProjectById } = useCanvasRouteLifecycle({
+  route,
+  currentCanvasProjectId,
+  edges,
+  flowKey,
+  groups,
+  isMobile,
+  nodes,
+  nodesFactory,
+  bootstrapAuth,
+  cleanupOverlayRectUpdates,
+  clearViewportSettleTimer,
+  flushSave,
+  getProjectCanvas,
+  hasPendingCanvasChanges,
+  initProjectsStore,
+  loadCachedProjects,
+  loadProject,
+  refreshProjectById,
+  resetCanvasSession,
+  scheduleOverlayRectUpdate,
+  stopGroupDrag,
+  updateNodeInternals,
+  handleGlobalKeydown
 })
 
-// Cleanup on unmount | 卸载时清理
-onUnmounted(() => {
-  window.removeEventListener('resize', checkMobile)
-  window.removeEventListener('resize', scheduleOverlayRectUpdate)
-  window.removeEventListener('pagehide', handlePageHide)
-  window.removeEventListener('keydown', handleGlobalKeydown)
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-  stopGroupDrag()
-  if (overlayRafId) cancelAnimationFrame(overlayRafId)
-  if (overlayTimeoutId) clearTimeout(overlayTimeoutId)
-  if (viewportSettleTimeoutId) clearTimeout(viewportSettleTimeoutId)
-  // Save project before leaving | 离开前保存项目
-  flushSave()
+const {
+  conflictAction,
+  remoteRefreshAction,
+  showConflictModal,
+  showRemoteRefreshControl,
+  showRemoteRefreshModal,
+  syncIndicator,
+  cancelConflictResolution,
+  confirmRemoteRefresh,
+  openRemoteRefreshModal,
+  overwriteRemoteConflict,
+  refreshRemoteConflict,
+  saveConflictAsCopy
+} = useCanvasSyncResolution({
+  currentCanvasProjectId,
+  projectSaveState,
+  route,
+  router,
+  duplicateProject,
+  flushSave,
+  loadProjectById: (projectId) => loadProjectById(projectId),
+  notify: notifier,
+  refreshProjectById
 })
 </script>
-
-<style>
-/* Import Vue Flow styles | 引入 Vue Flow 样式 */
-@import '@vue-flow/core/dist/style.css';
-@import '@vue-flow/core/dist/theme-default.css';
-
-.canvas-flow {
-  position: relative;
-  z-index: 1;
-}
-
-.share-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.share-section {
-  padding: 20px 0;
-}
-
-.share-section + .share-section {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.share-form-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.share-heading {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.share-section h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.share-heading p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.share-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.toggle-btn {
-  width: 42px;
-  height: 24px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: #1c1c1c;
-  padding: 2px;
-  position: relative;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.18s ease, border-color 0.18s ease;
-}
-
-.toggle-btn span {
-  display: block;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.18s;
-}
-
-.toggle-btn.on {
-  background: #f3f4f6;
-  border-color: #f3f4f6;
-}
-
-.toggle-btn.on span {
-  transform: translateX(18px);
-  background: #111111;
-}
-
-.share-link-box {
-  margin-top: 12px;
-  border: 1px solid rgba(143, 143, 143, 0.24);
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 8px 8px 14px;
-  background: #0e0e0e;
-}
-
-.share-link-text {
-  flex: 1;
-  font-size: 13px;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.share-copy-btn {
-  min-width: 108px;
-}
-
-.share-textarea {
-  min-height: 96px;
-  width: 100%;
-  resize: none;
-  border-radius: 18px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  padding: 14px 16px;
-  color: var(--text);
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.share-textarea::placeholder {
-  color: var(--text-soft);
-}
-
-.share-textarea:focus {
-  border-color: var(--border-strong);
-  background: var(--surface-2);
-}
-
-.node-menu-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 18px;
-}
-
-.node-menu-eyebrow {
-  font-size: 11px;
-  line-height: 1;
-  letter-spacing: 0.14em;
-  color: #6b7280;
-  margin-bottom: 12px;
-}
-
-.node-menu-title {
-  margin: 0;
-  font-size: 17px;
-  line-height: 1.25;
-  font-weight: 600;
-  color: #f3f4f6;
-}
-
-.node-menu-copy {
-  margin: 12px 0 0;
-  font-size: 13px;
-  line-height: 1.65;
-  color: #9ca3af;
-}
-
-.node-menu-list {
-  display: flex;
-  flex-direction: column;
-  margin-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding-top: 10px;
-}
-
-.node-menu-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  position: relative;
-  border-radius: 18px;
-  padding: 14px 10px;
-  background: transparent;
-  border: 0;
-  transition: background 0.18s ease, transform 0.18s ease;
-}
-
-.node-menu-item + .node-menu-item {
-  margin-top: 10px;
-  padding-top: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.node-menu-item:hover {
-  background: rgba(255, 255, 255, 0.045);
-}
-
-.node-menu-item-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  background: #202020;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.node-menu-item-copy {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  min-width: 0;
-  padding-right: 12px;
-}
-
-.node-menu-item-title {
-  font-size: 14px;
-  line-height: 1.2;
-  color: #f3f4f6;
-  font-weight: 600;
-}
-
-.node-menu-item-description {
-  font-size: 12px;
-  line-height: 1.5;
-  color: #9ca3af;
-  text-align: left;
-}
-
-.node-menu-quantity {
-  margin-top: 18px;
-  padding-top: 18px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.node-menu-quantity-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #f3f4f6;
-}
-
-.node-menu-quantity-note {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.node-menu-stepper {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px;
-  border-radius: 999px;
-  background: #161616;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.node-menu-stepper-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #202020;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #f3f4f6;
-  font-size: 16px;
-  transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
-}
-
-.node-menu-stepper-btn:hover:not(:disabled) {
-  background: #2a2a2a;
-  border-color: rgba(255, 255, 255, 0.14);
-}
-
-.node-menu-stepper-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.node-menu-stepper-value {
-  min-width: 24px;
-  text-align: center;
-  font-size: 13px;
-  color: #f3f4f6;
-  font-weight: 600;
-}
-
-.canvas-flow {
-  width: 100%;
-  height: 100%;
-  background: #080808;
-}
-
-.canvas-primary-tool {
-  background: #ededed;
-  color: #111111;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-}
-
-.canvas-primary-tool:hover:not(:disabled) {
-  background: #d9d9d9;
-}
-
-.group-overlay-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 18;
-  pointer-events: none;
-}
-
-.group-capsule-menu {
-  position: absolute;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  pointer-events: auto;
-}
-
-.group-capsule-menu .capsule-inner {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(15, 15, 15, 0.96);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.34);
-  white-space: nowrap;
-}
-
-.group-capsule-menu .capsule-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.group-capsule-menu .capsule-divider {
-  width: 1px;
-  height: 18px;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.group-capsule-menu .capsule-icon,
-.group-capsule-menu .capsule-select {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.02);
-  color: #e7e8eb;
-  transition: all 0.2s ease;
-}
-
-.group-capsule-menu .capsule-icon {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-}
-
-.group-capsule-menu .capsule-icon:hover:not(:disabled),
-.group-capsule-menu .capsule-select:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.08);
-  color: #f3f4f6;
-}
-
-.group-capsule-menu .capsule-icon-solid {
-  background: #0f0f0f;
-  color: #f6f8fc;
-  border-color: rgba(143, 143, 143, 0.65);
-}
-
-.group-capsule-menu .capsule-create {
-  min-width: 86px;
-  height: 28px;
-  padding: 0 14px;
-  gap: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-}
-
-.group-capsule-menu .capsule-create-label {
-  font-size: 12px;
-  line-height: 1;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.group-primary-btn {
-  min-width: 88px;
-}
-
-.group-danger-icon {
-  color: #d89b90;
-  border-color: rgba(196, 106, 92, 0.24);
-}
-
-.group-danger-icon:hover:not(:disabled) {
-  color: #e5b0a8;
-  border-color: rgba(196, 106, 92, 0.48);
-  background: rgba(196, 106, 92, 0.1);
-}
-
-.canvas-group-box {
-  position: absolute;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.045);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-  pointer-events: none;
-}
-
-.canvas-group-box.is-selected {
-  border-color: rgba(235, 226, 216, 0.82);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 0 0 1px rgba(165, 129, 99, 0.18);
-}
-
-.canvas-group-title {
-  position: absolute;
-  left: 0;
-  top: -44px;
-  z-index: 3;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(41, 41, 43, 0.96);
-  color: #f3f4f6;
-  font-size: 13px;
-  font-weight: 600;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
-  pointer-events: auto;
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
-}
-
-.canvas-group-body-hit-zone {
-  position: absolute;
-  z-index: 1;
-  background: transparent;
-  pointer-events: auto;
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
-}
-
-.canvas-group-title.is-selected {
-  border-color: rgba(255, 255, 255, 0.38);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
-}
-
-.canvas-group-edge {
-  position: absolute;
-  z-index: 2;
-  border: none;
-  background: transparent;
-  pointer-events: auto;
-  cursor: grab;
-}
-
-.canvas-group-edge::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-}
-
-.canvas-group-edge.top,
-.canvas-group-edge.bottom {
-  left: 0;
-  width: 100%;
-  height: 14px;
-}
-
-.canvas-group-edge.left,
-.canvas-group-edge.right {
-  top: 0;
-  width: 14px;
-  height: 100%;
-}
-
-.canvas-group-edge.top {
-  top: 0;
-}
-
-.canvas-group-edge.top::before,
-.canvas-group-edge.bottom::before {
-  border-left: none;
-  border-right: none;
-}
-
-.canvas-group-edge.bottom {
-  bottom: 0;
-}
-
-.canvas-group-edge.left {
-  left: 0;
-}
-
-.canvas-group-edge.left::before,
-.canvas-group-edge.right::before {
-  border-top: none;
-  border-bottom: none;
-}
-
-.canvas-group-edge.right {
-  right: 0;
-}
-
-</style>
-
-<style>
-.canvas-flow .vue-flow__pane {
-  background-color: rgba(18, 18, 18, 0.72);
-  background-image:
-    linear-gradient(rgba(22, 22, 22, 0.78), rgba(22, 22, 22, 0.78)),
-    var(--canvas-grid-image, none);
-  background-size: var(--canvas-grid-size, 20px 20px);
-  background-position: var(--canvas-grid-position, 0 0);
-}
-
-.canvas-sync-pill {
-  flex: 0 1 auto;
-  min-width: 110px;
-  width: auto;
-  height: 50px;
-  display: flex;
-  align-self: auto;
-  justify-content: center;
-  align-items: center;
-}
-
-.canvas-sync-refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  margin-left: 4px;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 11px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.canvas-sync-refresh-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.11);
-  border-color: rgba(255, 255, 255, 0.24);
-}
-
-.canvas-sync-refresh-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
-}
-
-.canvas-zoom-pill {
-  width: auto;
-  justify-content: center;
-  align-items: center;
-}
-
-.conflict-actions {
-  flex-wrap: wrap;
-}
-
-.conflict-actions .ui-button-text {
-  flex: 1 1 132px;
-  min-width: 0;
-}
-
-.canvas-flow .vue-flow__node-text,
-.canvas-flow .vue-flow__node-image,
-.canvas-flow .vue-flow__node-video {
-  box-shadow: none !important;
-  border-radius: 24px !important;
-}
-
-.canvas-flow .vue-flow__edge-path {
-  stroke: #ffffff;
-  stroke-width: 1;
-  stroke-dasharray: 0;
-}
-
-.canvas-flow .vue-flow__edge.selected .vue-flow__edge-path {
-  stroke: #ffffff;
-  stroke-width: 2;
-  stroke-dasharray: 0;
-}
-</style>

@@ -1,51 +1,49 @@
 <template>
   <div class="video-node-wrapper node-shell-wrapper" @mouseenter="showCapsule = true" @mouseleave="showCapsule = false">
-    <div class="node-meta-row" @mousedown="handleMetaMouseDown">
-      <n-icon :size="16" class="meta-icon"><VideocamOutline /></n-icon>
-      <span class="meta-title">Video</span>
-    </div>
+    <NodeMetaRow label="Video" :icon="VideocamOutline" @mousedown="handleMetaMouseDown" />
 
-    <div v-show="showNodeCapsule" class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
-        <div class="capsule-inner" :class="{ 'capsule-inner-selected': isSelected }">
-        <div class="capsule-group">
-          <BaseDropdown :options="modelOptions" compact @select="setModel"><button class="capsule-select">{{ displayModel }}</button></BaseDropdown>
-          <BaseDropdown v-if="inputProfile.allowRatio" :options="ratioOptions" compact @select="setRatio"><button class="capsule-select">{{ localRatio }}</button></BaseDropdown>
-          <BaseDropdown v-if="inputProfile.allowType && typeOptions.length > 0" :options="typeOptions" compact @select="setO1Type"><button class="capsule-select">{{ displayO1Type }}</button></BaseDropdown>
-          <BaseDropdown v-if="inputProfile.allowMode && modeOptions.length > 0" :options="modeOptions" compact @select="setMode"><button class="capsule-select">{{ displayMode }}</button></BaseDropdown>
-          <BaseDropdown v-if="inputProfile.allowSize && sizeOptions.length > 0" :options="sizeOptions" compact @select="setSize"><button class="capsule-select">{{ displaySize }}</button></BaseDropdown>
-          <BaseDropdown v-if="inputProfile.allowResolution && resolutionOptions.length > 0" :options="resolutionOptions" compact @select="setResolution"><button class="capsule-select">{{ displayResolution }}</button></BaseDropdown>
-          <BaseDropdown v-if="inputProfile.allowAudioToggle && supportsAudioToggle" :options="audioOptions" compact @select="setGenerateAudio"><button class="capsule-select">{{ displayAudio }}</button></BaseDropdown>
-          <BaseDropdown v-if="inputProfile.allowDuration && durationOptions.length > 0" :options="durationOptions" compact @select="setDuration"><button class="capsule-select">{{ localDuration }}s</button></BaseDropdown>
-        </div>
-
-        <div class="capsule-divider" />
-
-        <div class="capsule-group">
-          <BaseDropdown :options="toolDropdownOptions" compact @select="handleToolAction">
-            <button class="capsule-select capsule-tool-trigger" :disabled="isToolsDisabled">
-              <img :src="toolsIcon" alt="" class="capsule-tool-icon" />
-              <span>Tools</span>
-            </button>
-          </BaseDropdown>
-          <button class="capsule-icon" :disabled="!displayVideoUrl" @click="openPreviewModal" title="Preview"><n-icon :size="14"><ExpandOutline /></n-icon></button>
-          <button class="capsule-icon" @click="handleDuplicate" title="Duplicate"><n-icon :size="14"><CopyOutline /></n-icon></button>
-          <button class="capsule-icon" @click="handleDelete" title="Delete"><n-icon :size="14"><TrashOutline /></n-icon></button>
-        </div>
-      </div>
-      <div class="capsule-inner capsule-generate" :class="{ 'capsule-inner-selected': isSelected }">
-        <button v-if="!isVideoBusy" class="capsule-icon capsule-icon-solid capsule-create" @click="handleGenerateVideo" title="Create">
-          <img :src="createIcon" alt="" class="capsule-create-graphic" />
-          <span class="capsule-create-label">Create</span>
-        </button>
-        <button v-if="!isVideoBusy" class="capsule-icon" @click="handleRegenerateVideo" title="Regenerate">
-          <n-icon :size="14"><RefreshOutline /></n-icon>
-        </button>
-        <button v-if="isVideoBusy" class="capsule-icon capsule-icon-solid capsule-create" @click="handleStopGeneration" title="Stop">
-          <n-icon :size="14"><CloseCircleOutline /></n-icon>
-          <span class="capsule-create-label">Stop</span>
-        </button>
-      </div>
-    </div>
+    <VideoNodeCapsuleMenu
+      v-show="showNodeCapsule"
+      :capsule-style="capsuleStyle"
+      :selected="isSelected"
+      :model-options="modelOptions"
+      :display-model="displayModel"
+      :input-profile="inputProfile"
+      :ratio-options="ratioOptions"
+      :display-ratio="localRatio"
+      :type-options="typeOptions"
+      :display-o1-type="displayO1Type"
+      :mode-options="modeOptions"
+      :display-mode="displayMode"
+      :size-options="sizeOptions"
+      :display-size="displaySize"
+      :resolution-options="resolutionOptions"
+      :display-resolution="displayResolution"
+      :supports-audio-toggle="supportsAudioToggle"
+      :audio-options="audioOptions"
+      :display-audio="displayAudio"
+      :duration-options="durationOptions"
+      :display-duration="localDuration"
+      :tool-options="toolDropdownOptions"
+      :tools-disabled="isToolsDisabled"
+      :has-video="!!displayVideoUrl"
+      :video-busy="isVideoBusy"
+      @select-model="setModel"
+      @select-ratio="setRatio"
+      @select-o1-type="setO1Type"
+      @select-mode="setMode"
+      @select-size="setSize"
+      @select-resolution="setResolution"
+      @select-generate-audio="setGenerateAudio"
+      @select-duration="setDuration"
+      @tool-action="handleToolAction"
+      @preview="openPreviewModal"
+      @duplicate="handleDuplicate"
+      @delete="handleDelete"
+      @create="handleGenerateVideo"
+      @regenerate="handleRegenerateVideo"
+      @stop="handleStopGeneration"
+    />
 
     <div
       class="video-node rounded-2xl border relative transition-all duration-200 overflow-visible"
@@ -56,93 +54,40 @@
       :style="moduleStyle"
     >
       <div class="module-stage" :style="stageStyle">
-        <div v-if="showProgress" class="module-progress-shell">
-          <div class="module-progress-track"></div>
-          <div class="module-progress-bar" :style="progressBarStyle"></div>
-          <div class="module-progress-label">Generating video... {{ progressPercent }}%</div>
-        </div>
+        <VideoNodeGenerationProgress v-if="showProgress" :bar-style="progressBarStyle" :percent="progressPercent" />
 
-        <div v-else-if="displayVideoUrl && !data.loading" class="module-video-shell">
-          <div class="module-video-frame">
-            <video
-              v-if="isVideoInteractive"
-              :src="displayVideoUrl"
-              controls
-              class="module-video"
-            />
-            <button
-              v-else-if="showStaticVideoPreview"
-              class="module-video-static-preview"
-              type="button"
-              @click="activateInlineVideoPreview"
-            >
-              <video
-                :src="displayVideoUrl"
-                muted
-                playsinline
-                preload="metadata"
-                class="module-video-static-media"
-              />
-              <span class="module-video-play-badge">
-                <n-icon :size="18"><VideocamOutline /></n-icon>
-              </span>
-              <span class="module-video-static-label">Preview video</span>
-            </button>
-          </div>
-        </div>
+        <VideoNodeDisplayFrame
+          v-else-if="displayVideoUrl && !data.loading"
+          :video-url="displayVideoUrl"
+          :is-interactive="isVideoInteractive"
+          :show-static-preview="showStaticVideoPreview"
+          @activate-preview="activateInlineVideoPreview"
+        />
 
-        <div v-else class="w-full h-full bg-[#0f0f0f] flex flex-col items-center justify-center gap-4 relative text-center px-4">
-          <div v-if="activeImageRoleSet.keys.size > 0" class="flex items-center gap-3">
-            <div v-for="item in imageRoleStatusList.filter(i => i.active && i.previewUrl)" :key="item.key" class="flex flex-col items-center gap-1">
-              <div class="w-16 h-16 rounded-lg overflow-hidden border border-[#2d2d2d] bg-black">
-                <img :src="item.previewUrl" class="w-full h-full object-cover" />
-              </div>
-              <span class="text-[10px] text-[#7b818c]">{{ item.label }}</span>
-            </div>
-          </div>
-          
-          <div class="flex flex-col items-center gap-2">
-            <n-icon :size="32" class="text-[#7b818c]"><VideocamOutline /></n-icon>
-            <span class="text-sm text-[#7b818c]">{{ connectHint }}</span>
-            <button class="upload-btn" @click="triggerUpload">Upload</button>
-            <input ref="uploadInputRef" type="file" accept="video/*" class="hidden" @change="handleFileUpload" />
-          </div>
-        </div>
+        <template v-else>
+          <VideoNodeEmptyState
+            :show-previews="activeImageRoleSet.keys.size > 0"
+            :items="imageRoleStatusList"
+            :connect-hint="connectHint"
+            @upload="triggerUpload"
+          />
+          <input ref="uploadInputRef" type="file" accept="video/*" class="hidden" @change="handleFileUpload" />
+        </template>
       </div>
 
-      <Handle type="source" :position="Position.Right" id="right" :class="['node-handle-plus', 'node-handle-plus-right', { 'node-handle-plus-visible': showHandles }]" />
-      <Handle type="target" :position="Position.Left" id="left" :class="['node-handle-plus', 'node-handle-plus-left', { 'node-handle-plus-visible': showHandles }]" />
+      <NodeFlowHandles :show-handles="showHandles" />
     </div>
 
-    <n-modal v-model:show="showPreviewModal" :mask-closable="true">
-      <div class="zoom-modal-card" @click.stop>
-        <video :src="displayVideoUrl" controls autoplay class="zoom-video-original" />
-      </div>
-    </n-modal>
-    <BaseModal
-      v-model:show="showErrorModal"
-      title="Video Module Error"
-      size="sm"
-    >
-      <p class="ui-body ui-modal-copy whitespace-pre-wrap">{{ data.error }}</p>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton @click="closeErrorModal">Close</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-    <BaseModal
-      v-model:show="showValidationModal"
-      :title="validationTitle"
-      size="sm"
-    >
-      <p class="ui-body ui-modal-copy whitespace-pre-wrap">{{ validationMessage }}</p>
-      <template #footer>
-        <div class="ui-modal-actions">
-          <BaseButton @click="closeValidationModal">OK</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
+    <VideoNodePreviewModal v-model:show="showPreviewModal" :video-url="displayVideoUrl" />
+    <VideoNodeFeedbackModals
+      v-model:show-error="showErrorModal"
+      v-model:show-validation="showValidationModal"
+      :error-message="data.error"
+      :validation-title="validationTitle"
+      :validation-message="validationMessage"
+      @close-error="closeErrorModal"
+      @close-validation="closeValidationModal"
+    />
     <VideoEnhanceToolDrawer
       v-model:show="showEnhanceDrawer"
       :video-url="displayVideoUrl || ''"
@@ -153,46 +98,46 @@
       @error="handleEnhanceError"
     />
 
-    <div v-if="showUploadProgress" class="upload-progress-wrap" :style="moduleStyle">
-      <div class="upload-progress-track">
-        <div class="upload-progress-bar" :style="uploadProgressStyle"></div>
-      </div>
-    </div>
+    <VideoNodeUploadProgress v-if="showUploadProgress" :module-style="moduleStyle" :progress-style="uploadProgressStyle" />
 
-    <div class="binding-status-wrap" :style="moduleStyle">
-      <div class="binding-status-row">
-        <div
-          v-for="item in imageRoleStatusList"
-          :key="item.key"
-          class="binding-status-pill"
-          :class="item.active ? 'binding-status-pill-active' : 'binding-status-pill-idle'"
-        >
-          {{ item.label }}
-        </div>
-      </div>
-    </div>
+    <NodeBindingStatus :module-style="moduleStyle" :items="imageRoleStatusList" flush />
   </div>
 </template>
 
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { NIcon, NModal } from 'naive-ui'
-import { BaseButton, BaseDropdown, BaseModal } from '@/components/ui'
+import { useVueFlow } from '@vue-flow/core'
+import { storeToRefs } from 'pinia'
 import VideoEnhanceToolDrawer from '@/components/tools/VideoEnhanceToolDrawer.vue'
-import { CloseCircleOutline, CopyOutline, ExpandOutline, RefreshOutline, TrashOutline, VideocamOutline } from '@/icons/coolicons'
-import { addEdge, addNode, currentProjectId, duplicateNode, edges, flushSave, nodes, removeNode, saveProject, updateNode } from '@/stores/canvas'
-import { useApiConfig, useVideoGeneration } from '@/hooks'
+import NodeBindingStatus from './NodeBindingStatus.vue'
+import NodeFlowHandles from './NodeFlowHandles.vue'
+import NodeMetaRow from './NodeMetaRow.vue'
+import VideoNodeCapsuleMenu from './video/VideoNodeCapsuleMenu.vue'
+import VideoNodeDisplayFrame from './video/VideoNodeDisplayFrame.vue'
+import VideoNodeEmptyState from './video/VideoNodeEmptyState.vue'
+import VideoNodeFeedbackModals from './video/VideoNodeFeedbackModals.vue'
+import VideoNodeGenerationProgress from './video/VideoNodeGenerationProgress.vue'
+import VideoNodePreviewModal from './video/VideoNodePreviewModal.vue'
+import VideoNodeUploadProgress from './video/VideoNodeUploadProgress.vue'
+import { useVideoNodeEnhanceResults } from './video/useVideoNodeEnhanceResults.js'
+import { useVideoNodeProgressState } from './video/useVideoNodeProgressState.js'
+import { useVideoNodeUploadPersistence } from './video/useVideoNodeUploadPersistence.js'
+import { VideocamOutline } from '@/icons/coolicons'
+import { useCanvasStore } from '@/stores/canvas'
+import { pinia } from '@/stores/pinia'
+import { useVideoGeneration } from '@/hooks/api/useVideoApi.js'
+import { useApiConfig } from '@/hooks/useApiConfig'
 import { DEFAULT_VIDEO_DURATION, DEFAULT_VIDEO_MODEL, DEFAULT_VIDEO_RATIO, getModelConfig, getModelDurationOptions, getModelRatioOptions, getModelVideoModeOptions, getModelVideoResolutionOptions, getModelVideoSizeOptions, getModelVideoTypeOptions, getVideoGenerationProfile, resolveSeedanceGenerationType, resolveVideoModelKey, videoModelOptions } from '@/stores/models'
 import { createAuthenticatedMediaProxyUrl, persistMediaUrl, uploadImageFile } from '@/utils/media'
 import { getVisibleVideoBindingStatusItems, shouldLoadInlineVideoPlayer, shouldRenderStaticVideoPreview } from '@/utils/videoPreview'
 import { edgeStrategy, resolveNodeInputs } from '@/services/edgeStrategy'
-import createIcon from '@/assets/create-icon.svg'
-import toolsIcon from '@/assets/tools-icon.svg'
 
 const props = defineProps({ id: String, data: Object, selected: Boolean })
 
 const { updateNodeInternals } = useVueFlow()
+const canvasStore = useCanvasStore(pinia)
+const { currentProjectId, nodes } = storeToRefs(canvasStore)
+const { addEdge, addNode, duplicateNode, flushSave, removeNode, saveProject, updateNode } = canvasStore
 const { isConfigured } = useApiConfig()
 const videoGen = useVideoGeneration()
 
@@ -217,21 +162,52 @@ const uploadInputRef = ref(null)
 const showPreviewModal = ref(false)
 const showErrorModal = ref(false)
 const showValidationModal = ref(false)
-const showEnhanceDrawer = ref(false)
 const validationTitle = ref('Upload Limit')
 const validationMessage = ref('')
 const videoActionLoading = ref('')
-const toolActionLoading = ref('')
-const pendingEnhancedNodeId = ref('')
-const isUploading = ref(false)
-const showUploadProgress = ref(false)
-const uploadProgress = ref(0)
-const uploadStage = ref('idle')
-const progressValue = ref(0)
-const showProgress = ref(false)
-const progressTimer = ref(null)
-const progressFinishTimer = ref(null)
 const MAX_UPLOAD_SIZE_BYTES = 60 * 1024 * 1024
+const {
+  handleFileUpload,
+  isUploading,
+  showUploadProgress,
+  triggerUpload,
+  uploadProgressStyle
+} = useVideoNodeUploadPersistence({
+  currentProjectId,
+  flushSave,
+  maxUploadSizeBytes: MAX_UPLOAD_SIZE_BYTES,
+  messageApi: () => window.$message,
+  nodeId: () => props.id,
+  showValidationModal,
+  updateNode,
+  uploadInputRef,
+  uploadVideoFile: uploadImageFile,
+  validationMessage,
+  validationTitle
+})
+const {
+  handleEnhanceApply,
+  handleEnhanceError,
+  handleEnhancePending,
+  handleToolAction,
+  showEnhanceDrawer,
+  toolActionLoading
+} = useVideoNodeEnhanceResults({
+  addEdge,
+  addNode,
+  currentProjectId,
+  edgeStrategy,
+  flushSave,
+  messageApi: () => window.$message,
+  nodeId: () => props.id,
+  nodes,
+  persistMediaUrl,
+  saveProject,
+  setTimeoutFn: setTimeout,
+  triggerUpload,
+  updateNode,
+  updateNodeInternals
+})
 
 const getInitialVideoModel = (data) => resolveVideoModelKey(data?.model || DEFAULT_VIDEO_MODEL)
 const getInitialVideoConfig = (data) => getModelConfig(getInitialVideoModel(data))
@@ -416,20 +392,15 @@ const stageStyle = computed(() => {
   return { width: `${picked.width}px`, height: `${picked.height}px` }
 })
 const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
-const progressPercent = computed(() => Math.round(progressValue.value))
-const progressBarStyle = computed(() => ({ width: `${Math.max(0, Math.min(100, progressValue.value))}%` }))
-const uploadProgressStyle = computed(() => {
-  const percent = Math.max(0, Math.min(100, uploadProgress.value))
-  const color =
-    uploadStage.value === 'error'
-      ? '#c46a5c'
-      : uploadStage.value === 'success'
-        ? '#8b9272'
-        : '#d8dbe0'
-  return {
-    width: `${percent}%`,
-    background: color
-  }
+const {
+  progressBarStyle,
+  progressPercent,
+  resetProgress,
+  showProgress
+} = useVideoNodeProgressState({
+  error: () => props.data?.error,
+  hasVideo: () => !!props.data?.url,
+  loading: () => props.data?.loading
 })
 const capsuleStyle = {
   transform: 'translateX(-50%) scale(var(--node-capsule-scale, 1))',
@@ -437,81 +408,8 @@ const capsuleStyle = {
 }
 const isToolBusy = computed(() => !!toolActionLoading.value)
 const isToolsDisabled = computed(() => !props.data?.url || isToolBusy.value || isUploading.value || isVideoBusy.value)
-const clearProgressTimers = () => {
-  if (progressTimer.value) {
-    clearInterval(progressTimer.value)
-    progressTimer.value = null
-  }
-  if (progressFinishTimer.value) {
-    clearTimeout(progressFinishTimer.value)
-    progressFinishTimer.value = null
-  }
-}
-
-const startProgress = () => {
-  clearProgressTimers()
-  progressValue.value = 0
-  showProgress.value = true
-  progressTimer.value = setInterval(() => {
-    if (progressValue.value < 70) progressValue.value += 3
-    else if (progressValue.value < 90) progressValue.value += 1.2
-    else if (progressValue.value < 98) progressValue.value += 0.35
-    progressValue.value = Math.min(progressValue.value, 98)
-  }, 120)
-}
-
-const finishProgress = () => {
-  clearProgressTimers()
-  progressTimer.value = setInterval(() => {
-    progressValue.value = Math.min(100, progressValue.value + 4.5)
-    if (progressValue.value >= 100) {
-      clearProgressTimers()
-      progressFinishTimer.value = setTimeout(() => {
-        showProgress.value = false
-        progressValue.value = 0
-      }, 120)
-    }
-  }, 16)
-}
 const isVideoBusy = computed(() => (!!props.data?.loading && !props.data?.url) || videoGen.loading.value || !!videoActionLoading.value || isUploading.value)
-watch(
-  () => props.data?.loading,
-  (loadingNow) => {
-    // Only start progress if loading AND no URL (meaning it's generating, not just uploaded) | 仅当加载中且无 URL 时才开始进度条（意味着正在生成，而不仅仅是上传）
-    if (loadingNow && !props.data?.url) {
-      startProgress()
-      return
-    }
-    if (props.data?.error) {
-      clearProgressTimers()
-      showProgress.value = false
-      progressValue.value = 0
-      return
-    }
-    if (showProgress.value) finishProgress()
-  },
-  { immediate: true }
-)
-
-onUnmounted(() => clearProgressTimers())
-
-const beforeUnloadGuard = (event) => {
-  if (!isUploading.value) return
-  event.preventDefault()
-  event.returnValue = 'Video upload is still in progress. Leaving now may lose it.'
-}
-
-watch(isUploading, (uploading) => {
-  if (uploading) {
-    window.addEventListener('beforeunload', beforeUnloadGuard)
-  } else {
-    window.removeEventListener('beforeunload', beforeUnloadGuard)
-  }
-})
-
-onUnmounted(() => {
-  window.removeEventListener('beforeunload', beforeUnloadGuard)
-})
+onUnmounted(() => videoGen.stop())
 
 watch(
   () => props.data?.error,
@@ -599,73 +497,6 @@ const getConnectedInputs = () => {
     last_frame_image: resolvedInputs.value.last_frame_image,
     images: resolvedInputs.value.images,
     videos: resolvedInputs.value.videos
-  }
-}
-
-const createLinkedVideoNode = (payload = {}) => {
-  const currentNode = nodes.value.find((node) => node.id === props.id)
-  const position = {
-    x: (currentNode?.position?.x || 0) + 360,
-    y: currentNode?.position?.y || 0
-  }
-
-  const nodeId = addNode('video', position, {
-    url: '',
-    loading: true,
-    label: 'Enhanced video',
-    ...payload
-  })
-
-  addEdge(edgeStrategy.resolve({
-    source: props.id,
-    target: nodeId,
-    sourceHandle: 'right',
-    targetHandle: 'left'
-  }))
-
-  setTimeout(() => {
-    updateNodeInternals(nodeId)
-  }, 50)
-
-  return nodeId
-}
-
-const updateLinkedVideoNode = async (nodeId, payload = {}) => {
-  if (!nodeId) return false
-  updateNode(nodeId, {
-    ...payload,
-    updatedAt: Date.now()
-  })
-  return saveProject()
-}
-
-const resolveVideoPersistence = async (rawValue, fileName) => {
-  const rawUrl = String(rawValue || '').trim()
-  if (!rawUrl) {
-    throw new Error('No video output')
-  }
-
-  try {
-    const stableUrl = await persistMediaUrl(rawUrl, fileName, {
-      projectId: currentProjectId.value,
-      source: 'video_enhance',
-      sourceNodeId: props.id
-    })
-    if (stableUrl) {
-      return {
-        persisted: true,
-        persistedUrl: stableUrl,
-        displayUrl: stableUrl
-      }
-    }
-  } catch (error) {
-    console.warn('Video persistence failed, keeping preview only:', error)
-  }
-
-  return {
-    persisted: false,
-    persistedUrl: '',
-    displayUrl: rawUrl
   }
 }
 
@@ -770,12 +601,9 @@ const runVideoGeneration = async (mode = 'create') => {
 
 const handleStopGeneration = () => {
   videoGen.stop()
-  // Clear timers and reset UI
-  clearProgressTimers()
-  showProgress.value = false
-  progressValue.value = 0
+  resetProgress()
   videoActionLoading.value = ''
-  
+
   // Reset node state
   updateNode(props.id, { loading: false, error: 'Generation stopped' })
   window.$message?.info('Generation stopped')
@@ -783,160 +611,6 @@ const handleStopGeneration = () => {
 
 const handleGenerateVideo = () => runVideoGeneration('create')
 const handleRegenerateVideo = () => runVideoGeneration('regenerate')
-const handleToolAction = async (key) => {
-  if (key === 'replace-video') {
-    triggerUpload()
-    return
-  }
-  if (key === 'enhance-video') {
-    showEnhanceDrawer.value = true
-  }
-}
-
-const handleEnhancePending = async (payload = {}) => {
-  if (payload.targetMode === 'replace') return
-  if (pendingEnhancedNodeId.value) return
-
-  toolActionLoading.value = 'enhance-video'
-  const nodeId = createLinkedVideoNode({
-    fileType: payload.fileType || 'video/mp4',
-    sourceTool: 'video-enhance',
-    error: ''
-  })
-  pendingEnhancedNodeId.value = nodeId || ''
-  await flushSave()
-}
-
-const handleEnhanceApply = async (payload = {}) => {
-  const targetNodeId = pendingEnhancedNodeId.value
-  pendingEnhancedNodeId.value = ''
-
-  try {
-    const persistence = await resolveVideoPersistence(
-      payload.url,
-      `enhanced-video-${Date.now()}.mp4`
-    )
-
-    const savedOk = await updateLinkedVideoNode(targetNodeId, {
-      url: persistence.persisted ? persistence.persistedUrl : persistence.displayUrl,
-      loading: false,
-      error: '',
-      fileType: payload.fileType || 'video/mp4',
-      persistStatus: persistence.persisted ? 'saved' : 'error',
-      persistError: persistence.persisted ? '' : 'Enhanced result is only shown temporarily. Please retry.'
-    })
-
-    if (persistence.persisted && savedOk) {
-      window.$message?.success('Enhanced video created')
-    } else if (!persistence.persisted) {
-      window.$message?.warning('Enhanced result is only shown temporarily. Please retry until it is saved.')
-    } else {
-      window.$message?.warning('Enhanced video created, but project save failed. Please retry save.')
-    }
-    showEnhanceDrawer.value = false
-  } catch (error) {
-    if (targetNodeId) {
-      await updateLinkedVideoNode(targetNodeId, {
-        loading: false,
-        error: error?.message || 'Video enhancement failed'
-      })
-    }
-    window.$message?.error(error?.message || 'Video enhancement failed')
-  } finally {
-    toolActionLoading.value = ''
-  }
-}
-
-const handleEnhanceError = async (payload = {}) => {
-  const failedNodeId = pendingEnhancedNodeId.value
-  pendingEnhancedNodeId.value = ''
-  toolActionLoading.value = ''
-  if (!failedNodeId) return
-  await updateLinkedVideoNode(failedNodeId, {
-    loading: false,
-    error: payload?.message || 'Video enhancement failed'
-  })
-}
-
-const triggerUpload = () => {
-  if (isUploading.value) return
-  uploadInputRef.value?.click()
-}
-
-const resetUploadProgress = (delayMs = 1500) => {
-  setTimeout(() => {
-    if (uploadStage.value === 'success' || uploadStage.value === 'error') {
-      showUploadProgress.value = false
-      uploadProgress.value = 0
-      uploadStage.value = 'idle'
-    }
-  }, delayMs)
-}
-
-const handleFileUpload = async (event) => {
-  const file = event.target.files?.[0]
-  if (!file) return
-
-  try {
-    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-      validationTitle.value = 'Upload Limit'
-      validationMessage.value = 'Video is too large. Maximum file size is 60MB.'
-      showValidationModal.value = true
-      return
-    }
-
-    updateNode(props.id, { loading: false, error: '' })
-    isUploading.value = true
-    showUploadProgress.value = true
-    uploadStage.value = 'uploading'
-    uploadProgress.value = 3
-
-    const url = await uploadImageFile(file, {
-      projectId: currentProjectId.value,
-      source: 'video_upload',
-      sourceNodeId: props.id,
-      onProgress: (percent) => {
-        uploadStage.value = 'uploading'
-        uploadProgress.value = Math.max(uploadProgress.value, Math.min(92, percent))
-      }
-    })
-
-    if (!url) throw new Error('Upload failed: No URL returned')
-
-    uploadStage.value = 'saving'
-    uploadProgress.value = Math.max(uploadProgress.value, 95)
-    updateNode(props.id, {
-      url,
-      fileName: file.name,
-      fileType: file.type,
-      updatedAt: Date.now(),
-      loading: false,
-      error: ''
-    })
-    const savedOk = await flushSave()
-    if (savedOk) {
-      uploadStage.value = 'success'
-      uploadProgress.value = 100
-      window.$message?.success('Upload complete and saved')
-      resetUploadProgress(900)
-    } else {
-      uploadStage.value = 'error'
-      uploadProgress.value = 100
-      window.$message?.warning('Project save failed after upload. Please retry save.')
-      resetUploadProgress(2200)
-    }
-  } catch (err) {
-    console.error('Video upload error:', err)
-    updateNode(props.id, { loading: false, error: err.message || 'Upload failed' })
-    uploadStage.value = 'error'
-    uploadProgress.value = 100
-    resetUploadProgress(2200)
-    window.$message?.error(`Video upload failed: ${err.message || 'Unknown error'}`)
-  } finally {
-    isUploading.value = false
-    if (event?.target) event.target.value = ''
-  }
-}
 
 const handleDelete = () => {
   removeNode(props.id)
@@ -1059,104 +733,11 @@ watch(
   border-radius: var(--module-radius);
 }
 
-.module-video-shell {
-  width: 100%;
-  height: 100%;
-  padding: var(--module-inset);
-  background: #050505;
-}
-.module-video-frame {
-  --inner-radius: calc(var(--module-radius) - var(--module-inset));
-  width: 100%;
-  height: 100%;
-  border-radius: var(--inner-radius);
-  overflow: hidden;
-  background: #000;
-}
-.module-video {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: var(--inner-radius);
-  clip-path: inset(0 round var(--inner-radius));
-  background: #000;
-}
-.module-video-static-preview {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: var(--inner-radius);
-  background: #000;
-  color: #d8dbe0;
-  display: block;
-  padding: 0;
-  overflow: hidden;
-  cursor: pointer;
-}
-.module-video-static-media {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: var(--inner-radius);
-  background: #000;
-}
-.module-video-play-badge {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 42px;
-  height: 42px;
-  transform: translate(-50%, -50%);
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.48);
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  color: #f4f4f5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.module-video-static-label {
-  position: absolute;
-  left: 50%;
-  bottom: 16px;
-  transform: translateX(-50%);
-  padding: 4px 9px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.5);
-  color: #f4f4f5;
-  font-size: 12px;
-  line-height: 1;
-  white-space: nowrap;
-  pointer-events: none;
-}
 .binding-warning-text {
   color: #c8a06a;
   font-size: 11px;
   line-height: 1.35;
   text-align: center;
-}
-.upload-progress-wrap {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  margin-top: 12px;
-}
-.upload-progress-track {
-  width: 100%;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-}
-.upload-progress-bar {
-  height: 100%;
-  width: 0%;
-  border-radius: inherit;
-  transition: width 0.2s ease, background 0.2s ease;
 }
 .upload-btn {
   margin-top: 4px;
@@ -1167,19 +748,6 @@ watch(
   font-size: 12px;
   padding: 6px 12px;
   line-height: 1;
-}
-
-.capsule-tool-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.capsule-tool-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  filter: brightness(0) saturate(100%) invert(81%) sepia(6%) saturate(243%) hue-rotate(182deg) brightness(93%) contrast(88%);
 }
 
 .video-node::after {
@@ -1202,28 +770,4 @@ watch(
   opacity: 1;
 }
 
-.zoom-modal-card {
-  max-width: calc(100vw - 80px);
-  max-height: calc(100vh - 80px);
-  overflow: auto;
-  background: #121212;
-  border: 1px solid rgba(143, 143, 143, 0.38);
-  border-radius: 14px;
-  padding: 12px;
-}
-
-.zoom-image-original {
-  display: block;
-  max-width: none;
-  max-height: none;
-}
-
-.zoom-video-original {
-  display: block;
-  max-width: min(1200px, calc(100vw - 140px));
-  max-height: calc(100vh - 140px);
-  width: auto;
-  height: auto;
-  background: #000;
-}
 </style>

@@ -7,19 +7,19 @@
           <p class="text-[var(--text-secondary)]">Personal calls, tokens and media output.</p>
         </div>
         <div class="flex items-center gap-2">
-          <button class="flora-button-ghost px-4 py-2 rounded-xl" @click="goAdmin">Admin Console</button>
-          <button class="flora-button-ghost px-4 py-2 rounded-xl" @click="goHome">Home</button>
+          <UsageNavButton class="px-4 py-2 rounded-xl" @click="goAdmin">Admin Console</UsageNavButton>
+          <UsageNavButton class="px-4 py-2 rounded-xl" @click="goHome">Home</UsageNavButton>
         </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div v-for="card in cards" :key="card.label" class="flora-panel rounded-2xl p-5">
+        <UsageSurface v-for="card in cards" :key="card.label" class="rounded-2xl p-5">
           <p class="text-xs uppercase tracking-wider text-[var(--text-secondary)]">{{ card.label }}</p>
           <p class="text-2xl mt-2">{{ card.value }}</p>
-        </div>
+        </UsageSurface>
       </div>
 
-      <div class="flora-panel rounded-2xl p-6">
+      <UsageSurface class="rounded-2xl p-6">
         <h2 class="text-lg mb-4">Daily Trend</h2>
         <div v-if="series.length === 0" class="text-sm text-[var(--text-secondary)]">No usage data yet.</div>
         <div v-else class="space-y-2">
@@ -35,7 +35,7 @@
             <span class="text-sm text-right">{{ row.total_calls }} calls</span>
           </div>
         </div>
-      </div>
+      </UsageSurface>
     </div>
   </div>
 </template>
@@ -44,7 +44,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getUsageSummary, getUsageTimeseries } from '@/api/usage'
+import UsageNavButton from '@/components/usage/UsageNavButton.vue'
+import UsageSurface from '@/components/usage/UsageSurface.vue'
 import { getErrorMessage } from '@/utils'
+
+const isLocalPreviewMode = () => import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
 
 const router = useRouter()
 
@@ -84,6 +88,8 @@ const loadUsageData = async () => {
 }
 
 onMounted(async () => {
+  if (isLocalPreviewMode()) return
+
   try {
     await loadUsageData()
   } catch (error) {

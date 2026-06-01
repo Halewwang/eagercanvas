@@ -2,160 +2,90 @@
   <!-- Image config node wrapper for hover area | Text to Image配置节点包裹层，扩展悬浮区域 -->
   <div class="image-config-node-wrapper" @mouseenter="showActions = true" @mouseleave="showActions = false">
     <!-- Image config node | Text to Image配置节点 -->
-    <div
-      class="image-config-node bg-[#0f0f0f] rounded-2xl border min-w-[300px] transition-all duration-200"
-      :class="data.selected ? 'border-[#8f8f8f]' : 'border-transparent'">
+    <ConfigNodeShell :selected="data.selected" class="image-config-node min-w-[300px]">
       <!-- Header | 头部 -->
-      <div class="flex items-center justify-between px-3 py-2 border-b border-[rgba(143,143,143,0.28)]">
-        <span class="text-sm font-medium text-[#d7dbe3]">{{ data.label }}</span>
-        <div class="flex items-center gap-1">
-          <button @click="handleDelete" class="p-1 hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors">
-            <n-icon :size="14">
-              <TrashOutline />
-            </n-icon>
-          </button>
+      <ConfigNodeHeader :label="data.label" @delete="handleDelete">
+        <template #actions>
           <BaseDropdown :options="modelOptions" compact @select="handleModelSelect">
-            <button class="p-1 hover:bg-[rgba(255,255,255,0.04)] rounded transition-colors">
-              <n-icon :size="14">
-                <ChevronDownOutline />
-              </n-icon>
-            </button>
+            <ConfigNodeIconButton>
+              <ChevronDownOutline />
+            </ConfigNodeIconButton>
           </BaseDropdown>
-        </div>
-      </div>
+        </template>
+      </ConfigNodeHeader>
 
       <!-- Config options | 配置选项 -->
-      <div class="p-3 space-y-3">
+      <ConfigNodeContent>
         <!-- Model selector | Model选择 -->
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Model</span>
-          <BaseDropdown :options="modelOptions" compact @select="handleModelSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ displayModelName }}
-              <n-icon :size="12"><ChevronDownOutline /></n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow label="Model" :options="modelOptions" icon="down" @select="handleModelSelect">
+          {{ displayModelName }}
+        </ConfigNodeDropdownRow>
 
         <!-- Quality selector | Quality选择 -->
-        <div v-if="hasQualityOptions" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Quality</span>
-          <BaseDropdown :options="qualityOptions" compact @select="handleQualitySelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ displayQuality }}
-              <n-icon :size="12"><ChevronForwardOutline /></n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow v-if="hasQualityOptions" label="Quality" :options="qualityOptions" @select="handleQualitySelect">
+          {{ displayQuality }}
+        </ConfigNodeDropdownRow>
 
-        <div v-if="backgroundOptions.length > 0" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Background</span>
-          <BaseDropdown :options="backgroundOptions" compact @select="handleBackgroundSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ displayBackground }}
-              <n-icon :size="12"><ChevronForwardOutline /></n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow v-if="backgroundOptions.length > 0" label="Background" :options="backgroundOptions" @select="handleBackgroundSelect">
+          {{ displayBackground }}
+        </ConfigNodeDropdownRow>
 
-        <div v-if="formatOptions.length > 0" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Format</span>
-          <BaseDropdown :options="formatOptions" compact @select="handleFormatSelect">
-            <button class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-              {{ displayFormat }}
-              <n-icon :size="12"><ChevronForwardOutline /></n-icon>
-            </button>
-          </BaseDropdown>
-        </div>
+        <ConfigNodeDropdownRow v-if="formatOptions.length > 0" label="Format" :options="formatOptions" @select="handleFormatSelect">
+          {{ displayFormat }}
+        </ConfigNodeDropdownRow>
 
         <!-- Size selector | Size选择 -->
-        <div v-if="hasSizeOptions" class="flex items-center justify-between">
-          <span class="text-xs text-[#8f939e]">Size</span>
-          <div class="flex items-center gap-2">
-            <BaseDropdown :options="sizeOptions" compact @select="handleSizeSelect">
-              <button
-                class="flex items-center gap-1 text-sm text-[#eceff2] hover:text-[#f2f3f5]">
-                {{ displaySize }}
-                <n-icon :size="12">
-                  <ChevronForwardOutline />
-                </n-icon>
-              </button>
-            </BaseDropdown>
-          </div>
-        </div>
+        <ConfigNodeDropdownRow v-if="hasSizeOptions" label="Size" :options="sizeOptions" @select="handleSizeSelect">
+          {{ displaySize }}
+        </ConfigNodeDropdownRow>
 
         <!-- Model tips | Model提示 -->
-        <div v-if="currentModelConfig?.tips" class="text-xs text-[#8f939e] bg-[#14161a] rounded px-2 py-1">
-          💡 {{ currentModelConfig.tips }}
-        </div>
+        <ConfigNodeTipMessage v-if="currentModelConfig?.tips" :message="currentModelConfig.tips" />
 
         <!-- Connected inputs indicator | 连接输入指示 -->
-        <div
-          class="flex items-center gap-2 text-xs text-[#8f939e] py-1 border-t border-[rgba(143,143,143,0.28)]">
-          <span class="px-3 py-1 rounded-full"
-            :class="connectedPrompts.length > 0 ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
-            Prompt {{ connectedPrompts.length > 0 ? `${connectedPrompts.length} items` : '○' }}
-          </span>
-          <span v-if="currentModelConfig?.supportImageReference" class="px-3 py-1 rounded-full"
-            :class="connectedRefImages.length > 0 ? 'bg-[#2a2a2a] text-[#f2f3f5] border border-[rgba(255,255,255,0.62)]' : 'bg-[#1a1a1a] text-[#818793] border border-[rgba(143,143,143,0.36)]'">
-            Reference {{ connectedRefImages.length > 0 ? `${connectedRefImages.length} images` : '○' }}
-          </span>
-        </div>
+        <ConfigNodeConnectionStatus :items="connectionStatusItems" />
 
         <!-- Generate button | 生成按钮 -->
-        <div v-if="hasConnectedImageWithContent" class="flex gap-2">
-          <!-- Create new (primary) | 新建节点（主按钮） -->
-          <button @click="handleGenerate('new')" :disabled="loading || !isConfigured"
-            class="flora-button-primary flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        <ConfigNodeSplitActions
+          v-if="hasConnectedImageWithContent"
+          :disabled="loading || !isConfigured"
+          @primary="handleGenerate('new')"
+          @secondary="handleGenerate('replace')"
+        >
+          <template #primary>
             <n-spin v-if="loading" :size="14" />
             <template v-else>
               <n-icon :size="14"><AddOutline /></n-icon>
               Generate New
             </template>
-          </button>
-          <!-- Replace existing (secondary) | Replace现有（次按钮） -->
-          <button @click="handleGenerate('replace')" :disabled="loading || !isConfigured"
-            class="flex-shrink-0 flex items-center justify-center gap-1 py-2 px-2.5 rounded-lg border border-[rgba(143,143,143,0.32)] text-[#8f939e] hover:border-[rgba(226,229,235,0.72)] hover:text-[#f2f3f5] text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          </template>
+          <template #secondary>
             <n-spin v-if="loading" :size="14" />
             <template v-else>
               <n-icon :size="14"><RefreshOutline /></n-icon>
               Replace
             </template>
-          </button>
-        </div>
-        <button v-else @click="handleGenerate('auto')" :disabled="loading || !isConfigured"
-          class="flora-button-primary w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          </template>
+        </ConfigNodeSplitActions>
+        <ConfigNodePrimaryActionButton v-else @click="handleGenerate('auto')" :disabled="loading || !isConfigured" emphasized>
           <n-spin v-if="loading" :size="14" />
           <template v-else>
             <span class="text-[#090b0d] bg-[rgba(232,224,214,0.78)] rounded-full w-4 h-4 flex items-center justify-center text-xs">◆</span>
             Generate Now
           </template>
-        </button>
+        </ConfigNodePrimaryActionButton>
 
         <!-- Error message | 错误信息 -->
-        <div v-if="error" class="text-xs text-red-500 mt-2">
-          {{ error.message || 'Generation failed' }}
-        </div>
+        <ConfigNodeErrorMessage :error="error" />
 
-      </div>
+      </ConfigNodeContent>
 
       <!-- Handles | 连接点 -->
-      <Handle type="target" :position="Position.Left" id="left" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
-      <Handle type="source" :position="Position.Right" id="right" class="!bg-[#d6d8de] !border-2 !border-[#0f0f0f]" />
-    </div>
+      <ConfigNodeHandles />
+    </ConfigNodeShell>
 
     <!-- Hover action buttons | 悬浮操作按钮 -->
-    <!-- Top right - Copy button | 右上角 - Copy按钮 -->
-    <div v-show="showActions" class="absolute -top-5 right-0 z-[1000]">
-      <button @click="handleDuplicate"
-        class="action-btn group p-2 rounded-lg transition-all border border-[rgba(143,143,143,0.32)] flex items-center gap-0 hover:gap-1.5">
-        <n-icon :size="16" class="text-[#c9ccd2]">
-          <CopyOutline />
-        </n-icon>
-        <span
-          class="text-xs text-[#c9ccd2] max-w-0 overflow-hidden group-hover:max-w-[60px] transition-all duration-200 whitespace-nowrap">Copy</span>
-      </button>
-    </div>
+    <ConfigNodeHoverActions :visible="showActions" @duplicate="handleDuplicate" />
   </div>
 </template>
 
@@ -165,15 +95,35 @@
  * Configuration panel for text-to-image generation with API integration
  */
 import { ref, computed, watch, onMounted } from 'vue'
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
+import { useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
+import { storeToRefs } from 'pinia'
 import { BaseDropdown } from '@/components/ui'
-import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline, RefreshOutline, AddOutline } from '@/icons/coolicons'
-import { useImageGeneration, useApiConfig } from '@/hooks'
-import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, saveProject, projectSaveState, currentProjectId } from '@/stores/canvas'
+import { ChevronDownOutline, RefreshOutline, AddOutline } from '@/icons/coolicons'
+import { useImageGeneration } from '@/hooks/api/useImageApi.js'
+import { useApiConfig } from '@/hooks/useApiConfig'
+import { useCanvasStore } from '@/stores/canvas'
+import { pinia } from '@/stores/pinia'
 import { imageModelOptions, getModelSizeOptions, getModelQualityOptions, getModelConfig, DEFAULT_IMAGE_MODEL } from '@/stores/models'
 import { persistImageUrl } from '@/utils/media'
 import { edgeStrategy, resolveNodeInputs } from '@/services/edgeStrategy'
+import ConfigNodeConnectionStatus from './config/ConfigNodeConnectionStatus.vue'
+import ConfigNodeContent from './config/ConfigNodeContent.vue'
+import ConfigNodeDropdownRow from './config/ConfigNodeDropdownRow.vue'
+import ConfigNodeErrorMessage from './config/ConfigNodeErrorMessage.vue'
+import ConfigNodeHandles from './config/ConfigNodeHandles.vue'
+import ConfigNodeHeader from './config/ConfigNodeHeader.vue'
+import ConfigNodeHoverActions from './config/ConfigNodeHoverActions.vue'
+import ConfigNodeIconButton from './config/ConfigNodeIconButton.vue'
+import ConfigNodePrimaryActionButton from './config/ConfigNodePrimaryActionButton.vue'
+import ConfigNodeShell from './config/ConfigNodeShell.vue'
+import {
+  getImageConfigRatioFromSizeKey as ratioFromSizeKey,
+  getImageConfigResolutionFromSizeKey as resolutionFromSizeKey,
+  resolveImageConfigSizeSelection
+} from './config/ImageConfigSizeOptions.js'
+import ConfigNodeSplitActions from './config/ConfigNodeSplitActions.vue'
+import ConfigNodeTipMessage from './config/ConfigNodeTipMessage.vue'
 
 const props = defineProps({
   id: String,
@@ -182,6 +132,9 @@ const props = defineProps({
 
 // Vue Flow instance | Vue Flow 实例
 const { updateNodeInternals } = useVueFlow()
+const canvasStore = useCanvasStore(pinia)
+const { currentProjectId, edges, nodes, projectSaveState } = storeToRefs(canvasStore)
+const { updateNode, addNode, addEdge, duplicateNode, removeNode, saveProject } = canvasStore
 
 // API config hook | API 配置 hook
 const { isConfigured } = useApiConfig()
@@ -200,49 +153,6 @@ const localBackground = ref(props.data?.background || 'auto')
 const localOutputFormat = ref(props.data?.output_format || props.data?.outputFormat || 'png')
 const localRatio = ref(props.data?.ratio || '1:1')
 const localResolution = ref(props.data?.resolution || '1k')
-
-const BASE_SIZE_BY_RATIO = {
-  '1:1': { w: 1024, h: 1024 },
-  '3:2': { w: 1152, h: 768 },
-  '2:3': { w: 768, h: 1152 },
-  '4:3': { w: 1152, h: 864 },
-  '3:4': { w: 864, h: 1152 },
-  '4:5': { w: 896, h: 1120 },
-  '5:4': { w: 1120, h: 896 },
-  '16:9': { w: 1280, h: 720 },
-  '9:16': { w: 720, h: 1280 },
-  '21:9': { w: 1680, h: 720 }
-}
-
-const ratioFromSizeKey = (sizeKey) => {
-  if (String(sizeKey || '').trim().toLowerCase() === 'auto') return 'auto'
-  const [w, h] = String(sizeKey || '').split('x').map(Number)
-  if (!w || !h) return '1:1'
-  const ratio = w / h
-  if (Math.abs(ratio - 1) < 0.02) return '1:1'
-  if (Math.abs(ratio - 3 / 2) < 0.03) return '3:2'
-  if (Math.abs(ratio - 2 / 3) < 0.03) return '2:3'
-  if (Math.abs(ratio - 16 / 9) < 0.03) return '16:9'
-  if (Math.abs(ratio - 9 / 16) < 0.03) return '9:16'
-  if (Math.abs(ratio - 4 / 3) < 0.03) return '4:3'
-  if (Math.abs(ratio - 3 / 4) < 0.03) return '3:4'
-  if (Math.abs(ratio - 4 / 5) < 0.03) return '4:5'
-  if (Math.abs(ratio - 5 / 4) < 0.03) return '5:4'
-  if (Math.abs(ratio - 21 / 9) < 0.03) return '21:9'
-  return '1:1'
-}
-
-const resolutionFromSizeKey = (sizeKey) => {
-  if (String(sizeKey || '').trim().toLowerCase() === 'auto') return '1k'
-  const [w, h] = String(sizeKey || '').split('x').map(Number)
-  if (!w || !h) return '1k'
-  const ratio = ratioFromSizeKey(sizeKey)
-  const base = BASE_SIZE_BY_RATIO[ratio] || BASE_SIZE_BY_RATIO['1:1']
-  const scale = Math.max(w / base.w, h / base.h)
-  if (scale >= 3.5) return '4k'
-  if (scale >= 1.8) return '2k'
-  return '1k'
-}
 
 // Get current model config | 获取当前Model配置
 const currentModelConfig = computed(() => getModelConfig(localModel.value))
@@ -309,31 +219,17 @@ const displaySize = computed(() => {
   return option?.label || localSize.value
 })
 
-const sizeMetaOptions = computed(() =>
-  sizeOptions.value.map((opt) => {
-    const key = String(opt.key || '')
-    const [w, h] = key.split('x').map(Number)
-    return {
-      key,
-      ratio: ratioFromSizeKey(key),
-      resolution: resolutionFromSizeKey(key),
-      pixels: (w || 0) * (h || 0)
-    }
+const applyNearestSizeSelection = (ratioKey, resolutionKey) => {
+  const selection = resolveImageConfigSizeSelection({
+    sizeOptions: sizeOptions.value,
+    currentSize: localSize.value,
+    ratio: ratioKey,
+    resolution: resolutionKey
   })
-)
-
-const pickNearestSizeKey = (ratioKey, resolutionKey) => {
-  if (ratioKey === 'auto') return 'auto'
-  let candidates = sizeMetaOptions.value.filter((opt) => opt.ratio === ratioKey)
-  candidates = candidates.filter((opt) => opt.key !== 'auto')
-  if (candidates.length === 0) candidates = sizeMetaOptions.value
-  candidates = candidates.filter((opt) => opt.key !== 'auto')
-  if (candidates.length === 0) return localSize.value || '1024x1024'
-  const exact = candidates.find((opt) => opt.resolution === resolutionKey)
-  const picked = exact || [...candidates].sort((a, b) => a.pixels - b.pixels)[0]
-  localRatio.value = picked.ratio
-  localResolution.value = picked.resolution
-  return picked.key
+  localSize.value = selection.size
+  localRatio.value = selection.ratio
+  localResolution.value = selection.resolution
+  return selection.size
 }
 
 localRatio.value = props.data?.ratio || ratioFromSizeKey(localSize.value)
@@ -393,6 +289,21 @@ const connectedRefImages = computed(() => {
   return getConnectedInputs().refImages
 })
 
+const connectionStatusItems = computed(() => [
+  {
+    key: 'prompt',
+    label: `Prompt ${connectedPrompts.value.length > 0 ? `${connectedPrompts.value.length} items` : '○'}`,
+    active: connectedPrompts.value.length > 0
+  },
+  currentModelConfig.value?.supportImageReference
+    ? {
+        key: 'reference',
+        label: `Reference ${connectedRefImages.value.length > 0 ? `${connectedRefImages.value.length} images` : '○'}`,
+        active: connectedRefImages.value.length > 0
+      }
+    : null
+].filter(Boolean))
+
 // Handle model selection | 处理Model选择
 const handleModelSelect = (key) => {
   localModel.value = key
@@ -416,7 +327,7 @@ const handleModelSelect = (key) => {
   }
   localRatio.value = ratioFromSizeKey(localSize.value)
   localResolution.value = resolutionFromSizeKey(localSize.value)
-  localSize.value = pickNearestSizeKey(localRatio.value, localResolution.value)
+  localSize.value = applyNearestSizeSelection(localRatio.value, localResolution.value)
   updates.size = localSize.value
   updates.ratio = localRatio.value
   updates.resolution = localResolution.value
@@ -428,7 +339,7 @@ const handleQualitySelect = (quality) => {
   localQuality.value = quality
   localRatio.value = ratioFromSizeKey(localSize.value)
   localResolution.value = resolutionFromSizeKey(localSize.value)
-  localSize.value = pickNearestSizeKey(localRatio.value, localResolution.value)
+  localSize.value = applyNearestSizeSelection(localRatio.value, localResolution.value)
   updateNode(props.id, {
     quality,
     size: localSize.value,

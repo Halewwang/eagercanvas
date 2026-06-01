@@ -4,15 +4,16 @@ import test from 'node:test'
 
 const readStore = (name) => readFile(new URL(`./${name}.js`, import.meta.url), 'utf8')
 
-test('canvas store exposes a useCanvasStore facade for existing state and actions', async () => {
+test('canvas store exposes a Pinia defineStore boundary without direct runtime exports', async () => {
   const source = await readStore('canvas')
 
-  assert.match(source, /export const useCanvasStore = \(\) => \(\{/)
-  assert.match(source, /\bnodes,\n/)
-  assert.match(source, /\bcurrentProjectId,\n/)
-  assert.match(source, /\baddNode,\n/)
-  assert.match(source, /\bloadProject,\n/)
-  assert.match(source, /\bsaveProject,\n/)
+  assert.match(source, /import \{ defineStore \} from 'pinia'/)
+  assert.match(source, /export const useCanvasStore = defineStore\('canvas', \(\) => \{/)
+  assert.deepEqual(
+    Array.from(source.matchAll(/^export const (?!useCanvasStore\b)(\w+)/gm), ([, name]) => name),
+    []
+  )
+  assert.match(source, /return \{[\s\S]*\bcurrentProjectId,[\s\S]*\bnodes,[\s\S]*\baddNode,[\s\S]*\bloadProject,[\s\S]*\bsaveProject,/)
 })
 
 test('projects store exposes a useProjectsStore facade for existing state and actions', async () => {

@@ -146,8 +146,14 @@ export const createCanvasDraftStorage = ({
     if (!scope || !projectId) return null
     const raw = await driver.get(toKey(projectId))
     const record = raw ? normalizeCanvasDraftRecord(raw) : null
-    if (record) cache.set(String(projectId), record)
-    return record
+    if (!record) return null
+    const cachedRecord = {
+      ...record,
+      projectId: String(projectId),
+      userId: scope
+    }
+    cache.set(String(projectId), cachedRecord)
+    return cachedRecord
   }
 
   const saveDraft = async (projectId, input = {}) => {
@@ -161,7 +167,11 @@ export const createCanvasDraftStorage = ({
       projectId: String(projectId)
     }
     await driver.set(next)
-    cache.set(String(projectId), record)
+    cache.set(String(projectId), {
+      ...record,
+      projectId: String(projectId),
+      userId: scope
+    })
     return true
   }
 
@@ -171,7 +181,13 @@ export const createCanvasDraftStorage = ({
     cache.clear()
     records.forEach((raw) => {
       const record = normalizeCanvasDraftRecord(raw)
-      if (raw?.projectId && record) cache.set(String(raw.projectId), record)
+      if (raw?.projectId && record) {
+        cache.set(String(raw.projectId), {
+          ...record,
+          projectId: String(raw.projectId),
+          userId: raw.userId || scope
+        })
+      }
     })
     return Array.from(cache.values())
   }

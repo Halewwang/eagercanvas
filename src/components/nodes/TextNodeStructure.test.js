@@ -1,0 +1,124 @@
+import assert from 'node:assert/strict'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { test } from 'node:test'
+
+const textNodeSource = readFileSync(new URL('./TextNode.vue', import.meta.url), 'utf8')
+const sharedBindingStatusSource = readFileSync(new URL('./NodeBindingStatus.vue', import.meta.url), 'utf8')
+
+function readTextComponentSource(name) {
+  const url = new URL(`./text/${name}.vue`, import.meta.url)
+  const path = fileURLToPath(url)
+  return existsSync(path) ? readFileSync(url, 'utf8') : ''
+}
+
+function readTextScriptSource(name) {
+  const url = new URL(`./text/${name}.js`, import.meta.url)
+  const path = fileURLToPath(url)
+  return existsSync(path) ? readFileSync(url, 'utf8') : ''
+}
+
+test('text node delegates capsule toolbar to a focused component', () => {
+  const capsuleMenuSource = readTextComponentSource('TextNodeCapsuleMenu')
+
+  assert.match(textNodeSource, /import TextNodeCapsuleMenu from '\.\/text\/TextNodeCapsuleMenu\.vue'/)
+  assert.match(textNodeSource, /<TextNodeCapsuleMenu\s+v-show="showNodeCapsule"/)
+  assert.match(textNodeSource, /:capsule-style="capsuleStyle"/)
+  assert.match(textNodeSource, /:selected="isSelected"/)
+  assert.match(textNodeSource, /:chat-model-options="chatModelDropdownOptions"/)
+  assert.match(textNodeSource, /:selected-chat-model="localChatModel"/)
+  assert.match(textNodeSource, /:display-chat-model="displayChatModel"/)
+  assert.match(textNodeSource, /:generating="isGenerating"/)
+  assert.match(textNodeSource, /@select-chat-model="setChatModel"/)
+  assert.match(textNodeSource, /@duplicate="handleDuplicate"/)
+  assert.match(textNodeSource, /@delete="handleDelete"/)
+  assert.match(textNodeSource, /@create="handleGenerateText"/)
+  assert.match(textNodeSource, /@regenerate="handleRegenerateText"/)
+  assert.match(textNodeSource, /@stop="handleStopGeneration"/)
+  assert.doesNotMatch(textNodeSource, /<BaseDropdown/)
+  assert.doesNotMatch(textNodeSource, /BaseDropdown/)
+  assert.doesNotMatch(textNodeSource, /class="capsule-menu/)
+  assert.doesNotMatch(textNodeSource, /createIcon|CloseCircleOutline|CopyOutline|RefreshOutline|TrashOutline/)
+
+  assert.match(capsuleMenuSource, /import \{ NIcon \} from 'naive-ui'/)
+  assert.match(capsuleMenuSource, /import \{ BaseDropdown \} from '@\/components\/ui'/)
+  assert.match(capsuleMenuSource, /import createIcon from '@\/assets\/create-icon\.svg'/)
+  assert.match(capsuleMenuSource, /CloseCircleOutline/)
+  assert.match(capsuleMenuSource, /CopyOutline/)
+  assert.match(capsuleMenuSource, /RefreshOutline/)
+  assert.match(capsuleMenuSource, /TrashOutline/)
+  assert.match(capsuleMenuSource, /defineEmits\(\[\s*'selectChatModel'/s)
+  assert.match(capsuleMenuSource, /class="capsule-menu absolute left-1\/2 z-\[1200\]"/)
+  assert.match(capsuleMenuSource, /<BaseDropdown :options="chatModelOptions" :selected-key="selectedChatModel" compact @select="\$emit\('selectChatModel', \$event\)"/)
+  assert.match(capsuleMenuSource, /@click="\$emit\('duplicate'\)"/)
+  assert.match(capsuleMenuSource, /@click="\$emit\('delete'\)"/)
+  assert.match(capsuleMenuSource, /@click="\$emit\('create'\)"/)
+  assert.match(capsuleMenuSource, /@click="\$emit\('regenerate'\)"/)
+  assert.match(capsuleMenuSource, /@click="\$emit\('stop'\)"/)
+  assert.match(capsuleMenuSource, /<style scoped src="\.\/\.\.\/node-base\.css"><\/style>/)
+})
+
+test('text node delegates passive status, progress, and error display to focused components', () => {
+  const errorModalSource = readTextComponentSource('TextNodeErrorModal')
+  const generationProgressSource = readTextComponentSource('TextNodeGenerationProgress')
+  const progressStateSource = readTextScriptSource('useTextNodeProgressState')
+
+  assert.match(textNodeSource, /import NodeBindingStatus from '\.\/NodeBindingStatus\.vue'/)
+  assert.match(textNodeSource, /import TextNodeErrorModal from '\.\/text\/TextNodeErrorModal\.vue'/)
+  assert.match(textNodeSource, /import TextNodeGenerationProgress from '\.\/text\/TextNodeGenerationProgress\.vue'/)
+  assert.match(textNodeSource, /import \{ useTextNodeProgressState \} from '\.\/text\/useTextNodeProgressState\.js'/)
+  assert.match(textNodeSource, /useTextNodeProgressState\(\{/)
+  assert.match(textNodeSource, /<TextNodeGenerationProgress\s+v-if="showProgress"\s+:bar-style="progressBarStyle"\s+:percent="progressPercent"\s*\/>/)
+  assert.match(textNodeSource, /<TextNodeErrorModal\s+v-model:show="showErrorModal"\s+:error-message="data\.error"\s+@close="closeErrorModal"\s*\/>/)
+  assert.match(textNodeSource, /<NodeBindingStatus\s+:items="textInputStatusList"\s+:module-style="moduleStyle"\s*\/>/)
+  assert.ok(
+    textNodeSource.indexOf('<NodeBindingStatus') > textNodeSource.indexOf('class="text-node rounded-2xl'),
+    'text node status tags should render after the module so they sit below it like image node tags'
+  )
+  assert.match(textNodeSource, /const textInputStatusList = computed\(\(\) => \[/)
+  assert.match(textNodeSource, /label: `Linked to \$\{connectedTargets\.value\.length\} module/)
+  assert.match(textNodeSource, /connectedTargets\.value\.length > 1 \? 's' : ''/)
+  assert.match(textNodeSource, /label: 'Not linked'/)
+  assert.match(textNodeSource, /label: 'Image'/)
+  assert.match(textNodeSource, /active: hasIncomingImage\.value/)
+  assert.doesNotMatch(textNodeSource, /TextNodeBindingStatus/)
+  assert.doesNotMatch(textNodeSource, /<TextNodeBindingStatus[\s\S]*:connected-count=/)
+  assert.doesNotMatch(textNodeSource, /<TextNodeBindingStatus[\s\S]*:has-incoming-image=/)
+  assert.doesNotMatch(textNodeSource, /<TextNodeBindingStatus[\s\S]*:module-style=/)
+  assert.doesNotMatch(textNodeSource, /class="module-progress-shell"/)
+  assert.doesNotMatch(textNodeSource, /class="binding-status-wrap"/)
+  assert.doesNotMatch(textNodeSource, /const progressValue = ref\(0\)/)
+  assert.doesNotMatch(textNodeSource, /const showProgress = ref\(false\)/)
+  assert.doesNotMatch(textNodeSource, /const progressTimer = ref\(null\)/)
+  assert.doesNotMatch(textNodeSource, /const progressFinishTimer = ref\(null\)/)
+  assert.doesNotMatch(textNodeSource, /const clearProgressTimers = \(\) =>/)
+  assert.doesNotMatch(textNodeSource, /const startProgress = \(\) =>/)
+  assert.doesNotMatch(textNodeSource, /const finishProgress = \(\) =>/)
+  assert.doesNotMatch(textNodeSource, /watch\(\s*\(\) => props\.data\?\.loading/)
+  assert.doesNotMatch(textNodeSource, /onUnmounted\(\(\) => clearProgressTimers\(\)\)/)
+  assert.doesNotMatch(textNodeSource, /<BaseModal/)
+  assert.doesNotMatch(textNodeSource, /BaseModal|BaseModalActions|BaseModalCopy|BaseButton/)
+
+  assert.match(progressStateSource, /import \{ computed, getCurrentInstance, onUnmounted, ref, watch \} from 'vue'/)
+  assert.match(progressStateSource, /export const useTextNodeProgressState = \(/)
+  assert.match(progressStateSource, /const clearProgressTimers = \(\) =>/)
+  assert.match(progressStateSource, /const startProgress = \(\) =>/)
+  assert.match(progressStateSource, /const finishProgress = \(\) =>/)
+  assert.match(progressStateSource, /const resetProgress = \(\) =>/)
+  assert.match(progressStateSource, /watch\(loading,/)
+  assert.match(generationProgressSource, /defineProps\(\{\s*barStyle:/s)
+  assert.match(generationProgressSource, /Generating text\.\.\. \{\{ percent \}\}%/)
+  assert.match(generationProgressSource, /class="module-progress-shell rounded-\[14px\]"/)
+  assert.match(errorModalSource, /import \{ BaseButton, BaseModal, BaseModalActions, BaseModalCopy \} from '@\/components\/ui'/)
+  assert.match(errorModalSource, /defineEmits\(\['update:show', 'close'\]\)/)
+  assert.match(errorModalSource, /title="Text Module Error"/)
+  assert.match(errorModalSource, /<BaseModalCopy class="whitespace-pre-wrap">\{\{ errorMessage \}\}<\/BaseModalCopy>/)
+  assert.match(errorModalSource, /<BaseButton @click="\$emit\('close'\)">Close<\/BaseButton>/)
+  assert.match(sharedBindingStatusSource, /v-for="item in items"/)
+  assert.match(sharedBindingStatusSource, /binding-status-pill-active/)
+  assert.match(sharedBindingStatusSource, /\.binding-status-wrap\s*\{/)
+  assert.match(sharedBindingStatusSource, /margin-top:\s*10px;/)
+  assert.match(sharedBindingStatusSource, /justify-content:\s*center;/)
+  assert.doesNotMatch(sharedBindingStatusSource, /position:\s*absolute;/)
+  assert.doesNotMatch(sharedBindingStatusSource, /top:\s*62px;/)
+})

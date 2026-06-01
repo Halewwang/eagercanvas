@@ -1,7 +1,7 @@
-import dotenv from 'dotenv'
 import process from 'node:process'
+import { loadBackendEnvFiles } from './load-env-files.js'
 
-dotenv.config()
+loadBackendEnvFiles()
 
 const requireEnv = (name, fallback = '') => {
   const value = process.env[name] ?? fallback
