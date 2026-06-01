@@ -30,7 +30,8 @@ const createHarness = async (overrides = {}) => {
   const imageModelOptions = ref([
     { key: 'model-a', label: 'Model A' },
     { key: 'model-b', label: 'Model B' },
-    { key: 'gpt-image-2', label: 'GPT Image 2' }
+    { key: 'gpt-image-2', label: 'GPT Image 2' },
+    { key: 'gpt-image-lite', label: 'GPT Image lite' }
   ])
   const configs = {
     'model-a': {
@@ -90,6 +91,20 @@ const createHarness = async (overrides = {}) => {
       ],
       sizes: [],
       hideRatioCapsule: false
+    },
+    'gpt-image-lite': {
+      defaultParams: {
+        size: 'auto',
+        quality: 'auto',
+        background: 'auto',
+        output_format: 'png'
+      },
+      resolutions: [
+        { key: '1k', label: '1K' },
+        { key: '2k', label: '2K' }
+      ],
+      sizes: [],
+      hideRatioCapsule: false
     }
   }
   const controls = useImageNodeModelControls({
@@ -127,7 +142,8 @@ test('image node model controls expose capsule options and display labels from l
   assert.deepEqual(controls.imageModelDropdownOptions.value, [
     { key: 'model-a', label: 'Model A' },
     { key: 'model-b', label: 'Model B' },
-    { key: 'gpt-image-2', label: 'GPT Image 2' }
+    { key: 'gpt-image-2', label: 'GPT Image 2' },
+    { key: 'gpt-image-lite', label: 'GPT Image lite' }
   ])
   assert.deepEqual(controls.ratioDropdownOptions.value.map((item) => item.key), ['1:1', '16:9'])
   assert.deepEqual(controls.resolutionDropdownOptions.value.map((item) => item.key), ['1k', '2k'])
@@ -223,4 +239,25 @@ test('image node model controls keep gpt image 2 ratios and resolved size semant
   data.value = { ...data.value, ratio: 'auto', size: 'auto' }
   await nextTick()
   assert.equal(controls.findNearestSizeKey('auto', '2k'), 'auto')
+})
+
+test('image node model controls keep GPT Image lite on GPT Image 2 ratio semantics', async () => {
+  const { controls } = await createHarness({
+    data: {
+      model: 'gpt-image-lite',
+      size: 'auto',
+      ratio: 'auto',
+      resolution: '1k',
+      quality: 'auto',
+      background: 'auto',
+      output_format: 'png'
+    }
+  })
+
+  assert.equal(controls.displayRatio.value, 'Auto')
+  assert.equal(controls.ratioDropdownOptions.value.at(-1).key, '21:9')
+
+  controls.setImageRatio('16:9')
+  controls.setResolution('2k')
+  assert.equal(controls.localImageSize.value, '16:9-2k')
 })

@@ -20,6 +20,28 @@ test('image request helper routes GPT Image 2 through OpenAI with styled prompt 
   assert.deepEqual(request.payload.images, ['https://example.com/input.png'])
 })
 
+test('image request helper routes GPT Image lite through derouter while preserving GPT Image 2 controls', () => {
+  const request = resolveImageGenerationRequest({
+    model: 'gpt-image-lite',
+    prompt: 'A product shot',
+    size: '1152x768',
+    quality: 'high',
+    background: 'transparent',
+    output_format: 'webp',
+    image_url: 'https://example.com/input.png'
+  })
+
+  assert.equal(request.kind, 'adapter')
+  assert.equal(request.adapter, 'derouter')
+  assert.equal(request.payload.prompt, 'A product shot')
+  assert.equal(request.payload.ratio, '3:2')
+  assert.equal(request.payload.size, '1152x768')
+  assert.equal(request.payload.quality, 'high')
+  assert.equal(request.payload.background, 'transparent')
+  assert.equal(request.payload.output_format, 'webp')
+  assert.deepEqual(request.payload.images, ['https://example.com/input.png'])
+})
+
 test('image request helper routes Gemini preview with derived aspect ratio, resolution, and input images', () => {
   const request = resolveImageGenerationRequest({
     model: 'gemini-3.1-flash-image-preview',

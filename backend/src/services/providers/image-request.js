@@ -113,10 +113,10 @@ export const resolveImageGenerationRequest = (payload = {}) => {
     normalizeResolutionFromSize(size, aspectRatio) ||
     '1k'
 
-  if (lowerModel === 'gpt-image-2') {
+  if (lowerModel === 'gpt-image-2' || lowerModel === 'gpt-image-lite') {
     return {
       kind: 'adapter',
-      adapter: 'openai',
+      adapter: lowerModel === 'gpt-image-lite' ? 'derouter' : 'openai',
       payload: {
         ...payload,
         prompt,

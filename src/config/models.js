@@ -122,26 +122,35 @@ export const GPT_IMAGE_2_SIZE_OPTIONS = GPT_IMAGE_2_BASE_SIZES.flatMap((base) =>
     }))
 )
 
+const GPT_IMAGE_2_MODEL_CONFIG = {
+    label: 'GPT Image 2',
+    key: 'gpt-image-2',
+    sizes: ['auto', ...GPT_IMAGE_2_SIZE_OPTIONS.map(s => s.key)],
+    resolutions: GPT_IMAGE_2_RESOLUTION_OPTIONS,
+    qualities: GPT_IMAGE_2_QUALITY_OPTIONS,
+    backgrounds: GPT_IMAGE_2_BACKGROUND_OPTIONS,
+    outputFormats: GPT_IMAGE_2_OUTPUT_FORMAT_OPTIONS,
+    defaultParams: {
+        size: '1024x1024',
+        quality: 'auto',
+        background: 'auto',
+        output_format: 'png'
+    },
+    supportImageReference: true,
+    showAdvancedCapsuleParams: true,
+    requestTimeoutMs: 1800000,
+    tips: '使用 302.AI GPT-Image-2，比例选项与 Gemini 一致，分辨率胶囊选择 1K/2K/4K，4K 自动限制在最长边 3840px、总像素 830 万以内。'
+}
+
 // Image generation models | 图片生成模型
 export const IMAGE_MODELS = [
+    GPT_IMAGE_2_MODEL_CONFIG,
     {
-        label: 'GPT Image 2',
-        key: 'gpt-image-2',
-        sizes: ['auto', ...GPT_IMAGE_2_SIZE_OPTIONS.map(s => s.key)],
-        resolutions: GPT_IMAGE_2_RESOLUTION_OPTIONS,
-        qualities: GPT_IMAGE_2_QUALITY_OPTIONS,
-        backgrounds: GPT_IMAGE_2_BACKGROUND_OPTIONS,
-        outputFormats: GPT_IMAGE_2_OUTPUT_FORMAT_OPTIONS,
-        defaultParams: {
-            size: '1024x1024',
-            quality: 'auto',
-            background: 'auto',
-            output_format: 'png'
-        },
-        supportImageReference: true,
-        showAdvancedCapsuleParams: true,
-        requestTimeoutMs: 1800000,
-        tips: '使用 302.AI GPT-Image-2，比例选项与 Gemini 一致，分辨率胶囊选择 1K/2K/4K，4K 自动限制在最长边 3840px、总像素 830 万以内。'
+        ...GPT_IMAGE_2_MODEL_CONFIG,
+        label: 'GPT Image lite',
+        key: 'gpt-image-lite',
+        requestTimeoutMs: 240000,
+        tips: '使用 derouter GPT-Image-2 同步图片接口，参数与 GPT Image 2 保持一致。'
     },
     {
         label: 'Gemini 3.1 Flash Image Preview',

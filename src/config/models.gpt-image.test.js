@@ -20,6 +20,23 @@ test('GPT Image 2 is available as a built-in image model', () => {
   assert.deepEqual(model.resolutions, GPT_IMAGE_2_RESOLUTION_OPTIONS)
 })
 
+test('GPT Image lite reuses GPT Image 2 controls with a separate model key', () => {
+  const gptImage2 = IMAGE_MODELS.find((item) => item.key === 'gpt-image-2')
+  const lite = IMAGE_MODELS.find((item) => item.key === 'gpt-image-lite')
+
+  assert.ok(gptImage2, 'gpt-image-2 model should exist')
+  assert.ok(lite, 'gpt-image-lite model should exist')
+  assert.equal(lite.label, 'GPT Image lite')
+  assert.deepEqual(lite.sizes, gptImage2.sizes)
+  assert.deepEqual(lite.resolutions, gptImage2.resolutions)
+  assert.deepEqual(lite.qualities, gptImage2.qualities)
+  assert.deepEqual(lite.backgrounds, gptImage2.backgrounds)
+  assert.deepEqual(lite.outputFormats, gptImage2.outputFormats)
+  assert.deepEqual(lite.defaultParams, gptImage2.defaultParams)
+  assert.equal(lite.supportImageReference, gptImage2.supportImageReference)
+  assert.equal(lite.showAdvancedCapsuleParams, gptImage2.showAdvancedCapsuleParams)
+})
+
 test('GPT Image 2 exposes the same ratio list as Gemini image models', () => {
   assert.deepEqual(
     GPT_IMAGE_2_BASE_SIZES.map((item) => item.ratio),

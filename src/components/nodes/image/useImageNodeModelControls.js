@@ -87,7 +87,7 @@ export const useImageNodeModelControls = ({
 
   const imageModelDropdownOptions = computed(() => getImageNodeSelectOptions(readImageModelOptions()))
   const currentImageModelConfig = computed(() => getModelConfig(localImageModel.value))
-  const isGptImage2Model = computed(() => localImageModel.value === 'gpt-image-2')
+  const isGptImage2Model = computed(() => ['gpt-image-2', 'gpt-image-lite'].includes(localImageModel.value))
   const showAdvancedCapsuleParams = computed(() => currentImageModelConfig.value?.showAdvancedCapsuleParams === true)
   const imageSizeOptions = computed(() => getModelSizeOptions(localImageModel.value, localImageQuality.value))
   const sizeMetaOptions = computed(() => getImageNodeSizeMetaOptions(imageSizeOptions.value))
