@@ -88,3 +88,16 @@ test('loaded remote project is synced only with explicit remote success', () => 
   assert.equal(status.localSaved, true)
   assert.equal(status.remoteSynced, true)
 })
+
+
+test('loaded cached draft with a remote-synced revision displays as synced', () => {
+  const status = deriveLoadSyncStatus({
+    loadSource: 'local-draft',
+    remoteSynced: true
+  })
+
+  assert.equal(status.status, CANVAS_SYNC_STATES.synced)
+  assert.equal(status.localSaved, true)
+  assert.equal(status.remoteSynced, true)
+  assert.equal(status.reason, 'loaded-synced-cache')
+})

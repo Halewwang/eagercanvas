@@ -2,15 +2,15 @@
   <div class="template-canvas-preview" :class="{ empty: assetCount === 0 }">
     <div
       v-if="assetCount > 0"
-      class="template-asset-grid"
-      :class="`template-asset-grid--${gridSize}`"
-      :style="gridStyle"
+      class="template-asset-wall"
+      :class="wallClasses"
+      :style="wallStyle"
       aria-label="Template image asset preview"
     >
       <div
         v-for="asset in previewAssets"
         :key="asset.id"
-        class="template-asset-cell"
+        class="template-asset-tile"
       >
         <img
           :src="asset.url"
@@ -43,8 +43,13 @@ const props = defineProps({
 const previewAssets = computed(() => getWorkspaceTemplatePreviewAssets(props.canvasData))
 const assetCount = computed(() => previewAssets.value.length)
 const gridSize = computed(() => getWorkspaceTemplatePreviewGridSize(props.canvasData))
-const gridStyle = computed(() => ({
-  '--template-preview-grid-size': gridSize.value || 1
+const wallColumnCount = computed(() => (gridSize.value <= 3 ? 6 : 9))
+const wallClasses = computed(() => [
+  `template-asset-wall--${gridSize.value}`,
+  `template-asset-wall--count-${Math.min(assetCount.value, 6)}`
+])
+const wallStyle = computed(() => ({
+  '--template-preview-wall-columns': wallColumnCount.value
 }))
 </script>
 
@@ -60,50 +65,84 @@ const gridStyle = computed(() => ({
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 18px;
+  padding: 10px;
 }
 
-.template-asset-grid {
+.template-asset-wall {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: repeat(var(--template-preview-grid-size), minmax(0, 1fr));
-  grid-template-rows: repeat(var(--template-preview-grid-size), minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(var(--template-preview-wall-columns), minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  grid-auto-flow: dense;
+  gap: 4px;
 }
 
-.template-asset-grid--6 {
-  gap: 5px;
-}
-
-.template-asset-grid--9 {
+.template-asset-wall--6 {
   gap: 3px;
 }
 
-.template-asset-cell {
+.template-asset-wall--9 {
+  gap: 2px;
+}
+
+.template-asset-tile {
   min-width: 0;
   min-height: 0;
-  border-radius: 8px;
+  border-radius: 5px;
   overflow: hidden;
-  background: #080808;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: #050505;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.template-asset-grid--6 .template-asset-cell {
-  border-radius: 5px;
+.template-asset-wall--9 .template-asset-tile {
+  border-radius: 3px;
 }
 
-.template-asset-grid--9 .template-asset-cell {
-  border-radius: 3px;
+.template-asset-wall--count-1 .template-asset-tile {
+  grid-column: 1 / -1;
+  grid-row: span 4;
+}
+
+.template-asset-wall--count-2 .template-asset-tile {
+  grid-column: span 3;
+  grid-row: span 4;
+}
+
+.template-asset-wall--count-3 .template-asset-tile {
+  grid-column: span 2;
+  grid-row: span 4;
+}
+
+.template-asset-tile:nth-child(6n + 1),
+.template-asset-tile:nth-child(6n + 2),
+.template-asset-tile:nth-child(6n + 3) {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.template-asset-tile:nth-child(6n + 4) {
+  grid-column: span 1;
+  grid-row: span 2;
+}
+
+.template-asset-tile:nth-child(6n + 5) {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.template-asset-tile:nth-child(6n) {
+  grid-column: span 3;
+  grid-row: span 2;
 }
 
 .template-asset-image {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
 }
 

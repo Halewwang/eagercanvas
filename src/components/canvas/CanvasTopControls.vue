@@ -32,11 +32,11 @@
           v-if="showRemoteRefreshControl"
           class="canvas-sync-refresh-btn"
           :disabled="remoteRefreshAction === 'refresh'"
-          title="Refresh from cloud"
+          title="Load cloud version"
           @click.stop="$emit('remote-refresh')"
         >
           <n-icon :size="13"><RefreshOutline /></n-icon>
-          <span>{{ remoteRefreshAction === 'refresh' ? 'Refreshing' : 'Refresh cloud' }}</span>
+          <span>{{ remoteRefreshAction === 'refresh' ? 'Loading' : 'Load cloud' }}</span>
         </button>
       </div>
     </CanvasSurface>

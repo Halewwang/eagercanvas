@@ -10,6 +10,7 @@ import {
   hasCanvasContent,
   mapProjectFromApi,
   mapProjectToApi,
+  mergeCachedProjectSummaries,
   resolveProjectThumbnail,
   sortProjectsByActivity,
   toProjectSummary
@@ -139,6 +140,85 @@ test('project activity sorting ignores last-opened timestamps', () => {
   ])
 
   assert.deepEqual(sorted.map((item) => item.id), ['new-activity', 'old-activity'])
+})
+
+test('cached project summaries preserve existing remote project details', () => {
+  const merged = mergeCachedProjectSummaries([
+    {
+      id: 'project-1',
+      name: 'Cached Summary',
+      updatedAt: '2026-05-01T00:00:00.000Z',
+      lastOpenedAt: '2026-05-03T00:00:00.000Z',
+      remoteSynced: true
+    }
+  ], [
+    {
+      id: 'project-1',
+      name: 'Remote Detail',
+      updatedAt: '2026-05-02T00:00:00.000Z',
+      serverUpdatedAt: '2026-05-02T00:00:00.000Z',
+      readState: 'remote',
+      canvasData: { nodes: [{ id: 'remote-node' }], edges: [], groups: [] }
+    },
+    {
+      id: 'project-2',
+      name: 'Remote Only',
+      updatedAt: '2026-05-04T00:00:00.000Z',
+      readState: 'remote'
+    }
+  ])
+
+  assert.equal(merged[0].name, 'Remote Detail')
+  assert.equal(merged[0].readState, 'remote')
+  assert.deepEqual(merged[0].canvasData.nodes, [{ id: 'remote-node' }])
+  assert.equal(merged[0].lastOpenedAt, '2026-05-03T00:00:00.000Z')
+  assert.equal(merged[1].id, 'project-2')
+})
+
+test('cached project summaries keep unsynced local drafts ahead of remote details', () => {
+  const merged = mergeCachedProjectSummaries([
+    {
+      id: 'project-1',
+      name: 'Unsynced Draft Summary',
+      updatedAt: '2026-05-03T00:00:00.000Z',
+      remoteSynced: false
+    }
+  ], [
+    {
+      id: 'project-1',
+      name: 'Remote Detail',
+      updatedAt: '2026-05-02T00:00:00.000Z',
+      readState: 'remote',
+      canvasData: { nodes: [{ id: 'remote-node' }], edges: [] }
+    }
+  ])
+
+  assert.equal(merged[0].name, 'Unsynced Draft Summary')
+  assert.equal(merged[0].readState, 'local-cache')
+  assert.equal(merged[0].canvasData, undefined)
+})
+
+test('cached project summaries do not replace newer synced cache with older remote detail', () => {
+  const merged = mergeCachedProjectSummaries([
+    {
+      id: 'project-1',
+      name: 'Newer Synced Cache',
+      updatedAt: '2026-05-03T00:00:00.000Z',
+      remoteSynced: true
+    }
+  ], [
+    {
+      id: 'project-1',
+      name: 'Older Remote Detail',
+      updatedAt: '2026-05-02T00:00:00.000Z',
+      readState: 'remote',
+      canvasData: { nodes: [{ id: 'old-remote-node' }], edges: [] }
+    }
+  ])
+
+  assert.equal(merged[0].name, 'Newer Synced Cache')
+  assert.equal(merged[0].readState, 'local-cache')
+  assert.equal(merged[0].canvasData, undefined)
 })
 
 test('projects store delegates pure project data helpers to projectsData', () => {

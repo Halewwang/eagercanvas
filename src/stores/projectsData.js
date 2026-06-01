@@ -105,6 +105,47 @@ export const sortProjectsByActivity = (list = []) =>
     return toTs(b?.createdAt) - toTs(a?.createdAt)
   })
 
+export const mergeCachedProjectSummaries = (cachedProjects = [], currentProjects = []) => {
+  const currentById = new Map((Array.isArray(currentProjects) ? currentProjects : [])
+    .filter((project) => project?.id)
+    .map((project) => [project.id, project]))
+  const cachedIds = new Set()
+  const isCurrentProjectFreshEnough = (currentProject, cachedProject) => {
+    const currentTs = Math.max(toTs(currentProject?.serverUpdatedAt), toTs(currentProject?.updatedAt))
+    const cachedTs = Math.max(toTs(cachedProject?.serverUpdatedAt), toTs(cachedProject?.updatedAt))
+    return !cachedTs || currentTs >= cachedTs
+  }
+
+  const mergedCached = (Array.isArray(cachedProjects) ? cachedProjects : [])
+    .filter((project) => project?.id)
+    .map((cachedProject) => {
+      cachedIds.add(cachedProject.id)
+      const currentProject = currentById.get(cachedProject.id)
+
+      if (
+        cachedProject.remoteSynced === true
+        && currentProject?.readState === 'remote'
+        && isCurrentProjectFreshEnough(currentProject, cachedProject)
+      ) {
+        return {
+          ...cachedProject,
+          ...currentProject,
+          lastOpenedAt: cachedProject.lastOpenedAt || currentProject.lastOpenedAt || null
+        }
+      }
+
+      return {
+        ...cachedProject,
+        readState: cachedProject.readState || 'local-cache'
+      }
+    })
+
+  const remoteOnly = Array.from(currentById.values())
+    .filter((project) => project?.readState === 'remote' && !cachedIds.has(project.id))
+
+  return [...mergedCached, ...remoteOnly]
+}
+
 export const hasCanvasContent = (canvasData) => {
   const nodes = Array.isArray(canvasData?.nodes) ? canvasData.nodes.length : 0
   const edges = Array.isArray(canvasData?.edges) ? canvasData.edges.length : 0

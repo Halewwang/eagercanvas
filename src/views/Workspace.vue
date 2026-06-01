@@ -208,11 +208,6 @@ const createBlankProject = async () => {
 
 const handlePrimaryClick = async (item) => {
   if (activeSection.value === 'projects') {
-    try {
-      await refreshProjectById(item.id)
-    } catch {
-      // Keep the local draft path available when the cloud detail request fails.
-    }
     await router.push(`/canvas/${item.id}`)
     return
   }

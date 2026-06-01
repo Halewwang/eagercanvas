@@ -208,14 +208,18 @@ test('workspace template canvas preview renders capped image assets instead of a
 
   assert.match(previewSource, /getWorkspaceTemplatePreviewAssets/)
   assert.match(previewSource, /getWorkspaceTemplatePreviewGridSize/)
-  assert.match(previewSource, /template-asset-grid/)
-  assert.match(previewSource, /--template-preview-grid-size/)
+  assert.match(previewSource, /template-asset-wall/)
+  assert.match(previewSource, /--template-preview-wall-columns/)
+  assert.match(previewSource, /grid-auto-flow:\s*dense/)
   assert.match(previewSource, /v-for="asset in previewAssets"/)
   assert.match(previewSource, /:src="asset\.url"/)
   assert.match(previewSource, /loading="lazy"/)
   assert.match(previewSource, /decoding="async"/)
-  assert.match(previewSource, /object-fit:\s*contain/)
+  assert.match(previewSource, /object-fit:\s*cover/)
+  assert.match(previewSource, /nth-child\(6n \+ 1\)/)
   assert.match(previewSource, /No image assets/)
+  assert.doesNotMatch(previewSource, /template-asset-grid/)
+  assert.doesNotMatch(previewSource, /object-fit:\s*contain/)
   assert.doesNotMatch(previewSource, /getWorkspaceTemplatePreviewEdges/)
   assert.doesNotMatch(previewSource, /getWorkspaceTemplatePreviewNodes/)
   assert.doesNotMatch(previewSource, /<svg[\s\S]*class="template-canvas-edges"/)
@@ -250,6 +254,17 @@ test('workspace view delegates display copy and card derivation to workspace dis
   assert.match(displaySource, /export const describeWorkspaceItem/)
   assert.match(displaySource, /export const getWorkspaceCardIconKey/)
   assert.match(displaySource, /export const getWorkspaceProjectMenuOptions/)
+})
+
+
+test('workspace project card navigation does not block on a cloud detail refresh', () => {
+  const start = workspaceSource.indexOf('const handlePrimaryClick = async (item) => {')
+  const end = workspaceSource.indexOf('const refreshProjectFromCloud = async')
+  const branch = workspaceSource.slice(start, end)
+
+  assert.match(branch, /await router\.push\(`\/canvas\/\$\{item\.id\}`\)/)
+  assert.doesNotMatch(branch, /await refreshProjectById\(item\.id\)/)
+  assert.doesNotMatch(branch, /Keep the local draft path available/)
 })
 
 test('workspace cloud surfaces fail softly so local projects remain accessible', () => {

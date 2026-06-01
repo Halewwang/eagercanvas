@@ -529,7 +529,7 @@ test('canvas view delegates sync resolution modals to a focused component', () =
   assert.match(syncConflictModalSource, /:deep\(\.ui-button-text\)/)
 
   assert.match(remoteRefreshModalSource, /import \{ BaseButton, BaseModal, BaseModalActions, BaseModalCopy \} from '@\/components\/ui'/)
-  assert.match(remoteRefreshModalSource, /title="Refresh from cloud"/)
+  assert.match(remoteRefreshModalSource, /title="Load cloud version"/)
   assert.match(remoteRefreshModalSource, /:close-on-overlay="action !== 'refresh'"/)
   assert.match(remoteRefreshModalSource, /@click="\$emit\('update:show', false\)"/)
   assert.match(remoteRefreshModalSource, /@click="\$emit\('confirm'\)"/)

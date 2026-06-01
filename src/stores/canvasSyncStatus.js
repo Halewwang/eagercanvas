@@ -114,7 +114,7 @@ export const deriveLoadSyncStatus = ({
   hasTransientMedia = false
 } = {}) => {
   const source = String(loadSource || '').trim()
-  const isRemoteSynced = remoteSynced === true && source === 'remote'
+  const isRemoteSynced = remoteSynced === true
 
   if (isRemoteSynced) {
     return createSyncStatus({
@@ -122,7 +122,7 @@ export const deriveLoadSyncStatus = ({
       localSaved: true,
       remoteSynced: true,
       hasTransientMedia,
-      reason: 'loaded-remote',
+      reason: source === 'remote' ? 'loaded-remote' : 'loaded-synced-cache',
       error: null
     })
   }

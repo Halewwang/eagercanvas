@@ -25,6 +25,7 @@ import {
   isPersistedProjectUploadUrl,
   mapProjectFromApi,
   mapProjectToApi,
+  mergeCachedProjectSummaries,
   resolveProjectThumbnail,
   sortProjectsByActivity,
   toProjectSummary
@@ -361,10 +362,11 @@ export const loadCachedProjects = async () => {
   await hydrateCanvasDraftCache()
   const localDrafts = await loadLocalCache()
   if (!localDrafts.length) return []
-  projects.value = sortProjectsByActivity(localDrafts).map((project) => ({
+  const cachedProjects = localDrafts.map((project) => ({
     ...project,
-    readState: project.readState || 'local-cache'
+    remoteSynced: isRemoteSyncedDraft(loadProjectCanvasDraftRecord(project.id))
   }))
+  projects.value = sortProjectsByActivity(mergeCachedProjectSummaries(cachedProjects, projects.value))
   projectsLoadState.value = {
     source: 'local-cache',
     reason: 'immediate-canvas-cache',

@@ -1,14 +1,14 @@
 <template>
   <BaseModal
     :show="show"
-    title="Refresh from cloud"
-    description="Load the latest saved cloud canvas for this project."
+    title="Load cloud version"
+    description="Replace this canvas with the latest saved cloud version."
     size="sm"
     :close-on-overlay="action !== 'refresh'"
     @update:show="$emit('update:show', $event)"
   >
     <BaseModalCopy>
-      Local draft changes on this device will be replaced by the cloud version.
+      Unsynced local draft changes on this device will be replaced by the cloud version.
     </BaseModalCopy>
     <template #footer>
       <BaseModalActions>
@@ -23,7 +23,7 @@
           :loading="action === 'refresh'"
           @click="$emit('confirm')"
         >
-          Refresh cloud
+          Load cloud
         </BaseButton>
       </BaseModalActions>
     </template>
