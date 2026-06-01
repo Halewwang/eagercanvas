@@ -168,11 +168,11 @@ const templateNodeCount = computed(() => getWorkspaceTemplateNodeCount(props.pre
 }
 
 .template-preview-stat {
-  min-width: 88px;
-  padding: 12px 14px;
-  border-radius: 16px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 0;
   border: none;
-  background: rgba(255, 255, 255, 0.035);
+  background: transparent;
   display: flex;
   flex-direction: column;
   align-items: flex-end;

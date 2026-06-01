@@ -1,5 +1,5 @@
 <template>
-  <section class="cards-grid">
+  <section class="cards-grid" :class="`cards-grid--${activeSection}`">
     <article
       v-for="item in items"
       :key="item.id"
@@ -9,6 +9,12 @@
       <div class="card-media" :class="{ 'project-media': activeSection === 'projects' }">
         <template v-if="item.thumbnail || item.cover || item.coverUrl">
           <img :src="item.thumbnail || item.cover || item.coverUrl" :alt="item.title || item.name" />
+        </template>
+        <template v-else-if="activeSection === 'featured' && item.canvasData">
+          <WorkspaceTemplateCanvasPreview
+            :canvas-data="item.canvasData"
+            class="card-canvas-preview"
+          />
         </template>
         <template v-else>
           <div class="fallback-icon">
@@ -54,6 +60,7 @@
 import { NIcon } from 'naive-ui'
 import { EllipsisHorizontalOutline } from '@/icons/coolicons'
 import { BaseDropdown } from '@/components/ui'
+import WorkspaceTemplateCanvasPreview from './WorkspaceTemplateCanvasPreview.vue'
 
 defineProps({
   activeSection: {
@@ -89,6 +96,11 @@ defineEmits([
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 22px;
+}
+
+.cards-grid--featured {
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 28px;
 }
 
 .project-card {
@@ -146,6 +158,13 @@ defineEmits([
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.card-canvas-preview {
+  height: 100%;
+  border: none;
+  border-radius: inherit;
+  background: linear-gradient(180deg, #101010 0%, #050505 100%);
 }
 
 .project-media {

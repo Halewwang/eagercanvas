@@ -3,15 +3,32 @@
     <template v-if="nodeCount > 0">
       <div class="template-canvas-grid"></div>
       <div class="template-canvas-stage" aria-label="Template canvas preview">
+        <svg
+          v-if="previewEdges.length > 0"
+          class="template-canvas-edges"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <g v-for="edge in previewEdges" :key="edge.id">
+            <path class="template-canvas-edge" :d="edge.path" />
+            <circle class="template-canvas-edge-dot" :cx="edge.sourceDot.cx" :cy="edge.sourceDot.cy" r="0.28" />
+            <circle class="template-canvas-edge-dot" :cx="edge.targetDot.cx" :cy="edge.targetDot.cy" r="0.28" />
+          </g>
+        </svg>
         <div
           v-for="node in previewNodes"
           :key="node.id"
           class="template-canvas-node"
-          :class="`template-canvas-node--${node.type}`"
+          :class="[`template-canvas-node--${node.kind}`, `template-canvas-node-type--${node.type}`]"
           :style="node.style"
         >
-          <span>{{ node.type }}</span>
-          <strong>{{ node.label }}</strong>
+          <img v-if="node.mediaUrl" :src="node.mediaUrl" :alt="node.label" class="template-canvas-node-media" />
+          <p v-else-if="node.text" class="template-canvas-node-text">{{ node.text }}</p>
+          <template v-else>
+            <span>{{ node.type }}</span>
+            <strong>{{ node.label }}</strong>
+          </template>
         </div>
       </div>
     </template>
@@ -23,6 +40,7 @@
 import { computed } from 'vue'
 import {
   getWorkspaceTemplateNodeCount,
+  getWorkspaceTemplatePreviewEdges,
   getWorkspaceTemplatePreviewNodes
 } from '@/utils/workspaceTemplatePreview'
 
@@ -35,6 +53,7 @@ const props = defineProps({
 
 const nodeCount = computed(() => getWorkspaceTemplateNodeCount(props.canvasData))
 const previewNodes = computed(() => getWorkspaceTemplatePreviewNodes(props.canvasData))
+const previewEdges = computed(() => getWorkspaceTemplatePreviewEdges(props.canvasData))
 </script>
 
 <style scoped>
@@ -45,9 +64,7 @@ const previewNodes = computed(() => getWorkspaceTemplatePreviewNodes(props.canva
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background:
-    radial-gradient(circle at 50% 10%, rgba(255, 255, 255, 0.06), transparent 42%),
-    linear-gradient(180deg, #17181c 0%, #101114 100%);
+  background: linear-gradient(180deg, #101010 0%, #050505 100%);
 }
 
 .template-canvas-grid {
@@ -65,42 +82,83 @@ const previewNodes = computed(() => getWorkspaceTemplatePreviewNodes(props.canva
   inset: 7%;
 }
 
+.template-canvas-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.template-canvas-edge {
+  fill: none;
+  stroke: rgba(214, 219, 229, 0.34);
+  stroke-width: 0.16;
+  vector-effect: non-scaling-stroke;
+}
+
+.template-canvas-edge-dot {
+  fill: rgba(238, 241, 247, 0.82);
+  vector-effect: non-scaling-stroke;
+}
+
 .template-canvas-node {
   position: absolute;
-  min-width: 70px;
-  min-height: 42px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(26, 28, 33, 0.92);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
-  padding: 8px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(16, 17, 20, 0.92);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.22);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 4px;
 }
 
-.template-canvas-node--image {
-  border-color: rgba(98, 182, 255, 0.45);
-  background: linear-gradient(180deg, rgba(33, 55, 74, 0.92), rgba(22, 30, 40, 0.92));
+.template-canvas-node--media {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: #060607;
 }
 
 .template-canvas-node--text {
-  border-color: rgba(255, 217, 122, 0.42);
-  background: linear-gradient(180deg, rgba(65, 51, 24, 0.9), rgba(33, 27, 18, 0.92));
+  padding: 4px 5px;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(8, 9, 11, 0.9);
+}
+
+.template-canvas-node--config {
+  padding: 4px 5px;
+  border-color: rgba(120, 140, 170, 0.18);
+  background: rgba(9, 11, 15, 0.92);
+}
+
+.template-canvas-node-media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.template-canvas-node-text {
+  margin: 0;
+  color: rgba(238, 241, 247, 0.78);
+  font-size: 6px;
+  line-height: 1.25;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .template-canvas-node span {
   color: rgba(236, 238, 244, 0.52);
-  font-size: 10px;
+  font-size: 5px;
   line-height: 1;
   text-transform: uppercase;
 }
 
 .template-canvas-node strong {
   color: rgba(255, 255, 255, 0.92);
-  font-size: 12px;
+  font-size: 6px;
   line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
