@@ -1,4 +1,4 @@
-const MAX_PREVIEW_ASSETS = 81
+const MAX_PREVIEW_ASSETS = 9
 
 const getNodes = (canvasData = {}) => {
   const nodes = Array.isArray(canvasData?.nodes) ? canvasData.nodes : []
@@ -61,7 +61,5 @@ export const getWorkspaceTemplatePreviewAssets = (canvasData = {}) => {
 export const getWorkspaceTemplatePreviewGridSize = (canvasData = {}) => {
   const count = getWorkspaceTemplatePreviewAssets(canvasData).length
   if (count <= 0) return 0
-  if (count <= 9) return 3
-  if (count <= 36) return 6
-  return 9
+  return 3
 }

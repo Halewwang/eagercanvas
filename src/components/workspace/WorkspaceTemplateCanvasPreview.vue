@@ -8,9 +8,9 @@
       aria-label="Template image asset preview"
     >
       <div
-        v-for="asset in previewAssets"
+        v-for="asset in previewAssetsWithLayout"
         :key="asset.id"
-        class="template-asset-tile"
+        :class="['template-asset-tile', asset.layoutClass]"
       >
         <img
           :src="asset.url"
@@ -43,13 +43,21 @@ const props = defineProps({
 const previewAssets = computed(() => getWorkspaceTemplatePreviewAssets(props.canvasData))
 const assetCount = computed(() => previewAssets.value.length)
 const gridSize = computed(() => getWorkspaceTemplatePreviewGridSize(props.canvasData))
-const wallColumnCount = computed(() => (gridSize.value <= 3 ? 6 : 9))
+const wallColumnCount = computed(() => (assetCount.value > 0 ? 8 : 1))
+const wallRowCount = computed(() => (assetCount.value > 0 ? 4 : 1))
+const previewAssetsWithLayout = computed(() =>
+  previewAssets.value.map((asset, index) => ({
+    ...asset,
+    layoutClass: `template-asset-tile--layout-${assetCount.value}-${index + 1}`
+  }))
+)
 const wallClasses = computed(() => [
   `template-asset-wall--${gridSize.value}`,
-  `template-asset-wall--count-${Math.min(assetCount.value, 6)}`
+  `template-asset-wall--count-${assetCount.value}`
 ])
 const wallStyle = computed(() => ({
-  '--template-preview-wall-columns': wallColumnCount.value
+  '--template-preview-wall-columns': wallColumnCount.value,
+  '--template-preview-wall-rows': wallRowCount.value
 }))
 </script>
 
@@ -73,17 +81,8 @@ const wallStyle = computed(() => ({
   height: 100%;
   display: grid;
   grid-template-columns: repeat(var(--template-preview-wall-columns), minmax(0, 1fr));
-  grid-auto-rows: minmax(0, 1fr);
-  grid-auto-flow: dense;
+  grid-template-rows: repeat(var(--template-preview-wall-rows), minmax(0, 1fr));
   gap: 4px;
-}
-
-.template-asset-wall--6 {
-  gap: 3px;
-}
-
-.template-asset-wall--9 {
-  gap: 2px;
 }
 
 .template-asset-tile {
@@ -98,52 +97,196 @@ const wallStyle = computed(() => ({
   justify-content: center;
 }
 
-.template-asset-wall--9 .template-asset-tile {
-  border-radius: 3px;
-}
-
-.template-asset-wall--count-1 .template-asset-tile {
-  grid-column: 1 / -1;
-  grid-row: span 4;
-}
-
-.template-asset-wall--count-2 .template-asset-tile {
-  grid-column: span 3;
-  grid-row: span 4;
-}
-
-.template-asset-wall--count-3 .template-asset-tile {
-  grid-column: span 2;
-  grid-row: span 4;
-}
-
-.template-asset-tile:nth-child(6n + 1),
-.template-asset-tile:nth-child(6n + 2),
-.template-asset-tile:nth-child(6n + 3) {
-  grid-column: span 2;
-  grid-row: span 2;
-}
-
-.template-asset-tile:nth-child(6n + 4) {
-  grid-column: span 1;
-  grid-row: span 2;
-}
-
-.template-asset-tile:nth-child(6n + 5) {
-  grid-column: span 2;
-  grid-row: span 2;
-}
-
-.template-asset-tile:nth-child(6n) {
-  grid-column: span 3;
-  grid-row: span 2;
-}
-
 .template-asset-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.template-asset-tile--layout-1-1 {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+}
+
+.template-asset-tile--layout-2-1 {
+  grid-column: 1 / 5;
+  grid-row: 1 / -1;
+}
+
+.template-asset-tile--layout-2-2 {
+  grid-column: 5 / 9;
+  grid-row: 1 / -1;
+}
+
+.template-asset-tile--layout-3-1 {
+  grid-column: 1 / 4;
+  grid-row: 1 / -1;
+}
+
+.template-asset-tile--layout-3-2 {
+  grid-column: 4 / 6;
+  grid-row: 1 / -1;
+}
+
+.template-asset-tile--layout-3-3 {
+  grid-column: 6 / 9;
+  grid-row: 1 / -1;
+}
+
+.template-asset-tile--layout-4-1 {
+  grid-column: 1 / 5;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-4-2 {
+  grid-column: 5 / 9;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-4-3 {
+  grid-column: 1 / 4;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-4-4 {
+  grid-column: 4 / 9;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-5-1 {
+  grid-column: 1 / 4;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-5-2 {
+  grid-column: 4 / 6;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-5-3 {
+  grid-column: 6 / 9;
+  grid-row: 1 / -1;
+}
+
+.template-asset-tile--layout-5-4 {
+  grid-column: 1 / 3;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-5-5 {
+  grid-column: 3 / 6;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-6-1 {
+  grid-column: 1 / 3;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-6-2 {
+  grid-column: 3 / 5;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-6-3 {
+  grid-column: 5 / 9;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-6-4 {
+  grid-column: 1 / 2;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-6-5 {
+  grid-column: 2 / 5;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-6-6 {
+  grid-column: 5 / 9;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-7-1,
+.template-asset-tile--layout-8-1,
+.template-asset-tile--layout-9-1 {
+  grid-column: 1 / 3;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-7-2,
+.template-asset-tile--layout-8-2 {
+  grid-column: 3 / 5;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-9-2 {
+  grid-column: 3 / 5;
+  grid-row: 1 / 2;
+}
+
+.template-asset-tile--layout-7-3,
+.template-asset-tile--layout-8-3 {
+  grid-column: 5 / 6;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-9-3 {
+  grid-column: 5 / 6;
+  grid-row: 1 / 2;
+}
+
+.template-asset-tile--layout-8-4 {
+  grid-column: 6 / 9;
+  grid-row: 1 / 3;
+}
+
+.template-asset-tile--layout-9-4 {
+  grid-column: 6 / 9;
+  grid-row: 1 / -1;
+}
+
+.template-asset-tile--layout-7-4,
+.template-asset-tile--layout-8-5,
+.template-asset-tile--layout-9-5 {
+  grid-column: 1 / 2;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-7-5,
+.template-asset-tile--layout-8-6,
+.template-asset-tile--layout-9-6 {
+  grid-column: 2 / 4;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-7-6,
+.template-asset-tile--layout-8-7,
+.template-asset-tile--layout-9-7 {
+  grid-column: 4 / 6;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-7-7 {
+  grid-column: 6 / 9;
+  grid-row: 1 / -1;
+}
+
+.template-asset-tile--layout-8-8 {
+  grid-column: 6 / 9;
+  grid-row: 3 / 5;
+}
+
+.template-asset-tile--layout-9-8 {
+  grid-column: 3 / 5;
+  grid-row: 2 / 3;
+}
+
+.template-asset-tile--layout-9-9 {
+  grid-column: 5 / 6;
+  grid-row: 2 / 3;
 }
 
 .template-canvas-empty {

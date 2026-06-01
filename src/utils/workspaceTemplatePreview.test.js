@@ -59,7 +59,7 @@ test('workspace template preview helpers extract capped image assets for grid pr
   assert.equal(preview.getWorkspaceTemplatePreviewGridSize(canvasData), 3)
 })
 
-test('workspace template preview grid size steps through 3, 6, and 9 with an 81 asset cap', () => {
+test('workspace template preview keeps the photo wall to a maximum of 9 image assets', () => {
   const buildCanvasData = (count) => ({
     nodes: Array.from({ length: count }, (_, index) => ({
       id: `image-${index}`,
@@ -73,8 +73,7 @@ test('workspace template preview grid size steps through 3, 6, and 9 with an 81 
 
   assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(0)), 0)
   assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(9)), 3)
-  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(10)), 6)
-  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(36)), 6)
-  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(37)), 9)
-  assert.equal(preview.getWorkspaceTemplatePreviewAssets(buildCanvasData(90)).length, 81)
+  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(10)), 3)
+  assert.equal(preview.getWorkspaceTemplatePreviewGridSize(buildCanvasData(37)), 3)
+  assert.equal(preview.getWorkspaceTemplatePreviewAssets(buildCanvasData(90)).length, 9)
 })
