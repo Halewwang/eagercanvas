@@ -96,13 +96,7 @@ export const useImageNodeGeneration = ({
         throw new Error('No image output')
       }
 
-      const persistence = await resolveImagePersistence(
-        result[0].url,
-        generatedImageFileName(),
-        'Generated image persistence failed. Please retry.'
-      )
-
-      updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(persistence, {
+      const outputMeta = {
         loading: false,
         model: readReactiveValue(localImageModel),
         size: readReactiveValue(localImageSize),
@@ -114,7 +108,26 @@ export const useImageNodeGeneration = ({
         sourcePrompt: generationPrompt,
         sourceRefImages: buildSourceRefImages(refImages),
         error: ''
+      }
+      const immediatePersistence = {
+        persistedUrl: '',
+        displayUrl: result[0].url,
+        persisted: false,
+        persistError: 'Saving generated image...'
+      }
+      updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(immediatePersistence, {
+        ...outputMeta,
+        persistStatus: 'saving',
+        persistError: 'Saving generated image...'
       }))
+
+      const persistence = await resolveImagePersistence(
+        result[0].url,
+        generatedImageFileName(),
+        'Generated image persistence failed. Please retry.'
+      )
+
+      updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(persistence, outputMeta))
 
       if (!persistence.persisted) {
         dispatchMessage(messageApi, {

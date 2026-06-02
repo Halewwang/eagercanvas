@@ -441,25 +441,19 @@ const resolveImagePersistence = async (rawValue, fileName, persistenceFailureMes
       }
     }
   } catch (error) {
-    if (!rawUrl.startsWith('data:image/') && /^https?:\/\//i.test(rawUrl)) {
-      console.warn('Image config persistence failed, keeping preview only:', error)
-      return {
-        persistedUrl: '',
-        displayUrl: rawUrl,
-        persisted: false
-      }
+    console.warn('Image config persistence failed, keeping preview only:', error)
+    return {
+      persistedUrl: '',
+      displayUrl: rawUrl,
+      persisted: false
     }
-    throw error
-  }
-
-  if (rawUrl.startsWith('data:image/')) {
-    throw new Error(persistenceFailureMessage)
   }
 
   return {
     persistedUrl: '',
     displayUrl: rawUrl,
-    persisted: false
+    persisted: false,
+    persistError: persistenceFailureMessage
   }
 }
 
@@ -637,16 +631,7 @@ const handleGenerate = async (mode = 'auto') => {
         throw new Error('No image output')
       }
 
-      const persistence = await resolveImagePersistence(
-        rawUrl,
-        `generated-${Date.now()}.png`,
-        'Generated image persistence failed. Please retry.',
-        imageNodeId
-      )
-
-      updateNode(imageNodeId, {
-        url: persistence.persistedUrl,
-        previewUrl: persistence.persisted ? '' : persistence.displayUrl,
+      const outputMeta = {
         base64: '',
         loading: false,
         label: 'Text to Image',
@@ -659,14 +644,36 @@ const handleGenerate = async (mode = 'auto') => {
         resolution: localResolution.value || resolutionFromSizeKey(localSize.value),
         sourceConfigId: props.id,
         sourcePrompt,
-        sourceRefImages,
-        persistStatus: persistence.persisted ? 'saving' : 'pending',
-        persistError: persistence.persisted ? '' : 'Image uses a temporary address until it is fully saved.',
+        sourceRefImages
+      }
+
+      updateNode(imageNodeId, {
+        url: '',
+        previewUrl: rawUrl,
+        ...outputMeta,
+        persistStatus: 'saving',
+        persistError: 'Saving generated image...',
         updatedAt: Date.now()
       })
-      
-      // Mark this config node as executed | 标记配置节点已执行
+
       updateNode(props.id, { status: 'completed', executed: true, outputNodeId: imageNodeId, error: '' })
+
+      const persistence = await resolveImagePersistence(
+        rawUrl,
+        `generated-${Date.now()}.png`,
+        'Generated image persistence failed. Please retry.',
+        imageNodeId
+      )
+
+      updateNode(imageNodeId, {
+        url: persistence.persistedUrl,
+        previewUrl: persistence.persisted ? '' : persistence.displayUrl,
+        ...outputMeta,
+        persistStatus: persistence.persisted ? 'saving' : 'pending',
+        persistError: persistence.persisted ? '' : (persistence.persistError || 'Image uses a temporary address until it is fully saved.'),
+        updatedAt: Date.now()
+      })
+
       if (!persistence.persisted) {
         window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
         return

@@ -4,7 +4,8 @@ import test from 'node:test'
 import {
   buildImageGenerationAssets,
   persistImageResultAssets,
-  persistVideoResultAsset
+  persistVideoResultAsset,
+  shouldPersistImageResultAssetsBeforeResponse
 } from './runs.service.js'
 
 test('persistImageResultAssets replaces provider image URLs before history is stored', async () => {
@@ -73,6 +74,26 @@ test('buildImageGenerationAssets excludes inline data URLs from media history', 
       origin: 'generation'
     }
   ])
+})
+
+test('derouter inline image results can return before upload persistence', () => {
+  assert.equal(
+    shouldPersistImageResultAssetsBeforeResponse({
+      provider: 'derouter',
+      data: [{ url: 'data:image/png;base64,aW1hZ2UtYnl0ZXM=' }]
+    }),
+    false
+  )
+})
+
+test('non-derouter image results keep response-time persistence', () => {
+  assert.equal(
+    shouldPersistImageResultAssetsBeforeResponse({
+      provider: 'dashboard302',
+      data: [{ url: 'data:image/png;base64,aW1hZ2UtYnl0ZXM=' }]
+    }),
+    true
+  )
 })
 
 test('persistVideoResultAsset replaces provider video URLs before history is stored', async () => {

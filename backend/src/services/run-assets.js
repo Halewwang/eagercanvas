@@ -29,6 +29,14 @@ export const persistDataUrlIfNeeded = async (dataUrl, fileName) => {
   return uploadDataUrl({ dataUrl: raw, fileName }).then((result) => String(result?.url || '').trim() || raw)
 }
 
+export const shouldPersistImageResultAssetsBeforeResponse = (result = {}) => {
+  const provider = String(result?.provider || result?.raw?.provider || '').trim().toLowerCase()
+  const hasInlineImage = (Array.isArray(result?.data) ? result.data : [])
+    .some((entry) => isInlineDataUrl(entry?.url))
+
+  return !(provider === 'derouter' && hasInlineImage)
+}
+
 export const persistImageResultAssets = async (result = {}, options = {}) => {
   const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
   const persistDataUrl = options.persistDataUrl || persistDataUrlIfNeeded
