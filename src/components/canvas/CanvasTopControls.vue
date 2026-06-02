@@ -40,7 +40,13 @@
         </button>
       </div>
     </CanvasSurface>
-    <CanvasSurface class="rounded-full p-1.5">
+    <CanvasSurface v-if="readOnly" class="rounded-full p-1.5">
+      <CanvasPillButton title="Request edit access" @click="$emit('request-edit')">
+        <n-icon :size="16"><CreateOutline /></n-icon>
+        <span class="text-sm font-medium">Request Edit</span>
+      </CanvasPillButton>
+    </CanvasSurface>
+    <CanvasSurface v-else class="rounded-full p-1.5">
       <CanvasPillButton title="Share" @click="$emit('share')">
         <n-icon :size="16"><CopyOutline /></n-icon>
         <span class="text-sm font-medium">Share</span>
@@ -52,7 +58,7 @@
 <script setup>
 import { NIcon } from 'naive-ui'
 import { BaseDropdown } from '@/components/ui'
-import { ChevronBackOutline, ChevronDownOutline, CopyOutline, RefreshOutline } from '@/icons/coolicons'
+import { ChevronBackOutline, ChevronDownOutline, CopyOutline, CreateOutline, RefreshOutline } from '@/icons/coolicons'
 import CanvasPillButton from './CanvasPillButton.vue'
 import CanvasSurface from './CanvasSurface.vue'
 
@@ -76,10 +82,14 @@ defineProps({
   remoteRefreshAction: {
     type: String,
     default: ''
+  },
+  readOnly: {
+    type: Boolean,
+    default: false
   }
 })
 
-defineEmits(['workspace', 'project-action', 'remote-refresh', 'share'])
+defineEmits(['workspace', 'project-action', 'remote-refresh', 'share', 'request-edit'])
 </script>
 
 <style scoped>

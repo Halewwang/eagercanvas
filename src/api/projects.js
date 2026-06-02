@@ -65,3 +65,26 @@ export const apiDeleteProject = (id) =>
       silentNetworkErrorToast: true
     })
   )
+
+export const apiRequestProjectEditAccess = (id, payload = {}) =>
+  apiRequest({
+    url: `/projects/${encodeURIComponent(id)}/edit-requests`,
+    method: 'post',
+    data: payload,
+    silentNetworkErrorToast: true
+  })
+
+export const apiListProjectEditRequests = (id) =>
+  apiRequest({
+    url: `/projects/${encodeURIComponent(id)}/edit-requests`,
+    method: 'get',
+    silentNetworkErrorToast: true
+  })
+
+export const apiReviewProjectEditRequest = (id, requestId, payload = {}) =>
+  apiRequest({
+    url: `/projects/${encodeURIComponent(id)}/edit-requests/${encodeURIComponent(requestId)}/review`,
+    method: 'post',
+    data: payload,
+    silentNetworkErrorToast: true
+  })

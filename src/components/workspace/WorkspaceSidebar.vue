@@ -1,13 +1,17 @@
 <template>
   <aside class="workspace-sidebar">
-    <div class="brand">
-      <img :src="aioncraftWordmark" alt="AionCraft" class="brand-logo" />
-      <span class="brand-divider" aria-hidden="true"></span>
-      <div class="brand-text">{{ workspaceBrand }}</div>
-    </div>
+    <WorkspaceSwitcher
+      :current-workspace="currentWorkspace"
+      :workspaces="workspaces"
+      :pending-invites="pendingInvites"
+      @select="$emit('selectWorkspace', $event)"
+      @create="$emit('createWorkspace')"
+      @invite="$emit('inviteWorkspace')"
+      @leave="$emit('leaveWorkspace')"
+      @accept-invite="$emit('acceptWorkspaceInvite', $event)"
+    />
 
     <section class="sidebar-group">
-      <div class="sidebar-group-title">Workspace</div>
       <nav class="nav-menu">
         <button
           v-for="item in navItems"
@@ -16,27 +20,24 @@
           :class="{ active: activeSection === item.key }"
           @click="$emit('update:activeSection', item.key)"
         >
-          <NIcon :size="16"><component :is="item.icon" /></NIcon>
+          <NIcon class="nav-icon" :size="18"><component :is="item.icon" /></NIcon>
           <span>{{ item.label }}</span>
         </button>
       </nav>
     </section>
 
-    <div class="sidebar-account">
+    <footer class="sidebar-footer-tools">
       <template v-if="isAuthenticated">
-        <button class="account-profile" title="Upload avatar" @click="$emit('uploadAvatar')">
-          <div class="account-avatar">
-            <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="avatar" />
-            <span v-else>{{ avatarInitial }}</span>
-          </div>
-          <div class="account-meta">
-            <strong>{{ user?.displayName || 'Workspace Member' }}</strong>
-            <span>{{ user?.email }}</span>
-          </div>
-        </button>
-        <div class="account-actions">
-          <button class="account-action-btn" @click="$emit('usage')">Usage</button>
-          <button class="account-action-btn" @click="$emit('logout')">Logout</button>
+        <div class="sidebar-tool-actions">
+          <button class="sidebar-tool-btn" type="button" title="Settings" aria-label="Settings" @click="$emit('settings')">
+            <NIcon :size="18"><SettingsOutline /></NIcon>
+          </button>
+          <button class="sidebar-tool-btn" type="button" title="Admin Dashboard" aria-label="Admin Dashboard" @click="$emit('admin')">
+            <NIcon :size="18"><WindowSidebarOutline /></NIcon>
+          </button>
+          <button class="sidebar-tool-btn sidebar-tool-btn--logout" type="button" title="Logout" aria-label="Logout" @click="$emit('logout')">
+            <NIcon :size="18"><LogOutOutline /></NIcon>
+          </button>
         </div>
       </template>
       <template v-else>
@@ -45,13 +46,14 @@
           <button class="account-action-btn account-action-btn-primary" @click="$emit('register')">Register</button>
         </div>
       </template>
-    </div>
+    </footer>
   </aside>
 </template>
 
 <script setup>
 import { NIcon } from 'naive-ui'
-import aioncraftWordmark from '@/assets/home-figma/aioncraft-wordmark.svg'
+import { LogOutOutline, SettingsOutline, WindowSidebarOutline } from '@/icons/coolicons'
+import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 
 defineProps({
   workspaceBrand: {
@@ -77,13 +79,31 @@ defineProps({
   avatarInitial: {
     type: String,
     default: ''
+  },
+  currentWorkspace: {
+    type: Object,
+    default: null
+  },
+  workspaces: {
+    type: Array,
+    default: () => []
+  },
+  pendingInvites: {
+    type: Array,
+    default: () => []
   }
 })
 
 defineEmits([
   'update:activeSection',
+  'selectWorkspace',
+  'createWorkspace',
+  'inviteWorkspace',
+  'leaveWorkspace',
+  'acceptWorkspaceInvite',
   'uploadAvatar',
-  'usage',
+  'settings',
+  'admin',
   'logout',
   'login',
   'register'
@@ -100,35 +120,6 @@ defineEmits([
   background: rgba(255, 255, 255, 0.015);
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 10px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.brand-logo {
-  width: 93px;
-  height: 31px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.brand-divider {
-  width: 1px;
-  height: 28px;
-  flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.brand-text {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-}
-
 .nav-menu {
   display: flex;
   flex-direction: column;
@@ -138,15 +129,7 @@ defineEmits([
 .sidebar-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.sidebar-group-title {
-  padding: 0 12px;
-  color: rgba(236, 238, 244, 0.45);
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  gap: 4px;
 }
 
 .nav-item {
@@ -157,11 +140,15 @@ defineEmits([
   border-radius: 14px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 0 12px;
   cursor: pointer;
   font-size: 14px;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.nav-icon {
+  flex-shrink: 0;
 }
 
 .nav-item.active {
@@ -169,69 +156,43 @@ defineEmits([
   color: #fff;
 }
 
-.sidebar-account {
+.sidebar-footer-tools {
   margin-top: auto;
-  padding: 14px 10px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.account-profile {
-  width: 100%;
-  border: none;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 18px;
-  padding: 12px;
+  padding: 0 10px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  text-align: left;
-  cursor: pointer;
+  justify-content: flex-start;
+  gap: 10px;
 }
 
-.account-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.sidebar-tool-actions {
   display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.sidebar-tool-btn {
+  width: 26px;
+  height: 30px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(236, 238, 244, 0.7);
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.sidebar-tool-btn:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  flex-shrink: 0;
 }
 
-.account-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.account-meta {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.account-meta strong {
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-}
-
-.account-meta span {
-  font-size: 12px;
-  color: rgba(236, 238, 244, 0.58);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.sidebar-tool-btn--logout {
+  margin-left: auto;
 }
 
 .account-actions {

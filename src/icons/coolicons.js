@@ -14,6 +14,7 @@ import settings from '@iconify-icons/ci/settings'
 import trashFull from '@iconify-icons/ci/trash-full'
 import chevronLeft from '@iconify-icons/ci/chevron-left'
 import chevronDown from '@iconify-icons/ci/chevron-down'
+import chevronUp from '@iconify-icons/ci/chevron-up'
 import text from '@iconify-icons/ci/text'
 import playCircle from '@iconify-icons/ci/play-circle'
 import swatchesPalette from '@iconify-icons/ci/swatches-palette'
@@ -25,6 +26,7 @@ import compass from '@iconify-icons/ci/compass'
 import minus from '@iconify-icons/ci/minus'
 import download from '@iconify-icons/ci/download'
 import gridBig from '@iconify-icons/ci/grid-big'
+import windowSidebar from '@iconify-icons/ci/window-sidebar'
 import chatCircle from '@iconify-icons/ci/chat-circle'
 import closeMd from '@iconify-icons/ci/close-md'
 import bookOpen from '@iconify-icons/ci/book-open'
@@ -39,6 +41,7 @@ import color from '@iconify-icons/ci/color'
 import chevronRight from '@iconify-icons/ci/chevron-right'
 import search from '@iconify-icons/ci/search'
 import globe from '@iconify-icons/ci/globe'
+import logOut from '@iconify-icons/ci/log-out'
 
 const wrap = (iconData) => ({
   name: 'CoolIconAdapter',
@@ -61,6 +64,7 @@ export const TrashOutline = wrap(trashFull)
 
 export const ChevronBackOutline = wrap(chevronLeft)
 export const ChevronDownOutline = wrap(chevronDown)
+export const ChevronUpOutline = wrap(chevronUp)
 export const TextOutline = wrap(text)
 export const VideocamOutline = wrap(playCircle)
 export const ColorPaletteOutline = wrap(swatchesPalette)
@@ -72,6 +76,7 @@ export const LocateOutline = wrap(compass)
 export const RemoveOutline = wrap(minus)
 export const DownloadOutline = wrap(download)
 export const AppsOutline = wrap(gridBig)
+export const WindowSidebarOutline = wrap(windowSidebar)
 export const ChatbubbleOutline = wrap(chatCircle)
 
 export const CloseOutline = wrap(closeMd)
@@ -89,3 +94,4 @@ export const ColorWandOutline = wrap(color)
 export const ChevronForwardOutline = wrap(chevronRight)
 export const SearchOutline = wrap(search)
 export const GlobeOutline = wrap(globe)
+export const LogOutOutline = wrap(logOut)

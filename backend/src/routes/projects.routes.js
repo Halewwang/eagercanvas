@@ -4,8 +4,11 @@ import { asyncHandler } from '../utils/http.js'
 import {
   createProject,
   getProject,
+  getProjectEditRequests,
   listProjects,
   removeProject,
+  requestProjectEditAccess,
+  reviewProjectEditAccess,
   updateProject
 } from '../services/projects.service.js'
 
@@ -30,6 +33,21 @@ projectsRouter.get('/:id', asyncHandler(async (req, res) => {
 projectsRouter.patch('/:id', asyncHandler(async (req, res) => {
   const project = await updateProject(req.user.id, req.params.id, req.body)
   res.json({ data: project })
+}))
+
+projectsRouter.post('/:id/edit-requests', asyncHandler(async (req, res) => {
+  const result = await requestProjectEditAccess(req.user.id, req.params.id, req.body)
+  res.status(201).json({ data: result })
+}))
+
+projectsRouter.get('/:id/edit-requests', asyncHandler(async (req, res) => {
+  const result = await getProjectEditRequests(req.user.id, req.params.id)
+  res.json({ data: result })
+}))
+
+projectsRouter.post('/:id/edit-requests/:requestId/review', asyncHandler(async (req, res) => {
+  const result = await reviewProjectEditAccess(req.user.id, req.params.id, req.params.requestId, req.body)
+  res.json({ data: result })
 }))
 
 projectsRouter.delete('/:id', asyncHandler(async (req, res) => {

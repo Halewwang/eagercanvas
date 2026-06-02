@@ -10,20 +10,25 @@
     :max-zoom="2"
     :snap-to-grid="true"
     :snap-grid="[20, 20]"
+    :nodes-draggable="!readOnly"
+    :nodes-connectable="!readOnly"
+    :edges-updatable="!readOnly"
+    :elements-selectable="!readOnly"
     multi-selection-key-code="Shift"
     class="canvas-flow"
+    :class="{ 'canvas-flow--read-only': readOnly }"
     :style="canvasFlowStyle"
-    @connect="$emit('connect', $event)"
-    @connect-start="$emit('connectStart', $event)"
-    @connect-end="$emit('connectEnd', $event)"
+    @connect="emitMutable('connect', $event)"
+    @connect-start="emitMutable('connectStart', $event)"
+    @connect-end="emitMutable('connectEnd', $event)"
     @node-click="$emit('nodeClick', $event)"
-    @node-drag-start="forwardNodeDragStart"
-    @node-drag-stop="$emit('nodeDragStop', $event)"
-    @nodes-change="$emit('nodesChange', $event)"
+    @node-drag-start="emitMutable('nodeDragStart', $event)"
+    @node-drag-stop="emitMutable('nodeDragStop', $event)"
+    @nodes-change="emitMutable('nodesChange', $event)"
     @pane-click="$emit('paneClick', $event)"
-    @pane-context-menu="$emit('paneContextMenu', $event)"
+    @pane-context-menu="emitMutable('paneContextMenu', $event)"
     @viewport-change="$emit('viewportChange', $event)"
-    @edges-change="$emit('edgesChange', $event)"
+    @edges-change="emitMutable('edgesChange', $event)"
   />
 </template>
 
@@ -59,6 +64,10 @@ const props = defineProps({
   canvasFlowStyle: {
     type: Object,
     default: () => ({})
+  },
+  readOnly: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -81,12 +90,16 @@ const emit = defineEmits([
 
 const nodesModel = computed({
   get: () => props.nodes,
-  set: (value) => emit('update:nodes', value)
+  set: (value) => {
+    if (!props.readOnly) emit('update:nodes', value)
+  }
 })
 
 const edgesModel = computed({
   get: () => props.edges,
-  set: (value) => emit('update:edges', value)
+  set: (value) => {
+    if (!props.readOnly) emit('update:edges', value)
+  }
 })
 
 const viewportModel = computed({
@@ -94,8 +107,9 @@ const viewportModel = computed({
   set: (value) => emit('update:viewport', value)
 })
 
-function forwardNodeDragStart(...args) {
-  emit('nodeDragStart', ...args)
+function emitMutable(name, ...args) {
+  if (props.readOnly) return
+  emit(name, ...args)
 }
 </script>
 
@@ -137,5 +151,9 @@ function forwardNodeDragStart(...args) {
   stroke: #ffffff;
   stroke-width: 2;
   stroke-dasharray: 0;
+}
+
+.canvas-flow--read-only .vue-flow__node {
+  pointer-events: none;
 }
 </style>

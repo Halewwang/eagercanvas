@@ -596,11 +596,19 @@ const loadProject = (projectId) => {
   const canvasData = getProjectCanvas(projectId)
   
   if (canvasData) {
-    projectSaveState.value = deriveLoadSyncStatus({
-      loadSource: canvasData?._meta?.loadSource || canvasData?._meta?.readState,
-      remoteSynced: canvasData?._meta?.remoteSynced,
-      hasTransientMedia: false
-    })
+    projectSaveState.value = canvasData?._meta?.permission === 'viewer'
+      ? createSyncStatus({
+          status: CANVAS_SYNC_STATES.synced,
+          localSaved: false,
+          remoteSynced: false,
+          reason: 'read-only',
+          error: null
+        })
+      : deriveLoadSyncStatus({
+          loadSource: canvasData?._meta?.loadSource || canvasData?._meta?.readState,
+          remoteSynced: canvasData?._meta?.remoteSynced,
+          hasTransientMedia: false
+        })
     lastSaveResult = { ...projectSaveState.value }
 
     // Restore project version
@@ -683,7 +691,19 @@ const loadProject = (projectId) => {
  */
 const saveProject = async ({ forceRemoteOverwrite = false } = {}) => {
   if (!currentProjectId.value) return
-  if (!getProjectCanvas(currentProjectId.value)) return false
+  const projectCanvas = getProjectCanvas(currentProjectId.value)
+  if (!projectCanvas) return false
+  if (projectCanvas?._meta?.permission === 'viewer') {
+    lastSaveResult = createSyncStatus({
+      status: CANVAS_SYNC_STATES.synced,
+      localSaved: false,
+      remoteSynced: false,
+      reason: 'read-only',
+      error: null
+    })
+    projectSaveState.value = { ...lastSaveResult }
+    return false
+  }
 
   const { containsTransientMedia, localSnapshot, remoteSnapshot } = createCanvasPersistenceSnapshots({
     nodes: nodes.value,

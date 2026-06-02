@@ -2,11 +2,18 @@
 /**
  * Root App component.
  */
-import { onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { NConfigProvider, darkTheme } from 'naive-ui'
+import { useRoute } from 'vue-router'
 import { BaseToastViewport, ErrorBoundary, NetworkBanner } from './components/ui'
 import UpdatePrompt from './components/UpdatePrompt.vue'
 import { startAppVersionWatcher, stopAppVersionWatcher } from './utils/appVersion'
+
+const route = useRoute()
+const appRouteClass = computed(() => [
+  'app-route',
+  route.name === 'Home' ? 'app-route--home' : 'app-route--google-sans'
+])
 
 const themeOverrides = {
   common: {
@@ -53,7 +60,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides">
+  <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides" :class="appRouteClass">
     <ErrorBoundary>
       <BaseToastViewport />
       <NetworkBanner :sync-offline-drafts="syncOfflineDrafts" />

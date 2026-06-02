@@ -6,7 +6,11 @@
       class="project-card"
       @click="$emit('primaryClick', item)"
     >
-      <div class="card-media" :class="{ 'project-media': activeSection === 'projects' }">
+      <div class="card-media" :class="{ 'project-media': activeSection !== 'featured' }">
+        <div v-if="showOwnerAvatar(item)" class="owner-avatar" title="Shared by">
+          <img v-if="item.ownerAvatarUrl" :src="item.ownerAvatarUrl" alt="owner avatar" />
+          <span v-else>{{ getOwnerInitial(item) }}</span>
+        </div>
         <template v-if="item.thumbnail || item.cover || item.coverUrl">
           <img :src="item.thumbnail || item.cover || item.coverUrl" :alt="item.title || item.name" />
         </template>
@@ -24,11 +28,14 @@
       </div>
 
       <div class="card-body">
-        <template v-if="activeSection === 'projects'">
+        <template v-if="activeSection !== 'featured'">
           <div class="project-meta-row">
             <div class="project-meta-main">
               <h3>{{ item.name }}</h3>
               <p>{{ describeItem(item) }}</p>
+              <div v-if="projectBadges(item).length" class="project-badges">
+                <span v-for="badge in projectBadges(item)" :key="badge" class="badge">{{ badge }}</span>
+              </div>
             </div>
             <div @click.stop>
               <BaseDropdown
@@ -46,7 +53,17 @@
         <template v-else>
           <div class="title-row">
             <h3>{{ item.title || item.name }}</h3>
-            <span v-if="activeSection === 'featured'" class="badge">Public</span>
+            <button
+              v-if="activeSection === 'featured'"
+              type="button"
+              class="favorite-btn"
+              :class="{ active: item.isFavorite }"
+              title="Favorite"
+              @click.stop="$emit('favoriteTemplate', item)"
+            >
+              <NIcon :size="15"><BookmarkOutline /></NIcon>
+            </button>
+            <span v-if="activeSection === 'featured'" class="badge">{{ item.workspaceKind === 'team' ? 'Workspace' : 'Public' }}</span>
           </div>
           <p>{{ describeItem(item) }}</p>
         </template>
@@ -58,7 +75,7 @@
 
 <script setup>
 import { NIcon } from 'naive-ui'
-import { EllipsisHorizontalOutline } from '@/icons/coolicons'
+import { BookmarkOutline, EllipsisHorizontalOutline } from '@/icons/coolicons'
 import { BaseDropdown } from '@/components/ui'
 import WorkspaceTemplateCanvasPreview from './WorkspaceTemplateCanvasPreview.vue'
 
@@ -87,8 +104,28 @@ defineProps({
 
 defineEmits([
   'primaryClick',
-  'projectMenuSelect'
+  'projectMenuSelect',
+  'favoriteTemplate'
 ])
+
+const showOwnerAvatar = (item = {}) => {
+  if (!item) return false
+  if (item.ownerAvatarUrl || item.ownerDisplayName) return true
+  return item.accessMode === 'team' && item.ownerUserId
+}
+
+const getOwnerInitial = (item = {}) => {
+  const raw = String(item.ownerDisplayName || item.ownerEmail || item.ownerUserId || '').trim()
+  return (raw[0] || 'U').toUpperCase()
+}
+
+const projectBadges = (item = {}) => {
+  const badges = []
+  if (item.accessMode === 'team') badges.push('Team')
+  if (item.permission === 'viewer') badges.push('Viewer')
+  if (item.permission === 'editor') badges.push('Editor')
+  return badges
+}
 </script>
 
 <style scoped>
@@ -160,6 +197,32 @@ defineEmits([
   display: block;
 }
 
+.owner-avatar {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 3;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.42);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+}
+
+.owner-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .card-canvas-preview {
   height: 100%;
   border: none;
@@ -227,6 +290,26 @@ defineEmits([
   background: rgba(255, 255, 255, 0.06);
 }
 
+.favorite-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(236, 238, 244, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.favorite-btn.active,
+.favorite-btn:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .menu-btn {
   width: 36px;
   height: 36px;
@@ -286,6 +369,13 @@ defineEmits([
   color: rgba(236, 238, 244, 0.65);
   font-size: 13px;
   line-height: 1.35;
+}
+
+.project-badges {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .project-menu-btn {

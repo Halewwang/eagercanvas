@@ -6,20 +6,28 @@
       class="h-full relative overflow-hidden"
       @pointerdown.capture="handleCanvasPointerDownCapture"
       @mousedown.capture="handleCanvasPointerDownCapture"
-      @contextmenu.capture="handleCanvasContextMenu"
+      @contextmenu.capture="handleCanvasContextMenuGuarded"
       @dragover="handleCanvasMediaDragOver"
-      @drop="handleCanvasMediaDrop"
+      @drop="handleCanvasMediaDropGuarded"
     >
       <CanvasTopControls
-        :project-options="projectOptions"
+        :project-options="projectOptionsForPermission"
         :project-name="projectName"
         :sync-indicator="syncIndicator"
         :show-remote-refresh-control="showRemoteRefreshControl"
         :remote-refresh-action="remoteRefreshAction"
+        :read-only="isReadOnlyProject"
         @workspace="goWorkspace"
-        @project-action="handleProjectAction"
+        @project-action="handleProjectActionWithPermission"
         @remote-refresh="openRemoteRefreshModal"
         @share="openShareDialog"
+        @request-edit="requestCanvasEditAccess"
+      />
+
+      <CanvasReadOnlyBanner
+        v-if="isReadOnlyProject"
+        :owner-name="currentProject?.ownerDisplayName || ''"
+        @request-edit="requestCanvasEditAccess"
       />
 
       <CanvasFlowStage
@@ -31,6 +39,7 @@
         :edge-types="edgeTypes"
         :default-viewport="canvasViewport"
         :canvas-flow-style="canvasFlowStyle"
+        :read-only="isReadOnlyProject"
         @connect="onConnect"
         @connect-start="onConnectStart"
         @connect-end="onConnectEnd"
@@ -51,6 +60,7 @@
         :selected-group-menu-rect="selectedGroupMenuRect"
         :group-body-hit-rects-by-id="groupBodyHitRectsById"
         :group-box-pointer-events="getGroupBoxPointerEvents()"
+        :read-only="isReadOnlyProject"
         @create-group="handleCreateGroup"
         @group-grip-pointer-down="handleGroupGripPointerDown"
         @select-group="selectGroup"
@@ -66,6 +76,7 @@
         :show-local-inject-button="showLocalInjectButton"
         :user="user"
         :avatar-initial="avatarInitial"
+        :read-only="isReadOnlyProject"
         @add-node="toggleToolbarNodeMenu"
         @open-library="showMediaLibraryPanel = true"
         @undo="undo"
@@ -78,7 +89,7 @@
       <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarChange" />
 
       <CanvasNodeMenu
-        :show="showNodeMenu"
+        :show="!isReadOnlyProject && showNodeMenu"
         :mode="nodeMenuMode"
         :menu-style="nodeMenuStyle"
         :title="nodeMenuTitle"
@@ -168,13 +179,14 @@ import { useCanvasNodeDragInteraction } from '@/hooks/useCanvasNodeDragInteracti
 import { useCanvasNodeMenuState } from '@/hooks/useCanvasNodeMenuState.js'
 import { useCanvasOverlayRects } from '@/hooks/useCanvasOverlayRects.js'
 import { useCanvasProjectActions } from '@/hooks/useCanvasProjectActions'
+import { useCanvasReadOnlyGuard } from '@/hooks/useCanvasReadOnlyGuard.js'
 import { useCanvasRouteLifecycle } from '@/hooks/useCanvasRouteLifecycle.js'
 import { useCanvasSelectionInteraction } from '@/hooks/useCanvasSelectionInteraction.js'
 import { useCanvasSyncResolution } from '@/hooks/useCanvasSyncResolution.js'
 import { useCanvasViewportInteraction } from '@/hooks/useCanvasViewportInteraction.js'
 import { edgeStrategy, isConnectionValid } from '@/services/edgeStrategy'
 import { notifier } from '@/utils/notifier'
-import { duplicateProject, getProjectCanvas, initProjectsStore, loadCachedProjects, projects, refreshProjectById } from '@/stores/projects'
+import { duplicateProject, getProjectCanvas, initProjectsStore, loadCachedProjects, projects, refreshProjectById, requestProjectEditAccess } from '@/stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import {
@@ -195,6 +207,7 @@ import CanvasFlowStage from '@/components/canvas/CanvasFlowStage.vue'
 import CanvasGroupOverlay from '@/components/canvas/CanvasGroupOverlay.vue'
 import CanvasNodeMenu from '@/components/canvas/CanvasNodeMenu.vue'
 import CanvasProjectModals from '@/components/canvas/CanvasProjectModals.vue'
+import CanvasReadOnlyBanner from '@/components/canvas/CanvasReadOnlyBanner.vue'
 import CanvasShareModal from '@/components/canvas/CanvasShareModal.vue'
 import CanvasSyncModals from '@/components/canvas/CanvasSyncModals.vue'
 import CanvasToolbar from '@/components/canvas/CanvasToolbar.vue'
@@ -343,6 +356,22 @@ const currentCanvasProjectId = computed(() => {
   return value && value !== 'new' ? value : ''
 })
 
+const {
+  currentProject,
+  handleProjectActionWithPermission,
+  isReadOnlyProject,
+  projectOptionsForPermission,
+  requestCanvasEditAccess,
+  warnReadOnly
+} = useCanvasReadOnlyGuard({
+  currentProjectId: currentCanvasProjectId,
+  projects,
+  projectOptions,
+  handleProjectAction,
+  requestProjectEditAccess,
+  notify: notifier
+})
+
 const screenPointToFlowPoint = (point) => {
   return getFlowPointFromScreenPoint(point, viewport.value)
 }
@@ -360,6 +389,15 @@ const {
   uploadMediaFile: uploadImageFile,
   viewport
 })
+
+const handleCanvasMediaDropGuarded = (event) => {
+  if (isReadOnlyProject.value) {
+    event?.preventDefault?.()
+    warnReadOnly()
+    return
+  }
+  return handleCanvasMediaDrop(event)
+}
 
 let selectionInteraction = null
 const clearNodeSelectionForNodeMenu = () => selectionInteraction?.clearNodeSelection()
@@ -528,8 +566,20 @@ const {
   openPaneNodeMenu
 })
 
+const handleCanvasContextMenuGuarded = (event) => {
+  if (isReadOnlyProject.value) {
+    event?.preventDefault?.()
+    return
+  }
+  return handleCanvasContextMenu(event)
+}
+
 // Add new node | 添加新节点
 const addNewNode = async (type) => {
+  if (isReadOnlyProject.value) {
+    warnReadOnly()
+    return
+  }
   if (pendingConnectMenuContext.value) {
     const context = pendingConnectMenuContext.value
     const createdNodeIds = []
@@ -610,6 +660,10 @@ const readImageDimensions = (file) =>
   })
 
 const triggerLocalImageInject = () => {
+  if (isReadOnlyProject.value) {
+    warnReadOnly()
+    return
+  }
   if (!localInjectInputRef.value) return
   localInjectInputRef.value.value = ''
   localInjectInputRef.value.click()
@@ -618,6 +672,11 @@ const triggerLocalImageInject = () => {
 const handleLocalImageInject = async (event) => {
   const file = event.target?.files?.[0]
   if (!file) return
+  if (isReadOnlyProject.value) {
+    if (event?.target) event.target.value = ''
+    warnReadOnly()
+    return
+  }
 
   try {
     const [dataUrl, dimensions] = await Promise.all([
@@ -656,6 +715,10 @@ const getLibraryInsertPosition = () => {
 }
 
 const handleInsertLibraryAsset = async (asset = {}) => {
+  if (isReadOnlyProject.value) {
+    warnReadOnly()
+    return
+  }
   const safeUrl = String(asset?.url || '').trim()
   const kind = String(asset?.kind || '').trim().toLowerCase()
   if (!safeUrl) return
@@ -692,7 +755,7 @@ const handleInsertLibraryAsset = async (asset = {}) => {
 }
 
 const goWorkspace = () => {
-  flushSave()
+  if (!isReadOnlyProject.value) flushSave()
   router.push('/workspace')
 }
 
@@ -730,7 +793,10 @@ const { loadProjectById } = useCanvasRouteLifecycle({
   scheduleOverlayRectUpdate,
   stopGroupDrag,
   updateNodeInternals,
-  handleGlobalKeydown
+  handleGlobalKeydown: (event) => {
+    if (isReadOnlyProject.value) return
+    handleGlobalKeydown(event)
+  }
 })
 
 const {

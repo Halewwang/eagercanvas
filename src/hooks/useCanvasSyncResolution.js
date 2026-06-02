@@ -24,6 +24,14 @@ export const useCanvasSyncResolution = ({
     const state = projectSaveState?.value || {}
     const status = String(state.status || 'idle')
 
+    if (state.reason === 'read-only') {
+      return {
+        label: 'Read-only',
+        title: 'This team project can be viewed but not edited.',
+        dotClass: 'bg-sky-400'
+      }
+    }
+
     if (status === 'dirty') {
       return {
         label: 'Unsaved',

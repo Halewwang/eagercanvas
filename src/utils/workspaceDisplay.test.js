@@ -13,14 +13,14 @@ test('workspace display helpers preserve brand and section copy behavior', () =>
       user: { displayName: '  Hale  ', id: 'user-a' },
       currentWorkspace: { name: 'Team Canvas' }
     }),
-    'Hale Workspace'
+    'Team Canvas'
   )
   assert.equal(
     workspaceDisplay.getWorkspaceBrand({
       user: { displayName: '  ', id: ' member-7 ' },
       currentWorkspace: { name: 'Team Canvas' }
     }),
-    'member-7 Workspace'
+    'Team Canvas'
   )
   assert.equal(
     workspaceDisplay.getWorkspaceBrand({
@@ -32,14 +32,19 @@ test('workspace display helpers preserve brand and section copy behavior', () =>
   assert.equal(workspaceDisplay.getWorkspaceBrand({}), 'Shared Workspace')
 
   assert.equal(workspaceDisplay.getWorkspaceSectionTitle('featured'), 'Share Templates')
+  assert.equal(workspaceDisplay.getWorkspaceSectionTitle('shared'), 'Shared with me')
   assert.equal(workspaceDisplay.getWorkspaceSectionTitle('projects'), 'My Project')
   assert.equal(
     workspaceDisplay.getWorkspaceSectionDescription('featured'),
-    'Templates published by workspace members. Using one creates a full copy in your own projects.'
+    'Community and workspace templates. Using one creates a full copy in the active workspace.'
+  )
+  assert.equal(
+    workspaceDisplay.getWorkspaceSectionDescription('shared'),
+    'Team projects you can open in read-only mode'
   )
   assert.equal(
     workspaceDisplay.getWorkspaceSectionDescription('projects'),
-    'Project cover is shown as 16:9. Manage project actions from the menu.'
+    'Projects are created in the active workspace. Team members can view team projects by default.'
   )
 })
 
@@ -101,5 +106,11 @@ test('workspace project menu helper preserves action order and keys', () => {
     { label: 'Duplicate project', key: 'duplicate' },
     { type: 'divider', key: 'divider-1' },
     { label: 'Delete project', key: 'delete' }
+  ])
+  assert.deepEqual(workspaceDisplay.getWorkspaceProjectMenuOptions({ permission: 'viewer' }), [
+    { label: 'Refresh from cloud', key: 'refresh-cloud' },
+    { label: 'Copy project link', key: 'copy-link' },
+    { type: 'divider', key: 'divider-1' },
+    { label: 'Request edit access', key: 'request-edit' }
   ])
 })

@@ -31,6 +31,11 @@ const routes = [
     component: () => import('@/views/Workspace.vue')
   },
   {
+    path: '/workspace/join/:token',
+    name: 'WorkspaceJoin',
+    component: () => import('@/views/Workspace.vue')
+  },
+  {
     path: '/usage',
     name: 'Usage',
     component: () => import('@/views/Usage.vue')

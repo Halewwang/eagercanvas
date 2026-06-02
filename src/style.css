@@ -4,6 +4,7 @@
 
 /* Base styles */
 :root {
+  --font-google-sans: 'Google Sans', 'Google Sans Text', 'Product Sans', 'Segoe UI', sans-serif;
   font-family: 'fieldwork', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -11,6 +12,14 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.app-route--google-sans {
+  font-family: var(--font-google-sans);
+}
+
+.n-config-provider.app-route--google-sans {
+  font-family: var(--font-google-sans);
 }
 
 * {

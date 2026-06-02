@@ -73,3 +73,9 @@ test('retired legacy global style blocks stay removed', () => {
     assert.doesNotMatch(styleSource, new RegExp(`\\.${selector}(?:\\s|\\.|:|\\{)`))
   }
 })
+
+test('non-home routes use the Google Sans app font scope', () => {
+  assert.match(styleSource, /--font-google-sans:\s*'Google Sans',\s*'Google Sans Text',\s*'Product Sans',\s*'Segoe UI',\s*sans-serif;/)
+  assert.match(styleSource, /\.app-route--google-sans\s*\{[^}]*font-family:\s*var\(--font-google-sans\);/s)
+  assert.doesNotMatch(styleSource, /\.app-route--home\s*\{[^}]*font-family:\s*var\(--font-google-sans\);/s)
+})

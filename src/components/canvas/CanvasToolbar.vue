@@ -4,22 +4,23 @@
       round
       class="canvas-primary-tool"
       title="Add Node"
+      :disabled="readOnly"
       @click="$emit('add-node')"
     >
       <n-icon :size="20"><AddOutline /></n-icon>
     </CanvasToolbarButton>
-    <CanvasToolbarButton title="Asset Library" @click="$emit('open-library')">
+    <CanvasToolbarButton title="Asset Library" :disabled="readOnly" @click="$emit('open-library')">
       <n-icon :size="20"><ImageOutline /></n-icon>
     </CanvasToolbarButton>
     <CanvasToolbarButton
-      :disabled="!canUndo"
+      :disabled="readOnly || !canUndo"
       title="Undo"
       @click="$emit('undo')"
     >
       <n-icon :size="20"><ArrowUndoOutline /></n-icon>
     </CanvasToolbarButton>
     <CanvasToolbarButton
-      :disabled="!canRedo"
+      :disabled="readOnly || !canRedo"
       title="Redo"
       @click="$emit('redo')"
     >
@@ -36,6 +37,7 @@
       v-if="showLocalInjectButton"
       class="text-white"
       title="Inject Image"
+      :disabled="readOnly"
       @click="$emit('inject-image')"
     >
       <n-icon :size="20"><ImageOutline /></n-icon>
@@ -85,6 +87,10 @@ defineProps({
   avatarInitial: {
     type: String,
     default: ''
+  },
+  readOnly: {
+    type: Boolean,
+    default: false
   }
 })
 

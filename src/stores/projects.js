@@ -8,7 +8,10 @@ import {
   apiDeleteProject,
   apiGetProject,
   apiListProjects,
-  apiPatchProject
+  apiListProjectEditRequests,
+  apiPatchProject,
+  apiRequestProjectEditAccess,
+  apiReviewProjectEditRequest
 } from '@/api/projects'
 import { useAuthStore } from '@/stores/auth'
 import { getCanvasDraftStorage } from '@/stores/canvasDrafts'
@@ -44,6 +47,15 @@ export const projectsLoadState = ref({
   error: null,
   updatedAt: null
 })
+
+export const isProjectReadOnly = (project = {}) => project?.permission === 'viewer'
+
+const createReadOnlyProjectError = () => {
+  const error = new Error('This project is read-only. Request edit access before making changes.')
+  error.code = 'PROJECT_EDIT_PERMISSION_REQUIRED'
+  error.status = 403
+  return error
+}
 
 const getUserScopedKey = (prefix) => {
   const { user, isAuthenticated } = useAuthStore()
@@ -493,6 +505,9 @@ export const updateProject = async (id, data) => {
   const index = projects.value.findIndex((p) => p.id === id)
   if (index === -1) return false
   const currentProject = projects.value[index]
+  if (isProjectReadOnly(currentProject)) {
+    throw createReadOnlyProjectError()
+  }
 
   const nextProject = {
     ...currentProject,
@@ -574,6 +589,15 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null,
       localSaved: false,
       remoteSynced: false,
       status: 'missing'
+    }
+  }
+  if (isProjectReadOnly(project)) {
+    return {
+      project,
+      localSaved: false,
+      remoteSynced: false,
+      status: 'read-only',
+      error: createReadOnlyProjectError()
     }
   }
 
@@ -751,6 +775,10 @@ export const syncOfflineCanvasDrafts = async () => {
         summary.skipped += 1
         continue
       }
+      if (isProjectReadOnly(project)) {
+        summary.skipped += 1
+        continue
+      }
 
       summary.attempted += 1
       const result = await syncOfflineCanvasDraftRecord({
@@ -814,6 +842,10 @@ export const getProjectCanvas = (id) => {
 }
 
 export const deleteProject = async (id) => {
+  const project = projects.value.find((p) => p.id === id)
+  if (isProjectReadOnly(project)) {
+    throw createReadOnlyProjectError()
+  }
   if (BYPASS_AUTH_IN_DEV) {
     projects.value = projects.value.filter((p) => p.id !== id)
     await removeProjectCanvasDraft(id)
@@ -830,6 +862,9 @@ export const deleteProject = async (id) => {
 export const duplicateProject = async (id) => {
   const source = projects.value.find((p) => p.id === id)
   if (!source) return null
+  if (isProjectReadOnly(source)) {
+    throw createReadOnlyProjectError()
+  }
   const sourceCanvas = getProjectCanvas(id)
   const nextCanvas = sourceCanvas
     ? {
@@ -855,6 +890,21 @@ export const renameProject = async (id, name) => {
 
 export const updateProjectThumbnail = async (id, thumbnail) => {
   return updateProject(id, { thumbnail })
+}
+
+export const requestProjectEditAccess = async (id, message = '') => {
+  const response = await apiRequestProjectEditAccess(id, { message })
+  return response?.data?.request || null
+}
+
+export const loadProjectEditRequests = async (id) => {
+  const response = await apiListProjectEditRequests(id)
+  return Array.isArray(response?.data?.requests) ? response.data.requests : []
+}
+
+export const reviewProjectEditRequest = async (id, requestId, decision) => {
+  const response = await apiReviewProjectEditRequest(id, requestId, { decision })
+  return response?.data?.request || null
 }
 
 export const markProjectOpened = (id, openedAt = new Date().toISOString()) => {
@@ -911,6 +961,9 @@ export const useProjectsStore = () => ({
   duplicateProject,
   renameProject,
   updateProjectThumbnail,
+  requestProjectEditAccess,
+  loadProjectEditRequests,
+  reviewProjectEditRequest,
   markProjectOpened,
   getSortedProjects,
   initProjectsStore

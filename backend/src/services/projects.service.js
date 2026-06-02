@@ -2,6 +2,18 @@ import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
 import { sanitizeCanvasData } from './canvas-sanitize.service.js'
+import {
+  assertProjectCanEdit,
+  assertProjectCanRead,
+  createProjectEditRequest,
+  listProjectEditRequests,
+  resolveProjectAccess,
+  reviewProjectEditRequest
+} from './project-permissions.service.js'
+import {
+  getActiveWorkspace,
+  resolveProjectCreateWorkspace
+} from './workspace-membership.service.js'
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -15,6 +27,14 @@ const updateSchema = z.object({
   thumbnailUrl: z.string().optional().nullable(),
   baseRevision: z.string().optional().nullable(),
   currentUpdatedAt: z.string().optional().nullable()
+})
+
+const editRequestSchema = z.object({
+  message: z.string().trim().max(500).optional().default('')
+})
+
+const reviewSchema = z.object({
+  decision: z.enum(['approve', 'reject'])
 })
 
 const normalizeThumbnailUrl = (value) => {
@@ -40,42 +60,115 @@ const normalizeCanvasForRead = async (canvasData) => {
   return sanitizeCanvasData(canvasData || {})
 }
 
-export const listProjects = async (userId) => {
-  const { data, error } = await supabase
-    .from('projects')
-    .select('id, name, thumbnail_url, created_at, updated_at')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false })
-
-  if (error) throw new HttpError(500, error.message, 'PROJECT_LIST_FAILED')
-  return data
-}
-
-export const getProject = async (userId, id) => {
+const getProjectById = async (id) => {
   const { data, error } = await supabase
     .from('projects')
     .select('*')
     .eq('id', id)
-    .eq('user_id', userId)
     .maybeSingle()
 
   if (error) throw new HttpError(500, error.message, 'PROJECT_GET_FAILED')
   if (!data) throw new HttpError(404, 'Project not found', 'PROJECT_NOT_FOUND')
+  return data
+}
 
-  return {
-    ...data,
-    canvas_json: await normalizeCanvasForRead(data.canvas_json)
+const getOwnerProfiles = async (userIds = []) => {
+  const ids = Array.from(new Set(userIds.filter(Boolean)))
+  if (!ids.length) return new Map()
+
+  const [profilesResult, usersResult] = await Promise.all([
+    supabase.from('user_profiles').select('user_id, display_name, username, avatar_url').in('user_id', ids),
+    supabase.from('users').select('id, email').in('id', ids)
+  ])
+
+  const profilesById = new Map()
+  const usersById = new Map()
+  ;(profilesResult.data || []).forEach((profile) => profilesById.set(profile.user_id, profile))
+  ;(usersResult.data || []).forEach((user) => usersById.set(user.id, user))
+
+  return new Map(ids.map((id) => {
+    const profile = profilesById.get(id) || {}
+    const user = usersById.get(id) || {}
+    return [id, {
+      displayName: profile.display_name || user.email || 'Project owner',
+      username: profile.username || '',
+      avatarUrl: profile.avatar_url || '',
+      email: user.email || ''
+    }]
+  }))
+}
+
+const mapProjectForRead = async (row, {
+  permission = null,
+  ownerProfile = null,
+  includeCanvas = false
+} = {}) => ({
+  ...row,
+  owner_display_name: ownerProfile?.displayName || '',
+  owner_avatar_url: ownerProfile?.avatarUrl || '',
+  owner_username: ownerProfile?.username || '',
+  owner_email: ownerProfile?.email || '',
+  permission: permission || 'none',
+  access_mode: row.access_mode || 'private',
+  canvas_json: includeCanvas
+    ? await normalizeCanvasForRead(row.canvas_json)
+    : row.canvas_json
+})
+
+export const listProjects = async (userId) => {
+  const activeWorkspace = await getActiveWorkspace(userId)
+  let query = supabase
+    .from('projects')
+    .select('id, user_id, workspace_id, access_mode, name, thumbnail_url, created_at, updated_at')
+    .order('updated_at', { ascending: false })
+
+  if (activeWorkspace.kind === 'team') {
+    query = query.eq('workspace_id', activeWorkspace.id).eq('access_mode', 'team')
+  } else {
+    query = query.eq('workspace_id', activeWorkspace.id).eq('user_id', userId)
   }
+
+  const { data, error } = await query
+
+  if (error) throw new HttpError(500, error.message, 'PROJECT_LIST_FAILED')
+
+  const ownerProfiles = await getOwnerProfiles((data || []).map((row) => row.user_id))
+  const projects = []
+  for (const row of data || []) {
+    const permission = await resolveProjectAccess(userId, row)
+    if (permission === 'none') continue
+    projects.push(await mapProjectForRead(row, {
+      permission,
+      ownerProfile: ownerProfiles.get(row.user_id)
+    }))
+  }
+
+  return projects
+}
+
+export const getProject = async (userId, id) => {
+  const data = await getProjectById(id)
+  const permission = await assertProjectCanRead(userId, data)
+  const ownerProfiles = await getOwnerProfiles([data.user_id])
+
+  return mapProjectForRead(data, {
+    permission,
+    ownerProfile: ownerProfiles.get(data.user_id),
+    includeCanvas: true
+  })
 }
 
 export const createProject = async (userId, input) => {
   const payload = createSchema.parse(input)
   const normalizedCanvasData = await normalizeCanvasForStorage(payload.canvasData)
+  const { workspace, accessMode } = await resolveProjectCreateWorkspace(userId)
 
   const { data, error } = await supabase
     .from('projects')
     .insert({
       user_id: userId,
+      workspace_id: workspace.id,
+      access_mode: accessMode,
       name: payload.name,
       canvas_json: normalizedCanvasData,
       thumbnail_url: normalizeThumbnailUrl(payload.thumbnailUrl)
@@ -84,18 +177,42 @@ export const createProject = async (userId, input) => {
     .single()
 
   if (error) throw new HttpError(500, error.message, 'PROJECT_CREATE_FAILED')
-  return data
+
+  if (accessMode === 'team') {
+    const { error: memberError } = await supabase
+      .from('project_members')
+      .upsert(
+        {
+          project_id: data.id,
+          user_id: userId,
+          role: 'owner',
+          granted_by: userId
+        },
+        { onConflict: 'project_id,user_id' }
+      )
+    if (memberError) throw new HttpError(500, memberError.message, 'PROJECT_OWNER_MEMBER_CREATE_FAILED')
+  }
+
+  const ownerProfiles = await getOwnerProfiles([userId])
+  return mapProjectForRead(data, {
+    permission: 'owner',
+    ownerProfile: ownerProfiles.get(userId),
+    includeCanvas: true
+  })
 }
 
 export const updateProject = async (userId, id, input) => {
+  const existingProject = await getProjectById(id)
+  await assertProjectCanEdit(userId, existingProject)
+
   const payload = updateSchema.parse(input)
   const normalizedCanvasData = payload.canvasData !== undefined
     ? await normalizeCanvasForStorage(payload.canvasData)
     : undefined
 
   if (normalizedCanvasData !== undefined && !hasCanvasContent(normalizedCanvasData)) {
-    const existingProject = await getProject(userId, id)
-    if (hasCanvasContent(existingProject.canvas_json)) {
+    const existingCanvas = await normalizeCanvasForRead(existingProject.canvas_json)
+    if (hasCanvasContent(existingCanvas)) {
       throw new HttpError(
         409,
         'Blocked an empty canvas overwrite because this project already has saved content. Please refresh and try again.',
@@ -112,13 +229,10 @@ export const updateProject = async (userId, id, input) => {
   if (normalizedCanvasData !== undefined) patch.canvas_json = normalizedCanvasData
   if (payload.thumbnailUrl !== undefined) patch.thumbnail_url = normalizeThumbnailUrl(payload.thumbnailUrl)
 
-  // Optimistic locking: If client provided updatedAt, check it matches
-  // 如果客户端提供了 updatedAt（版本号），则检查是否匹配
   let query = supabase
     .from('projects')
     .update(patch)
     .eq('id', id)
-    .eq('user_id', userId)
 
   const baseRevision = payload.baseRevision || payload.currentUpdatedAt || null
   if (baseRevision) {
@@ -128,38 +242,60 @@ export const updateProject = async (userId, id, input) => {
   const { data, error } = await query.select('*').maybeSingle()
 
   if (error) throw new HttpError(500, error.message, 'PROJECT_UPDATE_FAILED')
-  
-  // If we had a version check and no data returned, it means conflict
-  // 如果进行了版本检查但未返回数据，说明发生了冲突（updated_at 不匹配）
+
   if (baseRevision && !data) {
     throw new HttpError(409, 'Project has been modified by another session', 'PROJECT_CONFLICT')
   }
 
   if (!data && !baseRevision) {
-    // Fallback for cases without version check (e.g. name update only)
     throw new HttpError(404, 'Project not found', 'PROJECT_NOT_FOUND')
   }
 
-  return {
-    ...data,
-    canvas_json: await normalizeCanvasForRead(data.canvas_json)
-  }
+  const permission = await resolveProjectAccess(userId, data)
+  const ownerProfiles = await getOwnerProfiles([data.user_id])
+  return mapProjectForRead(data, {
+    permission,
+    ownerProfile: ownerProfiles.get(data.user_id),
+    includeCanvas: true
+  })
 }
 
 export const removeProject = async (userId, id) => {
+  const project = await getProjectById(id)
+  await assertProjectCanEdit(userId, project)
+
   const { error } = await supabase
     .from('projects')
     .delete()
     .eq('id', id)
-    .eq('user_id', userId)
 
   if (error) throw new HttpError(500, error.message, 'PROJECT_DELETE_FAILED')
 
   await supabase.from('audit_logs').insert({
     user_id: userId,
     action: 'project.delete',
-    metadata: { projectId: id }
+    metadata: { projectId: id, workspaceId: project.workspace_id || null }
   })
 
   return { ok: true }
+}
+
+export const requestProjectEditAccess = async (userId, id, input = {}) => {
+  const project = await getProjectById(id)
+  const payload = editRequestSchema.parse(input || {})
+  const request = await createProjectEditRequest(userId, project, payload)
+  return { request }
+}
+
+export const getProjectEditRequests = async (userId, id) => {
+  const project = await getProjectById(id)
+  const requests = await listProjectEditRequests(userId, project)
+  return { requests }
+}
+
+export const reviewProjectEditAccess = async (userId, id, requestId, input = {}) => {
+  const project = await getProjectById(id)
+  const payload = reviewSchema.parse(input || {})
+  const request = await reviewProjectEditRequest(userId, project, requestId, payload.decision)
+  return { request }
 }

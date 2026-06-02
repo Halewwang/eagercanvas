@@ -1,6 +1,7 @@
 <template>
   <div class="group-overlay-layer">
     <CanvasGroupCreateMenu
+      v-if="!readOnly"
       :rect="multiSelectMenuRect"
       @create-group="$emit('createGroup')"
     />
@@ -12,11 +13,12 @@
       :selected="selectedGroupId === group.id"
       :hit-rects="groupBodyHitRectsById[group.id] || []"
       :pointer-events="groupBoxPointerEvents"
-      @group-grip-pointer-down="$emit('groupGripPointerDown', group, $event)"
-      @select-group="$emit('selectGroup', $event)"
+      @group-grip-pointer-down="!readOnly && $emit('groupGripPointerDown', group, $event)"
+      @select-group="!readOnly && $emit('selectGroup', $event)"
     />
 
     <CanvasGroupActionsMenu
+      v-if="!readOnly"
       :rect="selectedGroupMenuRect"
       @rename-group="$emit('renameGroup')"
       @duplicate-selected-group="$emit('duplicateSelectedGroup')"
@@ -55,6 +57,10 @@ defineProps({
   groupBoxPointerEvents: {
     type: String,
     default: 'none'
+  },
+  readOnly: {
+    type: Boolean,
+    default: false
   }
 })
 

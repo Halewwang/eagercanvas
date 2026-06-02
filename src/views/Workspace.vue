@@ -7,8 +7,17 @@
       :is-authenticated="isAuthenticated"
       :user="user"
       :avatar-initial="avatarInitial"
+      :current-workspace="currentWorkspace"
+      :workspaces="workspaces"
+      :pending-invites="pendingWorkspaceInvites"
+      @select-workspace="handleSelectWorkspace"
+      @create-workspace="openCreateWorkspaceModal"
+      @invite-workspace="openInviteWorkspaceModal"
+      @leave-workspace="openLeaveWorkspaceModal"
+      @accept-workspace-invite="handleAcceptWorkspaceInvite"
       @upload-avatar="triggerAvatarUpload"
-      @usage="router.push('/usage')"
+      @settings="router.push('/usage')"
+      @admin="router.push('/admin/dashboard')"
       @logout="handleLogout"
       @login="router.push({ path: '/', query: { auth: 'login', redirect: '/workspace' } })"
       @register="router.push({ path: '/', query: { auth: 'register', redirect: '/workspace' } })"
@@ -23,6 +32,18 @@
         @create-project="createBlankProject"
       />
 
+      <div v-if="activeSection === 'featured'" class="template-tabs">
+        <button
+          v-for="tab in templateTabs"
+          :key="tab.key"
+          type="button"
+          :class="{ active: activeTemplateScope === tab.key }"
+          @click="changeTemplateScope(tab.key)"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+
       <WorkspaceCardsGrid
         :active-section="activeSection"
         :items="sectionItems"
@@ -31,6 +52,7 @@
         :project-menu-options="projectMenuOptions"
         @primary-click="handlePrimaryClick"
         @project-menu-select="handleProjectMenuSelect"
+        @favorite-template="toggleFavoriteTemplate"
       />
     </main>
 
@@ -46,18 +68,41 @@
       @close-template-preview="closeTemplatePreview"
       @use-template-from-preview="useTemplateFromPreview"
     />
+
+    <WorkspaceTeamModals
+      v-model:show-create="showCreateWorkspaceModal"
+      v-model:show-invite="showInviteWorkspaceModal"
+      v-model:show-leave="showLeaveWorkspaceModal"
+      v-model:create-name="createWorkspaceName"
+      v-model:create-avatar-url="createWorkspaceAvatarUrl"
+      v-model:direct-invite-value="directInviteValue"
+      v-model:transfer-to-user-id="transferToUserId"
+      :created-invite-url="createdWorkspaceInviteUrl"
+      :create-loading="workspaceCreateLoading"
+      :direct-invite-loading="directInviteLoading"
+      :invite-url="workspaceInviteUrl"
+      :invite-link-loading="inviteLinkLoading"
+      :transfer-members="transferMembers"
+      :leave-loading="leaveLoading"
+      @confirm-create="confirmCreateWorkspace"
+      @send-direct-invite="sendDirectInvite"
+      @generate-invite-link="generateInviteLink"
+      @copy-invite-url="copyInviteUrl"
+      @confirm-leave="confirmLeaveWorkspace"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
+  BookmarkOutline,
   FolderOpenOutline,
   ImageOutline,
   SparklesOutline,
   GridOutline,
-  GlobeOutline
+  PersonOutline
 } from '@/icons/coolicons'
 import {
   projects,
@@ -66,12 +111,14 @@ import {
   renameProject,
   duplicateProject,
   deleteProject,
+  requestProjectEditAccess,
   refreshProjectById
 } from '@/stores/projects'
 import WorkspaceCardsGrid from '@/components/workspace/WorkspaceCardsGrid.vue'
 import WorkspaceHeader from '@/components/workspace/WorkspaceHeader.vue'
 import WorkspaceModals from '@/components/workspace/WorkspaceModals.vue'
 import WorkspaceSidebar from '@/components/workspace/WorkspaceSidebar.vue'
+import WorkspaceTeamModals from '@/components/workspace/WorkspaceTeamModals.vue'
 import { getErrorMessage } from '@/utils'
 import {
   describeWorkspaceItem,
@@ -87,6 +134,7 @@ import { notifier } from '@/utils/notifier'
 import { useAvatarUpload } from '@/hooks/useAvatarUpload'
 
 const router = useRouter()
+const route = useRoute()
 const { bootstrapAuth, isAuthenticated, user, logout, updateProfile } = useAuthStore()
 
 const activeSection = ref('projects')
@@ -100,10 +148,33 @@ const deleteTargetName = ref('')
 const showTemplatePreviewModal = ref(false)
 const previewTemplate = ref(null)
 const refreshingProjectId = ref('')
+const showCreateWorkspaceModal = ref(false)
+const showInviteWorkspaceModal = ref(false)
+const showLeaveWorkspaceModal = ref(false)
+const createWorkspaceName = ref('')
+const createWorkspaceAvatarUrl = ref('')
+const createdWorkspaceInviteUrl = ref('')
+const workspaceCreateLoading = ref(false)
+const directInviteValue = ref('')
+const directInviteLoading = ref(false)
+const workspaceInviteUrl = ref('')
+const inviteLinkLoading = ref(false)
+const transferMembers = ref([])
+const transferToUserId = ref('')
+const leaveLoading = ref(false)
+const activeTemplateScope = ref('workspace')
 
 const navItems = [
   { key: 'projects', label: 'My Project', icon: FolderOpenOutline },
-  { key: 'featured', label: 'Share Templates', icon: GlobeOutline }
+  { key: 'shared', label: 'Shared with me', icon: PersonOutline },
+  { key: 'featured', label: 'Shared Template', icon: BookmarkOutline }
+]
+
+const templateTabs = [
+  { key: 'community', label: 'Community' },
+  { key: 'workspace', label: 'Workspace' },
+  { key: 'my', label: 'My' },
+  { key: 'favorites', label: 'Favorites' }
 ]
 
 const workspaceCardIcons = {
@@ -124,9 +195,23 @@ const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange }
 
 const {
   currentWorkspace,
+  workspaces,
   featuredTemplates,
+  pendingWorkspaceInvites,
+  acceptWorkspaceInvite,
+  createTeamWorkspace,
+  createWorkspaceDirectInvite,
+  createWorkspaceInviteLink,
+  favoriteSharedTemplate,
+  joinWorkspaceInvite,
   loadCurrentWorkspace,
   loadFeaturedTemplates,
+  loadPendingWorkspaceInvites,
+  loadWorkspaceMembers,
+  loadWorkspaces,
+  leaveWorkspace,
+  selectWorkspace,
+  unfavoriteSharedTemplate,
   useSharedTemplate
 } = useWorkspaceStore()
 
@@ -141,7 +226,10 @@ const sectionDescription = computed(() => getWorkspaceSectionDescription(activeS
 
 const sectionItems = computed(() => {
   if (activeSection.value === 'featured') return featuredTemplates.value
-  return projects.value
+  if (activeSection.value === 'shared') {
+    return projects.value.filter((project) => project.permission === 'viewer')
+  }
+  return projects.value.filter((project) => project.permission !== 'viewer')
 })
 
 const describeItem = (item) => describeWorkspaceItem({
@@ -179,6 +267,15 @@ const handleProjectMenuSelect = async (key, project) => {
     notifier[ok ? 'success' : 'warning'](ok ? 'Project link copied' : 'Copy failed')
     return
   }
+  if (key === 'request-edit') {
+    try {
+      await requestProjectEditAccess(project.id)
+      notifier.success('Edit access requested')
+    } catch (error) {
+      notifier.error(getErrorMessage(error, 'Failed to request edit access'))
+    }
+    return
+  }
   if (key === 'rename') {
     openRename(project)
     return
@@ -207,7 +304,7 @@ const createBlankProject = async () => {
 }
 
 const handlePrimaryClick = async (item) => {
-  if (activeSection.value === 'projects') {
+  if (activeSection.value === 'projects' || activeSection.value === 'shared') {
     await router.push(`/canvas/${item.id}`)
     return
   }
@@ -239,6 +336,142 @@ const useTemplate = async (item) => {
     await router.push(`/canvas/${project.id}`)
   } catch (error) {
     notifier.error(getErrorMessage(error, 'Failed to create project from template'))
+  }
+}
+
+const reloadWorkspaceData = async () => {
+  await initProjectsStore()
+  await loadFeaturedTemplates(activeTemplateScope.value)
+}
+
+const handleSelectWorkspace = async (workspaceId) => {
+  if (!workspaceId || workspaceId === currentWorkspace.value?.id) return
+  try {
+    await selectWorkspace(workspaceId)
+    activeSection.value = 'projects'
+    await reloadWorkspaceData()
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to switch workspace'))
+  }
+}
+
+const openCreateWorkspaceModal = () => {
+  createWorkspaceName.value = ''
+  createWorkspaceAvatarUrl.value = ''
+  createdWorkspaceInviteUrl.value = ''
+  showCreateWorkspaceModal.value = true
+}
+
+const confirmCreateWorkspace = async () => {
+  if (!createWorkspaceName.value.trim()) return
+  workspaceCreateLoading.value = true
+  try {
+    await createTeamWorkspace({
+      name: createWorkspaceName.value.trim(),
+      avatarUrl: createWorkspaceAvatarUrl.value || null
+    })
+    const invite = await createWorkspaceInviteLink(currentWorkspace.value?.id)
+    createdWorkspaceInviteUrl.value = invite?.inviteUrl || ''
+    workspaceInviteUrl.value = createdWorkspaceInviteUrl.value
+    await reloadWorkspaceData()
+    notifier.success('Workspace created')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to create workspace'))
+  } finally {
+    workspaceCreateLoading.value = false
+  }
+}
+
+const openInviteWorkspaceModal = () => {
+  directInviteValue.value = ''
+  workspaceInviteUrl.value = ''
+  showInviteWorkspaceModal.value = true
+}
+
+const sendDirectInvite = async () => {
+  if (!directInviteValue.value.trim()) return
+  directInviteLoading.value = true
+  try {
+    await createWorkspaceDirectInvite(currentWorkspace.value?.id, directInviteValue.value.trim())
+    directInviteValue.value = ''
+    notifier.success('Invite created')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to create invite'))
+  } finally {
+    directInviteLoading.value = false
+  }
+}
+
+const generateInviteLink = async () => {
+  inviteLinkLoading.value = true
+  try {
+    const invite = await createWorkspaceInviteLink(currentWorkspace.value?.id)
+    workspaceInviteUrl.value = invite?.inviteUrl || ''
+    notifier.success('Invite link created')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to create invite link'))
+  } finally {
+    inviteLinkLoading.value = false
+  }
+}
+
+const copyInviteUrl = async (url) => {
+  const ok = await copyText(url)
+  notifier[ok ? 'success' : 'warning'](ok ? 'Invite link copied' : 'Copy failed')
+}
+
+const openLeaveWorkspaceModal = async () => {
+  transferToUserId.value = ''
+  showLeaveWorkspaceModal.value = true
+  try {
+    const members = await loadWorkspaceMembers(currentWorkspace.value?.id)
+    const currentUserId = String(user.value?.id || '')
+    transferMembers.value = members.filter((member) => member.userId !== currentUserId)
+  } catch {
+    transferMembers.value = []
+  }
+}
+
+const confirmLeaveWorkspace = async () => {
+  leaveLoading.value = true
+  try {
+    await leaveWorkspace(currentWorkspace.value?.id, { transferToUserId: transferToUserId.value || null })
+    showLeaveWorkspaceModal.value = false
+    activeSection.value = 'projects'
+    await reloadWorkspaceData()
+    notifier.success('Workspace left')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to leave workspace'))
+  } finally {
+    leaveLoading.value = false
+  }
+}
+
+const handleAcceptWorkspaceInvite = async (inviteId) => {
+  try {
+    await acceptWorkspaceInvite(inviteId)
+    activeSection.value = 'projects'
+    await reloadWorkspaceData()
+    notifier.success('Workspace joined')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to accept invite'))
+  }
+}
+
+const changeTemplateScope = async (scope) => {
+  activeTemplateScope.value = scope
+  await loadFeaturedTemplates(scope)
+}
+
+const toggleFavoriteTemplate = async (template) => {
+  try {
+    if (template.isFavorite) {
+      await unfavoriteSharedTemplate(template.id)
+    } else {
+      await favoriteSharedTemplate(template.id)
+    }
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to update favorite'))
   }
 }
 
@@ -297,12 +530,19 @@ const confirmDelete = async () => {
 const loadWorkspaceSurfaces = async () => {
   try {
     await loadCurrentWorkspace()
+    await loadWorkspaces()
   } catch {
     currentWorkspace.value = null
   }
 
   try {
-    await loadFeaturedTemplates()
+    await loadPendingWorkspaceInvites()
+  } catch {
+    pendingWorkspaceInvites.value = []
+  }
+
+  try {
+    await loadFeaturedTemplates(activeTemplateScope.value)
   } catch {
     featuredTemplates.value = []
   }
@@ -310,6 +550,15 @@ const loadWorkspaceSurfaces = async () => {
 
 onMounted(async () => {
   await bootstrapAuth()
+  const inviteToken = String(route.params?.token || '').trim()
+  if (inviteToken) {
+    try {
+      await joinWorkspaceInvite(inviteToken)
+      notifier.success('Workspace joined')
+    } catch (error) {
+      notifier.error(getErrorMessage(error, 'Invite link is invalid or expired'))
+    }
+  }
   await initProjectsStore()
   await loadWorkspaceSurfaces()
 })
@@ -328,6 +577,33 @@ onMounted(async () => {
 
 .workspace-main {
   padding: 28px;
+}
+
+.template-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 22px;
+  overflow-x: auto;
+}
+
+.template-tabs button {
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(236, 238, 244, 0.7);
+  padding: 0 14px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.template-tabs button.active,
+.template-tabs button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 @media (max-width: 900px) {

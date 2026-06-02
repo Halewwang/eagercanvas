@@ -27,9 +27,10 @@ defineEmits(['click'])
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  height: 48px;
-  padding: 0 24px;
+  gap: 8px;
+  height: 38px;
+  width: 128px;
+  padding: 0 14px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(12, 12, 12, 0.9);
@@ -62,9 +63,10 @@ defineEmits(['click'])
 }
 
 .workspace-action-pill-label {
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1;
   font-weight: 600;
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 </style>
