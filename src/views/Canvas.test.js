@@ -143,6 +143,20 @@ test('canvas view delegates the Vue Flow stage to a focused component', () => {
   assert.match(flowStageSource, /@viewport-change="\$emit\('viewportChange', \$event\)"/)
 })
 
+test('canvas view wires local media drag and drop through the focused composable', () => {
+  assert.match(canvasSource, /import \{ useCanvasMediaDrop \} from '@\/hooks\/useCanvasMediaDrop\.js'/)
+  assert.match(canvasSource, /import \{ isExpiredRemoteUrl, uploadImageFile \} from '@\/utils\/media'/)
+  assert.match(canvasSource, /@dragover="handleCanvasMediaDragOver"/)
+  assert.match(canvasSource, /@drop="handleCanvasMediaDrop"/)
+  assert.match(canvasSource, /useCanvasMediaDrop\(\{/)
+  assert.match(canvasSource, /\saddNode,/)
+  assert.match(canvasSource, /\scurrentProjectId: currentCanvasProjectId,/)
+  assert.match(canvasSource, /\sflushSave,/)
+  assert.match(canvasSource, /\supdateNode,/)
+  assert.match(canvasSource, /\suploadMediaFile: uploadImageFile,/)
+  assert.match(canvasSource, /\sviewport/)
+})
+
 test('canvas view delegates viewport interaction to a focused composable', () => {
   const viewportInteractionSource = readHookSource('useCanvasViewportInteraction')
 

@@ -7,6 +7,8 @@
       @pointerdown.capture="handleCanvasPointerDownCapture"
       @mousedown.capture="handleCanvasPointerDownCapture"
       @contextmenu.capture="handleCanvasContextMenu"
+      @dragover="handleCanvasMediaDragOver"
+      @drop="handleCanvasMediaDrop"
     >
       <CanvasTopControls
         :project-options="projectOptions"
@@ -161,6 +163,7 @@ import { useAvatarUpload } from '@/hooks/useAvatarUpload'
 import { useCanvasConnectionInteraction } from '@/hooks/useCanvasConnectionInteraction.js'
 import { useCanvasGroupActions } from '@/hooks/useCanvasGroupActions.js'
 import { useCanvasGroupDrag } from '@/hooks/useCanvasGroupDrag.js'
+import { useCanvasMediaDrop } from '@/hooks/useCanvasMediaDrop.js'
 import { useCanvasNodeDragInteraction } from '@/hooks/useCanvasNodeDragInteraction.js'
 import { useCanvasNodeMenuState } from '@/hooks/useCanvasNodeMenuState.js'
 import { useCanvasOverlayRects } from '@/hooks/useCanvasOverlayRects.js'
@@ -183,7 +186,7 @@ import {
   getLocalImageInjectPosition,
   createLocalImageNodeData
 } from '@/utils/canvasInteraction'
-import { isExpiredRemoteUrl } from '@/utils/media'
+import { isExpiredRemoteUrl, uploadImageFile } from '@/utils/media'
 import { isLocalPreviewEnabled } from '@/utils/localPreview'
 
 // Canvas feature components | 画布功能组件
@@ -239,6 +242,7 @@ const {
   translateNodesByIds,
   undo,
   ungroup,
+  updateNode,
   updateViewport
 } = canvasStore
 const canvasShellRef = ref(null)
@@ -342,6 +346,20 @@ const currentCanvasProjectId = computed(() => {
 const screenPointToFlowPoint = (point) => {
   return getFlowPointFromScreenPoint(point, viewport.value)
 }
+
+const {
+  handleCanvasMediaDragOver,
+  handleCanvasMediaDrop
+} = useCanvasMediaDrop({
+  addNode,
+  currentProjectId: currentCanvasProjectId,
+  flushSave,
+  notify: notifier,
+  updateNode,
+  updateNodeInternals,
+  uploadMediaFile: uploadImageFile,
+  viewport
+})
 
 let selectionInteraction = null
 const clearNodeSelectionForNodeMenu = () => selectionInteraction?.clearNodeSelection()
