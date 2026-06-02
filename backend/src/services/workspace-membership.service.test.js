@@ -131,6 +131,33 @@ test('ensurePersonalWorkspace falls back to legacy profile and workspace columns
   assert.equal(Object.prototype.hasOwnProperty.call(workspaceUpserts[1].row, 'created_by'), false)
 })
 
+test('ensurePersonalWorkspace names personal spaces from the user display identity', async () => {
+  const upserts = []
+  const supabaseClient = createLegacyWorkspaceClient({ upserts })
+  const originalFrom = supabaseClient.from
+  supabaseClient.from = (table) => {
+    const query = originalFrom(table)
+    if (table === 'user_profiles') {
+      query.maybeSingle = async () => ({
+        data: {
+          user_id: query.filters.user_id,
+          display_name: '  Hale  ',
+          username: 'hale',
+          avatar_url: 'https://example.com/avatar.png'
+        },
+        error: null
+      })
+    }
+    return query
+  }
+
+  const workspace = await ensurePersonalWorkspace('83092d16-116c-4dcf-b154-c9c69389ea39', { supabaseClient })
+  const workspaceUpserts = upserts.filter((item) => item.table === 'workspaces')
+
+  assert.equal(workspace.name, 'Hale Space')
+  assert.equal(workspaceUpserts[0].row.name, 'Hale Space')
+})
+
 test('workspace membership service exposes owner-only team update and delete helpers', () => {
   assert.match(workspaceMembershipSource, /export const updateTeamWorkspace = async/)
   assert.match(workspaceMembershipSource, /export const deleteTeamWorkspace = async/)

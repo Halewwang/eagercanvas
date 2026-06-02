@@ -66,6 +66,26 @@ export const apiDeleteProject = (id) =>
     })
   )
 
+export const apiCopyProjectToWorkspace = (id, payload = {}) =>
+  withRetry(() =>
+    apiRequest({
+      url: `/projects/${encodeURIComponent(id)}/copy-to-workspace`,
+      method: 'post',
+      data: payload,
+      silentNetworkErrorToast: true
+    })
+  )
+
+export const apiShareProjectWithUser = (id, payload = {}) =>
+  withRetry(() =>
+    apiRequest({
+      url: `/projects/${encodeURIComponent(id)}/shares`,
+      method: 'post',
+      data: payload,
+      silentNetworkErrorToast: true
+    })
+  )
+
 export const apiRequestProjectEditAccess = (id, payload = {}) =>
   apiRequest({
     url: `/projects/${encodeURIComponent(id)}/edit-requests`,

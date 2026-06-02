@@ -10,19 +10,29 @@
       @click.stop
     >
       <template v-for="item in normalizedOptions" :key="item.key">
-        <div v-if="item.type === 'divider'" class="mx-2 my-1 h-px bg-white/8" />
+        <div v-if="item.type === 'divider'" class="mx-2 my-1.5 h-px bg-[rgba(255,255,255,0.12)]" />
         <button
           v-else
           type="button"
-          class="flex w-full items-center rounded-[14px] text-left transition-colors"
+          class="flex w-full items-center gap-2 rounded-[14px] text-left transition-colors"
           :class="[
             props.compact ? 'px-3 py-2 text-[13px] leading-[1.25]' : 'ui-body px-3 py-2.5',
-            'text-[var(--text)] hover:bg-[rgba(255,255,255,0.12)]'
+            item.danger
+              ? 'text-[#ffb9b9] hover:bg-[rgba(255,99,99,0.12)]'
+              : 'text-[var(--text)] hover:bg-[rgba(255,255,255,0.12)]'
           ]"
           :data-danger="item.danger ? 'true' : 'false'"
           @click="handleSelect(item.key)"
         >
-          {{ item.label }}
+          <NIcon
+            v-if="item.icon"
+            :size="15"
+            class="shrink-0"
+            :class="item.danger ? 'text-[#ff9f9f]' : 'text-[var(--text-muted)]'"
+          >
+            <component :is="item.icon" />
+          </NIcon>
+          <span class="min-w-0 truncate">{{ item.label }}</span>
         </button>
       </template>
     </div>
@@ -31,6 +41,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { NIcon } from 'naive-ui'
 
 const emit = defineEmits(['select', 'update:show'])
 

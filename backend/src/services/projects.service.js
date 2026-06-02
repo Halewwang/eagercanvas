@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
-import { isMissingColumnError } from '../utils/supabase-schema.js'
+import { isMissingColumnError, isMissingRelationError } from '../utils/supabase-schema.js'
 import { sanitizeCanvasData } from './canvas-sanitize.service.js'
 import {
   assertProjectCanEdit,
@@ -12,6 +12,7 @@ import {
   reviewProjectEditRequest
 } from './project-permissions.service.js'
 import {
+  assertWorkspaceMember,
   getActiveWorkspace,
   resolveProjectCreateWorkspace
 } from './workspace-membership.service.js'
@@ -36,6 +37,14 @@ const editRequestSchema = z.object({
 
 const reviewSchema = z.object({
   decision: z.enum(['approve', 'reject'])
+})
+
+const copyToWorkspaceSchema = z.object({
+  workspaceId: z.string().trim().min(1)
+})
+
+const shareByEmailSchema = z.object({
+  email: z.string().trim().email().transform((value) => value.toLowerCase())
 })
 
 const normalizeThumbnailUrl = (value) => {
@@ -147,6 +156,53 @@ const listLegacyPersonalProjectRows = async (userId) => {
     .order('updated_at', { ascending: false })
 }
 
+const getUpdatedAtTs = (row = {}) => {
+  const ts = new Date(row.updated_at || 0).getTime()
+  return Number.isFinite(ts) ? ts : 0
+}
+
+export const mergeProjectListRows = (primaryRows = [], directSharedRows = []) => {
+  const byId = new Map()
+  for (const row of Array.isArray(primaryRows) ? primaryRows : []) {
+    if (row?.id) byId.set(row.id, row)
+  }
+  for (const row of Array.isArray(directSharedRows) ? directSharedRows : []) {
+    if (row?.id && !byId.has(row.id)) byId.set(row.id, row)
+  }
+  return Array.from(byId.values()).sort((a, b) => getUpdatedAtTs(b) - getUpdatedAtTs(a))
+}
+
+const listDirectSharedProjectRows = async (userId) => {
+  const { data: memberships, error: membershipError } = await supabase
+    .from('project_members')
+    .select('project_id, role')
+    .eq('user_id', userId)
+    .eq('role', 'viewer')
+
+  if (membershipError) {
+    if (
+      isMissingRelationError(membershipError, 'project_members') ||
+      isMissingColumnError(membershipError, 'project_members', 'role')
+    ) {
+      return []
+    }
+    throw new HttpError(500, membershipError.message, 'PROJECT_SHARED_MEMBER_LIST_FAILED')
+  }
+
+  const projectIds = Array.from(new Set((memberships || []).map((row) => row.project_id).filter(Boolean)))
+  if (!projectIds.length) return []
+
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, user_id, workspace_id, access_mode, name, thumbnail_url, created_at, updated_at')
+    .in('id', projectIds)
+    .neq('user_id', userId)
+    .order('updated_at', { ascending: false })
+
+  if (error) throw new HttpError(500, error.message, 'PROJECT_SHARED_LIST_FAILED')
+  return data || []
+}
+
 export const listProjects = async (userId) => {
   const activeWorkspace = await getActiveWorkspace(userId)
   let data = null
@@ -177,10 +233,13 @@ export const listProjects = async (userId) => {
 
   if (error) throw new HttpError(500, error.message, 'PROJECT_LIST_FAILED')
 
-  const ownerProfiles = await getOwnerProfiles((data || []).map((row) => row.user_id))
+  const directSharedRows = await listDirectSharedProjectRows(userId)
+  const directSharedIds = new Set(directSharedRows.map((row) => row.id).filter(Boolean))
+  const rows = mergeProjectListRows(data || [], directSharedRows)
+  const ownerProfiles = await getOwnerProfiles(rows.map((row) => row.user_id))
   const projects = []
-  for (const row of data || []) {
-    const permission = await resolveProjectAccess(userId, row)
+  for (const row of rows) {
+    const permission = directSharedIds.has(row.id) ? 'viewer' : await resolveProjectAccess(userId, row)
     if (permission === 'none') continue
     projects.push(await mapProjectForRead(row, {
       permission,
@@ -259,6 +318,128 @@ export const createProject = async (userId, input) => {
     ownerProfile: ownerProfiles.get(userId),
     includeCanvas: true
   })
+}
+
+export const copyProjectToWorkspace = async (userId, id, input = {}) => {
+  const payload = copyToWorkspaceSchema.parse(input || {})
+  const sourceProject = await getProjectById(id)
+  await assertProjectCanEdit(userId, sourceProject)
+
+  if (sourceProject.access_mode === 'team' || String(sourceProject.user_id || '') !== String(userId || '')) {
+    throw new HttpError(400, 'Only personal projects can be copied to a team workspace', 'PERSONAL_PROJECT_COPY_REQUIRED')
+  }
+
+  const { mapped: targetWorkspace } = await assertWorkspaceMember(userId, payload.workspaceId)
+  if (targetWorkspace.kind !== 'team') {
+    throw new HttpError(400, 'A team workspace is required', 'TEAM_WORKSPACE_REQUIRED')
+  }
+
+  const normalizedCanvasData = await normalizeCanvasForStorage(sourceProject.canvas_json || {})
+  const { data, error } = await supabase
+    .from('projects')
+    .insert({
+      user_id: userId,
+      workspace_id: targetWorkspace.id,
+      access_mode: 'team',
+      name: `${sourceProject.name || 'Untitled'} (Copy)`,
+      canvas_json: normalizedCanvasData,
+      thumbnail_url: normalizeThumbnailUrl(sourceProject.thumbnail_url)
+    })
+    .select('*')
+    .single()
+
+  if (error) throw new HttpError(500, error.message, 'PROJECT_COPY_TO_WORKSPACE_FAILED')
+
+  const { error: memberError } = await supabase
+    .from('project_members')
+    .upsert(
+      {
+        project_id: data.id,
+        user_id: userId,
+        role: 'owner',
+        granted_by: userId
+      },
+      { onConflict: 'project_id,user_id' }
+    )
+
+  if (memberError) throw new HttpError(500, memberError.message, 'PROJECT_COPY_OWNER_MEMBER_FAILED')
+
+  const ownerProfiles = await getOwnerProfiles([userId])
+  return mapProjectForRead(data, {
+    permission: 'owner',
+    ownerProfile: ownerProfiles.get(userId),
+    includeCanvas: true
+  })
+}
+
+const findUserByEmail = async (email) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, email')
+    .eq('email', email)
+    .maybeSingle()
+
+  if (error) throw new HttpError(500, error.message, 'PROJECT_SHARE_USER_LOOKUP_FAILED')
+  return data || null
+}
+
+const getExistingProjectMember = async (projectId, userId) => {
+  const { data, error } = await supabase
+    .from('project_members')
+    .select('project_id, user_id, role')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) throw new HttpError(500, error.message, 'PROJECT_SHARE_MEMBER_LOOKUP_FAILED')
+  return data || null
+}
+
+export const shareProjectWithUser = async (userId, id, input = {}) => {
+  const payload = shareByEmailSchema.parse(input || {})
+  const project = await getProjectById(id)
+  await assertProjectCanEdit(userId, project)
+
+  if (project.access_mode === 'team' || String(project.user_id || '') !== String(userId || '')) {
+    throw new HttpError(400, 'Only personal projects can be shared with a user', 'PERSONAL_PROJECT_SHARE_REQUIRED')
+  }
+
+  const recipient = await findUserByEmail(payload.email)
+  if (!recipient?.id) {
+    throw new HttpError(404, 'User not found', 'PROJECT_SHARE_USER_NOT_FOUND')
+  }
+  if (String(recipient.id) === String(userId)) {
+    throw new HttpError(400, 'Project is already owned by this user', 'PROJECT_SHARE_SELF_NOT_ALLOWED')
+  }
+
+  const existingMember = await getExistingProjectMember(project.id, recipient.id)
+  if (existingMember?.role === 'owner' || existingMember?.role === 'editor') {
+    return {
+      user: { id: recipient.id, email: recipient.email || payload.email },
+      role: existingMember.role
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('project_members')
+    .upsert(
+      {
+        project_id: project.id,
+        user_id: recipient.id,
+        role: 'viewer',
+        granted_by: userId
+      },
+      { onConflict: 'project_id,user_id' }
+    )
+    .select('project_id, user_id, role')
+    .single()
+
+  if (error) throw new HttpError(500, error.message, 'PROJECT_SHARE_CREATE_FAILED')
+
+  return {
+    user: { id: recipient.id, email: recipient.email || payload.email },
+    role: data?.role || 'viewer'
+  }
 }
 
 export const updateProject = async (userId, id, input) => {

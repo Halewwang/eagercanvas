@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authRequired } from '../middleware/auth.js'
 import { asyncHandler } from '../utils/http.js'
 import {
+  copyProjectToWorkspace,
   createProject,
   getProject,
   getProjectEditRequests,
@@ -9,6 +10,7 @@ import {
   removeProject,
   requestProjectEditAccess,
   reviewProjectEditAccess,
+  shareProjectWithUser,
   updateProject
 } from '../services/projects.service.js'
 
@@ -23,6 +25,16 @@ projectsRouter.get('/', asyncHandler(async (req, res) => {
 projectsRouter.post('/', asyncHandler(async (req, res) => {
   const project = await createProject(req.user.id, req.body)
   res.status(201).json({ data: project })
+}))
+
+projectsRouter.post('/:id/copy-to-workspace', asyncHandler(async (req, res) => {
+  const project = await copyProjectToWorkspace(req.user.id, req.params.id, req.body)
+  res.status(201).json({ data: project })
+}))
+
+projectsRouter.post('/:id/shares', asyncHandler(async (req, res) => {
+  const share = await shareProjectWithUser(req.user.id, req.params.id, req.body)
+  res.status(201).json({ data: share })
 }))
 
 projectsRouter.get('/:id', asyncHandler(async (req, res) => {

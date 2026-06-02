@@ -55,6 +55,20 @@ test('resolveProjectAccess treats team members as read-only viewers until grante
   assert.equal(await resolveProjectAccess('outsider-1', project, { supabaseClient }), 'none')
 })
 
+test('resolveProjectAccess treats directly shared project members as viewers', async () => {
+  const project = {
+    id: 'project-1',
+    user_id: 'owner-1',
+    workspace_id: 'personal-1',
+    access_mode: 'private'
+  }
+  const supabaseClient = createFakeProjectAccessClient({
+    projectMembers: [{ project_id: 'project-1', user_id: 'viewer-1', role: 'viewer' }]
+  })
+
+  assert.equal(await resolveProjectAccess('viewer-1', project, { supabaseClient }), 'viewer')
+})
+
 test('assertProjectCanEdit rejects team viewers before project mutation', async () => {
   const project = {
     id: 'project-1',

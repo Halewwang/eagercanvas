@@ -136,6 +136,14 @@ const getUserIdentity = async (userId, { supabaseClient = supabase } = {}) => {
   }
 }
 
+const getPersonalWorkspaceName = (identity = {}, userId = '') => {
+  const displayName = String(identity.displayName || '').trim()
+  if (displayName) return `${displayName} Space`
+  const username = String(identity.username || '').trim()
+  if (username) return `${username} Space`
+  return `${userId} Space`
+}
+
 const countWorkspaceMembers = async (workspaceId, { supabaseClient = supabase } = {}) => {
   const { count, error } = await supabaseClient
     .from('workspace_members')
@@ -167,7 +175,7 @@ export const ensurePublicWorkspace = async ({ supabaseClient = supabase } = {}) 
 export const ensurePersonalWorkspace = async (userId, { supabaseClient = supabase } = {}) => {
   const identity = await getUserIdentity(userId, { supabaseClient })
   const slug = `personal-${userId}`
-  const name = `${userId} Space`
+  const name = getPersonalWorkspaceName(identity, userId)
 
   const workspace = await upsertWorkspaceWithLegacyFallback({
     row: {

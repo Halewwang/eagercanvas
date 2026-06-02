@@ -45,6 +45,7 @@ export const resolveProjectAccess = async (userId, project = {}, options = {}) =
   const projectRole = await getProjectMemberRole(normalizedUserId, project.id, options)
   if (projectRole === PROJECT_ACCESS.owner) return PROJECT_ACCESS.owner
   if (projectRole === PROJECT_ACCESS.editor) return PROJECT_ACCESS.editor
+  if (projectRole === PROJECT_ACCESS.viewer) return PROJECT_ACCESS.viewer
 
   if (isTeamProject(project) && await isWorkspaceMember(normalizedUserId, project.workspace_id, options)) {
     return PROJECT_ACCESS.viewer

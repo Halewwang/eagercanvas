@@ -38,6 +38,8 @@ const BYPASS_AUTH_IN_DEV = isLocalPreviewEnabled()
 let localPreviewActiveWorkspace = null
 let localPreviewWorkspaces = null
 let localPreviewInviteCounter = 0
+const templateCache = new Map()
+let templateRequestToken = 0
 
 const slugifyWorkspaceName = (value = '') => {
   const slug = String(value || '')
@@ -103,6 +105,26 @@ const normalizeInvite = (invite) => ({
   expiresAt: invite?.expiresAt || '',
   createdAt: invite?.createdAt || ''
 })
+
+const normalizeTemplateScope = (scope = 'auto') => String(scope || 'auto').trim() || 'auto'
+
+const getTemplateCacheKey = (scope = templatesScope.value) => {
+  const workspaceId = currentWorkspace.value?.id || 'workspace'
+  return `${workspaceId}:${normalizeTemplateScope(scope)}`
+}
+
+const setFeaturedTemplatesForScope = (scope, templates = []) => {
+  const normalizedScope = normalizeTemplateScope(scope)
+  templatesScope.value = normalizedScope
+  featuredTemplates.value = templates
+  templateCache.set(getTemplateCacheKey(normalizedScope), templates)
+  return featuredTemplates.value
+}
+
+export const clearTemplateCache = () => {
+  templateCache.clear()
+  templateRequestToken += 1
+}
 
 const ensureLocalPreviewWorkspaceState = () => {
   if (!localPreviewWorkspaces) {
@@ -248,9 +270,18 @@ export const selectWorkspace = async (workspaceId) => {
     return setLocalPreviewActiveWorkspace(workspaceId)
   }
 
-  const response = await apiSelectWorkspace(workspaceId)
-  applyWorkspaceCollection(response?.data || {})
-  return currentWorkspace.value
+  const previousWorkspace = currentWorkspace.value
+  const optimisticWorkspace = workspaces.value.find((workspace) => workspace.id === workspaceId)
+  if (optimisticWorkspace) currentWorkspace.value = optimisticWorkspace
+
+  try {
+    const response = await apiSelectWorkspace(workspaceId)
+    applyWorkspaceCollection(response?.data || {})
+    return currentWorkspace.value
+  } catch (error) {
+    currentWorkspace.value = previousWorkspace
+    throw error
+  }
 }
 
 export const loadWorkspaceMembers = async (workspaceId = currentWorkspace.value?.id) => {
@@ -390,20 +421,33 @@ export const deleteTeamWorkspace = async (workspaceId = currentWorkspace.value?.
   return currentWorkspace.value
 }
 
-export const loadFeaturedTemplates = async (scope = 'auto') => {
-  templatesScope.value = scope || 'auto'
+export const loadFeaturedTemplates = async (scope = 'auto', options = {}) => {
+  const { preferCache = false } = options
+  const normalizedScope = normalizeTemplateScope(scope)
+  templatesScope.value = normalizedScope
   if (BYPASS_AUTH_IN_DEV) {
     ensureLocalPreviewWorkspaceState()
-    featuredTemplates.value = getLocalPreviewTemplates()
+    setFeaturedTemplatesForScope(normalizedScope, getLocalPreviewTemplates())
     return featuredTemplates.value
   }
 
-  const response = await apiListFeaturedTemplates(templatesScope.value === 'auto' ? {} : { scope: templatesScope.value })
-  templatesScope.value = response?.data?.scope || templatesScope.value
-  featuredTemplates.value = Array.isArray(response?.data?.templates)
+  const cachedTemplates = templateCache.get(getTemplateCacheKey(normalizedScope))
+  if (preferCache && cachedTemplates) {
+    featuredTemplates.value = cachedTemplates
+    return featuredTemplates.value
+  }
+
+  const requestWorkspaceId = currentWorkspace.value?.id || ''
+  const requestToken = ++templateRequestToken
+  const response = await apiListFeaturedTemplates(normalizedScope === 'auto' ? {} : { scope: normalizedScope })
+  if (requestToken !== templateRequestToken) return featuredTemplates.value
+  if (requestWorkspaceId !== (currentWorkspace.value?.id || '')) return featuredTemplates.value
+
+  const responseScope = normalizeTemplateScope(response?.data?.scope || normalizedScope)
+  const templates = Array.isArray(response?.data?.templates)
     ? response.data.templates.map(normalizeTemplate).filter(Boolean)
     : []
-  return featuredTemplates.value
+  return setFeaturedTemplatesForScope(responseScope, templates)
 }
 
 export const getProjectTemplateStatus = async (projectId) => {
@@ -429,6 +473,8 @@ export const favoriteSharedTemplate = async (templateId) => {
   featuredTemplates.value = featuredTemplates.value.map((template) => (
     template.id === templateId ? { ...template, isFavorite: true } : template
   ))
+  templateCache.set(getTemplateCacheKey(), featuredTemplates.value)
+  templateCache.delete(getTemplateCacheKey('favorites'))
 }
 
 export const unfavoriteSharedTemplate = async (templateId) => {
@@ -436,6 +482,8 @@ export const unfavoriteSharedTemplate = async (templateId) => {
   featuredTemplates.value = featuredTemplates.value.map((template) => (
     template.id === templateId ? { ...template, isFavorite: false } : template
   ))
+  templateCache.set(getTemplateCacheKey(), featuredTemplates.value)
+  templateCache.delete(getTemplateCacheKey('favorites'))
 }
 
 export const useSharedTemplate = async (templateId) => {
@@ -470,6 +518,7 @@ export const useWorkspaceStore = () => ({
   updateTeamWorkspace,
   deleteTeamWorkspace,
   loadFeaturedTemplates,
+  clearTemplateCache,
   getProjectTemplateStatus,
   publishProjectTemplate,
   unpublishProjectTemplate,

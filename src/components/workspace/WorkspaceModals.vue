@@ -36,6 +36,74 @@
   </BaseModal>
 
   <BaseModal
+    :show="showCopyToWorkspace"
+    title="Copy to team"
+    description="Create a full project copy in a team workspace you have joined."
+    size="sm"
+    @update:show="$emit('update:showCopyToWorkspace', $event)"
+  >
+    <div class="project-action-stack">
+      <BaseModalCopy>Copy "{{ copyTargetName }}" into a team workspace.</BaseModalCopy>
+      <label class="select-field">
+        <span>Team workspace</span>
+        <select :value="copyWorkspaceId" @change="$emit('update:copyWorkspaceId', $event.target.value)">
+          <option value="" disabled>Select team</option>
+          <option
+            v-for="workspace in copyWorkspaceOptions"
+            :key="workspace.id"
+            :value="workspace.id"
+          >
+            {{ workspace.name }}
+          </option>
+        </select>
+      </label>
+    </div>
+    <template #footer>
+      <BaseModalActions>
+        <BaseButton variant="ghost" @click="$emit('update:showCopyToWorkspace', false)">Cancel</BaseButton>
+        <BaseButton
+          :loading="copyLoading"
+          :disabled="!copyWorkspaceId || !copyWorkspaceOptions.length"
+          @click="$emit('confirmCopyToWorkspace')"
+        >
+          Copy
+        </BaseButton>
+      </BaseModalActions>
+    </template>
+  </BaseModal>
+
+  <BaseModal
+    :show="showShareUser"
+    title="Share with user"
+    description="Grant read-only access to an existing user by email."
+    size="sm"
+    @update:show="$emit('update:showShareUser', $event)"
+  >
+    <div class="project-action-stack">
+      <BaseModalCopy>Share "{{ shareTargetName }}" as a read-only project.</BaseModalCopy>
+      <BaseInput
+        v-model="shareEmailModel"
+        type="email"
+        label="User email"
+        placeholder="teammate@example.com"
+        @keyup.enter="$emit('confirmShareUser')"
+      />
+    </div>
+    <template #footer>
+      <BaseModalActions>
+        <BaseButton variant="ghost" @click="$emit('update:showShareUser', false)">Cancel</BaseButton>
+        <BaseButton
+          :loading="shareLoading"
+          :disabled="!shareEmail.trim()"
+          @click="$emit('confirmShareUser')"
+        >
+          Share
+        </BaseButton>
+      </BaseModalActions>
+    </template>
+  </BaseModal>
+
+  <BaseModal
     :show="showTemplatePreview"
     title="Template Preview"
     description="View template details without copying it into your projects."
@@ -94,6 +162,14 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  showCopyToWorkspace: {
+    type: Boolean,
+    default: false
+  },
+  showShareUser: {
+    type: Boolean,
+    default: false
+  },
   renameValue: {
     type: String,
     default: ''
@@ -101,6 +177,34 @@ const props = defineProps({
   deleteTargetName: {
     type: String,
     default: ''
+  },
+  copyWorkspaceId: {
+    type: String,
+    default: ''
+  },
+  copyTargetName: {
+    type: String,
+    default: ''
+  },
+  copyWorkspaceOptions: {
+    type: Array,
+    default: () => []
+  },
+  copyLoading: {
+    type: Boolean,
+    default: false
+  },
+  shareEmail: {
+    type: String,
+    default: ''
+  },
+  shareTargetName: {
+    type: String,
+    default: ''
+  },
+  shareLoading: {
+    type: Boolean,
+    default: false
   },
   previewTemplate: {
     type: Object,
@@ -112,9 +216,15 @@ const emit = defineEmits([
   'update:showRename',
   'update:showDelete',
   'update:showTemplatePreview',
+  'update:showCopyToWorkspace',
+  'update:showShareUser',
   'update:renameValue',
+  'update:copyWorkspaceId',
+  'update:shareEmail',
   'confirmRename',
   'confirmDelete',
+  'confirmCopyToWorkspace',
+  'confirmShareUser',
   'closeTemplatePreview',
   'useTemplateFromPreview'
 ])
@@ -124,10 +234,42 @@ const renameValueModel = computed({
   set: (value) => emit('update:renameValue', value)
 })
 
+const shareEmailModel = computed({
+  get: () => props.shareEmail,
+  set: (value) => emit('update:shareEmail', value)
+})
+
 const templateNodeCount = computed(() => getWorkspaceTemplateNodeCount(props.previewTemplate?.canvasData))
 </script>
 
 <style scoped>
+.project-action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.select-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.select-field span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.select-field select {
+  height: 44px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 14px;
+  outline: none;
+}
+
 .template-preview {
   display: flex;
   flex-direction: column;

@@ -16,7 +16,7 @@ test('workspace store uses Share Templates mock data only in local preview mode'
   assert.match(workspaceStoreSource, /if \(BYPASS_AUTH_IN_DEV\) \{[\s\S]*return ensureLocalPreviewWorkspaceState\(\)\.activeWorkspace[\s\S]*\}/)
   assert.match(workspaceStoreSource, /if \(BYPASS_AUTH_IN_DEV\) \{[\s\S]*return ensureLocalPreviewWorkspaceState\(\)\.workspaces[\s\S]*\}/)
   assert.match(workspaceStoreSource, /if \(BYPASS_AUTH_IN_DEV\) \{[\s\S]*localPreviewWorkspaces = \[\.\.\.state\.workspaces, workspace\][\s\S]*return currentWorkspace\.value[\s\S]*\}/)
-  assert.match(workspaceStoreSource, /if \(BYPASS_AUTH_IN_DEV\) \{[\s\S]*ensureLocalPreviewWorkspaceState\(\)[\s\S]*featuredTemplates\.value = getLocalPreviewTemplates\(\)[\s\S]*return featuredTemplates\.value[\s\S]*\}/)
+  assert.match(workspaceStoreSource, /if \(BYPASS_AUTH_IN_DEV\) \{[\s\S]*ensureLocalPreviewWorkspaceState\(\)[\s\S]*setFeaturedTemplatesForScope\(normalizedScope, getLocalPreviewTemplates\(\)\)[\s\S]*return featuredTemplates\.value[\s\S]*\}/)
   assert.match(workspaceStoreSource, /if \(BYPASS_AUTH_IN_DEV\) \{[\s\S]*const template = getLocalPreviewTemplateById\(templateId\)[\s\S]*return createLocalProjectFromTemplate\(template\)[\s\S]*\}/)
 })
 
@@ -31,6 +31,18 @@ test('workspace store preserves active workspace identity while loading template
     loadFeaturedTemplatesBranch,
     /currentWorkspace\.value = normalizeWorkspace\(response\?\.data\?\.workspace \|\| currentWorkspace\.value\)/
   )
+})
+
+test('workspace store caches template scopes and ignores stale scope responses', () => {
+  const workspaceStoreSource = readFileSync(new URL('./workspace.js', import.meta.url), 'utf8')
+
+  assert.match(workspaceStoreSource, /const templateCache = new Map\(\)/)
+  assert.match(workspaceStoreSource, /const getTemplateCacheKey = \(scope = templatesScope\.value\) =>/)
+  assert.match(workspaceStoreSource, /const setFeaturedTemplatesForScope = \(scope, templates = \[\]\) =>/)
+  assert.match(workspaceStoreSource, /export const clearTemplateCache = \(\) =>/)
+  assert.match(workspaceStoreSource, /if \(preferCache && cachedTemplates\)/)
+  assert.match(workspaceStoreSource, /const requestToken = \+\+templateRequestToken/)
+  assert.match(workspaceStoreSource, /if \(requestToken !== templateRequestToken\) return featuredTemplates\.value/)
 })
 
 test('workspace store exposes team update and delete actions', () => {

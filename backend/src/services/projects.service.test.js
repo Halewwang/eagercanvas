@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
   applyProjectListWorkspaceFilter,
+  mergeProjectListRows,
   shouldUseLegacyPersonalProjectList
 } from './projects.service.js'
+
+const projectsServiceSource = readFileSync(new URL('./projects.service.js', import.meta.url), 'utf8')
 
 const createProjectListQueryRecorder = () => ({
   filters: [],
@@ -50,4 +54,26 @@ test('team workspace project listing remains scoped to team projects only', () =
     ['eq', 'workspace_id', 'team-workspace-1'],
     ['eq', 'access_mode', 'team']
   ])
+})
+
+test('project listing merges direct shares without duplicating active workspace rows', () => {
+  const rows = mergeProjectListRows(
+    [
+      { id: 'owned-1', updated_at: '2026-06-03T10:00:00.000Z' },
+      { id: 'shared-1', updated_at: '2026-06-03T09:00:00.000Z' }
+    ],
+    [
+      { id: 'shared-2', updated_at: '2026-06-03T11:00:00.000Z' },
+      { id: 'shared-1', updated_at: '2026-06-03T12:00:00.000Z' }
+    ]
+  )
+
+  assert.deepEqual(rows.map((row) => row.id), ['shared-2', 'owned-1', 'shared-1'])
+})
+
+test('project copy and direct sharing stay scoped to personal owner projects', () => {
+  assert.match(projectsServiceSource, /PERSONAL_PROJECT_COPY_REQUIRED/)
+  assert.match(projectsServiceSource, /Only personal projects can be copied to a team workspace/)
+  assert.match(projectsServiceSource, /PERSONAL_PROJECT_SHARE_REQUIRED/)
+  assert.match(projectsServiceSource, /Only personal projects can be shared with a user/)
 })

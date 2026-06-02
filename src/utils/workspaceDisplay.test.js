@@ -3,6 +3,13 @@ import test from 'node:test'
 
 const workspaceDisplay = await import('./workspaceDisplay.js').catch(() => ({}))
 
+const simplifyMenuOptions = (options = []) => options.map((item) => ({
+  label: item.label,
+  key: item.key,
+  type: item.type,
+  hasIcon: item.type === 'divider' ? false : Boolean(item.icon)
+}))
+
 test('workspace display helpers preserve brand and section copy behavior', () => {
   assert.equal(typeof workspaceDisplay.getWorkspaceBrand, 'function')
   assert.equal(typeof workspaceDisplay.getWorkspaceSectionTitle, 'function')
@@ -99,18 +106,28 @@ test('workspace display helpers preserve project and template card derivation', 
 
 test('workspace project menu helper preserves action order and keys', () => {
   assert.equal(typeof workspaceDisplay.getWorkspaceProjectMenuOptions, 'function')
-  assert.deepEqual(workspaceDisplay.getWorkspaceProjectMenuOptions(), [
-    { label: 'Refresh from cloud', key: 'refresh-cloud' },
-    { label: 'Copy project link', key: 'copy-link' },
-    { label: 'Rename project', key: 'rename' },
-    { label: 'Duplicate project', key: 'duplicate' },
-    { type: 'divider', key: 'divider-1' },
-    { label: 'Delete project', key: 'delete' }
+  assert.deepEqual(simplifyMenuOptions(workspaceDisplay.getWorkspaceProjectMenuOptions()), [
+    { label: 'Refresh from cloud', key: 'refresh-cloud', type: undefined, hasIcon: true },
+    { label: 'Copy project link', key: 'copy-link', type: undefined, hasIcon: true },
+    { label: 'Rename project', key: 'rename', type: undefined, hasIcon: true },
+    { label: 'Duplicate project', key: 'duplicate', type: undefined, hasIcon: true },
+    { label: 'Copy to team', key: 'copy-to-workspace', type: undefined, hasIcon: true },
+    { label: 'Share with user', key: 'share-user', type: undefined, hasIcon: true },
+    { label: undefined, key: 'divider-1', type: 'divider', hasIcon: false },
+    { label: 'Delete project', key: 'delete', type: undefined, hasIcon: true }
   ])
-  assert.deepEqual(workspaceDisplay.getWorkspaceProjectMenuOptions({ permission: 'viewer' }), [
-    { label: 'Refresh from cloud', key: 'refresh-cloud' },
-    { label: 'Copy project link', key: 'copy-link' },
-    { type: 'divider', key: 'divider-1' },
-    { label: 'Request edit access', key: 'request-edit' }
+  assert.deepEqual(simplifyMenuOptions(workspaceDisplay.getWorkspaceProjectMenuOptions({ accessMode: 'team' }, { canCopyToTeam: false })), [
+    { label: 'Refresh from cloud', key: 'refresh-cloud', type: undefined, hasIcon: true },
+    { label: 'Copy project link', key: 'copy-link', type: undefined, hasIcon: true },
+    { label: 'Rename project', key: 'rename', type: undefined, hasIcon: true },
+    { label: 'Duplicate project', key: 'duplicate', type: undefined, hasIcon: true },
+    { label: undefined, key: 'divider-1', type: 'divider', hasIcon: false },
+    { label: 'Delete project', key: 'delete', type: undefined, hasIcon: true }
+  ])
+  assert.deepEqual(simplifyMenuOptions(workspaceDisplay.getWorkspaceProjectMenuOptions({ permission: 'viewer' })), [
+    { label: 'Refresh from cloud', key: 'refresh-cloud', type: undefined, hasIcon: true },
+    { label: 'Copy project link', key: 'copy-link', type: undefined, hasIcon: true },
+    { label: undefined, key: 'divider-1', type: 'divider', hasIcon: false },
+    { label: 'Request edit access', key: 'request-edit', type: undefined, hasIcon: true }
   ])
 })

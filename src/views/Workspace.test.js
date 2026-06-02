@@ -7,6 +7,7 @@ const workspaceSource = readFileSync(new URL('./Workspace.vue', import.meta.url)
 const styleSource = readFileSync(new URL('../style.css', import.meta.url), 'utf8')
 const iconsSource = readFileSync(new URL('../icons/coolicons.js', import.meta.url), 'utf8')
 const projectsStoreSource = readFileSync(new URL('../stores/projects.js', import.meta.url), 'utf8')
+const projectsApiSource = readFileSync(new URL('../api/projects.js', import.meta.url), 'utf8')
 
 function readWorkspaceComponentSource(name) {
   const path = fileURLToPath(new URL(`../components/workspace/${name}.vue`, import.meta.url))
@@ -277,6 +278,13 @@ test('workspace switcher falls back to the user-derived workspace brand', () => 
   assert.doesNotMatch(switcherSource, /currentWorkspace\?\.name \|\| 'Personal Workspace'/)
 })
 
+test('workspace view keeps template tabs scoped to useful personal surfaces', () => {
+  assert.doesNotMatch(workspaceSource, /\{ key: 'workspace', label: 'Workspace' \}/)
+  assert.match(workspaceSource, /\{ key: 'community', label: 'Community' \}/)
+  assert.match(workspaceSource, /\{ key: 'my', label: 'My' \}/)
+  assert.match(workspaceSource, /\{ key: 'favorites', label: 'Favorites' \}/)
+})
+
 test('workspace cards show owner avatars only on shared and template surfaces', () => {
   const cardsGridSource = readWorkspaceComponentSource('WorkspaceCardsGrid')
 
@@ -345,8 +353,14 @@ test('workspace view delegates project and template modals to a focused componen
   assert.doesNotMatch(modalsSource, /No cover/)
   assert.match(modalsSource, /v-model="renameValueModel"/)
   assert.match(modalsSource, /BaseModalCopy>Delete "\{\{ deleteTargetName \}\}"/)
+  assert.match(modalsSource, /title="Copy to team"/)
+  assert.match(modalsSource, /copyWorkspaceOptions/)
+  assert.match(modalsSource, /title="Share with user"/)
+  assert.match(modalsSource, /v-model="shareEmailModel"/)
   assert.match(modalsSource, /@click="\$emit\('confirmRename'\)"/)
   assert.match(modalsSource, /@click="\$emit\('confirmDelete'\)"/)
+  assert.match(modalsSource, /@click="\$emit\('confirmCopyToWorkspace'\)"/)
+  assert.match(modalsSource, /@click="\$emit\('confirmShareUser'\)"/)
   assert.match(modalsSource, /@click="\$emit\('closeTemplatePreview'\)"/)
   assert.match(modalsSource, /@click="\$emit\('useTemplateFromPreview'\)"/)
   assert.match(modalsSource, /emit\('update:renameValue', value\)/)
@@ -479,7 +493,9 @@ test('workspace view delegates display copy and card derivation to workspace dis
   assert.match(workspaceSource, /getWorkspaceCardIconKey\(\{[\s\S]*activeSection: activeSection\.value[\s\S]*item[\s\S]*\}\)/)
   assert.match(workspaceSource, /ImageOutline/)
   assert.match(workspaceSource, /image:\s*ImageOutline/)
-  assert.match(workspaceSource, /const projectMenuOptions = getWorkspaceProjectMenuOptions/)
+  assert.match(workspaceSource, /const projectMenuIconMap = \{/)
+  assert.match(workspaceSource, /const withProjectMenuIcons = \(options = \[\]\) => options\.map/)
+  assert.match(workspaceSource, /const projectMenuOptions = \(project\) => withProjectMenuIcons\(getWorkspaceProjectMenuOptions\(project,[\s\S]*canCopyToTeam:/)
   assert.doesNotMatch(workspaceSource, /const formatDate =/)
   assert.doesNotMatch(workspaceSource, /const projectMenuOptions = \(\) => \[/)
   assert.doesNotMatch(workspaceSource, /Templates published by workspace members/)
@@ -505,10 +521,11 @@ test('workspace project card navigation does not block on a cloud detail refresh
 
 test('workspace cloud surfaces fail softly while project list stays cloud authoritative', () => {
   assert.match(workspaceSource, /const loadWorkspaceSurfaces = async \(\) => \{/)
-  assert.match(workspaceSource, /try\s*\{\s*await loadCurrentWorkspace\(\)\s*await loadWorkspaces\(\)\s*\}\s*catch/s)
+  assert.match(workspaceSource, /try\s*\{\s*await loadWorkspaces\(\)\s*\}\s*catch/s)
+  assert.doesNotMatch(workspaceSource, /loadCurrentWorkspace/)
   assert.match(workspaceSource, /try\s*\{\s*await loadPendingWorkspaceInvites\(\)\s*\}\s*catch/s)
-  assert.match(workspaceSource, /try\s*\{\s*await loadFeaturedTemplates\(activeTemplateScope\.value\)\s*\}\s*catch/s)
-  assert.match(workspaceSource, /await loadWorkspaceProjects\(\)[\s\S]*await loadWorkspaceSurfaces\(\)/)
+  assert.match(workspaceSource, /loadTemplatesForActiveScope\(\{ preferCache: true \}\)/)
+  assert.match(workspaceSource, /await Promise\.all\(\[\s*loadWorkspaceProjects\(\),\s*loadWorkspaceSurfaces\(\)\s*\]\)/)
 })
 
 test('workspace project list does not render browser local cache as authoritative data', () => {
@@ -525,5 +542,49 @@ test('workspace template scope follows the effective backend scope after loading
 
   assert.match(workspaceSource, /const activeTemplateScope = ref\('community'\)/)
   assert.match(workspaceSource, /syncActiveTemplateScopeFromStore\(\)/)
-  assert.match(storeSource, /templatesScope\.value = response\?\.data\?\.scope \|\| templatesScope\.value/)
+  assert.match(storeSource, /const responseScope = normalizeTemplateScope\(response\?\.data\?\.scope \|\| normalizedScope\)/)
+  assert.match(storeSource, /return setFeaturedTemplatesForScope\(responseScope, templates\)/)
+})
+
+test('workspace switching updates the visible workspace before background refresh completes', () => {
+  assert.match(workspaceSource, /const runWorkspaceRefreshInBackground = \(\) => \{/)
+  assert.match(workspaceSource, /const refreshWorkspaceData = async \(\) => \{/)
+  assert.match(workspaceSource, /Promise\.all\(\[\s*loadWorkspaceProjects\(\),\s*loadTemplatesForActiveScope\(\{ preferCache: true \}\)\s*\]\)/)
+  assert.match(workspaceSource, /const selection = selectWorkspace\(workspaceId\)[\s\S]*activeSection\.value = 'projects'[\s\S]*await selection[\s\S]*runWorkspaceRefreshInBackground\(\)/)
+  assert.doesNotMatch(workspaceSource, /await reloadWorkspaceData\(\)/)
+})
+
+test('workspace personal project actions support copying to joined teams and sharing by email', () => {
+  const dropdownSource = readFileSync(new URL('../components/ui/BaseDropdown.vue', import.meta.url), 'utf8')
+
+  assert.match(dropdownSource, /import \{ NIcon \} from 'naive-ui'/)
+  assert.match(dropdownSource, /<NIcon[\s\S]*v-if="item\.icon"/)
+  assert.match(dropdownSource, /<component :is="item\.icon" \/>/)
+  assert.match(dropdownSource, /bg-\[rgba\(255,255,255,0\.12\)\]/)
+  assert.match(dropdownSource, /item\.danger[\s\S]*text-\[#ffb9b9\]/)
+  assert.match(dropdownSource, /item\.danger \? 'text-\[#ff9f9f\]'/)
+
+  assert.match(projectsApiSource, /export const apiCopyProjectToWorkspace/)
+  assert.match(projectsApiSource, /\/projects\/\$\{encodeURIComponent\(id\)\}\/copy-to-workspace/)
+  assert.match(projectsApiSource, /export const apiShareProjectWithUser/)
+  assert.match(projectsApiSource, /\/projects\/\$\{encodeURIComponent\(id\)\}\/shares/)
+
+  assert.match(projectsStoreSource, /apiCopyProjectToWorkspace/)
+  assert.match(projectsStoreSource, /apiShareProjectWithUser/)
+  assert.match(projectsStoreSource, /export const copyProjectToWorkspace = async \(id, workspaceId\) =>/)
+  assert.match(projectsStoreSource, /export const shareProjectWithUser = async \(id, email\) =>/)
+
+  assert.match(workspaceSource, /copyProjectToWorkspace/)
+  assert.match(workspaceSource, /shareProjectWithUser/)
+  assert.match(workspaceSource, /const teamCopyWorkspaces = computed\(\(\) => workspaces\.value\.filter/)
+  assert.match(workspaceSource, /if \(key === 'copy-to-workspace'\)[\s\S]*openCopyToWorkspace\(project\)/)
+  assert.match(workspaceSource, /if \(key === 'share-user'\)[\s\S]*openShareUser\(project\)/)
+  assert.match(workspaceSource, /const confirmCopyToWorkspace = async \(\) =>/)
+  assert.match(workspaceSource, /const confirmShareUser = async \(\) =>/)
+
+  const copyStart = workspaceSource.indexOf('const confirmCopyToWorkspace = async () => {')
+  const shareStart = workspaceSource.indexOf('const confirmShareUser = async () => {')
+  const loadSurfacesStart = workspaceSource.indexOf('const loadWorkspaceSurfaces = async () => {')
+  assert.doesNotMatch(workspaceSource.slice(copyStart, shareStart), /await refreshWorkspaceData\(\)/)
+  assert.doesNotMatch(workspaceSource.slice(shareStart, loadSurfacesStart), /await refreshWorkspaceData\(\)/)
 })

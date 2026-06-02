@@ -156,10 +156,7 @@ export const createTeamWorkspace = async (userId, input) => {
 
 export const selectWorkspace = async (userId, workspaceId) => {
   const activeWorkspace = await setActiveWorkspace(userId, workspaceId)
-  return {
-    activeWorkspace,
-    ...(await listUserWorkspaces(userId))
-  }
+  return { activeWorkspace }
 }
 
 export const updateTeamWorkspace = async (userId, workspaceId, input = {}) => {

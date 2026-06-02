@@ -4,6 +4,7 @@
  */
 import { computed, ref } from 'vue'
 import {
+  apiCopyProjectToWorkspace,
   apiCreateProject,
   apiDeleteProject,
   apiGetProject,
@@ -11,7 +12,8 @@ import {
   apiListProjectEditRequests,
   apiPatchProject,
   apiRequestProjectEditAccess,
-  apiReviewProjectEditRequest
+  apiReviewProjectEditRequest,
+  apiShareProjectWithUser
 } from '@/api/projects'
 import { useAuthStore } from '@/stores/auth'
 import { getCanvasDraftStorage } from '@/stores/canvasDrafts'
@@ -896,6 +898,50 @@ export const duplicateProject = async (id) => {
   })
 }
 
+export const copyProjectToWorkspace = async (id, workspaceId) => {
+  const source = projects.value.find((p) => p.id === id)
+  if (!source) return null
+  if (isProjectReadOnly(source)) {
+    throw createReadOnlyProjectError()
+  }
+  const targetWorkspaceId = String(workspaceId || '').trim()
+  if (!targetWorkspaceId) return null
+
+  if (BYPASS_AUTH_IN_DEV) {
+    return {
+      ...source,
+      id: `local-copy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: `${source.name} (Copy)`,
+      workspaceId: targetWorkspaceId,
+      accessMode: 'team',
+      canvasData: cloneCanvasData(getProjectCanvas(id) || defaultCanvasData)
+    }
+  }
+
+  const response = await apiCopyProjectToWorkspace(id, { workspaceId: targetWorkspaceId })
+  return response?.data ? mapProjectFromApi(response.data) : null
+}
+
+export const shareProjectWithUser = async (id, email) => {
+  const source = projects.value.find((p) => p.id === id)
+  if (!source) return null
+  if (isProjectReadOnly(source)) {
+    throw createReadOnlyProjectError()
+  }
+  const normalizedEmail = String(email || '').trim()
+  if (!normalizedEmail) return null
+
+  if (BYPASS_AUTH_IN_DEV) {
+    return {
+      user: { email: normalizedEmail },
+      role: 'viewer'
+    }
+  }
+
+  const response = await apiShareProjectWithUser(id, { email: normalizedEmail })
+  return response?.data || null
+}
+
 export const renameProject = async (id, name) => {
   return updateProject(id, { name })
 }
@@ -971,6 +1017,8 @@ export const useProjectsStore = () => ({
   getProjectCanvas,
   deleteProject,
   duplicateProject,
+  copyProjectToWorkspace,
+  shareProjectWithUser,
   renameProject,
   updateProjectThumbnail,
   requestProjectEditAccess,

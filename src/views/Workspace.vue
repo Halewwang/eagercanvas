@@ -64,11 +64,22 @@
       v-model:show-rename="showRenameModal"
       v-model:show-delete="showDeleteModal"
       v-model:show-template-preview="showTemplatePreviewModal"
+      v-model:show-copy-to-workspace="showCopyWorkspaceModal"
+      v-model:show-share-user="showShareUserModal"
       v-model:rename-value="renameValue"
+      v-model:copy-workspace-id="copyWorkspaceId"
+      v-model:share-email="shareEmail"
       :delete-target-name="deleteTargetName"
+      :copy-target-name="copyTargetName"
+      :copy-workspace-options="teamCopyWorkspaces"
+      :copy-loading="copyLoading"
+      :share-target-name="shareTargetName"
+      :share-loading="shareLoading"
       :preview-template="previewTemplate"
       @confirm-rename="confirmRename"
       @confirm-delete="confirmDelete"
+      @confirm-copy-to-workspace="confirmCopyToWorkspace"
+      @confirm-share-user="confirmShareUser"
       @close-template-preview="closeTemplatePreview"
       @use-template-from-preview="useTemplateFromPreview"
     />
@@ -121,11 +132,15 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   BookmarkOutline,
+  CopyOutline,
+  CreateOutline,
   FolderOpenOutline,
   ImageOutline,
   SparklesOutline,
   GridOutline,
-  PersonOutline
+  PersonOutline,
+  RefreshOutline,
+  TrashOutline
 } from '@/icons/coolicons'
 import {
   projects,
@@ -134,6 +149,8 @@ import {
   createProject,
   renameProject,
   duplicateProject,
+  copyProjectToWorkspace,
+  shareProjectWithUser,
   deleteProject,
   requestProjectEditAccess,
   refreshProjectById
@@ -170,6 +187,16 @@ const renameValue = ref('')
 const showDeleteModal = ref(false)
 const deleteTargetId = ref('')
 const deleteTargetName = ref('')
+const showCopyWorkspaceModal = ref(false)
+const copyTargetId = ref('')
+const copyTargetName = ref('')
+const copyWorkspaceId = ref('')
+const copyLoading = ref(false)
+const showShareUserModal = ref(false)
+const shareTargetId = ref('')
+const shareTargetName = ref('')
+const shareEmail = ref('')
+const shareLoading = ref(false)
 const showTemplatePreviewModal = ref(false)
 const previewTemplate = ref(null)
 const refreshingProjectId = ref('')
@@ -209,7 +236,6 @@ const navItems = [
 
 const templateTabs = [
   { key: 'community', label: 'Community' },
-  { key: 'workspace', label: 'Workspace' },
   { key: 'my', label: 'My' },
   { key: 'favorites', label: 'Favorites' }
 ]
@@ -219,6 +245,15 @@ const workspaceCardIcons = {
   image: ImageOutline,
   video: SparklesOutline,
   default: GridOutline
+}
+
+const projectMenuIconMap = {
+  refresh: RefreshOutline,
+  copy: CopyOutline,
+  edit: CreateOutline,
+  folder: FolderOpenOutline,
+  person: PersonOutline,
+  trash: TrashOutline
 }
 
 const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange } = useAvatarUpload({
@@ -242,7 +277,6 @@ const {
   createWorkspaceInviteLink,
   favoriteSharedTemplate,
   joinWorkspaceInvite,
-  loadCurrentWorkspace,
   loadFeaturedTemplates,
   loadPendingWorkspaceInvites,
   loadWorkspaceMembers,
@@ -300,11 +334,18 @@ const resolveCardIcon = (item) => {
   return workspaceCardIcons[iconKey] || workspaceCardIcons.default
 }
 
-const projectMenuOptions = getWorkspaceProjectMenuOptions
+const teamCopyWorkspaces = computed(() => workspaces.value.filter((workspace) => workspace.kind === 'team'))
 
-const getDefaultTemplateScopeForCurrentWorkspace = () => (
-  currentWorkspace.value?.kind === 'team' ? 'workspace' : 'community'
-)
+const withProjectMenuIcons = (options = []) => options.map((item) => (
+  item.icon ? { ...item, icon: projectMenuIconMap[item.icon] || item.icon } : item
+))
+
+const projectMenuOptions = (project) => withProjectMenuIcons(getWorkspaceProjectMenuOptions(project, {
+  canCopyToTeam: project?.permission !== 'viewer' && project?.accessMode !== 'team' && teamCopyWorkspaces.value.length > 0,
+  canShareWithUser: project?.permission !== 'viewer' && project?.accessMode !== 'team'
+}))
+
+const getDefaultTemplateScopeForCurrentWorkspace = () => 'community'
 
 const syncActiveTemplateScopeFromStore = () => {
   activeTemplateScope.value = templatesScope.value || activeTemplateScope.value
@@ -314,8 +355,8 @@ const resetTemplateScopeForCurrentWorkspace = () => {
   activeTemplateScope.value = getDefaultTemplateScopeForCurrentWorkspace()
 }
 
-const loadTemplatesForActiveScope = async () => {
-  await loadFeaturedTemplates(activeTemplateScope.value)
+const loadTemplatesForActiveScope = async (options = {}) => {
+  await loadFeaturedTemplates(activeTemplateScope.value, options)
   syncActiveTemplateScopeFromStore()
 }
 
@@ -354,6 +395,14 @@ const handleProjectMenuSelect = async (key, project) => {
   }
   if (key === 'duplicate') {
     await duplicate(project)
+    return
+  }
+  if (key === 'copy-to-workspace') {
+    openCopyToWorkspace(project)
+    return
+  }
+  if (key === 'share-user') {
+    openShareUser(project)
     return
   }
   if (key === 'delete') {
@@ -435,18 +484,28 @@ const loadWorkspaceProjects = async () => {
   await initProjectsStore({ allowLocalFallback: false })
 }
 
-const reloadWorkspaceData = async () => {
-  await loadWorkspaceProjects()
-  await loadTemplatesForActiveScope()
+const refreshWorkspaceData = async () => {
+  await Promise.all([
+    loadWorkspaceProjects(),
+    loadTemplatesForActiveScope({ preferCache: true })
+  ])
+}
+
+const runWorkspaceRefreshInBackground = () => {
+  void refreshWorkspaceData().catch((error) => {
+    notifier.error(getErrorMessage(error, 'Failed to refresh workspace data'))
+  })
 }
 
 const handleSelectWorkspace = async (workspaceId) => {
   if (!workspaceId || workspaceId === currentWorkspace.value?.id) return
   try {
-    await selectWorkspace(workspaceId)
+    const selection = selectWorkspace(workspaceId)
     resetTemplateScopeForCurrentWorkspace()
     activeSection.value = 'projects'
-    await reloadWorkspaceData()
+    await selection
+    resetTemplateScopeForCurrentWorkspace()
+    runWorkspaceRefreshInBackground()
   } catch (error) {
     notifier.error(getErrorMessage(error, 'Failed to switch workspace'))
   }
@@ -478,7 +537,7 @@ const confirmCreateWorkspace = async () => {
     const invite = await createWorkspaceInviteLink(currentWorkspace.value?.id)
     createdWorkspaceInviteUrl.value = invite?.inviteUrl || ''
     workspaceInviteUrl.value = createdWorkspaceInviteUrl.value
-    await reloadWorkspaceData()
+    await refreshWorkspaceData()
     notifier.success('Workspace created')
   } catch (error) {
     notifier.error(getErrorMessage(error, 'Failed to create workspace'))
@@ -585,7 +644,7 @@ const confirmDeleteWorkspace = async () => {
     deleteWorkspaceName.value = ''
     resetTemplateScopeForCurrentWorkspace()
     activeSection.value = 'projects'
-    await reloadWorkspaceData()
+    await refreshWorkspaceData()
     notifier.success('Workspace deleted')
   } catch (error) {
     notifier.error(getErrorMessage(error, 'Failed to delete workspace'))
@@ -601,7 +660,7 @@ const confirmLeaveWorkspace = async () => {
     showLeaveWorkspaceModal.value = false
     resetTemplateScopeForCurrentWorkspace()
     activeSection.value = 'projects'
-    await reloadWorkspaceData()
+    await refreshWorkspaceData()
     notifier.success('Workspace left')
   } catch (error) {
     notifier.error(getErrorMessage(error, 'Failed to leave workspace'))
@@ -615,7 +674,7 @@ const handleAcceptWorkspaceInvite = async (inviteId) => {
     await acceptWorkspaceInvite(inviteId)
     resetTemplateScopeForCurrentWorkspace()
     activeSection.value = 'projects'
-    await reloadWorkspaceData()
+    await refreshWorkspaceData()
     notifier.success('Workspace joined')
   } catch (error) {
     notifier.error(getErrorMessage(error, 'Failed to accept invite'))
@@ -623,8 +682,9 @@ const handleAcceptWorkspaceInvite = async (inviteId) => {
 }
 
 const changeTemplateScope = async (scope) => {
+  if (scope === activeTemplateScope.value) return
   activeTemplateScope.value = scope
-  await loadTemplatesForActiveScope()
+  await loadTemplatesForActiveScope({ preferCache: true })
 }
 
 const toggleFavoriteTemplate = async (template) => {
@@ -676,6 +736,24 @@ const duplicate = async (project) => {
   notifier.success('Project duplicated')
 }
 
+const openCopyToWorkspace = (project) => {
+  if (!teamCopyWorkspaces.value.length) {
+    notifier.warning('Join or create a team workspace first')
+    return
+  }
+  copyTargetId.value = project.id
+  copyTargetName.value = project.name
+  copyWorkspaceId.value = teamCopyWorkspaces.value[0]?.id || ''
+  showCopyWorkspaceModal.value = true
+}
+
+const openShareUser = (project) => {
+  shareTargetId.value = project.id
+  shareTargetName.value = project.name
+  shareEmail.value = ''
+  showShareUserModal.value = true
+}
+
 const openDelete = (project) => {
   deleteTargetId.value = project.id
   deleteTargetName.value = project.name
@@ -691,9 +769,43 @@ const confirmDelete = async () => {
   notifier.success('Project deleted')
 }
 
+const confirmCopyToWorkspace = async () => {
+  if (!copyTargetId.value || !copyWorkspaceId.value || copyLoading.value) return
+  copyLoading.value = true
+  try {
+    const targetWorkspace = teamCopyWorkspaces.value.find((workspace) => workspace.id === copyWorkspaceId.value)
+    await copyProjectToWorkspace(copyTargetId.value, copyWorkspaceId.value)
+    showCopyWorkspaceModal.value = false
+    copyTargetId.value = ''
+    copyTargetName.value = ''
+    copyWorkspaceId.value = ''
+    notifier.success(`Project copied to ${targetWorkspace?.name || 'team workspace'}`)
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to copy project'))
+  } finally {
+    copyLoading.value = false
+  }
+}
+
+const confirmShareUser = async () => {
+  if (!shareTargetId.value || !shareEmail.value.trim() || shareLoading.value) return
+  shareLoading.value = true
+  try {
+    await shareProjectWithUser(shareTargetId.value, shareEmail.value.trim())
+    showShareUserModal.value = false
+    shareTargetId.value = ''
+    shareTargetName.value = ''
+    shareEmail.value = ''
+    notifier.success('Project shared')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to share project'))
+  } finally {
+    shareLoading.value = false
+  }
+}
+
 const loadWorkspaceSurfaces = async () => {
   try {
-    await loadCurrentWorkspace()
     await loadWorkspaces()
   } catch {
     currentWorkspace.value = null
@@ -707,11 +819,10 @@ const loadWorkspaceSurfaces = async () => {
   }
 
   try {
-    await loadFeaturedTemplates(activeTemplateScope.value)
+    await loadTemplatesForActiveScope({ preferCache: true })
   } catch {
     featuredTemplates.value = []
   }
-  syncActiveTemplateScopeFromStore()
 }
 
 onMounted(async () => {
@@ -725,8 +836,10 @@ onMounted(async () => {
       notifier.error(getErrorMessage(error, 'Invite link is invalid or expired'))
     }
   }
-  await loadWorkspaceProjects()
-  await loadWorkspaceSurfaces()
+  await Promise.all([
+    loadWorkspaceProjects(),
+    loadWorkspaceSurfaces()
+  ])
 })
 </script>
 

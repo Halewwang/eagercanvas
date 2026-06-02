@@ -53,23 +53,29 @@ export const getWorkspaceCardIconKey = ({ activeSection = 'projects', item = {} 
   return 'default'
 }
 
-export const getWorkspaceProjectMenuOptions = (project = {}) => {
+export const getWorkspaceProjectMenuOptions = (project = {}, options = {}) => {
   const base = [
-    { label: 'Refresh from cloud', key: 'refresh-cloud' },
-    { label: 'Copy project link', key: 'copy-link' }
+    { label: 'Refresh from cloud', key: 'refresh-cloud', icon: 'refresh' },
+    { label: 'Copy project link', key: 'copy-link', icon: 'copy' }
   ]
   if (project.permission === 'viewer') {
     return [
       ...base,
       { type: 'divider', key: 'divider-1' },
-      { label: 'Request edit access', key: 'request-edit' }
+      { label: 'Request edit access', key: 'request-edit', icon: 'edit' }
     ]
   }
   return [
     ...base,
-    { label: 'Rename project', key: 'rename' },
-    { label: 'Duplicate project', key: 'duplicate' },
+    { label: 'Rename project', key: 'rename', icon: 'edit' },
+    { label: 'Duplicate project', key: 'duplicate', icon: 'copy' },
+    ...(options.canCopyToTeam !== false && project.accessMode !== 'team'
+      ? [{ label: 'Copy to team', key: 'copy-to-workspace', icon: 'folder' }]
+      : []),
+    ...(options.canShareWithUser !== false && project.accessMode !== 'team'
+      ? [{ label: 'Share with user', key: 'share-user', icon: 'person' }]
+      : []),
     { type: 'divider', key: 'divider-1' },
-    { label: 'Delete project', key: 'delete' }
+    { label: 'Delete project', key: 'delete', icon: 'trash' }
   ]
 }
