@@ -248,6 +248,7 @@ test('image node linked create data preserves defaults and payload overrides', (
     sourcePrompt: 'prompt',
     sourceRefImages: ['https://asset/a.png'],
     error: '',
+    suppressErrorModal: false,
     persistStatus: 'saving',
     persistError: 'pending',
     updatedAt: 3456
@@ -285,6 +286,7 @@ test('image node linked update patch keeps optional label behavior', () => {
     sourcePrompt: '',
     sourceRefImages: [],
     error: 'Generation failed',
+    suppressErrorModal: false,
     persistStatus: '',
     persistError: '',
     updatedAt: 4567
@@ -597,6 +599,7 @@ test('image node tool pending patch preserves payload while normalizing loading 
     base64: '',
     loading: true,
     error: '',
+    suppressErrorModal: true,
     sourcePrompt: 'prompt',
     sourceRefImages: ['https://asset/ref.png']
   })
@@ -636,7 +639,8 @@ test('image node tool error patch clears generated media and keeps fallback mess
     url: '',
     base64: '',
     loading: false,
-    error: 'Provider timed out'
+    error: 'Provider timed out',
+    suppressErrorModal: true
   })
 
   assert.deepEqual(imageNodeData.getImageNodeToolErrorPatch({
@@ -646,7 +650,8 @@ test('image node tool error patch clears generated media and keeps fallback mess
     url: '',
     base64: '',
     loading: false,
-    error: 'Wedding 3x3 generation failed'
+    error: 'Wedding 3x3 generation failed',
+    suppressErrorModal: true
   })
 })
 
@@ -737,6 +742,7 @@ test('image node tool linked result patch preserves pending tool output state', 
     loading: false,
     shouldSave: false,
     error: '',
+    suppressErrorModal: false,
     fileType: 'image/webp',
     size: '1536x1024',
     ratio: '3:2',
@@ -776,6 +782,7 @@ test('image node tool linked result patch preserves pending tool output state', 
     loading: false,
     shouldSave: true,
     error: '',
+    suppressErrorModal: false,
     label: 'Wedding Result',
     fileType: 'image/png',
     size: '1024x1024',

@@ -9,6 +9,7 @@ import { extensionFromMimeType, fetchBinaryFromSource } from './media-source.js'
 
 const DEFAULT_DEROUTER_BASE_URL = 'https://api-direct.derouter.ai/openai/v1'
 const DEFAULT_DEROUTER_TIMEOUT_MS = 300000
+const MIN_DEROUTER_TIMEOUT_MS = 300000
 const DEROUTER_REFERENCE_MAX_BYTES = 4 * 1024 * 1024
 const DEROUTER_REFERENCE_OPTIMIZATION_ATTEMPTS = [
   { maxEdge: 1536, quality: 82 },
@@ -42,8 +43,19 @@ const resolveDerouterBaseUrl = (requestOptions = {}) =>
 const resolveDerouterApiKey = (requestOptions = {}) =>
   String(requestOptions?.derouterApiKey || env.derouterApiKey || '').trim()
 
+const normalizeDerouterTimeoutMs = (value) => {
+  const timeoutMs = Number(value)
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return DEFAULT_DEROUTER_TIMEOUT_MS
+  return Math.max(timeoutMs, MIN_DEROUTER_TIMEOUT_MS)
+}
+
 const resolveDerouterTimeoutMs = (requestOptions = {}) =>
-  Number(requestOptions?.derouterTimeoutMs || requestOptions?.timeoutMs || env.derouterTimeoutMs || DEFAULT_DEROUTER_TIMEOUT_MS)
+  normalizeDerouterTimeoutMs(
+    requestOptions?.derouterTimeoutMs ||
+    requestOptions?.timeoutMs ||
+    env.derouterTimeoutMs ||
+    DEFAULT_DEROUTER_TIMEOUT_MS
+  )
 
 const buildDerouterHeaders = (requestOptions = {}, extra = {}) => {
   const apiKey = resolveDerouterApiKey(requestOptions)
@@ -94,8 +106,9 @@ const callDerouter = async (path, body, { multipart = false } = {}, requestOptio
     throw new HttpError(500, 'DEROUTER_API_BASE_URL is not configured', 'DEROUTER_NOT_CONFIGURED')
   }
 
+  const timeoutMs = resolveDerouterTimeoutMs(requestOptions)
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), resolveDerouterTimeoutMs(requestOptions))
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(buildProviderUrl(baseUrl, path), {
       method: 'POST',
@@ -113,6 +126,15 @@ const callDerouter = async (path, body, { multipart = false } = {}, requestOptio
     }
 
     return data || {}
+  } catch (error) {
+    if (error?.name === 'AbortError' || /^this operation was aborted$/i.test(String(error?.message || ''))) {
+      throw new HttpError(
+        504,
+        `Derouter image request timed out after ${timeoutMs}ms. Please retry.`,
+        'DEROUTER_TIMEOUT'
+      )
+    }
+    throw error
   } finally {
     clearTimeout(timer)
   }

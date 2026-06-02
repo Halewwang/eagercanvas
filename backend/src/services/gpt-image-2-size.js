@@ -13,22 +13,99 @@ const GPT_IMAGE_2_BASE_SIZES = [
 
 const GPT_IMAGE_2_MAX_EDGE = 3840
 const GPT_IMAGE_2_MAX_PIXELS = 8294400
+const GPT_IMAGE_2_MIN_PIXELS = 655360
+const GPT_IMAGE_2_MAX_ASPECT_RATIO = 3
 
 const alignToMultipleOf16 = (value) => Math.max(16, Math.round(Number(value || 0) / 16) * 16)
+const alignUpToMultipleOf16 = (value) => Math.max(16, Math.ceil(Number(value || 0) / 16) * 16)
 
-const clampToGptImage2Limits = (width, height) => {
-  let safeWidth = alignToMultipleOf16(width)
-  let safeHeight = alignToMultipleOf16(height)
+const getPixelCount = (width, height) => width * height
+const getAspectRatio = (width, height) => Math.max(width, height) / Math.max(1, Math.min(width, height))
+
+const reduceToGptImage2UpperLimits = (width, height) => {
+  let safeWidth = width
+  let safeHeight = height
 
   while (
     Math.max(safeWidth, safeHeight) > GPT_IMAGE_2_MAX_EDGE ||
-    safeWidth * safeHeight > GPT_IMAGE_2_MAX_PIXELS
+    getPixelCount(safeWidth, safeHeight) > GPT_IMAGE_2_MAX_PIXELS
   ) {
     if (safeWidth >= safeHeight) {
       safeWidth = Math.max(16, safeWidth - 16)
     } else {
       safeHeight = Math.max(16, safeHeight - 16)
     }
+  }
+
+  return { width: safeWidth, height: safeHeight }
+}
+
+const enforceGptImage2AspectRatio = (width, height) => {
+  let safeWidth = width
+  let safeHeight = height
+
+  if (safeWidth > safeHeight * GPT_IMAGE_2_MAX_ASPECT_RATIO) {
+    safeHeight = alignUpToMultipleOf16(safeWidth / GPT_IMAGE_2_MAX_ASPECT_RATIO)
+  } else if (safeHeight > safeWidth * GPT_IMAGE_2_MAX_ASPECT_RATIO) {
+    safeWidth = alignUpToMultipleOf16(safeHeight / GPT_IMAGE_2_MAX_ASPECT_RATIO)
+  }
+
+  return reduceToGptImage2UpperLimits(safeWidth, safeHeight)
+}
+
+const scaleUpToGptImage2MinPixels = (width, height) => {
+  if (getPixelCount(width, height) >= GPT_IMAGE_2_MIN_PIXELS) {
+    return { width, height }
+  }
+
+  const scale = Math.sqrt(GPT_IMAGE_2_MIN_PIXELS / getPixelCount(width, height))
+  return {
+    width: alignUpToMultipleOf16(width * scale),
+    height: alignUpToMultipleOf16(height * scale)
+  }
+}
+
+const clampToGptImage2Limits = (width, height) => {
+  let safeWidth = alignToMultipleOf16(width)
+  let safeHeight = alignToMultipleOf16(height)
+
+  const edgeScale = GPT_IMAGE_2_MAX_EDGE / Math.max(safeWidth, safeHeight)
+  const pixelScale = Math.sqrt(GPT_IMAGE_2_MAX_PIXELS / getPixelCount(safeWidth, safeHeight))
+  const scale = Math.min(1, edgeScale, pixelScale)
+
+  if (scale < 1) {
+    safeWidth = alignToMultipleOf16(safeWidth * scale)
+    safeHeight = alignToMultipleOf16(safeHeight * scale)
+  }
+
+  let normalized = reduceToGptImage2UpperLimits(safeWidth, safeHeight)
+  safeWidth = normalized.width
+  safeHeight = normalized.height
+
+  normalized = enforceGptImage2AspectRatio(safeWidth, safeHeight)
+  safeWidth = normalized.width
+  safeHeight = normalized.height
+
+  normalized = scaleUpToGptImage2MinPixels(safeWidth, safeHeight)
+  safeWidth = normalized.width
+  safeHeight = normalized.height
+
+  normalized = enforceGptImage2AspectRatio(safeWidth, safeHeight)
+  safeWidth = normalized.width
+  safeHeight = normalized.height
+  while (
+    Math.max(safeWidth, safeHeight) > GPT_IMAGE_2_MAX_EDGE ||
+    getPixelCount(safeWidth, safeHeight) > GPT_IMAGE_2_MAX_PIXELS
+  ) {
+    if (safeWidth >= safeHeight) {
+      safeWidth = Math.max(16, safeWidth - 16)
+    } else {
+      safeHeight = Math.max(16, safeHeight - 16)
+    }
+  }
+
+  if (!isValidGptImage2PixelSize(safeWidth, safeHeight)) {
+    return { width: 1024, height: 1024 }
   }
 
   return { width: safeWidth, height: safeHeight }
@@ -42,7 +119,9 @@ const isValidGptImage2PixelSize = (width, height) => (
   width % 16 === 0 &&
   height % 16 === 0 &&
   Math.max(width, height) <= GPT_IMAGE_2_MAX_EDGE &&
-  width * height <= GPT_IMAGE_2_MAX_PIXELS
+  getPixelCount(width, height) >= GPT_IMAGE_2_MIN_PIXELS &&
+  getPixelCount(width, height) <= GPT_IMAGE_2_MAX_PIXELS &&
+  getAspectRatio(width, height) <= GPT_IMAGE_2_MAX_ASPECT_RATIO
 )
 
 const normalizeGptImage2PixelSize = (value = '') => {
@@ -110,7 +189,7 @@ export const buildGptImage2RequestBody = (payload = {}) => {
     prompt: String(payload.prompt || '').trim(),
     size,
     quality: pickAllowed(payload.quality, ['auto', 'low', 'medium', 'high'], 'auto'),
-    background: pickAllowed(payload.background, ['auto', 'opaque', 'transparent'], 'auto'),
+    background: pickAllowed(payload.background, ['auto', 'opaque'], 'auto'),
     output_format: outputFormat,
     n: 1,
     moderation: pickAllowed(payload.moderation, ['auto', 'low'], 'auto')

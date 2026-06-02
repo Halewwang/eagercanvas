@@ -160,6 +160,7 @@ const getImageNodeLinkedBaseData = ({
   sourcePrompt: payload.sourcePrompt || '',
   sourceRefImages: Array.isArray(payload.sourceRefImages) ? payload.sourceRefImages : [],
   error: payload.error || '',
+  suppressErrorModal: !!payload.suppressErrorModal,
   persistStatus: payload.persistStatus || '',
   persistError: payload.persistError || '',
   updatedAt: now
@@ -403,7 +404,8 @@ export const getImageNodeToolPendingPatch = (payload = {}) => ({
   loading: true,
   url: '',
   base64: '',
-  error: ''
+  error: '',
+  suppressErrorModal: true
 })
 
 export const getImageNodeActionPendingPatch = () => ({
@@ -426,7 +428,8 @@ export const getImageNodeToolErrorPatch = ({
   url: '',
   base64: '',
   loading: false,
-  error: payload?.message || fallbackMessage
+  error: payload?.message || fallbackMessage,
+  suppressErrorModal: true
 })
 
 export const getImageNodeToolReplacementPatch = ({
@@ -471,6 +474,7 @@ export const getImageNodeToolLinkedResultPatch = ({
   loading: false,
   shouldSave: !!persistence?.persisted,
   error: '',
+  suppressErrorModal: false,
   ...(labelFallback ? { label: payload.label || labelFallback } : {}),
   fileType: payload.fileType || 'image/png',
   size: payload.size || defaults.size || '',

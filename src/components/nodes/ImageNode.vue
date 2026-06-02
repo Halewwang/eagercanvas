@@ -528,9 +528,9 @@ const imageInputStatusMap = {
 }
 
 watch(
-  () => props.data?.error,
-  (newVal) => {
-    showErrorModal.value = !!newVal
+  () => [props.data?.error, props.data?.suppressErrorModal],
+  ([newVal, suppressErrorModal]) => {
+    showErrorModal.value = !!newVal && !suppressErrorModal
   }
 )
 const {

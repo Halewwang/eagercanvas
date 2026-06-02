@@ -244,7 +244,66 @@ test('GPT Image lite keeps derouter upstream timeout above the documented 240s b
       },
       {
         derouterApiBaseUrl: 'https://derouter.test/openai/v1',
-        derouterApiKey: 'sk-derouter'
+        derouterApiKey: 'sk-derouter',
+        derouterTimeoutMs: 240000
+      }
+    )
+  } finally {
+    global.fetch = originalFetch
+    global.setTimeout = originalSetTimeout
+    global.clearTimeout = originalClearTimeout
+  }
+
+  assert.equal(timeoutDelays[0], 300000)
+})
+
+test('GPT Image lite reports derouter timeout aborts as gateway timeout errors', async () => {
+  const originalFetch = global.fetch
+  const originalSetTimeout = global.setTimeout
+  const originalClearTimeout = global.clearTimeout
+  const timeoutDelays = []
+
+  global.fetch = async (_url, init = {}) => new Promise((_resolve, reject) => {
+    const rejectAbort = () => {
+      const error = new Error('This operation was aborted')
+      error.name = 'AbortError'
+      reject(error)
+    }
+    if (init.signal?.aborted) {
+      rejectAbort()
+      return
+    }
+    init.signal?.addEventListener?.('abort', rejectAbort, { once: true })
+  })
+  global.setTimeout = (callback, delay) => {
+    timeoutDelays.push(delay)
+    queueMicrotask(callback)
+    return { delay }
+  }
+  global.clearTimeout = () => {}
+
+  try {
+    await assert.rejects(
+      () => providerGenerateImage(
+        {
+          model: 'gpt-image-lite',
+          prompt: 'A slow render',
+          ratio: '1:1',
+          resolution: '2k',
+          quality: 'high'
+        },
+        {
+          derouterApiBaseUrl: 'https://derouter.test/openai/v1',
+          derouterApiKey: 'sk-derouter',
+          derouterTimeoutMs: 240000
+        }
+      ),
+      (error) => {
+        assert.equal(error.status, 504)
+        assert.equal(error.code, 'DEROUTER_TIMEOUT')
+        assert.doesNotMatch(error.message, /This operation was aborted/i)
+        assert.match(error.message, /timed out/i)
+        return true
       }
     )
   } finally {

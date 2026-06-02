@@ -360,6 +360,7 @@ test('image node delegates feedback modals to a focused component', () => {
   assert.match(feedbackModalsSource, /@update:show="\$emit\('update:showValidation', \$event\)"/)
   assert.match(feedbackModalsSource, /<BaseModalCopy class="whitespace-pre-wrap">\{\{ validationMessage \}\}<\/BaseModalCopy>/)
   assert.match(feedbackModalsSource, /<BaseButton @click="\$emit\('closeValidation'\)">OK<\/BaseButton>/)
+  assert.match(imageNodeSource, /props\.data\?\.suppressErrorModal/)
 })
 
 test('image node delegates capsule toolbar to a focused component', () => {

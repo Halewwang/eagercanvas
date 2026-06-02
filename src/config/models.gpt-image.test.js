@@ -39,6 +39,16 @@ test('GPT Image lite reuses GPT Image 2 controls with a separate model key', () 
   assert.ok(lite.requestTimeoutMs < gptImage2.requestTimeoutMs)
 })
 
+test('GPT Image 2 and lite do not expose unsupported transparent background', () => {
+  const gptImage2 = IMAGE_MODELS.find((item) => item.key === 'gpt-image-2')
+  const lite = IMAGE_MODELS.find((item) => item.key === 'gpt-image-lite')
+
+  assert.ok(gptImage2, 'gpt-image-2 model should exist')
+  assert.ok(lite, 'gpt-image-lite model should exist')
+  assert.deepEqual(gptImage2.backgrounds.map((item) => item.key), ['auto', 'opaque'])
+  assert.deepEqual(lite.backgrounds.map((item) => item.key), ['auto', 'opaque'])
+})
+
 test('GPT Image 2 exposes the same ratio list as Gemini image models', () => {
   assert.deepEqual(
     GPT_IMAGE_2_BASE_SIZES.map((item) => item.ratio),

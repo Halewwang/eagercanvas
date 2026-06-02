@@ -9,6 +9,23 @@ import {
   resolveGptImage2Size
 } from './gpt-image-2-size.js'
 
+const parsePixelSize = (size) => {
+  const [width, height] = String(size || '').split('x').map(Number)
+  return { width, height }
+}
+
+const assertValidGptImage2PixelSize = (size) => {
+  const { width, height } = parsePixelSize(size)
+  assert.ok(Number.isFinite(width), `${size} should include a numeric width`)
+  assert.ok(Number.isFinite(height), `${size} should include a numeric height`)
+  assert.equal(width % 16, 0)
+  assert.equal(height % 16, 0)
+  assert.ok(Math.max(width, height) <= 3840)
+  assert.ok(width * height >= 655_360)
+  assert.ok(width * height <= 8_294_400)
+  assert.ok(Math.max(width, height) / Math.min(width, height) <= 3)
+}
+
 test('resolves GPT Image 2 capsule resolution to provider size', () => {
   assert.equal(resolveGptImage2Size({ ratio: '1:1', resolution: '1k' }), '1024x1024')
   assert.equal(resolveGptImage2Size({ ratio: '1:1', resolution: '2k' }), '2048x2048')
@@ -48,7 +65,7 @@ test('builds GPT Image 2 request body with supported advanced params', () => {
       prompt: 'A product shot',
       size: '2160x3840',
       quality: 'high',
-      background: 'transparent',
+      background: 'auto',
       output_format: 'webp',
       n: 1,
       moderation: 'auto',
@@ -82,6 +99,14 @@ test('keeps explicit GPT Image 2 custom size when no ratio is provided', () => {
 test('normalizes explicit GPT Image 2 custom size to provider constraints', () => {
   assert.equal(resolveGptImage2Size({ size: '3840x1645' }), '3840x1648')
   assert.equal(resolveGptImage2Size({ size: '5000x5000' }), '2880x2880')
+})
+
+test('normalizes undersized and overwide GPT Image 2 custom sizes to provider constraints', () => {
+  const undersized = resolveGptImage2Size({ size: '256x256' })
+  const overwide = resolveGptImage2Size({ size: '3840x16' })
+
+  assertValidGptImage2PixelSize(undersized)
+  assertValidGptImage2PixelSize(overwide)
 })
 
 test('extracts GPT Image 2 async task ids from common response shapes', () => {

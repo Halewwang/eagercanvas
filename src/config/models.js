@@ -50,8 +50,7 @@ export const GPT_IMAGE_2_QUALITY_OPTIONS = [
 
 export const GPT_IMAGE_2_BACKGROUND_OPTIONS = [
     { label: 'Auto', key: 'auto' },
-    { label: 'Opaque', key: 'opaque' },
-    { label: 'Transparent', key: 'transparent' }
+    { label: 'Opaque', key: 'opaque' }
 ]
 
 export const GPT_IMAGE_2_OUTPUT_FORMAT_OPTIONS = [
@@ -139,7 +138,7 @@ const GPT_IMAGE_2_MODEL_CONFIG = {
     supportImageReference: true,
     showAdvancedCapsuleParams: true,
     requestTimeoutMs: 1800000,
-    tips: '使用 302.AI GPT-Image-2，比例选项与 Gemini 一致，分辨率胶囊选择 1K/2K/4K，4K 自动限制在最长边 3840px、总像素 830 万以内。'
+    tips: '使用 302.AI GPT-Image-2，比例选项与 Gemini 一致，分辨率胶囊选择 1K/2K/4K，尺寸会限制在最长边 3840px、长短边 3:1 以内、总像素 65.5 万到 829.4 万之间。'
 }
 
 // Image generation models | 图片生成模型
@@ -150,7 +149,7 @@ export const IMAGE_MODELS = [
         label: 'GPT Image lite',
         key: 'gpt-image-lite',
         requestTimeoutMs: 330000,
-        tips: '使用 derouter GPT-Image-2 同步图片接口，参数与 GPT Image 2 保持一致，等待窗口覆盖 240s 长耗时生成。'
+        tips: '使用 derouter GPT-Image-2 同步图片接口，参数与 GPT Image 2 保持一致，等待窗口覆盖 5 分钟长耗时生成。'
     },
     {
         label: 'Gemini 3.1 Flash Image Preview',
