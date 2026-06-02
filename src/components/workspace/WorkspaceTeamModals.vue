@@ -17,11 +17,11 @@
 
     <div class="create-workspace-layout">
       <div class="avatar-panel">
-        <button class="avatar-upload" type="button" aria-label="Choose team avatar" @click="avatarInputRef?.click()">
+        <button class="avatar-upload" type="button" aria-label="Choose team avatar" @click="createAvatarInputRef?.click()">
           <img v-if="createAvatarUrl" :src="createAvatarUrl" alt="team avatar" />
           <span v-else>{{ createName?.[0]?.toUpperCase() || 'W' }}</span>
         </button>
-        <input ref="avatarInputRef" type="file" accept="image/*" class="hidden" @change="handleAvatarFile" />
+        <input ref="createAvatarInputRef" type="file" accept="image/*" class="hidden" @change="(event) => handleAvatarFile(event, 'create')" />
       </div>
 
       <div class="create-form-stack">
@@ -87,6 +87,41 @@
   </BaseModal>
 
   <BaseModal
+    :show="showEdit"
+    title="Edit Workspace"
+    description="Update the team space name and avatar."
+    size="sm"
+    @update:show="$emit('update:showEdit', $event)"
+  >
+    <div class="create-workspace-layout">
+      <div class="avatar-panel">
+        <button class="avatar-upload" type="button" aria-label="Choose updated team avatar" @click="editAvatarInputRef?.click()">
+          <img v-if="editAvatarUrl" :src="editAvatarUrl" alt="team avatar" />
+          <span v-else>{{ editName?.[0]?.toUpperCase() || 'W' }}</span>
+        </button>
+        <input ref="editAvatarInputRef" type="file" accept="image/*" class="hidden" @change="(event) => handleAvatarFile(event, 'edit')" />
+      </div>
+
+      <div class="create-form-stack">
+        <BaseInput
+          :model-value="editName"
+          label="Workspace Name"
+          placeholder="Design Team"
+          @update:model-value="$emit('update:editName', $event)"
+        />
+      </div>
+    </div>
+    <template #footer>
+      <BaseModalActions>
+        <BaseButton variant="ghost" @click="$emit('update:showEdit', false)">Cancel</BaseButton>
+        <BaseButton :loading="editLoading" :disabled="!editName.trim()" @click="$emit('confirmEdit')">
+          Save
+        </BaseButton>
+      </BaseModalActions>
+    </template>
+  </BaseModal>
+
+  <BaseModal
     :show="showLeave"
     title="Leave Workspace"
     description="Transfer owned team projects before leaving this workspace."
@@ -118,6 +153,28 @@
       </BaseModalActions>
     </template>
   </BaseModal>
+
+  <BaseModal
+    :show="showDelete"
+    title="Delete Workspace"
+    description="Delete this team space and its team projects."
+    size="sm"
+    @update:show="$emit('update:showDelete', $event)"
+  >
+    <div class="team-modal-stack">
+      <p class="modal-copy">
+        Delete workspace "{{ deleteWorkspaceName }}". Team projects, invites, and workspace templates in this space will be removed.
+      </p>
+    </div>
+    <template #footer>
+      <BaseModalActions>
+        <BaseButton variant="ghost" @click="$emit('update:showDelete', false)">Cancel</BaseButton>
+        <BaseButton variant="danger" :loading="deleteLoading" @click="$emit('confirmDeleteWorkspace')">
+          Delete
+        </BaseButton>
+      </BaseModalActions>
+    </template>
+  </BaseModal>
 </template>
 
 <script setup>
@@ -128,6 +185,8 @@ const props = defineProps({
   showCreate: Boolean,
   showInvite: Boolean,
   showLeave: Boolean,
+  showEdit: Boolean,
+  showDelete: Boolean,
   createName: {
     type: String,
     default: ''
@@ -159,25 +218,46 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
-  leaveLoading: Boolean
+  leaveLoading: Boolean,
+  editName: {
+    type: String,
+    default: ''
+  },
+  editAvatarUrl: {
+    type: String,
+    default: ''
+  },
+  editLoading: Boolean,
+  deleteWorkspaceName: {
+    type: String,
+    default: ''
+  },
+  deleteLoading: Boolean
 })
 
 const emit = defineEmits([
   'update:showCreate',
   'update:showInvite',
   'update:showLeave',
+  'update:showEdit',
+  'update:showDelete',
   'update:createName',
   'update:createAvatarUrl',
+  'update:editName',
+  'update:editAvatarUrl',
   'update:directInviteValue',
   'update:transferToUserId',
   'confirmCreate',
+  'confirmEdit',
   'sendDirectInvite',
   'generateInviteLink',
   'copyInviteUrl',
-  'confirmLeave'
+  'confirmLeave',
+  'confirmDeleteWorkspace'
 ])
 
-const avatarInputRef = ref(null)
+const createAvatarInputRef = ref(null)
+const editAvatarInputRef = ref(null)
 
 const generatedSlug = computed(() => {
   const slug = String(props.createName || '')
@@ -189,11 +269,14 @@ const generatedSlug = computed(() => {
   return slug || 'workspace'
 })
 
-const handleAvatarFile = (event) => {
+const handleAvatarFile = (event, target = 'create') => {
   const file = event.target?.files?.[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => emit('update:createAvatarUrl', String(reader.result || ''))
+  reader.onload = () => {
+    const eventName = target === 'edit' ? 'update:editAvatarUrl' : 'update:createAvatarUrl'
+    emit(eventName, String(reader.result || ''))
+  }
   reader.readAsDataURL(file)
 }
 </script>

@@ -17,6 +17,7 @@ import {
   assertWorkspaceMember,
   assertWorkspaceOwner,
   createTeamWorkspace as createTeamWorkspaceRecord,
+  deleteTeamWorkspace as deleteTeamWorkspaceRecord,
   ensurePublicWorkspace,
   getActiveWorkspace,
   getWorkspaceKind,
@@ -25,7 +26,8 @@ import {
   listWorkspaceMembers,
   leaveWorkspace as leaveWorkspaceRecord,
   mapWorkspace,
-  setActiveWorkspace
+  setActiveWorkspace,
+  updateTeamWorkspace as updateTeamWorkspaceRecord
 } from './workspace-membership.service.js'
 
 const publishTemplateSchema = z.object({
@@ -160,6 +162,15 @@ export const selectWorkspace = async (userId, workspaceId) => {
   }
 }
 
+export const updateTeamWorkspace = async (userId, workspaceId, input = {}) => {
+  const workspace = await updateTeamWorkspaceRecord(userId, workspaceId, input)
+  const currentWorkspace = await getActiveWorkspace(userId)
+  return {
+    activeWorkspace: workspace.id === currentWorkspace.id ? workspace : currentWorkspace,
+    ...(await listUserWorkspaces(userId))
+  }
+}
+
 export const getWorkspaceMembers = async (userId, workspaceId) =>
   listWorkspaceMembers(userId, workspaceId)
 
@@ -257,6 +268,14 @@ export const acceptWorkspaceDirectInvite = async (userId, inviteId) => {
 
 export const leaveUserWorkspace = async (userId, workspaceId, input = {}) => {
   const result = await leaveWorkspaceRecord(userId, workspaceId, input)
+  return {
+    ...result,
+    ...(await listUserWorkspaces(userId))
+  }
+}
+
+export const deleteTeamWorkspace = async (userId, workspaceId) => {
+  const result = await deleteTeamWorkspaceRecord(userId, workspaceId)
   return {
     ...result,
     ...(await listUserWorkspaces(userId))

@@ -54,6 +54,7 @@ export const mapWorkspace = (row, role = 'member', memberCount = 1) => ({
   kind: getWorkspaceKind(row),
   role,
   avatarUrl: row.avatar_url || '',
+  createdBy: row.created_by || '',
   memberCount: Number(memberCount || 0),
   schemaVersion: getWorkspaceSchemaVersion(row)
 })
@@ -166,7 +167,7 @@ export const ensurePublicWorkspace = async ({ supabaseClient = supabase } = {}) 
 export const ensurePersonalWorkspace = async (userId, { supabaseClient = supabase } = {}) => {
   const identity = await getUserIdentity(userId, { supabaseClient })
   const slug = `personal-${userId}`
-  const name = `${userId} Workspace`
+  const name = `${userId} Space`
 
   const workspace = await upsertWorkspaceWithLegacyFallback({
     row: {
@@ -396,6 +397,39 @@ export const createTeamWorkspace = async (userId, input = {}, { supabaseClient =
   return setActiveWorkspace(userId, workspace.id, { supabaseClient })
 }
 
+export const updateTeamWorkspace = async (userId, workspaceId, input = {}, { supabaseClient = supabase } = {}) => {
+  const payload = teamWorkspaceSchema.parse(input || {})
+  const { workspace, membership } = await assertWorkspaceOwner(userId, workspaceId, { supabaseClient })
+  if (getWorkspaceKind(workspace) !== WORKSPACE_KIND.team) {
+    throw new HttpError(400, 'Only team workspaces can be updated', 'TEAM_WORKSPACE_REQUIRED')
+  }
+
+  const avatarUrl = normalizeAvatarUrl(payload.avatarUrl)
+  let { data, error } = await supabaseClient
+    .from('workspaces')
+    .update({
+      name: payload.name,
+      avatar_url: avatarUrl
+    })
+    .eq('id', workspaceId)
+    .select('*')
+    .single()
+
+  if (error && isMissingColumnError(error, 'workspaces', 'avatar_url')) {
+    const legacyResult = await supabaseClient
+      .from('workspaces')
+      .update({ name: payload.name })
+      .eq('id', workspaceId)
+      .select('*')
+      .single()
+    data = legacyResult.data
+    error = legacyResult.error
+  }
+
+  if (error) throw new HttpError(500, error.message, 'WORKSPACE_UPDATE_FAILED')
+  return mapWorkspace(data, membership.role, await countWorkspaceMembers(workspaceId, { supabaseClient }))
+}
+
 export const listWorkspaceMembers = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
   await assertWorkspaceMember(userId, workspaceId, { supabaseClient })
   const { data, error } = await supabaseClient
@@ -508,4 +542,25 @@ export const leaveWorkspace = async (userId, workspaceId, input = {}, { supabase
   const personalWorkspace = await ensurePersonalWorkspace(userId, { supabaseClient })
   const activeWorkspace = await setActiveWorkspace(userId, personalWorkspace.id, { supabaseClient })
   return { activeWorkspace }
+}
+
+export const deleteTeamWorkspace = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
+  const { workspace } = await assertWorkspaceOwner(userId, workspaceId, { supabaseClient })
+  if (getWorkspaceKind(workspace) !== WORKSPACE_KIND.team) {
+    throw new HttpError(400, 'Only team workspaces can be deleted', 'TEAM_WORKSPACE_REQUIRED')
+  }
+
+  const { error } = await supabaseClient
+    .from('workspaces')
+    .delete()
+    .eq('id', workspaceId)
+
+  if (error) throw new HttpError(500, error.message, 'WORKSPACE_DELETE_FAILED')
+
+  const personalWorkspace = await ensurePersonalWorkspace(userId, { supabaseClient })
+  const activeWorkspace = await setActiveWorkspace(userId, personalWorkspace.id, { supabaseClient })
+  return {
+    activeWorkspace,
+    deletedWorkspaceId: workspaceId
+  }
 }

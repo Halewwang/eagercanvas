@@ -7,6 +7,7 @@ import {
   createWorkspaceDirectInvite,
   createWorkspaceLinkInvite,
   createProjectFromTemplate,
+  deleteTeamWorkspace,
   favoriteSharedTemplate,
   getCurrentWorkspace,
   getWorkspaceMembers,
@@ -19,6 +20,7 @@ import {
   listWorkspaces,
   publishProjectTemplate,
   selectWorkspace,
+  updateTeamWorkspace,
   unfavoriteSharedTemplate,
   unpublishProjectTemplate
 } from '../services/workspace.service.js'
@@ -43,6 +45,16 @@ workspaceRouter.post('/workspaces', asyncHandler(async (req, res) => {
 
 workspaceRouter.post('/workspaces/:workspaceId/select', asyncHandler(async (req, res) => {
   const result = await selectWorkspace(req.user.id, req.params.workspaceId)
+  res.json({ data: result })
+}))
+
+workspaceRouter.patch('/workspaces/:workspaceId', asyncHandler(async (req, res) => {
+  const result = await updateTeamWorkspace(req.user.id, req.params.workspaceId, req.body)
+  res.json({ data: result })
+}))
+
+workspaceRouter.delete('/workspaces/:workspaceId', asyncHandler(async (req, res) => {
+  const result = await deleteTeamWorkspace(req.user.id, req.params.workspaceId)
   res.json({ data: result })
 }))
 

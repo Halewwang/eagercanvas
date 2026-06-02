@@ -209,6 +209,22 @@ test('workspace switcher separates personal and team workspace lists', () => {
   assert.match(switcherSource, /\.option-avatar\s*\{[^}]*border-radius:\s*999px/s)
 })
 
+test('workspace switcher exposes owner-only team edit and delete actions', () => {
+  const switcherSource = readWorkspaceComponentSource('WorkspaceSwitcher')
+
+  assert.match(switcherSource, /canManageWorkspace\(workspace\)/)
+  assert.match(switcherSource, /const canManageCurrentWorkspace = computed/)
+  assert.match(switcherSource, /class="workspace-edit-button"/)
+  assert.match(switcherSource, /aria-label="Edit team"/)
+  assert.match(switcherSource, /@click\.stop="editWorkspace\(workspace\)"/)
+  assert.match(switcherSource, /emit\('edit', workspace\)/)
+  assert.match(switcherSource, /v-if="canManageCurrentWorkspace"/)
+  assert.match(switcherSource, />Delete team<\/span>/)
+  assert.match(switcherSource, /emitAction\('delete'\)/)
+  assert.match(switcherSource, /v-else-if="currentWorkspace\?\.kind === 'team'"/)
+  assert.match(switcherSource, />Leave team<\/span>/)
+})
+
 test('workspace view delegates project and template cards to a focused component', () => {
   const cardsGridSource = readWorkspaceComponentSource('WorkspaceCardsGrid')
 
@@ -387,6 +403,34 @@ test('workspace team modals expose create workspace slug, avatar, and invite sur
   assert.match(teamModalsSource, /Invite link · 7 days/)
   assert.match(teamModalsSource, /Username or email/)
   assert.match(teamModalsSource, /Transfer to/)
+})
+
+test('workspace team modals expose edit and delete workspace flows', () => {
+  const teamModalsSource = readWorkspaceComponentSource('WorkspaceTeamModals')
+
+  assert.match(workspaceSource, /v-model:show-edit="showEditWorkspaceModal"/)
+  assert.match(workspaceSource, /v-model:show-delete="showDeleteWorkspaceModal"/)
+  assert.match(workspaceSource, /v-model:edit-name="editWorkspaceName"/)
+  assert.match(workspaceSource, /v-model:edit-avatar-url="editWorkspaceAvatarUrl"/)
+  assert.match(workspaceSource, /:delete-workspace-name="deleteWorkspaceName"/)
+  assert.match(workspaceSource, /@confirm-edit="confirmEditWorkspace"/)
+  assert.match(workspaceSource, /@confirm-delete-workspace="confirmDeleteWorkspace"/)
+  assert.match(teamModalsSource, /title="Edit Workspace"/)
+  assert.match(teamModalsSource, /aria-label="Choose updated team avatar"/)
+  assert.match(teamModalsSource, /label="Workspace Name"/)
+  assert.match(teamModalsSource, /title="Delete Workspace"/)
+  assert.match(teamModalsSource, /Delete workspace "\{\{ deleteWorkspaceName \}\}"/)
+})
+
+test('workspace creation regenerates the created invite link without creating a duplicate team', () => {
+  const start = workspaceSource.indexOf('const confirmCreateWorkspace = async () => {')
+  const end = workspaceSource.indexOf('const openInviteWorkspaceModal = () => {')
+  const branch = workspaceSource.slice(start, end)
+
+  assert.match(branch, /if \(createdWorkspaceInviteUrl\.value\) \{/)
+  assert.match(branch, /const invite = await createWorkspaceInviteLink\(currentWorkspace\.value\?\.id\)/)
+  assert.match(branch, /notifier\.success\('Invite link regenerated'\)/)
+  assert.match(branch, /return\s*\}/)
 })
 
 test('workspace template canvas preview renders capped image assets instead of a node graph', () => {

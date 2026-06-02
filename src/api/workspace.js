@@ -22,6 +22,21 @@ export const apiCreateTeamWorkspace = (payload) =>
     silentNetworkErrorToast: true
   })
 
+export const apiUpdateTeamWorkspace = (workspaceId, payload) =>
+  apiRequest({
+    url: `/workspace/workspaces/${encodeURIComponent(workspaceId)}`,
+    method: 'patch',
+    data: payload,
+    silentNetworkErrorToast: true
+  })
+
+export const apiDeleteTeamWorkspace = (workspaceId) =>
+  apiRequest({
+    url: `/workspace/workspaces/${encodeURIComponent(workspaceId)}`,
+    method: 'delete',
+    silentNetworkErrorToast: true
+  })
+
 export const apiSelectWorkspace = (workspaceId) =>
   apiRequest({
     url: `/workspace/workspaces/${encodeURIComponent(workspaceId)}/select`,

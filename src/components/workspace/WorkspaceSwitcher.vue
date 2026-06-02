@@ -45,24 +45,38 @@
 
       <div v-if="teamWorkspaces.length" class="switcher-section">
         <div class="switcher-label">Teams</div>
-        <button
+        <div
           v-for="workspace in teamWorkspaces"
           :key="workspace.id"
-          type="button"
-          class="workspace-option"
+          class="workspace-option-row"
           :class="{ active: workspace.id === currentWorkspace?.id }"
-          @click="selectWorkspace(workspace.id)"
         >
-          <div class="workspace-avatar option-avatar">
-            <img v-if="workspace.avatarUrl" :src="workspace.avatarUrl" alt="workspace avatar" />
-            <span v-else>{{ getInitial(workspace.name) }}</span>
-          </div>
-          <div class="workspace-copy">
-            <strong>{{ workspace.name }}</strong>
-            <span>{{ formatWorkspaceOptionMeta(workspace) }}</span>
-          </div>
-          <span v-if="workspace.id === currentWorkspace?.id" class="active-pill">Active</span>
-        </button>
+          <button
+            type="button"
+            class="workspace-option team-option"
+            @click="selectWorkspace(workspace.id)"
+          >
+            <div class="workspace-avatar option-avatar">
+              <img v-if="workspace.avatarUrl" :src="workspace.avatarUrl" alt="workspace avatar" />
+              <span v-else>{{ getInitial(workspace.name) }}</span>
+            </div>
+            <div class="workspace-copy">
+              <strong>{{ workspace.name }}</strong>
+              <span>{{ formatWorkspaceOptionMeta(workspace) }}</span>
+            </div>
+            <span v-if="workspace.id === currentWorkspace?.id" class="active-pill">Active</span>
+          </button>
+          <button
+            v-if="canManageWorkspace(workspace)"
+            type="button"
+            class="workspace-edit-button"
+            aria-label="Edit team"
+            title="Edit team"
+            @click.stop="editWorkspace(workspace)"
+          >
+            <NIcon :size="15"><CreateOutline /></NIcon>
+          </button>
+        </div>
       </div>
 
       <div v-if="!hasFilteredWorkspaces" class="switcher-empty">
@@ -89,7 +103,7 @@
           <span>Create team</span>
         </button>
         <button
-          v-if="currentWorkspace?.kind === 'team'"
+          v-if="canManageCurrentWorkspace"
           type="button"
           class="action-row"
           @click="emitAction('invite')"
@@ -98,7 +112,16 @@
           <span>Invite members</span>
         </button>
         <button
-          v-if="currentWorkspace?.kind === 'team'"
+          v-if="canManageCurrentWorkspace"
+          type="button"
+          class="action-row danger"
+          @click="emitAction('delete')"
+        >
+          <NIcon :size="16"><TrashOutline /></NIcon>
+          <span>Delete team</span>
+        </button>
+        <button
+          v-else-if="currentWorkspace?.kind === 'team'"
           type="button"
           class="action-row danger"
           @click="emitAction('leave')"
@@ -119,8 +142,10 @@ import {
   ChevronDownOutline,
   ChevronForwardOutline,
   ChevronUpOutline,
+  CreateOutline,
   SearchOutline,
-  SendOutline
+  SendOutline,
+  TrashOutline
 } from '@/icons/coolicons'
 
 const props = defineProps({
@@ -142,7 +167,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['select', 'create', 'invite', 'leave', 'acceptInvite'])
+const emit = defineEmits(['select', 'create', 'invite', 'leave', 'edit', 'delete', 'acceptInvite'])
 const rootRef = ref(null)
 const open = ref(false)
 const searchQuery = ref('')
@@ -161,6 +186,10 @@ const formatWorkspaceOptionMeta = (workspace) => {
   if (workspace?.kind === 'team') return formatMemberCount(workspace.memberCount)
   return 'Just you'
 }
+
+const canManageWorkspace = (workspace) => (
+  workspace?.kind === 'team' && workspace?.role === 'owner'
+)
 
 const workspaceMatchesSearch = (workspace) => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -193,6 +222,8 @@ const workspaceMeta = computed(() => {
   return 'Personal'
 })
 
+const canManageCurrentWorkspace = computed(() => canManageWorkspace(props.currentWorkspace))
+
 const toggleOpen = () => {
   open.value = !open.value
 }
@@ -209,6 +240,11 @@ const selectWorkspace = (workspaceId) => {
 
 const acceptInvite = (inviteId) => {
   emit('acceptInvite', inviteId)
+  close()
+}
+
+const editWorkspace = (workspace) => {
+  emit('edit', workspace)
   close()
 }
 
@@ -380,8 +416,23 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
+.workspace-option-row {
+  min-height: 58px;
+  border-radius: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.team-option {
+  min-height: 58px;
+}
+
 .workspace-option:hover,
-.workspace-option.active {
+.workspace-option.active,
+.workspace-option-row:hover,
+.workspace-option-row.active {
   background: rgba(255, 255, 255, 0.08);
 }
 
@@ -397,6 +448,24 @@ onBeforeUnmount(() => {
   padding: 3px 8px;
   color: rgba(255, 255, 255, 0.82);
   font-size: 11px;
+}
+
+.workspace-edit-button {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(236, 238, 244, 0.62);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.workspace-edit-button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
 }
 
 .switcher-label {

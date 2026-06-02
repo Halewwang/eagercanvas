@@ -20,6 +20,28 @@ test('workspace store uses Share Templates mock data only in local preview mode'
   assert.match(workspaceStoreSource, /if \(BYPASS_AUTH_IN_DEV\) \{[\s\S]*const template = getLocalPreviewTemplateById\(templateId\)[\s\S]*return createLocalProjectFromTemplate\(template\)[\s\S]*\}/)
 })
 
+test('workspace store preserves active workspace identity while loading template scopes', () => {
+  const start = workspaceStoreSource.indexOf('export const loadFeaturedTemplates = async')
+  const end = workspaceStoreSource.indexOf('export const getProjectTemplateStatus = async')
+  const loadFeaturedTemplatesBranch = workspaceStoreSource.slice(start, end)
+
+  assert.match(workspaceStoreSource, /const dedupeWorkspaces = \(items = \[\]\) => \{/)
+  assert.match(workspaceStoreSource, /workspaces\.value = dedupeWorkspaces\(payload\.workspaces\)/)
+  assert.doesNotMatch(
+    loadFeaturedTemplatesBranch,
+    /currentWorkspace\.value = normalizeWorkspace\(response\?\.data\?\.workspace \|\| currentWorkspace\.value\)/
+  )
+})
+
+test('workspace store exposes team update and delete actions', () => {
+  assert.match(workspaceStoreSource, /apiUpdateTeamWorkspace/)
+  assert.match(workspaceStoreSource, /apiDeleteTeamWorkspace/)
+  assert.match(workspaceStoreSource, /export const updateTeamWorkspace = async \(workspaceId = currentWorkspace\.value\?\.id, payload = \{\}\) => \{/)
+  assert.match(workspaceStoreSource, /export const deleteTeamWorkspace = async \(workspaceId = currentWorkspace\.value\?\.id\) => \{/)
+  assert.match(workspaceStoreSource, /updateTeamWorkspace,/)
+  assert.match(workspaceStoreSource, /deleteTeamWorkspace,/)
+})
+
 test('projects store can materialize a local project from a Share Templates debug item', () => {
   assert.match(projectsStoreSource, /export const createLocalProjectFromTemplate = async \(template = \{\}\) => \{/)
   assert.match(projectsStoreSource, /const project = createLocalProjectRecord\([\s\S]*template\.title[\s\S]*canvasData:\s*template\.canvasData[\s\S]*thumbnail:\s*template\.coverUrl/)

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -6,6 +7,8 @@ import {
   ensurePublicWorkspace,
   mapWorkspace
 } from './workspace-membership.service.js'
+
+const workspaceMembershipSource = readFileSync(new URL('./workspace-membership.service.js', import.meta.url), 'utf8')
 
 const missingColumnError = (table, column) => ({
   code: 'PGRST204',
@@ -91,11 +94,13 @@ test('mapWorkspace marks modern workspace rows when kind exists', () => {
     slug: 'personal-user-1',
     name: 'Personal Workspace',
     kind: 'personal',
-    is_default: false
+    is_default: false,
+    created_by: 'user-1'
   })
 
   assert.equal(workspace.kind, 'personal')
   assert.equal(workspace.schemaVersion, 'modern')
+  assert.equal(workspace.createdBy, 'user-1')
 })
 
 test('ensurePublicWorkspace falls back to legacy workspace columns when kind is missing', async () => {
@@ -118,10 +123,21 @@ test('ensurePersonalWorkspace falls back to legacy profile and workspace columns
   const workspaceUpserts = upserts.filter((item) => item.table === 'workspaces')
 
   assert.equal(workspace.slug, 'personal-user-1')
-  assert.equal(workspace.name, 'user-1 Workspace')
+  assert.equal(workspace.name, 'user-1 Space')
   assert.equal(workspaceUpserts.length, 2)
   assert.equal(Object.prototype.hasOwnProperty.call(workspaceUpserts[0].row, 'kind'), true)
   assert.equal(Object.prototype.hasOwnProperty.call(workspaceUpserts[1].row, 'kind'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(workspaceUpserts[1].row, 'avatar_url'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(workspaceUpserts[1].row, 'created_by'), false)
+})
+
+test('workspace membership service exposes owner-only team update and delete helpers', () => {
+  assert.match(workspaceMembershipSource, /export const updateTeamWorkspace = async/)
+  assert.match(workspaceMembershipSource, /export const deleteTeamWorkspace = async/)
+  assert.match(workspaceMembershipSource, /teamWorkspaceSchema\.parse\(input \|\| \{\}\)/)
+  assert.match(workspaceMembershipSource, /assertWorkspaceOwner\(userId, workspaceId/)
+  assert.match(workspaceMembershipSource, /getWorkspaceKind\(workspace\) !== WORKSPACE_KIND\.team/)
+  assert.match(workspaceMembershipSource, /\.from\('workspaces'\)[\s\S]*\.update\(\{[\s\S]*name: payload\.name/)
+  assert.match(workspaceMembershipSource, /\.from\('workspaces'\)[\s\S]*\.delete\(\)[\s\S]*\.eq\('id', workspaceId\)/)
+  assert.match(workspaceMembershipSource, /deletedWorkspaceId: workspaceId/)
 })

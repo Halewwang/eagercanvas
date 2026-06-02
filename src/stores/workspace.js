@@ -4,6 +4,7 @@ import {
   apiCreateTeamWorkspace,
   apiCreateWorkspaceDirectInvite,
   apiCreateWorkspaceInviteLink,
+  apiDeleteTeamWorkspace,
   apiFavoriteSharedTemplate,
   apiGetCurrentWorkspace,
   apiGetProjectTemplateStatus,
@@ -17,6 +18,7 @@ import {
   apiSelectWorkspace,
   apiUnfavoriteSharedTemplate,
   apiUnpublishProjectTemplate,
+  apiUpdateTeamWorkspace,
   apiUseSharedTemplate
 } from '@/api/workspace'
 import { createLocalProjectFromTemplate } from '@/stores/projects'
@@ -56,8 +58,20 @@ const normalizeWorkspace = (workspace) => {
     kind: workspace.kind || 'team',
     role: workspace.role || 'member',
     avatarUrl: workspace.avatarUrl || workspace.avatar_url || '',
+    createdBy: workspace.createdBy || workspace.created_by || '',
     memberCount: Number(workspace.memberCount || workspace.member_count || 0)
   }
+}
+
+const dedupeWorkspaces = (items = []) => {
+  const seen = new Set()
+  return items
+    .map(normalizeWorkspace)
+    .filter((workspace) => {
+      if (!workspace?.id || seen.has(workspace.id)) return false
+      seen.add(workspace.id)
+      return true
+    })
 }
 
 const normalizeTemplate = (template) => {
@@ -142,9 +156,12 @@ const applyWorkspaceCollection = (payload = {}) => {
   const active = normalizeWorkspace(payload.activeWorkspace || payload.active_workspace || payload.workspace || payload)
   if (active) currentWorkspace.value = active
   if (Array.isArray(payload.workspaces)) {
-    workspaces.value = payload.workspaces.map(normalizeWorkspace).filter(Boolean)
+    workspaces.value = dedupeWorkspaces(payload.workspaces)
+    if (active && !workspaces.value.some((item) => item.id === active.id)) {
+      workspaces.value = dedupeWorkspaces([active, ...workspaces.value])
+    }
   } else if (active && !workspaces.value.some((item) => item.id === active.id)) {
-    workspaces.value = [active, ...workspaces.value]
+    workspaces.value = dedupeWorkspaces([active, ...workspaces.value])
   }
   return currentWorkspace.value
 }
@@ -200,6 +217,28 @@ export const createTeamWorkspace = async (payload = {}) => {
   }
 
   const response = await apiCreateTeamWorkspace(payload)
+  applyWorkspaceCollection(response?.data || {})
+  return currentWorkspace.value
+}
+
+export const updateTeamWorkspace = async (workspaceId = currentWorkspace.value?.id, payload = {}) => {
+  if (!workspaceId) return null
+  if (BYPASS_AUTH_IN_DEV) {
+    const state = ensureLocalPreviewWorkspaceState()
+    const name = String(payload?.name || '').trim() || 'Workspace'
+    const avatarUrl = payload?.avatarUrl || ''
+    localPreviewWorkspaces = state.workspaces.map((workspace) => (
+      workspace.id === workspaceId && workspace.kind === 'team'
+        ? { ...workspace, name, avatarUrl }
+        : workspace
+    ))
+    localPreviewActiveWorkspace = localPreviewWorkspaces.find((workspace) => workspace.id === state.activeWorkspace?.id) || localPreviewActiveWorkspace
+    currentWorkspace.value = localPreviewActiveWorkspace
+    workspaces.value = dedupeWorkspaces(localPreviewWorkspaces)
+    return currentWorkspace.value
+  }
+
+  const response = await apiUpdateTeamWorkspace(workspaceId, payload)
   applyWorkspaceCollection(response?.data || {})
   return currentWorkspace.value
 }
@@ -333,6 +372,24 @@ export const leaveWorkspace = async (workspaceId = currentWorkspace.value?.id, p
   return currentWorkspace.value
 }
 
+export const deleteTeamWorkspace = async (workspaceId = currentWorkspace.value?.id) => {
+  if (!workspaceId) return null
+  if (BYPASS_AUTH_IN_DEV) {
+    const state = ensureLocalPreviewWorkspaceState()
+    localPreviewWorkspaces = state.workspaces.filter((workspace) => (
+      workspace.kind !== 'team' || workspace.id !== workspaceId
+    ))
+    localPreviewActiveWorkspace = localPreviewWorkspaces.find((workspace) => workspace.kind === 'personal') || localPreviewWorkspaces[0] || null
+    currentWorkspace.value = localPreviewActiveWorkspace
+    workspaces.value = dedupeWorkspaces(localPreviewWorkspaces)
+    return currentWorkspace.value
+  }
+
+  const response = await apiDeleteTeamWorkspace(workspaceId)
+  applyWorkspaceCollection(response?.data || {})
+  return currentWorkspace.value
+}
+
 export const loadFeaturedTemplates = async (scope = 'auto') => {
   templatesScope.value = scope || 'auto'
   if (BYPASS_AUTH_IN_DEV) {
@@ -342,7 +399,6 @@ export const loadFeaturedTemplates = async (scope = 'auto') => {
   }
 
   const response = await apiListFeaturedTemplates(templatesScope.value === 'auto' ? {} : { scope: templatesScope.value })
-  currentWorkspace.value = normalizeWorkspace(response?.data?.workspace || currentWorkspace.value)
   templatesScope.value = response?.data?.scope || templatesScope.value
   featuredTemplates.value = Array.isArray(response?.data?.templates)
     ? response.data.templates.map(normalizeTemplate).filter(Boolean)
@@ -411,6 +467,8 @@ export const useWorkspaceStore = () => ({
   loadPendingWorkspaceInvites,
   acceptWorkspaceInvite,
   leaveWorkspace,
+  updateTeamWorkspace,
+  deleteTeamWorkspace,
   loadFeaturedTemplates,
   getProjectTemplateStatus,
   publishProjectTemplate,

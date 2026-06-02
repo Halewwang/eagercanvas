@@ -14,6 +14,8 @@
       @create-workspace="openCreateWorkspaceModal"
       @invite-workspace="openInviteWorkspaceModal"
       @leave-workspace="openLeaveWorkspaceModal"
+      @edit-workspace="openEditWorkspaceModal"
+      @delete-workspace="openDeleteWorkspaceModal"
       @accept-workspace-invite="handleAcceptWorkspaceInvite"
       @upload-avatar="triggerAvatarUpload"
       @settings="openProfileSettings"
@@ -85,22 +87,31 @@
       v-model:show-create="showCreateWorkspaceModal"
       v-model:show-invite="showInviteWorkspaceModal"
       v-model:show-leave="showLeaveWorkspaceModal"
+      v-model:show-edit="showEditWorkspaceModal"
+      v-model:show-delete="showDeleteWorkspaceModal"
       v-model:create-name="createWorkspaceName"
       v-model:create-avatar-url="createWorkspaceAvatarUrl"
+      v-model:edit-name="editWorkspaceName"
+      v-model:edit-avatar-url="editWorkspaceAvatarUrl"
       v-model:direct-invite-value="directInviteValue"
       v-model:transfer-to-user-id="transferToUserId"
       :created-invite-url="createdWorkspaceInviteUrl"
       :create-loading="workspaceCreateLoading"
+      :edit-loading="workspaceEditLoading"
+      :delete-workspace-name="deleteWorkspaceName"
+      :delete-loading="workspaceDeleteLoading"
       :direct-invite-loading="directInviteLoading"
       :invite-url="workspaceInviteUrl"
       :invite-link-loading="inviteLinkLoading"
       :transfer-members="transferMembers"
       :leave-loading="leaveLoading"
       @confirm-create="confirmCreateWorkspace"
+      @confirm-edit="confirmEditWorkspace"
       @send-direct-invite="sendDirectInvite"
       @generate-invite-link="generateInviteLink"
       @copy-invite-url="copyInviteUrl"
       @confirm-leave="confirmLeaveWorkspace"
+      @confirm-delete-workspace="confirmDeleteWorkspace"
     />
   </div>
 </template>
@@ -165,10 +176,19 @@ const refreshingProjectId = ref('')
 const showCreateWorkspaceModal = ref(false)
 const showInviteWorkspaceModal = ref(false)
 const showLeaveWorkspaceModal = ref(false)
+const showEditWorkspaceModal = ref(false)
+const showDeleteWorkspaceModal = ref(false)
 const createWorkspaceName = ref('')
 const createWorkspaceAvatarUrl = ref('')
 const createdWorkspaceInviteUrl = ref('')
 const workspaceCreateLoading = ref(false)
+const editWorkspaceId = ref('')
+const editWorkspaceName = ref('')
+const editWorkspaceAvatarUrl = ref('')
+const workspaceEditLoading = ref(false)
+const deleteWorkspaceId = ref('')
+const deleteWorkspaceName = ref('')
+const workspaceDeleteLoading = ref(false)
 const directInviteValue = ref('')
 const directInviteLoading = ref(false)
 const workspaceInviteUrl = ref('')
@@ -229,6 +249,8 @@ const {
   loadWorkspaces,
   leaveWorkspace,
   selectWorkspace,
+  updateTeamWorkspace,
+  deleteTeamWorkspace,
   unfavoriteSharedTemplate,
   useSharedTemplate
 } = useWorkspaceStore()
@@ -441,6 +463,13 @@ const confirmCreateWorkspace = async () => {
   if (!createWorkspaceName.value.trim()) return
   workspaceCreateLoading.value = true
   try {
+    if (createdWorkspaceInviteUrl.value) {
+      const invite = await createWorkspaceInviteLink(currentWorkspace.value?.id)
+      createdWorkspaceInviteUrl.value = invite?.inviteUrl || ''
+      workspaceInviteUrl.value = createdWorkspaceInviteUrl.value
+      notifier.success('Invite link regenerated')
+      return
+    }
     await createTeamWorkspace({
       name: createWorkspaceName.value.trim(),
       avatarUrl: createWorkspaceAvatarUrl.value || null
@@ -455,6 +484,32 @@ const confirmCreateWorkspace = async () => {
     notifier.error(getErrorMessage(error, 'Failed to create workspace'))
   } finally {
     workspaceCreateLoading.value = false
+  }
+}
+
+const openEditWorkspaceModal = (workspace) => {
+  const target = workspace || currentWorkspace.value
+  if (!target?.id || target.kind !== 'team' || target.role !== 'owner') return
+  editWorkspaceId.value = target.id
+  editWorkspaceName.value = target.name || ''
+  editWorkspaceAvatarUrl.value = target.avatarUrl || ''
+  showEditWorkspaceModal.value = true
+}
+
+const confirmEditWorkspace = async () => {
+  if (!editWorkspaceId.value || !editWorkspaceName.value.trim()) return
+  workspaceEditLoading.value = true
+  try {
+    await updateTeamWorkspace(editWorkspaceId.value, {
+      name: editWorkspaceName.value.trim(),
+      avatarUrl: editWorkspaceAvatarUrl.value || null
+    })
+    showEditWorkspaceModal.value = false
+    notifier.success('Workspace updated')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to update workspace'))
+  } finally {
+    workspaceEditLoading.value = false
   }
 }
 
@@ -497,6 +552,10 @@ const copyInviteUrl = async (url) => {
 }
 
 const openLeaveWorkspaceModal = async () => {
+  if (currentWorkspace.value?.role === 'owner') {
+    openDeleteWorkspaceModal()
+    return
+  }
   transferToUserId.value = ''
   showLeaveWorkspaceModal.value = true
   try {
@@ -505,6 +564,33 @@ const openLeaveWorkspaceModal = async () => {
     transferMembers.value = members.filter((member) => member.userId !== currentUserId)
   } catch {
     transferMembers.value = []
+  }
+}
+
+const openDeleteWorkspaceModal = () => {
+  const target = currentWorkspace.value
+  if (!target?.id || target.kind !== 'team' || target.role !== 'owner') return
+  deleteWorkspaceId.value = target.id
+  deleteWorkspaceName.value = target.name || 'Workspace'
+  showDeleteWorkspaceModal.value = true
+}
+
+const confirmDeleteWorkspace = async () => {
+  if (!deleteWorkspaceId.value) return
+  workspaceDeleteLoading.value = true
+  try {
+    await deleteTeamWorkspace(deleteWorkspaceId.value)
+    showDeleteWorkspaceModal.value = false
+    deleteWorkspaceId.value = ''
+    deleteWorkspaceName.value = ''
+    resetTemplateScopeForCurrentWorkspace()
+    activeSection.value = 'projects'
+    await reloadWorkspaceData()
+    notifier.success('Workspace deleted')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to delete workspace'))
+  } finally {
+    workspaceDeleteLoading.value = false
   }
 }
 

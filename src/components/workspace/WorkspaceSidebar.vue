@@ -9,6 +9,8 @@
       @create="$emit('createWorkspace')"
       @invite="$emit('inviteWorkspace')"
       @leave="$emit('leaveWorkspace')"
+      @edit="$emit('editWorkspace', $event)"
+      @delete="$emit('deleteWorkspace')"
       @accept-invite="$emit('acceptWorkspaceInvite', $event)"
     />
 
@@ -102,6 +104,8 @@ defineEmits([
   'createWorkspace',
   'inviteWorkspace',
   'leaveWorkspace',
+  'editWorkspace',
+  'deleteWorkspace',
   'acceptWorkspaceInvite',
   'uploadAvatar',
   'settings',
