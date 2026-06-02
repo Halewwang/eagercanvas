@@ -18,8 +18,7 @@ import {
   extractProviderVideoUrl,
   persistImageResultAssets,
   persistVideoResultAsset,
-  resolveVideoSourceNodeId,
-  shouldPersistImageResultAssetsBeforeResponse
+  resolveVideoSourceNodeId
 } from './run-assets.js'
 import {
   assertImageTaskOwnership,
@@ -46,7 +45,6 @@ export {
   persistDataUrlIfNeeded,
   persistImageResultAssets,
   persistRemoteUrlIfNeeded,
-  shouldPersistImageResultAssetsBeforeResponse,
   persistVideoResultAsset
 } from './run-assets.js'
 
@@ -137,9 +135,7 @@ export const createRun = async (userId, input) => {
       providerResponse = await providerChatCompletions(payload.payload, providerRequestOptions)
     } else if (payload.type === 'image') {
       providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
-      if (shouldPersistImageResultAssetsBeforeResponse(providerResponse)) {
-        providerResponse = await persistImageResultAssets(providerResponse)
-      }
+      providerResponse = await persistImageResultAssets(providerResponse)
     } else {
       providerResponse = await providerCreateVideo(payload.payload, providerRequestOptions)
       providerResponse = await persistVideoResultAsset(providerResponse)

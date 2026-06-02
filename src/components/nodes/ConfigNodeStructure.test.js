@@ -173,19 +173,6 @@ test('image config node delegates provider size semantics to a pure helper', () 
   assert.match(sizeOptionsSource, /export const resolveImageConfigSizeSelection = \(/)
 })
 
-test('image config node displays provider output before persistence finishes', () => {
-  const generateIndex = imageConfigSource.indexOf('const result = await generate(params)')
-  const rawUrlIndex = imageConfigSource.indexOf("const rawUrl = String(result[0].url || '').trim()", generateIndex)
-  const savingPatchIndex = imageConfigSource.indexOf("persistStatus: 'saving'", rawUrlIndex)
-  const persistenceIndex = imageConfigSource.indexOf('const persistence = await resolveImagePersistence', rawUrlIndex)
-
-  assert.ok(generateIndex > -1, 'image config generation request should exist')
-  assert.ok(rawUrlIndex > generateIndex, 'image config should resolve provider URL after generation')
-  assert.ok(savingPatchIndex > rawUrlIndex, 'image config should mark the output as saving')
-  assert.ok(persistenceIndex > savingPatchIndex, 'image config should start persistence after showing the provider output')
-  assert.match(imageConfigSource, /previewUrl:\s*rawUrl/)
-})
-
 test('image and video config nodes delegate error display to a shared component', () => {
   const errorMessageSource = readConfigComponentSource('ConfigNodeErrorMessage')
 
