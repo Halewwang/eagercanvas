@@ -88,10 +88,24 @@ export const getImageUrl = (item) => {
 
 export const normalizeGeneratedImages = (response) => {
   const data = response?.data || response
+  const runId = response?.run_id || response?.runId || ''
+  const responsePersistStatus = response?.persistStatus || response?.persist_status || ''
+  const responseSkipClientPersistence = response?.skipClientPersistence || response?.skip_client_persistence || false
   return (Array.isArray(data) ? data : [data])
-    .map(item => ({
-      url: getImageUrl(item),
-      revisedPrompt: item?.revised_prompt || ''
-    }))
+    .map(item => {
+      const normalized = {
+        url: getImageUrl(item),
+        revisedPrompt: item?.revised_prompt || ''
+      }
+      const itemRunId = item?.run_id || item?.runId || runId
+      const itemPersistStatus = item?.persistStatus || item?.persist_status || responsePersistStatus
+      const itemSkipClientPersistence = item?.skipClientPersistence === true ||
+        item?.skip_client_persistence === true ||
+        responseSkipClientPersistence === true
+      if (itemRunId) normalized.runId = itemRunId
+      if (itemPersistStatus) normalized.persistStatus = itemPersistStatus
+      if (itemSkipClientPersistence) normalized.skipClientPersistence = true
+      return normalized
+    })
     .filter(item => item.url)
 }

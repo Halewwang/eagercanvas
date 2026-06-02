@@ -190,6 +190,34 @@ test('image node generation keeps temporary output without saving the project', 
   ]])
 })
 
+test('image node generation skips browser persistence for server-managed inline output', async () => {
+  const { calls, generation, messages } = await createHarness({
+    generateResult: [{
+      url: 'data:image/png;base64,aW1hZ2U=',
+      skipClientPersistence: true,
+      persistStatus: 'pending'
+    }]
+  })
+
+  await generation.runImageGeneration('create')
+
+  assert.equal(calls.some((call) => call[0] === 'resolve-persistence'), false)
+  assert.equal(calls.some((call) => call[0] === 'save-project'), false)
+  const finalPatch = calls.findLast?.((call) =>
+    call[0] === 'update-node' &&
+    call[2]?.kind === 'persistence-patch'
+  ) || [...calls].reverse().find((call) =>
+    call[0] === 'update-node' &&
+    call[2]?.kind === 'persistence-patch'
+  )
+  assert.equal(finalPatch?.[2]?.persistence?.displayUrl, 'data:image/png;base64,aW1hZ2U=')
+  assert.equal(finalPatch?.[2]?.persistence?.persisted, false)
+  assert.deepEqual(messages, [[
+    'warning',
+    'Image generated, but the result is still temporary. Refresh may lose it.'
+  ]])
+})
+
 test('image node generation records errors and clears the loading action', async () => {
   const { calls, generation, imageActionLoading, messages } = await createHarness({
     generateError: new Error('provider failed')

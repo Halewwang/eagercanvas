@@ -626,7 +626,9 @@ const handleGenerate = async (mode = 'auto') => {
 
     // Update image node with generated URL | 更新图片节点 URL
     if (result && result.length > 0) {
-      const rawUrl = String(result[0].url || '').trim()
+      const firstResult = result[0] || {}
+      const rawUrl = String(firstResult.url || '').trim()
+      const skipClientPersistence = firstResult.skipClientPersistence === true
       if (!rawUrl) {
         throw new Error('No image output')
       }
@@ -658,12 +660,19 @@ const handleGenerate = async (mode = 'auto') => {
 
       updateNode(props.id, { status: 'completed', executed: true, outputNodeId: imageNodeId, error: '' })
 
-      const persistence = await resolveImagePersistence(
-        rawUrl,
-        `generated-${Date.now()}.png`,
-        'Generated image persistence failed. Please retry.',
-        imageNodeId
-      )
+      const persistence = skipClientPersistence
+        ? {
+            persistedUrl: '',
+            displayUrl: rawUrl,
+            persisted: false,
+            persistError: 'Generated image is being saved by the server.'
+          }
+        : await resolveImagePersistence(
+          rawUrl,
+          `generated-${Date.now()}.png`,
+          'Generated image persistence failed. Please retry.',
+          imageNodeId
+        )
 
       updateNode(imageNodeId, {
         url: persistence.persistedUrl,

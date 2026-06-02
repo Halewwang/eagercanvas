@@ -16,6 +16,7 @@ import {
   buildImageGenerationAssets,
   buildVideoGenerationAssets,
   extractProviderVideoUrl,
+  markImageResultAssetsForServerPersistence,
   persistImageResultAssets,
   persistVideoResultAsset,
   resolveVideoSourceNodeId,
@@ -45,6 +46,7 @@ export {
   buildVideoGenerationAssets,
   persistDataUrlIfNeeded,
   persistImageResultAssets,
+  markImageResultAssetsForServerPersistence,
   persistRemoteUrlIfNeeded,
   shouldPersistImageResultAssetsBeforeResponse,
   persistVideoResultAsset
@@ -111,6 +113,57 @@ const enrichUsageWith302Record = async (providerResponse = {}, fallbackUsage = {
   }
 }
 
+const scheduleImageResultAssetPersistence = ({
+  userId,
+  runId,
+  projectId,
+  providerResponse,
+  model,
+  prompt,
+  sourceNodeId
+} = {}) => {
+  if (!userId || !runId || !providerResponse) return
+
+  void (async () => {
+    const persistedResponse = await persistImageResultAssets(providerResponse)
+    const assets = buildImageGenerationAssets(persistedResponse, sourceNodeId)
+    const hasAssets = assets.length > 0
+
+    await upsertGeneratedMediaRecord({
+      userId,
+      runId,
+      projectId,
+      runType: 'image',
+      model,
+      prompt,
+      status: hasAssets ? 'completed' : 'persistence_failed',
+      error: hasAssets ? '' : 'Generated image persistence failed',
+      sourceNodeId,
+      assets
+    })
+
+    if (!hasAssets) {
+      console.warn('[runs] background image persistence produced no stable assets', { runId })
+    }
+  })().catch((error) => {
+    console.warn('[runs] background image persistence failed', error?.message || error)
+    void upsertGeneratedMediaRecord({
+      userId,
+      runId,
+      projectId,
+      runType: 'image',
+      model,
+      prompt,
+      status: 'persistence_failed',
+      error: error?.message || 'Generated image persistence failed',
+      sourceNodeId,
+      assets: []
+    }).catch((recordError) => {
+      console.warn('[runs] background image persistence failure record failed', recordError?.message || recordError)
+    })
+  })
+}
+
 export const createRun = async (userId, input) => {
   const payload = runSchema.parse(input)
   const providerAccess = await resolveRunProviderAccess(userId, payload)
@@ -133,17 +186,25 @@ export const createRun = async (userId, input) => {
 
   try {
     let providerResponse
+    let clientProviderResponse
+    let deferImageAssetPersistence = false
     if (payload.type === 'chat') {
       providerResponse = await providerChatCompletions(payload.payload, providerRequestOptions)
     } else if (payload.type === 'image') {
       providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
       if (shouldPersistImageResultAssetsBeforeResponse(providerResponse)) {
         providerResponse = await persistImageResultAssets(providerResponse)
+        clientProviderResponse = providerResponse
+      } else {
+        deferImageAssetPersistence = true
+        clientProviderResponse = markImageResultAssetsForServerPersistence(providerResponse)
       }
     } else {
       providerResponse = await providerCreateVideo(payload.payload, providerRequestOptions)
       providerResponse = await persistVideoResultAsset(providerResponse)
+      clientProviderResponse = providerResponse
     }
+    clientProviderResponse = clientProviderResponse || providerResponse
 
     const latencyMs = Date.now() - startedAt
     const isImageRun = payload.type === 'image'
@@ -319,24 +380,37 @@ export const createRun = async (userId, input) => {
     })
 
     if (payload.type === 'image') {
-      await upsertGeneratedMediaRecord({
-        userId,
-        runId: run.id,
-        projectId: payload.projectId,
-        runType: 'image',
-        model: payload.model || payload.payload?.model,
-        prompt: payload.payload?.prompt,
-        status: 'completed',
-        sourceNodeId: String(payload.payload?.sourceNodeId || '').trim(),
-        assets: buildImageGenerationAssets(providerResponse, String(payload.payload?.sourceNodeId || '').trim())
-      })
+      const sourceNodeId = String(payload.payload?.sourceNodeId || '').trim()
+      if (deferImageAssetPersistence) {
+        scheduleImageResultAssetPersistence({
+          userId,
+          runId: run.id,
+          projectId: payload.projectId,
+          providerResponse,
+          model: payload.model || payload.payload?.model,
+          prompt: payload.payload?.prompt,
+          sourceNodeId
+        })
+      } else {
+        await upsertGeneratedMediaRecord({
+          userId,
+          runId: run.id,
+          projectId: payload.projectId,
+          runType: 'image',
+          model: payload.model || payload.payload?.model,
+          prompt: payload.payload?.prompt,
+          status: 'completed',
+          sourceNodeId,
+          assets: buildImageGenerationAssets(providerResponse, sourceNodeId)
+        })
+      }
     }
 
     return {
       runId: run.id,
       status: 'completed',
       result: {
-        ...providerResponse,
+        ...clientProviderResponse,
         run_id: run.id
       }
     }

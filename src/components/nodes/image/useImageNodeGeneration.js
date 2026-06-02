@@ -95,6 +95,8 @@ export const useImageNodeGeneration = ({
       if (!result?.[0]?.url) {
         throw new Error('No image output')
       }
+      const firstResult = result[0]
+      const skipClientPersistence = firstResult?.skipClientPersistence === true
 
       const outputMeta = {
         loading: false,
@@ -121,11 +123,18 @@ export const useImageNodeGeneration = ({
         persistError: 'Saving generated image...'
       }))
 
-      const persistence = await resolveImagePersistence(
-        result[0].url,
-        generatedImageFileName(),
-        'Generated image persistence failed. Please retry.'
-      )
+      const persistence = skipClientPersistence
+        ? {
+            persistedUrl: '',
+            displayUrl: firstResult.url,
+            persisted: false,
+            persistError: 'Generated image is being saved by the server.'
+          }
+        : await resolveImagePersistence(
+          firstResult.url,
+          generatedImageFileName(),
+          'Generated image persistence failed. Please retry.'
+        )
 
       updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(persistence, outputMeta))
 
