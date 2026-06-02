@@ -1,5 +1,6 @@
 import { env } from '../../config/env.js'
 import { HttpError } from '../../utils/http.js'
+import sharp from 'sharp'
 import { buildGptImage2RequestBody } from '../gpt-image-2-size.js'
 import { DelegatingProviderAdapter } from './delegating.adapter.js'
 import { buildProviderUrl } from './http-client.js'
@@ -8,6 +9,12 @@ import { extensionFromMimeType, fetchBinaryFromSource } from './media-source.js'
 
 const DEFAULT_DEROUTER_BASE_URL = 'https://api-direct.derouter.ai/openai/v1'
 const DEFAULT_DEROUTER_TIMEOUT_MS = 300000
+const DEROUTER_REFERENCE_MAX_BYTES = 4 * 1024 * 1024
+const DEROUTER_REFERENCE_OPTIMIZATION_ATTEMPTS = [
+  { maxEdge: 1536, quality: 82 },
+  { maxEdge: 1280, quality: 76 },
+  { maxEdge: 1024, quality: 70 }
+]
 
 const pickFirstImageInput = (payload = {}) => {
   if (typeof payload.image === 'string') return payload.image
@@ -62,6 +69,10 @@ const parseDerouterResponse = async (response) => {
 }
 
 const extractDerouterErrorMessage = (data, status) => {
+  if (status === 413) {
+    return 'Derouter request is too large. Please use a smaller reference image or fewer reference images.'
+  }
+
   const candidates = [
     data?.error?.message,
     data?.message,
@@ -70,7 +81,11 @@ const extractDerouterErrorMessage = (data, status) => {
     data?.raw
   ]
   const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
-  return found ? String(found).trim() : `Derouter request failed: ${status}`
+  const message = found ? String(found).trim() : ''
+  if (/^\s*</.test(message)) {
+    return `Derouter request failed: ${status}`
+  }
+  return message || `Derouter request failed: ${status}`
 }
 
 const callDerouter = async (path, body, { multipart = false } = {}, requestOptions = {}) => {
@@ -171,11 +186,53 @@ const appendDerouterMultipartImages = async (formData, images = []) => {
     const source = String(images[index] || '').trim()
     if (!source) continue
 
-    const { mimeType, buffer } = await fetchBinaryFromSource(source)
-    const fileName = `image-${index + 1}.${extensionFromMimeType(mimeType)}`
-    const blob = new Blob([buffer], { type: mimeType || 'image/png' })
+    const image = await prepareDerouterReferenceImage(await fetchBinaryFromSource(source))
+    const fileName = `image-${index + 1}.${extensionFromMimeType(image.mimeType)}`
+    const blob = new Blob([image.buffer], { type: image.mimeType || 'image/jpeg' })
     formData.append('image', blob, fileName)
   }
+}
+
+const prepareDerouterReferenceImage = async ({ mimeType = 'image/png', buffer } = {}) => {
+  if (!Buffer.isBuffer(buffer) || buffer.byteLength === 0) {
+    throw new HttpError(400, 'Reference image is empty', 'DEROUTER_REFERENCE_IMAGE_EMPTY')
+  }
+  if (buffer.byteLength <= DEROUTER_REFERENCE_MAX_BYTES) {
+    return { mimeType, buffer }
+  }
+
+  let lastSize = buffer.byteLength
+  try {
+    for (const attempt of DEROUTER_REFERENCE_OPTIMIZATION_ATTEMPTS) {
+      const optimized = await sharp(buffer, { limitInputPixels: false })
+        .rotate()
+        .resize({
+          width: attempt.maxEdge,
+          height: attempt.maxEdge,
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .flatten({ background: { r: 255, g: 255, b: 255 } })
+        .jpeg({ quality: attempt.quality, mozjpeg: true })
+        .toBuffer()
+
+      lastSize = optimized.byteLength
+      if (optimized.byteLength <= DEROUTER_REFERENCE_MAX_BYTES) {
+        return {
+          mimeType: 'image/jpeg',
+          buffer: optimized
+        }
+      }
+    }
+  } catch (error) {
+    throw new HttpError(400, 'Reference image could not be prepared for derouter upload', 'DEROUTER_REFERENCE_IMAGE_INVALID')
+  }
+
+  throw new HttpError(
+    400,
+    `Reference image is too large for derouter after optimization (${lastSize} bytes)`,
+    'DEROUTER_REFERENCE_IMAGE_TOO_LARGE'
+  )
 }
 
 export const createDerouterImage = async (payload = {}, requestOptions = {}) => {
