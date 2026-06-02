@@ -176,6 +176,18 @@ from public.workspaces w
 where wm.workspace_id = w.id
   and w.kind = 'personal';
 
+do $$
+begin
+  if exists (
+    select 1
+    from pg_trigger
+    where tgname = 'trg_projects_touch_updated_at'
+      and tgrelid = 'public.projects'::regclass
+  ) then
+    alter table public.projects disable trigger trg_projects_touch_updated_at;
+  end if;
+end $$;
+
 update public.projects p
 set
   workspace_id = w.id,
@@ -183,6 +195,18 @@ set
 from public.workspaces w
 where w.slug = 'personal-' || p.user_id::text
   and p.workspace_id is null;
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_trigger
+    where tgname = 'trg_projects_touch_updated_at'
+      and tgrelid = 'public.projects'::regclass
+  ) then
+    alter table public.projects enable trigger trg_projects_touch_updated_at;
+  end if;
+end $$;
 
 insert into public.user_workspace_preferences (user_id, active_workspace_id)
 select u.id, w.id
