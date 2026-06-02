@@ -31,17 +31,21 @@
 
     <footer class="sidebar-footer-tools">
       <template v-if="isAuthenticated">
-        <div class="sidebar-tool-actions">
+        <div class="sidebar-user-row">
           <button class="sidebar-profile-btn" type="button" title="Profile settings" aria-label="Profile settings" @click="$emit('settings')">
             <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="user avatar" />
             <span v-else>{{ avatarInitial }}</span>
           </button>
-          <button class="sidebar-tool-btn" type="button" title="Admin Dashboard" aria-label="Admin Dashboard" @click="$emit('admin')">
-            <NIcon :size="18"><WindowSidebarOutline /></NIcon>
-          </button>
-          <button class="sidebar-tool-btn sidebar-tool-btn--logout" type="button" title="Logout" aria-label="Logout" @click="$emit('logout')">
-            <NIcon :size="18"><LogOutOutline /></NIcon>
-          </button>
+          <span class="sidebar-user-divider" aria-hidden="true"></span>
+          <div class="sidebar-usage-meter" aria-live="polite">
+            <span class="sidebar-usage-calls">{{ usageCallsLabel }}</span>
+            <span class="sidebar-usage-cost">{{ usageCostLabel }}</span>
+          </div>
+          <BaseDropdown :options="accountMenuOptions" placement="top-end" compact @select="handleAccountMenuSelect">
+            <button class="sidebar-settings-btn" type="button" title="Account menu" aria-label="Account menu">
+              <NIcon :size="18"><SettingsOutline /></NIcon>
+            </button>
+          </BaseDropdown>
         </div>
       </template>
       <template v-else>
@@ -55,11 +59,13 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { NIcon } from 'naive-ui'
-import { LogOutOutline, WindowSidebarOutline } from '@/icons/coolicons'
+import { LogOutOutline, SettingsOutline, WindowSidebarOutline } from '@/icons/coolicons'
+import { BaseDropdown } from '@/components/ui'
 import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 
-defineProps({
+const props = defineProps({
   workspaceBrand: {
     type: String,
     default: 'Shared Workspace'
@@ -84,6 +90,14 @@ defineProps({
     type: String,
     default: ''
   },
+  usageSummary: {
+    type: Object,
+    default: null
+  },
+  usageLoading: {
+    type: Boolean,
+    default: false
+  },
   currentWorkspace: {
     type: Object,
     default: null
@@ -98,7 +112,7 @@ defineProps({
   }
 })
 
-defineEmits([
+const emit = defineEmits([
   'update:activeSection',
   'selectWorkspace',
   'createWorkspace',
@@ -114,6 +128,48 @@ defineEmits([
   'login',
   'register'
 ])
+
+const accountMenuOptions = computed(() => [
+  { key: 'admin', label: 'Admin Dashboard', icon: WindowSidebarOutline },
+  { key: 'divider', type: 'divider' },
+  { key: 'logout', label: 'Logout', icon: LogOutOutline, danger: true }
+])
+
+const formatCompactNumber = (value) => {
+  const numericValue = Number(value || 0)
+  if (!Number.isFinite(numericValue)) return '0'
+  return new Intl.NumberFormat('en', {
+    notation: numericValue >= 10000 ? 'compact' : 'standard',
+    maximumFractionDigits: numericValue >= 10000 ? 1 : 0
+  }).format(numericValue)
+}
+
+const formatUsageCost = (value) => {
+  const numericValue = Number(value || 0)
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return '0.0000'
+  if (numericValue < 1) return numericValue.toFixed(4)
+  return numericValue.toFixed(2)
+}
+
+const usageCallsLabel = computed(() => {
+  if (props.usageLoading && !props.usageSummary) return 'Loading usage'
+  return `${formatCompactNumber(props.usageSummary?.totalCalls)} calls`
+})
+
+const usageCostLabel = computed(() => {
+  if (props.usageLoading && !props.usageSummary) return 'Fetching cost'
+  return `$${formatUsageCost(props.usageSummary?.totalCostUsd)} used`
+})
+
+const handleAccountMenuSelect = (key) => {
+  if (key === 'admin') {
+    emit('admin')
+    return
+  }
+  if (key === 'logout') {
+    emit('logout')
+  }
+}
 </script>
 
 <style scoped>
@@ -165,16 +221,14 @@ defineEmits([
 .sidebar-footer-tools {
   margin-top: auto;
   padding: 0 10px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
+  width: 100%;
 }
 
-.sidebar-tool-actions {
-  display: flex;
+.sidebar-user-row {
+  display: grid;
+  grid-template-columns: 30px 1px minmax(0, 1fr) 30px;
   align-items: center;
-  gap: 10px;
+  column-gap: 12px;
   width: 100%;
 }
 
@@ -206,8 +260,43 @@ defineEmits([
   background: rgba(255, 255, 255, 0.1);
 }
 
-.sidebar-tool-btn {
-  width: 26px;
+.sidebar-user-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+
+.sidebar-usage-meter {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.15;
+}
+
+.sidebar-usage-calls,
+.sidebar-usage-cost {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-usage-calls {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sidebar-usage-cost {
+  color: rgba(236, 238, 244, 0.48);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.sidebar-settings-btn {
+  width: 30px;
   height: 30px;
   border: none;
   border-radius: 10px;
@@ -220,13 +309,9 @@ defineEmits([
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.sidebar-tool-btn:hover {
+.sidebar-settings-btn:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
-}
-
-.sidebar-tool-btn--logout {
-  margin-left: auto;
 }
 
 .account-actions {

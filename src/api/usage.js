@@ -1,10 +1,11 @@
 import { apiRequest } from './_httpClient.js'
 
-export const getUsageSummary = (from, to) =>
+export const getUsageSummary = (from, to, options = {}) =>
   apiRequest({
     url: '/usage/summary',
     method: 'get',
-    params: { from, to }
+    params: { from, to },
+    ...options
   })
 
 export const getUsageTimeseries = (granularity = 'day') =>

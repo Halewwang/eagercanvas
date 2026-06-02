@@ -320,6 +320,11 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
+.switcher-trigger > .workspace-avatar {
+  width: 45px;
+  height: 45px;
+}
+
 .workspace-avatar img {
   width: 100%;
   height: 100%;

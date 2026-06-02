@@ -90,9 +90,13 @@ const normalizedOptions = computed(() =>
 )
 
 const menuClass = computed(() => {
-  const placementClass = props.placement === 'bottom-end'
-    ? 'right-0 top-[calc(100%+10px)]'
-    : 'left-0 top-[calc(100%+10px)]'
+  const placementClassMap = {
+    'bottom-end': 'right-0 top-[calc(100%+10px)]',
+    'bottom-start': 'left-0 top-[calc(100%+10px)]',
+    'top-end': 'right-0 bottom-[calc(100%+10px)]',
+    'top-start': 'left-0 bottom-[calc(100%+10px)]'
+  }
+  const placementClass = placementClassMap[props.placement] || placementClassMap['bottom-end']
   const densityClass = props.compact ? 'min-w-[168px] p-1.5' : 'min-w-[192px] p-2'
 
   return [
