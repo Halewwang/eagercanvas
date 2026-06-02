@@ -175,18 +175,14 @@ test('image config node delegates provider size semantics to a pure helper', () 
 
 test('image config node displays provider output before persistence finishes', () => {
   const generateIndex = imageConfigSource.indexOf('const result = await generate(params)')
-  const rawUrlIndex = imageConfigSource.indexOf("const rawUrl = String(firstResult.url || '').trim()", generateIndex)
-  const skipClientPersistenceIndex = imageConfigSource.indexOf('const skipClientPersistence = firstResult.skipClientPersistence === true', rawUrlIndex)
+  const rawUrlIndex = imageConfigSource.indexOf("const rawUrl = String(result[0].url || '').trim()", generateIndex)
   const savingPatchIndex = imageConfigSource.indexOf("persistStatus: 'saving'", rawUrlIndex)
-  const persistenceIndex = imageConfigSource.indexOf('const persistence = skipClientPersistence', rawUrlIndex)
-  const resolvePersistenceIndex = imageConfigSource.indexOf('await resolveImagePersistence', persistenceIndex)
+  const persistenceIndex = imageConfigSource.indexOf('const persistence = await resolveImagePersistence', rawUrlIndex)
 
   assert.ok(generateIndex > -1, 'image config generation request should exist')
   assert.ok(rawUrlIndex > generateIndex, 'image config should resolve provider URL after generation')
-  assert.ok(skipClientPersistenceIndex > rawUrlIndex, 'image config should read server-managed persistence metadata')
   assert.ok(savingPatchIndex > rawUrlIndex, 'image config should mark the output as saving')
   assert.ok(persistenceIndex > savingPatchIndex, 'image config should start persistence after showing the provider output')
-  assert.ok(resolvePersistenceIndex > persistenceIndex, 'image config should still persist ordinary provider outputs')
   assert.match(imageConfigSource, /previewUrl:\s*rawUrl/)
 })
 

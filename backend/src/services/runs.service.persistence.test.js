@@ -56,25 +56,26 @@ test('persistImageResultAssets uploads inline data image URLs before history is 
   assert.equal(result.data[0].url, 'https://storage.example.com/persisted-inline-image.png')
 })
 
-test('persistImageResultAssets can keep oversized inline data images when persistence is not required inline', async () => {
+test('persistImageResultAssets rejects oversized inline data images when backend persistence fails', async () => {
   const largeDataUrl = `data:image/png;base64,${'A'.repeat(12 * 1024 * 1024)}`
 
-  const result = await persistImageResultAssets(
-    {
-      data: [
-        {
-          url: largeDataUrl
+  await assert.rejects(
+    () => persistImageResultAssets(
+      {
+        data: [
+          {
+            url: largeDataUrl
+          }
+        ]
+      },
+      {
+        persistDataUrl: async () => {
+          throw new Error('storage rejected upload')
         }
-      ]
-    },
-    {
-      persistDataUrl: async () => {
-        throw new Error('storage rejected upload')
       }
-    }
+    ),
+    /storage rejected upload/
   )
-
-  assert.equal(result.data[0].url, largeDataUrl)
 })
 
 test('buildImageGenerationAssets excludes inline data URLs from media history', () => {
@@ -107,7 +108,7 @@ test('small derouter inline image results can return before upload persistence',
   )
 })
 
-test('large derouter inline image results can return before upload persistence', () => {
+test('large derouter inline image results keep response-time persistence', () => {
   const largeBase64 = 'A'.repeat(12 * 1024 * 1024)
 
   assert.equal(
@@ -115,7 +116,7 @@ test('large derouter inline image results can return before upload persistence',
       provider: 'derouter',
       data: [{ url: `data:image/png;base64,${largeBase64}` }]
     }),
-    false
+    true
   )
 })
 
