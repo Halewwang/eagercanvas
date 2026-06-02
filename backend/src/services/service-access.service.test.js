@@ -64,24 +64,59 @@ test('getUserServiceStatus derives not_enabled when no credential exists', async
 
   const status = await getUserServiceStatus('user-1', { supabaseClient: fakeSupabase })
   assert.equal(status, 'not_enabled')
-  assert.deepEqual(calls, ['user_service_credentials'])
+  assert.deepEqual(calls, ['user_service_credentials', 'user_service_credentials'])
+})
+
+test('getUserServiceStatus reports active when an active credential exists before newer failures', async () => {
+  const fakeSupabase = {
+    from() {
+      const filters = []
+      return {
+        select() { return this },
+        eq(column, value) {
+          filters.push([column, value])
+          return this
+        },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => {
+          const wantsActive = filters.some(([column, value]) => column === 'status' && value === 'active')
+          return {
+            data: wantsActive
+              ? { id: 'cred-active', status: 'active' }
+              : { id: 'cred-failed', status: 'create_failed' },
+            error: null
+          }
+        }
+      }
+    }
+  }
+
+  const status = await getUserServiceStatus('user-1', { supabaseClient: fakeSupabase })
+  assert.equal(status, 'active')
 })
 
 test('resolveActiveUserServiceCredential rejects disabled service before resolving runtime key', async () => {
   const fakeSupabase = {
     from() {
+      const filters = []
       return {
         select() { return this },
-        eq(_column, _value) { return this },
+        eq(column, value) {
+          filters.push([column, value])
+          return this
+        },
         order() { return this },
         limit() { return this },
         maybeSingle: async () => ({
-          data: {
-            id: 'cred-1',
-            user_id: 'user-1',
-            provider_api_name: 'eager_user_disabled',
-            status: 'disabled'
-          },
+          data: filters.some(([column, value]) => column === 'status' && value === 'active')
+            ? null
+            : {
+                id: 'cred-1',
+                user_id: 'user-1',
+                provider_api_name: 'eager_user_disabled',
+                status: 'disabled'
+              },
           error: null
         })
       }
@@ -101,4 +136,58 @@ test('resolveActiveUserServiceCredential rejects disabled service before resolvi
       return true
     }
   )
+})
+
+test('resolveActiveUserServiceCredential prefers the active credential over newer failed records', async () => {
+  const calls = []
+  const fakeSupabase = {
+    from(table) {
+      const filters = []
+      calls.push(['from', table])
+      return {
+        select() { return this },
+        eq(column, value) {
+          filters.push([column, value])
+          calls.push(['eq', column, value])
+          return this
+        },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => {
+          const wantsActive = filters.some(([column, value]) => column === 'status' && value === 'active')
+          return {
+            data: wantsActive
+              ? {
+                  id: 'cred-active',
+                  user_id: 'user-1',
+                  provider_api_name: 'eager_user_active',
+                  status: 'active'
+                }
+              : {
+                  id: 'cred-failed',
+                  user_id: 'user-1',
+                  provider_api_name: 'eager_user_failed',
+                  status: 'create_failed'
+                },
+            error: null
+          }
+        }
+      }
+    }
+  }
+
+  const resolved = await resolveActiveUserServiceCredential('user-1', {
+    supabaseClient: fakeSupabase,
+    getRuntimeApiKeyByName: async (apiName) => {
+      assert.equal(apiName, 'eager_user_active')
+      return 'sk-active'
+    }
+  })
+
+  assert.deepEqual(resolved, {
+    serviceCredentialId: 'cred-active',
+    apiName: 'eager_user_active',
+    apiKey: 'sk-active'
+  })
+  assert.ok(calls.some((call) => call[0] === 'eq' && call[1] === 'status' && call[2] === 'active'))
 })

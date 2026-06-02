@@ -96,6 +96,16 @@ const latestCredentialQuery = (client, userId) =>
     .limit(1)
     .maybeSingle()
 
+const activeCredentialQuery = (client, userId) =>
+  client
+    .from(CREDENTIAL_TABLE)
+    .select('*')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
 const listUserCredentials = async (client, userId) => {
   const { data, error } = await client
     .from(CREDENTIAL_TABLE)
@@ -142,6 +152,13 @@ export const getUserServiceStatus = async (userId, deps = {}) => {
   const client = deps.supabaseClient || supabase
   const safeUserId = String(userId || '').trim()
   if (!safeUserId) return 'not_enabled'
+  const { data: activeCredential, error: activeError } = await activeCredentialQuery(client, safeUserId)
+  if (activeError) {
+    if (isMissingRelation(activeError)) return 'not_enabled'
+    throw new HttpError(500, activeError.message, 'SERVICE_CREDENTIAL_QUERY_FAILED')
+  }
+  if (activeCredential) return activeCredential.status || 'active'
+
   const { data, error } = await latestCredentialQuery(client, safeUserId)
   if (error) {
     if (isMissingRelation(error)) return 'not_enabled'
@@ -237,11 +254,15 @@ export const createUserServiceCredential = async ({
   return { ok: true, serviceCredential: formatServiceCredentialForAdmin(data) }
 }
 
-export const resolveActiveUserServiceCredential = async (userId, deps = {}) => {
-  const client = deps.supabaseClient || supabase
-  const getRuntimeApiKeyByName = deps.getRuntimeApiKeyByName || get302RuntimeApiKeyByName
-  const safeUserId = String(userId || '').trim()
-  if (!safeUserId) throw new HttpError(401, 'Missing authenticated user', 'UNAUTHORIZED')
+const resolveActiveUserServiceCredentialRecord = async (safeUserId, client) => {
+  const { data: activeCredential, error: activeError } = await activeCredentialQuery(client, safeUserId)
+  if (activeError) {
+    if (isMissingRelation(activeError)) {
+      throw new HttpError(403, '当前账号尚未开通生成服务，请联系管理员。', 'SERVICE_NOT_ENABLED')
+    }
+    throw new HttpError(500, activeError.message, 'SERVICE_CREDENTIAL_QUERY_FAILED')
+  }
+  if (activeCredential) return activeCredential
 
   const { data, error } = await latestCredentialQuery(client, safeUserId)
   if (error) {
@@ -254,9 +275,29 @@ export const resolveActiveUserServiceCredential = async (userId, deps = {}) => {
   if (data.status === 'disabled' || data.status === 'deleted') {
     throw new HttpError(403, '当前账号的生成服务已停用，请联系管理员。', 'SERVICE_DISABLED')
   }
-  if (data.status !== 'active') {
-    throw new HttpError(503, '服务凭证暂时不可用，请联系管理员。', 'SERVICE_CREDENTIAL_UNAVAILABLE')
+  throw new HttpError(503, '服务凭证暂时不可用，请联系管理员。', 'SERVICE_CREDENTIAL_UNAVAILABLE')
+}
+
+export const resolveActiveUserServiceAccess = async (userId, deps = {}) => {
+  const client = deps.supabaseClient || supabase
+  const safeUserId = String(userId || '').trim()
+  if (!safeUserId) throw new HttpError(401, 'Missing authenticated user', 'UNAUTHORIZED')
+
+  const data = await resolveActiveUserServiceCredentialRecord(safeUserId, client)
+
+  return {
+    serviceCredentialId: data.id,
+    apiName: data.provider_api_name
   }
+}
+
+export const resolveActiveUserServiceCredential = async (userId, deps = {}) => {
+  const client = deps.supabaseClient || supabase
+  const getRuntimeApiKeyByName = deps.getRuntimeApiKeyByName || get302RuntimeApiKeyByName
+  const safeUserId = String(userId || '').trim()
+  if (!safeUserId) throw new HttpError(401, 'Missing authenticated user', 'UNAUTHORIZED')
+
+  const data = await resolveActiveUserServiceCredentialRecord(safeUserId, client)
 
   const apiKey = await getRuntimeApiKeyByName(data.provider_api_name)
   if (!apiKey) {

@@ -11,6 +11,7 @@ import {
 } from './provider.service.js'
 import { get302RecordByRequestId, normalizeDashboardRecord } from './dashboard302.service.js'
 import { resolveActiveUserServiceCredential } from './service-access.service.js'
+import { buildRunProviderRequestOptions, resolveRunProviderAccess } from './run-provider-access.js'
 import {
   buildImageGenerationAssets,
   buildVideoGenerationAssets,
@@ -110,8 +111,8 @@ const enrichUsageWith302Record = async (providerResponse = {}, fallbackUsage = {
 
 export const createRun = async (userId, input) => {
   const payload = runSchema.parse(input)
-  const providerAccess = await resolveActiveUserServiceCredential(userId)
-  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
+  const providerAccess = await resolveRunProviderAccess(userId, payload)
+  const providerRequestOptions = buildRunProviderRequestOptions(providerAccess)
 
   const startedAt = Date.now()
   const { data: run, error: runInsertError } = await supabase
