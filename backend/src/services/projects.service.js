@@ -121,6 +121,16 @@ const mapProjectForRead = async (row, {
     : row.canvas_json
 })
 
+export const applyProjectListWorkspaceFilter = (query, activeWorkspace, userId) => {
+  if (activeWorkspace.kind === 'team') {
+    return query.eq('workspace_id', activeWorkspace.id).eq('access_mode', 'team')
+  }
+
+  return query
+    .or(`workspace_id.eq.${activeWorkspace.id},workspace_id.is.null`)
+    .eq('user_id', userId)
+}
+
 export const listProjects = async (userId) => {
   const activeWorkspace = await getActiveWorkspace(userId)
   let query = supabase
@@ -128,11 +138,7 @@ export const listProjects = async (userId) => {
     .select('id, user_id, workspace_id, access_mode, name, thumbnail_url, created_at, updated_at')
     .order('updated_at', { ascending: false })
 
-  if (activeWorkspace.kind === 'team') {
-    query = query.eq('workspace_id', activeWorkspace.id).eq('access_mode', 'team')
-  } else {
-    query = query.eq('workspace_id', activeWorkspace.id).eq('user_id', userId)
-  }
+  query = applyProjectListWorkspaceFilter(query, activeWorkspace, userId)
 
   let { data, error } = await query
 

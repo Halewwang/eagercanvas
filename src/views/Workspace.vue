@@ -50,6 +50,8 @@
         :describe-item="describeItem"
         :resolve-card-icon="resolveCardIcon"
         :project-menu-options="projectMenuOptions"
+        :empty-state-title="cardsEmptyStateTitle"
+        :empty-state-copy="cardsEmptyStateCopy"
         @primary-click="handlePrimaryClick"
         @project-menu-select="handleProjectMenuSelect"
         @favorite-template="toggleFavoriteTemplate"
@@ -116,6 +118,7 @@ import {
 } from '@/icons/coolicons'
 import {
   projects,
+  projectsLoadState,
   initProjectsStore,
   createProject,
   renameProject,
@@ -246,6 +249,21 @@ const sectionItems = computed(() => {
   }
   return projects.value.filter((project) => project.permission !== 'viewer')
 })
+
+const isProjectListUnavailable = computed(() => (
+  ['projects', 'shared'].includes(activeSection.value) &&
+  projectsLoadState.value.source === 'remote-error'
+))
+
+const cardsEmptyStateTitle = computed(() => (
+  isProjectListUnavailable.value ? 'Project list unavailable' : ''
+))
+
+const cardsEmptyStateCopy = computed(() => (
+  isProjectListUnavailable.value
+    ? 'Cloud project data could not be loaded. Cached browser projects are hidden to avoid stale results.'
+    : ''
+))
 
 const describeItem = (item) => describeWorkspaceItem({
   activeSection: activeSection.value,
@@ -384,15 +402,19 @@ const useTemplate = async (item) => {
       notifier.warning('Template unavailable')
       return
     }
-    await initProjectsStore()
+    await loadWorkspaceProjects()
     await router.push(`/canvas/${project.id}`)
   } catch (error) {
     notifier.error(getErrorMessage(error, 'Failed to create project from template'))
   }
 }
 
+const loadWorkspaceProjects = async () => {
+  await initProjectsStore({ allowLocalFallback: false })
+}
+
 const reloadWorkspaceData = async () => {
-  await initProjectsStore()
+  await loadWorkspaceProjects()
   await loadTemplatesForActiveScope()
 }
 
@@ -617,7 +639,7 @@ onMounted(async () => {
       notifier.error(getErrorMessage(error, 'Invite link is invalid or expired'))
     }
   }
-  await initProjectsStore()
+  await loadWorkspaceProjects()
   await loadWorkspaceSurfaces()
 })
 </script>

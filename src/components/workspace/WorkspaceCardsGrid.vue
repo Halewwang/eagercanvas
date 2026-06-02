@@ -1,8 +1,8 @@
 <template>
   <section class="cards-grid" :class="`cards-grid--${activeSection}`">
     <div v-if="!items.length" class="cards-empty-state">
-      <strong>{{ emptyStateTitle }}</strong>
-      <span>{{ emptyStateCopy }}</span>
+      <strong>{{ resolvedEmptyStateTitle }}</strong>
+      <span>{{ resolvedEmptyStateCopy }}</span>
     </div>
     <article
       v-for="item in items"
@@ -104,6 +104,14 @@ const props = defineProps({
   projectMenuOptions: {
     type: Function,
     default: () => []
+  },
+  emptyStateTitle: {
+    type: String,
+    default: ''
+  },
+  emptyStateCopy: {
+    type: String,
+    default: ''
   }
 })
 
@@ -113,13 +121,15 @@ defineEmits([
   'favoriteTemplate'
 ])
 
-const emptyStateTitle = computed(() => {
+const resolvedEmptyStateTitle = computed(() => {
+  if (props.emptyStateTitle) return props.emptyStateTitle
   if (props.activeSection === 'featured') return 'No shared templates yet'
   if (props.activeSection === 'shared') return 'No shared projects yet'
   return 'No projects yet'
 })
 
-const emptyStateCopy = computed(() => {
+const resolvedEmptyStateCopy = computed(() => {
+  if (props.emptyStateCopy) return props.emptyStateCopy
   if (props.activeSection === 'featured') return 'Published community and workspace templates will appear here.'
   if (props.activeSection === 'shared') return 'Projects shared with you by workspace members will appear here.'
   return 'Create a project to start building in this workspace.'

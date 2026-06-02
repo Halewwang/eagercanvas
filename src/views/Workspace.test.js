@@ -6,6 +6,7 @@ import { test } from 'node:test'
 const workspaceSource = readFileSync(new URL('./Workspace.vue', import.meta.url), 'utf8')
 const styleSource = readFileSync(new URL('../style.css', import.meta.url), 'utf8')
 const iconsSource = readFileSync(new URL('../icons/coolicons.js', import.meta.url), 'utf8')
+const projectsStoreSource = readFileSync(new URL('../stores/projects.js', import.meta.url), 'utf8')
 
 function readWorkspaceComponentSource(name) {
   const path = fileURLToPath(new URL(`../components/workspace/${name}.vue`, import.meta.url))
@@ -456,12 +457,21 @@ test('workspace project card navigation does not block on a cloud detail refresh
   assert.doesNotMatch(branch, /Keep the local draft path available/)
 })
 
-test('workspace cloud surfaces fail softly so local projects remain accessible', () => {
+test('workspace cloud surfaces fail softly while project list stays cloud authoritative', () => {
   assert.match(workspaceSource, /const loadWorkspaceSurfaces = async \(\) => \{/)
   assert.match(workspaceSource, /try\s*\{\s*await loadCurrentWorkspace\(\)\s*await loadWorkspaces\(\)\s*\}\s*catch/s)
   assert.match(workspaceSource, /try\s*\{\s*await loadPendingWorkspaceInvites\(\)\s*\}\s*catch/s)
   assert.match(workspaceSource, /try\s*\{\s*await loadFeaturedTemplates\(activeTemplateScope\.value\)\s*\}\s*catch/s)
-  assert.match(workspaceSource, /await initProjectsStore\(\)[\s\S]*await loadWorkspaceSurfaces\(\)/)
+  assert.match(workspaceSource, /await loadWorkspaceProjects\(\)[\s\S]*await loadWorkspaceSurfaces\(\)/)
+})
+
+test('workspace project list does not render browser local cache as authoritative data', () => {
+  assert.match(projectsStoreSource, /export const loadProjects = async \(\{ allowLocalFallback = true \} = \{\}\) => \{/)
+  assert.match(projectsStoreSource, /if \(!allowLocalFallback\)\s*\{[\s\S]*projects\.value = \[\][\s\S]*source:\s*'remote-error'/)
+  assert.match(projectsStoreSource, /export const initProjectsStore = async \(options = \{\}\) => \{\s*await loadProjects\(options\)\s*\}/)
+  assert.match(workspaceSource, /const loadWorkspaceProjects = async \(\) => \{\s*await initProjectsStore\(\{ allowLocalFallback: false \}\)\s*\}/)
+  assert.match(workspaceSource, /:empty-state-title="cardsEmptyStateTitle"/)
+  assert.match(workspaceSource, /Project list unavailable/)
 })
 
 test('workspace template scope follows the effective backend scope after loading', () => {

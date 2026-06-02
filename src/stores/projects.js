@@ -310,7 +310,7 @@ const mergeRemoteWithLocalDrafts = (remoteProjects, localProjects) => {
   })
 }
 
-export const loadProjects = async () => {
+export const loadProjects = async ({ allowLocalFallback = true } = {}) => {
   const { isAuthenticated } = useAuthStore()
   if (!isAuthenticated.value) {
     projects.value = []
@@ -354,6 +354,18 @@ export const loadProjects = async () => {
     }
     return projects.value
   } catch (error) {
+    const fallbackError = error?.message || 'Project list unavailable'
+    if (!allowLocalFallback) {
+      projects.value = []
+      projectsLoadState.value = {
+        source: 'remote-error',
+        reason: 'project-list-unavailable',
+        error: fallbackError,
+        updatedAt: new Date().toISOString()
+      }
+      return projects.value
+    }
+
     const tombstones = loadDeleteTombstones()
     projects.value = sortProjectsByActivity(localDrafts)
       .filter((project) => !tombstones.has(project.id))
@@ -361,7 +373,7 @@ export const loadProjects = async () => {
     projectsLoadState.value = {
       source: 'local-fallback',
       reason: 'project-list-unavailable',
-      error: error?.message || 'Project list unavailable',
+      error: fallbackError,
       updatedAt: new Date().toISOString()
     }
     return projects.value
@@ -941,8 +953,8 @@ export const getSortedProjects = (sortBy = 'updatedAt', order = 'desc') => {
   })
 }
 
-export const initProjectsStore = async () => {
-  await loadProjects()
+export const initProjectsStore = async (options = {}) => {
+  await loadProjects(options)
 }
 
 export const useProjectsStore = () => ({
