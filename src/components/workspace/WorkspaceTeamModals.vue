@@ -95,7 +95,7 @@
   >
     <div class="team-modal-stack">
       <p class="modal-copy">
-        You will return to Personal Workspace. If you own team projects, choose a team member to manage them.
+        You will return to your personal workspace. If you own team projects, choose a team member to manage them.
       </p>
       <label class="select-field">
         <span>Transfer to</span>

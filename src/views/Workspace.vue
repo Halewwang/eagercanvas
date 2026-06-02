@@ -16,7 +16,7 @@
       @leave-workspace="openLeaveWorkspaceModal"
       @accept-workspace-invite="handleAcceptWorkspaceInvite"
       @upload-avatar="triggerAvatarUpload"
-      @settings="router.push('/usage')"
+      @settings="openProfileSettings"
       @admin="router.push('/admin/dashboard')"
       @logout="handleLogout"
       @login="router.push({ path: '/', query: { auth: 'login', redirect: '/workspace' } })"
@@ -69,6 +69,16 @@
       @use-template-from-preview="useTemplateFromPreview"
     />
 
+    <WorkspaceProfileModal
+      v-model:show="showProfileModal"
+      v-model:display-name="profileDisplayName"
+      :user="user"
+      :avatar-initial="avatarInitial"
+      :saving="profileSaving"
+      @upload-avatar="triggerAvatarUpload"
+      @save-profile="saveProfileSettings"
+    />
+
     <WorkspaceTeamModals
       v-model:show-create="showCreateWorkspaceModal"
       v-model:show-invite="showInviteWorkspaceModal"
@@ -117,6 +127,7 @@ import {
 import WorkspaceCardsGrid from '@/components/workspace/WorkspaceCardsGrid.vue'
 import WorkspaceHeader from '@/components/workspace/WorkspaceHeader.vue'
 import WorkspaceModals from '@/components/workspace/WorkspaceModals.vue'
+import WorkspaceProfileModal from '@/components/workspace/WorkspaceProfileModal.vue'
 import WorkspaceSidebar from '@/components/workspace/WorkspaceSidebar.vue'
 import WorkspaceTeamModals from '@/components/workspace/WorkspaceTeamModals.vue'
 import { getErrorMessage } from '@/utils'
@@ -162,7 +173,10 @@ const inviteLinkLoading = ref(false)
 const transferMembers = ref([])
 const transferToUserId = ref('')
 const leaveLoading = ref(false)
-const activeTemplateScope = ref('workspace')
+const activeTemplateScope = ref('community')
+const showProfileModal = ref(false)
+const profileDisplayName = ref('')
+const profileSaving = ref(false)
 
 const navItems = [
   { key: 'projects', label: 'My Project', icon: FolderOpenOutline },
@@ -198,6 +212,7 @@ const {
   workspaces,
   featuredTemplates,
   pendingWorkspaceInvites,
+  templatesScope,
   acceptWorkspaceInvite,
   createTeamWorkspace,
   createWorkspaceDirectInvite,
@@ -247,6 +262,23 @@ const resolveCardIcon = (item) => {
 
 const projectMenuOptions = getWorkspaceProjectMenuOptions
 
+const getDefaultTemplateScopeForCurrentWorkspace = () => (
+  currentWorkspace.value?.kind === 'team' ? 'workspace' : 'community'
+)
+
+const syncActiveTemplateScopeFromStore = () => {
+  activeTemplateScope.value = templatesScope.value || activeTemplateScope.value
+}
+
+const resetTemplateScopeForCurrentWorkspace = () => {
+  activeTemplateScope.value = getDefaultTemplateScopeForCurrentWorkspace()
+}
+
+const loadTemplatesForActiveScope = async () => {
+  await loadFeaturedTemplates(activeTemplateScope.value)
+  syncActiveTemplateScopeFromStore()
+}
+
 const copyText = async (text) => {
   try {
     await navigator.clipboard.writeText(text)
@@ -292,6 +324,26 @@ const handleProjectMenuSelect = async (key, project) => {
 const handleLogout = async () => {
   await logout()
   await router.push('/')
+}
+
+const openProfileSettings = () => {
+  profileDisplayName.value = String(user.value?.displayName || '').trim()
+  showProfileModal.value = true
+}
+
+const saveProfileSettings = async () => {
+  const displayName = profileDisplayName.value.trim()
+  if (displayName.length < 2 || profileSaving.value) return
+  profileSaving.value = true
+  try {
+    await updateProfile({ displayName })
+    showProfileModal.value = false
+    notifier.success('Profile updated')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to update profile'))
+  } finally {
+    profileSaving.value = false
+  }
 }
 
 const createBlankProject = async () => {
@@ -341,13 +393,14 @@ const useTemplate = async (item) => {
 
 const reloadWorkspaceData = async () => {
   await initProjectsStore()
-  await loadFeaturedTemplates(activeTemplateScope.value)
+  await loadTemplatesForActiveScope()
 }
 
 const handleSelectWorkspace = async (workspaceId) => {
   if (!workspaceId || workspaceId === currentWorkspace.value?.id) return
   try {
     await selectWorkspace(workspaceId)
+    resetTemplateScopeForCurrentWorkspace()
     activeSection.value = 'projects'
     await reloadWorkspaceData()
   } catch (error) {
@@ -370,6 +423,7 @@ const confirmCreateWorkspace = async () => {
       name: createWorkspaceName.value.trim(),
       avatarUrl: createWorkspaceAvatarUrl.value || null
     })
+    resetTemplateScopeForCurrentWorkspace()
     const invite = await createWorkspaceInviteLink(currentWorkspace.value?.id)
     createdWorkspaceInviteUrl.value = invite?.inviteUrl || ''
     workspaceInviteUrl.value = createdWorkspaceInviteUrl.value
@@ -437,6 +491,7 @@ const confirmLeaveWorkspace = async () => {
   try {
     await leaveWorkspace(currentWorkspace.value?.id, { transferToUserId: transferToUserId.value || null })
     showLeaveWorkspaceModal.value = false
+    resetTemplateScopeForCurrentWorkspace()
     activeSection.value = 'projects'
     await reloadWorkspaceData()
     notifier.success('Workspace left')
@@ -450,6 +505,7 @@ const confirmLeaveWorkspace = async () => {
 const handleAcceptWorkspaceInvite = async (inviteId) => {
   try {
     await acceptWorkspaceInvite(inviteId)
+    resetTemplateScopeForCurrentWorkspace()
     activeSection.value = 'projects'
     await reloadWorkspaceData()
     notifier.success('Workspace joined')
@@ -460,7 +516,7 @@ const handleAcceptWorkspaceInvite = async (inviteId) => {
 
 const changeTemplateScope = async (scope) => {
   activeTemplateScope.value = scope
-  await loadFeaturedTemplates(scope)
+  await loadTemplatesForActiveScope()
 }
 
 const toggleFavoriteTemplate = async (template) => {
@@ -534,6 +590,7 @@ const loadWorkspaceSurfaces = async () => {
   } catch {
     currentWorkspace.value = null
   }
+  resetTemplateScopeForCurrentWorkspace()
 
   try {
     await loadPendingWorkspaceInvites()
@@ -546,6 +603,7 @@ const loadWorkspaceSurfaces = async () => {
   } catch {
     featuredTemplates.value = []
   }
+  syncActiveTemplateScopeFromStore()
 }
 
 onMounted(async () => {

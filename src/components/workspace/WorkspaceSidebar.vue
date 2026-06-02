@@ -4,6 +4,7 @@
       :current-workspace="currentWorkspace"
       :workspaces="workspaces"
       :pending-invites="pendingInvites"
+      :fallback-name="workspaceBrand"
       @select="$emit('selectWorkspace', $event)"
       @create="$emit('createWorkspace')"
       @invite="$emit('inviteWorkspace')"
@@ -29,8 +30,9 @@
     <footer class="sidebar-footer-tools">
       <template v-if="isAuthenticated">
         <div class="sidebar-tool-actions">
-          <button class="sidebar-tool-btn" type="button" title="Settings" aria-label="Settings" @click="$emit('settings')">
-            <NIcon :size="18"><SettingsOutline /></NIcon>
+          <button class="sidebar-profile-btn" type="button" title="Profile settings" aria-label="Profile settings" @click="$emit('settings')">
+            <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="user avatar" />
+            <span v-else>{{ avatarInitial }}</span>
           </button>
           <button class="sidebar-tool-btn" type="button" title="Admin Dashboard" aria-label="Admin Dashboard" @click="$emit('admin')">
             <NIcon :size="18"><WindowSidebarOutline /></NIcon>
@@ -52,7 +54,7 @@
 
 <script setup>
 import { NIcon } from 'naive-ui'
-import { LogOutOutline, SettingsOutline, WindowSidebarOutline } from '@/icons/coolicons'
+import { LogOutOutline, WindowSidebarOutline } from '@/icons/coolicons'
 import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 
 defineProps({
@@ -170,6 +172,34 @@ defineEmits([
   align-items: center;
   gap: 10px;
   width: 100%;
+}
+
+.sidebar-profile-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.sidebar-profile-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sidebar-profile-btn:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .sidebar-tool-btn {

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
+import { isMissingColumnError, isMissingRelationError } from '../utils/supabase-schema.js'
 
 export const PUBLIC_WORKSPACE_SLUG = 'shared-workspace'
 
@@ -33,32 +34,93 @@ const normalizeAvatarUrl = (value) => {
   return null
 }
 
+export const getWorkspaceKind = (row = {}) => {
+  const kind = String(row?.kind || '').trim()
+  if (kind) return kind
+  const slug = String(row?.slug || '').trim()
+  if (row?.is_default || slug === PUBLIC_WORKSPACE_SLUG) return WORKSPACE_KIND.public
+  if (slug.startsWith('personal-')) return WORKSPACE_KIND.personal
+  return WORKSPACE_KIND.team
+}
+
 export const mapWorkspace = (row, role = 'member', memberCount = 1) => ({
   id: row.id,
   slug: row.slug,
   name: row.name,
-  kind: row.kind || (row.is_default ? WORKSPACE_KIND.public : WORKSPACE_KIND.team),
+  kind: getWorkspaceKind(row),
   role,
   avatarUrl: row.avatar_url || '',
   memberCount: Number(memberCount || 0)
 })
 
+const isMissingWorkspaceModernColumn = (error) => (
+  isMissingColumnError(error, 'workspaces', 'kind') ||
+  isMissingColumnError(error, 'workspaces', 'avatar_url') ||
+  isMissingColumnError(error, 'workspaces', 'created_by')
+)
+
+const upsertWorkspaceWithLegacyFallback = async ({
+  row,
+  legacyRow,
+  onConflict = 'slug',
+  errorCode,
+  supabaseClient = supabase
+}) => {
+  const { data, error } = await supabaseClient
+    .from('workspaces')
+    .upsert(row, { onConflict })
+    .select('*')
+    .single()
+
+  if (!error) return data
+
+  if (legacyRow && isMissingWorkspaceModernColumn(error)) {
+    const { data: legacyData, error: legacyError } = await supabaseClient
+      .from('workspaces')
+      .upsert(legacyRow, { onConflict })
+      .select('*')
+      .single()
+
+    if (!legacyError) return legacyData
+    throw new HttpError(500, legacyError.message, errorCode)
+  }
+
+  throw new HttpError(500, error.message, errorCode)
+}
+
+const getUserProfileIdentity = async (userId, { supabaseClient = supabase } = {}) => {
+  const { data, error } = await supabaseClient
+    .from('user_profiles')
+    .select('display_name, username, avatar_url')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (!error) return data || {}
+
+  if (isMissingColumnError(error, 'user_profiles', 'username')) {
+    const { data: legacyProfile, error: legacyError } = await supabaseClient
+      .from('user_profiles')
+      .select('display_name, avatar_url')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (!legacyError) return legacyProfile || {}
+    throw new HttpError(500, legacyError.message, 'PROFILE_QUERY_FAILED')
+  }
+
+  throw new HttpError(500, error.message, 'PROFILE_QUERY_FAILED')
+}
+
 const getUserIdentity = async (userId, { supabaseClient = supabase } = {}) => {
-  const [{ data: user, error: userError }, { data: profile, error: profileError }] = await Promise.all([
+  const [{ data: user, error: userError }, profile] = await Promise.all([
     supabaseClient
       .from('users')
       .select('email')
       .eq('id', userId)
       .maybeSingle(),
-    supabaseClient
-      .from('user_profiles')
-      .select('display_name, username, avatar_url')
-      .eq('user_id', userId)
-      .maybeSingle()
+    getUserProfileIdentity(userId, { supabaseClient })
   ])
 
   if (userError) throw new HttpError(500, userError.message, 'USER_QUERY_FAILED')
-  if (profileError) throw new HttpError(500, profileError.message, 'PROFILE_QUERY_FAILED')
 
   return {
     email: user?.email || '',
@@ -79,47 +141,45 @@ const countWorkspaceMembers = async (workspaceId, { supabaseClient = supabase } 
 }
 
 export const ensurePublicWorkspace = async ({ supabaseClient = supabase } = {}) => {
-  const { data, error } = await supabaseClient
-    .from('workspaces')
-    .upsert(
-      {
-        slug: PUBLIC_WORKSPACE_SLUG,
-        name: 'Community',
-        kind: WORKSPACE_KIND.public,
-        is_default: true
-      },
-      { onConflict: 'slug' }
-    )
-    .select('*')
-    .single()
-
-  if (error) throw new HttpError(500, error.message, 'WORKSPACE_ENSURE_FAILED')
-  return data
+  return upsertWorkspaceWithLegacyFallback({
+    row: {
+      slug: PUBLIC_WORKSPACE_SLUG,
+      name: 'Community',
+      kind: WORKSPACE_KIND.public,
+      is_default: true
+    },
+    legacyRow: {
+      slug: PUBLIC_WORKSPACE_SLUG,
+      name: 'Community',
+      is_default: true
+    },
+    errorCode: 'WORKSPACE_ENSURE_FAILED',
+    supabaseClient
+  })
 }
 
 export const ensurePersonalWorkspace = async (userId, { supabaseClient = supabase } = {}) => {
   const identity = await getUserIdentity(userId, { supabaseClient })
-  const name = identity.displayName
-    ? `${identity.displayName}'s Workspace`
-    : 'Personal Workspace'
+  const slug = `personal-${userId}`
+  const name = `${userId} Workspace`
 
-  const { data: workspace, error } = await supabaseClient
-    .from('workspaces')
-    .upsert(
-      {
-        slug: `personal-${userId}`,
-        name,
-        kind: WORKSPACE_KIND.personal,
-        is_default: false,
-        avatar_url: identity.avatarUrl || null,
-        created_by: userId
-      },
-      { onConflict: 'slug' }
-    )
-    .select('*')
-    .single()
-
-  if (error) throw new HttpError(500, error.message, 'PERSONAL_WORKSPACE_ENSURE_FAILED')
+  const workspace = await upsertWorkspaceWithLegacyFallback({
+    row: {
+      slug,
+      name,
+      kind: WORKSPACE_KIND.personal,
+      is_default: false,
+      avatar_url: identity.avatarUrl || null,
+      created_by: userId
+    },
+    legacyRow: {
+      slug,
+      name,
+      is_default: false
+    },
+    errorCode: 'PERSONAL_WORKSPACE_ENSURE_FAILED',
+    supabaseClient
+  })
 
   const { error: memberError } = await supabaseClient
     .from('workspace_members')
@@ -166,7 +226,7 @@ export const assertWorkspaceMember = async (userId, workspaceId, { supabaseClien
     getWorkspaceMembership(userId, workspaceId, { supabaseClient })
   ])
 
-  if (!workspace || !membership || workspace.kind === WORKSPACE_KIND.public) {
+  if (!workspace || !membership || getWorkspaceKind(workspace) === WORKSPACE_KIND.public) {
     throw new HttpError(404, 'Workspace not found', 'WORKSPACE_NOT_FOUND')
   }
 
@@ -192,6 +252,7 @@ const getPreferredWorkspaceId = async (userId, { supabaseClient = supabase } = {
     .eq('user_id', userId)
     .maybeSingle()
 
+  if (isMissingRelationError(error, 'user_workspace_preferences')) return ''
   if (error) throw new HttpError(500, error.message, 'WORKSPACE_PREFERENCE_QUERY_FAILED')
   return data?.active_workspace_id || ''
 }
@@ -199,7 +260,7 @@ const getPreferredWorkspaceId = async (userId, { supabaseClient = supabase } = {
 export const setActiveWorkspace = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
   const { workspace, membership, mapped } = await assertWorkspaceMember(userId, workspaceId, { supabaseClient })
 
-  if (workspace.kind === WORKSPACE_KIND.public) {
+  if (getWorkspaceKind(workspace) === WORKSPACE_KIND.public) {
     throw new HttpError(400, 'Community cannot be selected as a project workspace', 'PUBLIC_WORKSPACE_NOT_SELECTABLE')
   }
 
@@ -214,6 +275,9 @@ export const setActiveWorkspace = async (userId, workspaceId, { supabaseClient =
       { onConflict: 'user_id' }
     )
 
+  if (isMissingRelationError(error, 'user_workspace_preferences')) {
+    return mapWorkspace(workspace, membership.role, mapped.memberCount)
+  }
   if (error) throw new HttpError(500, error.message, 'WORKSPACE_SELECT_FAILED')
   return mapWorkspace(workspace, membership.role, mapped.memberCount)
 }
@@ -226,7 +290,7 @@ export const getActiveWorkspace = async (userId, { supabaseClient = supabase } =
   if (preferredWorkspaceId) {
     const workspace = await getWorkspaceById(preferredWorkspaceId, { supabaseClient })
     const membership = await getWorkspaceMembership(userId, preferredWorkspaceId, { supabaseClient })
-    if (workspace && membership && workspace.kind !== WORKSPACE_KIND.public) {
+    if (workspace && membership && getWorkspaceKind(workspace) !== WORKSPACE_KIND.public) {
       return mapWorkspace(workspace, membership.role, await countWorkspaceMembers(workspace.id, { supabaseClient }))
     }
   }
@@ -246,11 +310,20 @@ export const listUserWorkspaces = async (userId, { supabaseClient = supabase } =
   const workspaceIds = (memberships || []).map((item) => item.workspace_id).filter(Boolean)
   if (!workspaceIds.length) return { activeWorkspace, workspaces: [activeWorkspace] }
 
-  const { data: rows, error: workspaceError } = await supabaseClient
+  let { data: rows, error: workspaceError } = await supabaseClient
     .from('workspaces')
     .select('*')
     .in('id', workspaceIds)
     .neq('kind', WORKSPACE_KIND.public)
+
+  if (workspaceError && isMissingColumnError(workspaceError, 'workspaces', 'kind')) {
+    const legacyResult = await supabaseClient
+      .from('workspaces')
+      .select('*')
+      .in('id', workspaceIds)
+    rows = (legacyResult.data || []).filter((row) => getWorkspaceKind(row) !== WORKSPACE_KIND.public)
+    workspaceError = legacyResult.error
+  }
 
   if (workspaceError) throw new HttpError(500, workspaceError.message, 'WORKSPACE_LIST_FAILED')
 
@@ -365,7 +438,7 @@ export const resolveProjectCreateWorkspace = async (userId, options = {}) => {
 
 export const leaveWorkspace = async (userId, workspaceId, input = {}, { supabaseClient = supabase } = {}) => {
   const { workspace, membership } = await assertWorkspaceMember(userId, workspaceId, { supabaseClient })
-  if (workspace.kind === WORKSPACE_KIND.personal) {
+  if (getWorkspaceKind(workspace) === WORKSPACE_KIND.personal) {
     throw new HttpError(400, 'Personal workspace cannot be left', 'PERSONAL_WORKSPACE_REQUIRED')
   }
 

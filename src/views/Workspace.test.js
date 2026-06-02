@@ -126,13 +126,17 @@ test('workspace view delegates sidebar navigation and account chrome to a focuse
   assert.doesNotMatch(sidebarSource, /class="usage-pill"/)
   assert.doesNotMatch(sidebarSource, /0% used/)
   assert.doesNotMatch(sidebarSource, /title="Trash"/)
-  assert.match(sidebarSource, /title="Settings"/)
+  assert.match(sidebarSource, /title="Profile settings"/)
+  assert.match(sidebarSource, /class="sidebar-profile-btn"/)
+  assert.match(sidebarSource, /:fallback-name="workspaceBrand"/)
+  assert.match(sidebarSource, /user\?\.avatarUrl/)
+  assert.match(sidebarSource, /\{\{ avatarInitial \}\}/)
   assert.match(sidebarSource, /title="Admin Dashboard"/)
   assert.match(sidebarSource, /title="Logout"/)
   assert.match(sidebarSource, /class="sidebar-tool-btn sidebar-tool-btn--logout"/)
   assert.doesNotMatch(sidebarSource, /title="Help"/)
   assert.doesNotMatch(sidebarSource, /TrashOutline/)
-  assert.match(sidebarSource, /SettingsOutline/)
+  assert.doesNotMatch(sidebarSource, /SettingsOutline/)
   assert.doesNotMatch(sidebarSource, /DashboardOutline/)
   assert.match(sidebarSource, /WindowSidebarOutline/)
   assert.match(sidebarSource, /LogOutOutline/)
@@ -160,7 +164,12 @@ test('workspace view delegates sidebar navigation and account chrome to a focuse
   assert.match(sidebarSource, /\.sidebar-tool-btn--logout\s*\{[^}]*margin-left:\s*auto/s)
   assert.match(sidebarSource, /\.sidebar-tool-btn:hover\s*\{/)
   assert.doesNotMatch(workspaceSource, /@usage="router\.push\('\/usage'\)"/)
-  assert.match(workspaceSource, /@settings="router\.push\('\/usage'\)"/)
+  assert.doesNotMatch(workspaceSource, /@settings="router\.push\('\/usage'\)"/)
+  assert.match(workspaceSource, /@settings="openProfileSettings"/)
+  assert.match(workspaceSource, /<WorkspaceProfileModal/)
+  assert.match(workspaceSource, /v-model:show="showProfileModal"/)
+  assert.match(workspaceSource, /@upload-avatar="triggerAvatarUpload"/)
+  assert.match(workspaceSource, /@save-profile="saveProfileSettings"/)
   assert.match(workspaceSource, /@admin="router\.push\('\/admin\/dashboard'\)"/)
   assert.match(workspaceSource, /PersonOutline/)
   assert.match(workspaceSource, /BookmarkOutline/)
@@ -241,6 +250,32 @@ test('workspace view delegates project and template cards to a focused component
   assert.match(cardsGridSource, /\.project-meta-row\s*\{/)
 })
 
+test('workspace switcher falls back to the user-derived workspace brand', () => {
+  const switcherSource = readWorkspaceComponentSource('WorkspaceSwitcher')
+
+  assert.match(switcherSource, /fallbackName/)
+  assert.match(switcherSource, /currentWorkspace\?\.name \|\| fallbackName/)
+  assert.doesNotMatch(switcherSource, /currentWorkspace\?\.name \|\| 'Personal Workspace'/)
+})
+
+test('workspace cards show owner avatars only on shared and template surfaces', () => {
+  const cardsGridSource = readWorkspaceComponentSource('WorkspaceCardsGrid')
+
+  assert.match(cardsGridSource, /showOwnerAvatar\(item,\s*activeSection\)/)
+  assert.match(cardsGridSource, /if \(activeSection === 'projects'\) return false/)
+  assert.match(cardsGridSource, /if \(activeSection === 'shared'\) return true/)
+  assert.match(cardsGridSource, /if \(activeSection === 'featured'\)/)
+})
+
+test('workspace shared templates render an empty state instead of a blank panel', () => {
+  const cardsGridSource = readWorkspaceComponentSource('WorkspaceCardsGrid')
+
+  assert.match(cardsGridSource, /v-if="!items\.length"/)
+  assert.match(cardsGridSource, /class="cards-empty-state"/)
+  assert.match(cardsGridSource, /No shared templates yet/)
+  assert.match(cardsGridSource, /\.cards-empty-state\s*\{/)
+})
+
 test('workspace project card hover outline stays inside the cover media', () => {
   const cardsGridSource = readWorkspaceComponentSource('WorkspaceCardsGrid')
 
@@ -299,6 +334,19 @@ test('workspace view delegates project and template modals to a focused componen
   assert.match(modalsSource, /\.template-preview\s*\{/)
   assert.match(modalsSource, /\.template-preview-description\s*\{/)
   assert.match(modalsSource, /\.template-preview-content\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto/s)
+})
+
+test('workspace profile modal exposes avatar, display name, email, and user id surfaces', () => {
+  const profileModalSource = readWorkspaceComponentSource('WorkspaceProfileModal')
+
+  assert.match(profileModalSource, /title="Profile settings"/)
+  assert.match(profileModalSource, /@click="\$emit\('uploadAvatar'\)"/)
+  assert.match(profileModalSource, /v-model="displayNameModel"/)
+  assert.match(profileModalSource, /label="Display Name"/)
+  assert.match(profileModalSource, /label="Email"/)
+  assert.match(profileModalSource, /label="User ID"/)
+  assert.match(profileModalSource, /readonly/)
+  assert.match(profileModalSource, /@click="\$emit\('saveProfile'\)"/)
 })
 
 test('workspace team modals expose create workspace slug, avatar, and invite surfaces', () => {
@@ -414,4 +462,12 @@ test('workspace cloud surfaces fail softly so local projects remain accessible',
   assert.match(workspaceSource, /try\s*\{\s*await loadPendingWorkspaceInvites\(\)\s*\}\s*catch/s)
   assert.match(workspaceSource, /try\s*\{\s*await loadFeaturedTemplates\(activeTemplateScope\.value\)\s*\}\s*catch/s)
   assert.match(workspaceSource, /await initProjectsStore\(\)[\s\S]*await loadWorkspaceSurfaces\(\)/)
+})
+
+test('workspace template scope follows the effective backend scope after loading', () => {
+  const storeSource = readFileSync(new URL('../stores/workspace.js', import.meta.url), 'utf8')
+
+  assert.match(workspaceSource, /const activeTemplateScope = ref\('community'\)/)
+  assert.match(workspaceSource, /syncActiveTemplateScopeFromStore\(\)/)
+  assert.match(storeSource, /templatesScope\.value = response\?\.data\?\.scope \|\| templatesScope\.value/)
 })

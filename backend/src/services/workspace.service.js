@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { env } from '../config/env.js'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
+import { isMissingColumnError, isMissingRelationError } from '../utils/supabase-schema.js'
 import { getProject, createProject } from './projects.service.js'
 import { sanitizeCanvasData } from './canvas-sanitize.service.js'
 import {
@@ -18,6 +19,7 @@ import {
   createTeamWorkspace as createTeamWorkspaceRecord,
   ensurePublicWorkspace,
   getActiveWorkspace,
+  getWorkspaceKind,
   getWorkspaceById,
   listUserWorkspaces,
   listWorkspaceMembers,
@@ -44,6 +46,15 @@ const getUserProfile = async (userId) => {
     .eq('user_id', userId)
     .maybeSingle()
 
+  if (isMissingColumnError(error, 'user_profiles', 'username')) {
+    const { data: legacyProfile, error: legacyError } = await supabase
+      .from('user_profiles')
+      .select('display_name, avatar_url')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (!legacyError) return legacyProfile || {}
+    throw new HttpError(500, legacyError.message, 'PROFILE_QUERY_FAILED')
+  }
   if (error) throw new HttpError(500, error.message, 'PROFILE_QUERY_FAILED')
   return data || {}
 }
@@ -122,7 +133,7 @@ const assertTemplateReadable = async (userId, template) => {
   if (!template) throw new HttpError(404, 'Shared template not found', 'TEMPLATE_NOT_FOUND')
   const workspace = await getWorkspaceById(template.workspace_id)
   if (!workspace) throw new HttpError(404, 'Shared template not found', 'TEMPLATE_NOT_FOUND')
-  if ((workspace.kind || WORKSPACE_KIND.public) === WORKSPACE_KIND.public) {
+  if (getWorkspaceKind(workspace) === WORKSPACE_KIND.public) {
     return { workspace: mapWorkspace(workspace, 'member', 0) }
   }
   const { mapped } = await assertWorkspaceMember(userId, workspace.id)
@@ -290,6 +301,9 @@ export const listTemplatesByScope = async (userId, rawScope = 'auto') => {
       .select('template_id')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
+    if (isMissingRelationError(favoritesError, 'shared_project_template_favorites')) {
+      return { workspace, scope: effectiveScope, templates: [] }
+    }
     if (favoritesError) throw new HttpError(500, favoritesError.message, 'TEMPLATE_FAVORITES_LIST_FAILED')
     const templateIds = (favorites || []).map((item) => item.template_id).filter(Boolean)
     if (!templateIds.length) {

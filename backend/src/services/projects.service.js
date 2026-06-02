@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
+import { isMissingColumnError } from '../utils/supabase-schema.js'
 import { sanitizeCanvasData } from './canvas-sanitize.service.js'
 import {
   assertProjectCanEdit,
@@ -42,6 +43,11 @@ const normalizeThumbnailUrl = (value) => {
   if (!raw) return null
   return /^https?:\/\//i.test(raw) ? raw : null
 }
+
+const isMissingProjectWorkspaceColumn = (error) => (
+  isMissingColumnError(error, 'projects', 'workspace_id') ||
+  isMissingColumnError(error, 'projects', 'access_mode')
+)
 
 const hasCanvasContent = (canvasData) => {
   const nodes = Array.isArray(canvasData?.nodes) ? canvasData.nodes.length : 0
@@ -128,7 +134,17 @@ export const listProjects = async (userId) => {
     query = query.eq('workspace_id', activeWorkspace.id).eq('user_id', userId)
   }
 
-  const { data, error } = await query
+  let { data, error } = await query
+
+  if (error && isMissingProjectWorkspaceColumn(error)) {
+    const legacyResult = await supabase
+      .from('projects')
+      .select('id, user_id, name, thumbnail_url, created_at, updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+    data = legacyResult.data
+    error = legacyResult.error
+  }
 
   if (error) throw new HttpError(500, error.message, 'PROJECT_LIST_FAILED')
 
@@ -163,7 +179,7 @@ export const createProject = async (userId, input) => {
   const normalizedCanvasData = await normalizeCanvasForStorage(payload.canvasData)
   const { workspace, accessMode } = await resolveProjectCreateWorkspace(userId)
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('projects')
     .insert({
       user_id: userId,
@@ -175,6 +191,21 @@ export const createProject = async (userId, input) => {
     })
     .select('*')
     .single()
+
+  if (error && isMissingProjectWorkspaceColumn(error) && accessMode !== 'team') {
+    const legacyResult = await supabase
+      .from('projects')
+      .insert({
+        user_id: userId,
+        name: payload.name,
+        canvas_json: normalizedCanvasData,
+        thumbnail_url: normalizeThumbnailUrl(payload.thumbnailUrl)
+      })
+      .select('*')
+      .single()
+    data = legacyResult.data
+    error = legacyResult.error
+  }
 
   if (error) throw new HttpError(500, error.message, 'PROJECT_CREATE_FAILED')
 

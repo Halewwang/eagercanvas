@@ -150,7 +150,7 @@ set
 insert into public.workspaces (slug, name, kind, is_default, avatar_url, created_by)
 select
   'personal-' || u.id::text,
-  coalesce(nullif(p.display_name, ''), split_part(u.email, '@', 1), 'Personal') || '''s Workspace',
+  u.id::text || ' Workspace',
   'personal',
   false,
   p.avatar_url,

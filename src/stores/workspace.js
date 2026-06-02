@@ -343,6 +343,7 @@ export const loadFeaturedTemplates = async (scope = 'auto') => {
 
   const response = await apiListFeaturedTemplates(templatesScope.value === 'auto' ? {} : { scope: templatesScope.value })
   currentWorkspace.value = normalizeWorkspace(response?.data?.workspace || currentWorkspace.value)
+  templatesScope.value = response?.data?.scope || templatesScope.value
   featuredTemplates.value = Array.isArray(response?.data?.templates)
     ? response.data.templates.map(normalizeTemplate).filter(Boolean)
     : []

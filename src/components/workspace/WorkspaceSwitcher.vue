@@ -6,7 +6,7 @@
         <span v-else>{{ workspaceInitial }}</span>
       </div>
       <div class="workspace-copy">
-        <strong>{{ currentWorkspace?.name || 'Personal Workspace' }}</strong>
+        <strong>{{ currentWorkspace?.name || fallbackName }}</strong>
         <span>{{ workspaceMeta }}</span>
       </div>
       <span class="switcher-chevron-stack" aria-hidden="true">
@@ -135,6 +135,10 @@ const props = defineProps({
   pendingInvites: {
     type: Array,
     default: () => []
+  },
+  fallbackName: {
+    type: String,
+    default: 'Shared Workspace'
   }
 })
 

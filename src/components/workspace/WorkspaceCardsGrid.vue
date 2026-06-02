@@ -1,5 +1,9 @@
 <template>
   <section class="cards-grid" :class="`cards-grid--${activeSection}`">
+    <div v-if="!items.length" class="cards-empty-state">
+      <strong>{{ emptyStateTitle }}</strong>
+      <span>{{ emptyStateCopy }}</span>
+    </div>
     <article
       v-for="item in items"
       :key="item.id"
@@ -7,7 +11,7 @@
       @click="$emit('primaryClick', item)"
     >
       <div class="card-media" :class="{ 'project-media': activeSection !== 'featured' }">
-        <div v-if="showOwnerAvatar(item)" class="owner-avatar" title="Shared by">
+        <div v-if="showOwnerAvatar(item, activeSection)" class="owner-avatar" title="Shared by">
           <img v-if="item.ownerAvatarUrl" :src="item.ownerAvatarUrl" alt="owner avatar" />
           <span v-else>{{ getOwnerInitial(item) }}</span>
         </div>
@@ -74,12 +78,13 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { NIcon } from 'naive-ui'
 import { BookmarkOutline, EllipsisHorizontalOutline } from '@/icons/coolicons'
 import { BaseDropdown } from '@/components/ui'
 import WorkspaceTemplateCanvasPreview from './WorkspaceTemplateCanvasPreview.vue'
 
-defineProps({
+const props = defineProps({
   activeSection: {
     type: String,
     default: 'projects'
@@ -108,8 +113,25 @@ defineEmits([
   'favoriteTemplate'
 ])
 
-const showOwnerAvatar = (item = {}) => {
+const emptyStateTitle = computed(() => {
+  if (props.activeSection === 'featured') return 'No shared templates yet'
+  if (props.activeSection === 'shared') return 'No shared projects yet'
+  return 'No projects yet'
+})
+
+const emptyStateCopy = computed(() => {
+  if (props.activeSection === 'featured') return 'Published community and workspace templates will appear here.'
+  if (props.activeSection === 'shared') return 'Projects shared with you by workspace members will appear here.'
+  return 'Create a project to start building in this workspace.'
+})
+
+const showOwnerAvatar = (item = {}, activeSection = 'projects') => {
   if (!item) return false
+  if (activeSection === 'projects') return false
+  if (activeSection === 'shared') return true
+  if (activeSection === 'featured') {
+    return Boolean(item.ownerAvatarUrl || item.ownerDisplayName || item.ownerUserId)
+  }
   if (item.ownerAvatarUrl || item.ownerDisplayName) return true
   return item.accessMode === 'team' && item.ownerUserId
 }
@@ -138,6 +160,29 @@ const projectBadges = (item = {}) => {
 .cards-grid--featured {
   grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
   gap: 28px;
+}
+
+.cards-empty-state {
+  grid-column: 1 / -1;
+  min-height: 180px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(236, 238, 244, 0.68);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+}
+
+.cards-empty-state strong {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.cards-empty-state span {
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .project-card {
