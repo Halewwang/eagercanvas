@@ -35,6 +35,8 @@ test('GPT Image lite reuses GPT Image 2 controls with a separate model key', () 
   assert.deepEqual(lite.defaultParams, gptImage2.defaultParams)
   assert.equal(lite.supportImageReference, gptImage2.supportImageReference)
   assert.equal(lite.showAdvancedCapsuleParams, gptImage2.showAdvancedCapsuleParams)
+  assert.ok(lite.requestTimeoutMs > 240000)
+  assert.ok(lite.requestTimeoutMs < gptImage2.requestTimeoutMs)
 })
 
 test('GPT Image 2 exposes the same ratio list as Gemini image models', () => {

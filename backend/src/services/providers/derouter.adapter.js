@@ -7,7 +7,7 @@ import { normalizeImageResponse } from './image-response.js'
 import { extensionFromMimeType, fetchBinaryFromSource } from './media-source.js'
 
 const DEFAULT_DEROUTER_BASE_URL = 'https://api-direct.derouter.ai/openai/v1'
-const DEFAULT_DEROUTER_TIMEOUT_MS = 240000
+const DEFAULT_DEROUTER_TIMEOUT_MS = 300000
 
 const pickFirstImageInput = (payload = {}) => {
   if (typeof payload.image === 'string') return payload.image

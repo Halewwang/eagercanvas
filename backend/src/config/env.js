@@ -43,7 +43,7 @@ export const env = {
 
   derouterApiBaseUrl: process.env.DEROUTER_API_BASE_URL || 'https://api-direct.derouter.ai/openai/v1',
   derouterApiKey: process.env.DEROUTER_API_KEY || '',
-  derouterTimeoutMs: Number(process.env.DEROUTER_TIMEOUT_MS || 240000),
+  derouterTimeoutMs: Number(process.env.DEROUTER_TIMEOUT_MS || 300000),
 
   dashboard302ApiBaseUrl: process.env.DASHBOARD_302_API_BASE_URL || '',
   dashboard302ApiKey: process.env.DASHBOARD_302_API_KEY || '',

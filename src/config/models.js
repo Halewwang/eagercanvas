@@ -149,8 +149,8 @@ export const IMAGE_MODELS = [
         ...GPT_IMAGE_2_MODEL_CONFIG,
         label: 'GPT Image lite',
         key: 'gpt-image-lite',
-        requestTimeoutMs: 240000,
-        tips: '使用 derouter GPT-Image-2 同步图片接口，参数与 GPT Image 2 保持一致。'
+        requestTimeoutMs: 330000,
+        tips: '使用 derouter GPT-Image-2 同步图片接口，参数与 GPT Image 2 保持一致，等待窗口覆盖 240s 长耗时生成。'
     },
     {
         label: 'Gemini 3.1 Flash Image Preview',

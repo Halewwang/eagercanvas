@@ -114,3 +114,47 @@ test('GPT Image lite edit calls derouter multipart image endpoint', async () => 
   assert.equal(requests[0].body.get('quality'), 'high')
   assert.ok(requests[0].body.get('image') instanceof Blob)
 })
+
+test('GPT Image lite keeps derouter upstream timeout above the documented 240s boundary', async () => {
+  const originalFetch = global.fetch
+  const originalSetTimeout = global.setTimeout
+  const originalClearTimeout = global.clearTimeout
+  const timeoutDelays = []
+
+  global.fetch = async () => new Response(
+    JSON.stringify({
+      data: [{ b64_json: 'aW1hZ2UtYnl0ZXM=' }]
+    }),
+    {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    }
+  )
+  global.setTimeout = (_callback, delay) => {
+    timeoutDelays.push(delay)
+    return { delay }
+  }
+  global.clearTimeout = () => {}
+
+  try {
+    await providerGenerateImage(
+      {
+        model: 'gpt-image-lite',
+        prompt: 'A slow render',
+        ratio: '1:1',
+        resolution: '2k',
+        quality: 'high'
+      },
+      {
+        derouterApiBaseUrl: 'https://derouter.test/openai/v1',
+        derouterApiKey: 'sk-derouter'
+      }
+    )
+  } finally {
+    global.fetch = originalFetch
+    global.setTimeout = originalSetTimeout
+    global.clearTimeout = originalClearTimeout
+  }
+
+  assert.equal(timeoutDelays[0], 300000)
+})
