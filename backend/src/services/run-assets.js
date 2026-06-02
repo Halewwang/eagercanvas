@@ -17,6 +17,20 @@ export const extractProviderVideoUrl = (result = {}) =>
 export const isPersistedUploadUrl = (value = '') => String(value || '').includes('/storage/v1/object/public/uploads/')
 export const isInlineDataUrl = (value = '') => /^data:image\/[^;,]+;base64,/i.test(String(value || '').trim())
 
+const DEROUTER_INLINE_CLIENT_PERSIST_MAX_BYTES = 8 * 1024 * 1024
+
+const estimateInlineDataUrlBytes = (value = '') => {
+  const match = String(value || '').trim().match(/^data:image\/[^;,]+;base64,(.+)$/is)
+  if (!match) return 0
+  const base64 = String(match[1] || '').replace(/\s+/g, '')
+  if (!base64) return 0
+  const padding = base64.endsWith('==') ? 2 : (base64.endsWith('=') ? 1 : 0)
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding)
+}
+
+const requiresBackendInlinePersistence = (value = '') =>
+  estimateInlineDataUrlBytes(value) > DEROUTER_INLINE_CLIENT_PERSIST_MAX_BYTES
+
 export const persistRemoteUrlIfNeeded = async (url, fileName) => {
   const raw = String(url || '').trim()
   if (!raw || isPersistedUploadUrl(raw)) return raw
@@ -31,10 +45,16 @@ export const persistDataUrlIfNeeded = async (dataUrl, fileName) => {
 
 export const shouldPersistImageResultAssetsBeforeResponse = (result = {}) => {
   const provider = String(result?.provider || result?.raw?.provider || '').trim().toLowerCase()
-  const hasInlineImage = (Array.isArray(result?.data) ? result.data : [])
-    .some((entry) => isInlineDataUrl(entry?.url))
+  const inlineImages = (Array.isArray(result?.data) ? result.data : [])
+    .map((entry) => String(entry?.url || '').trim())
+    .filter((url) => isInlineDataUrl(url))
+  const hasInlineImage = inlineImages.length > 0
 
-  return !(provider === 'derouter' && hasInlineImage)
+  if (provider === 'derouter' && hasInlineImage) {
+    return inlineImages.some((url) => requiresBackendInlinePersistence(url))
+  }
+
+  return true
 }
 
 export const persistImageResultAssets = async (result = {}, options = {}) => {
@@ -50,7 +70,10 @@ export const persistImageResultAssets = async (result = {}, options = {}) => {
 
       const fileName = `generated-${Date.now()}-${index}.png`
       const persistedUrl = isInlineDataUrl(remoteUrl)
-        ? await persistDataUrl(remoteUrl, fileName).catch(() => remoteUrl)
+        ? await persistDataUrl(remoteUrl, fileName).catch((error) => {
+            if (requiresBackendInlinePersistence(remoteUrl)) throw error
+            return remoteUrl
+          })
         : await persistRemoteUrl(remoteUrl, fileName).catch(() => remoteUrl)
 
       return {
