@@ -70,6 +70,7 @@ test('workspace view delegates the main header to a focused component', () => {
 
 test('workspace shared templates header uses compact title and description spacing', () => {
   const headerSource = readWorkspaceComponentSource('WorkspaceHeader')
+  const cardsGridSource = readWorkspaceComponentSource('WorkspaceCardsGrid')
 
   assert.match(headerSource, /\.main-header-copy\s*\{[^}]*flex:\s*1 1 auto/s)
   assert.match(headerSource, /\.main-header-copy\s*\{[^}]*min-width:\s*0/s)
@@ -83,6 +84,7 @@ test('workspace shared templates header uses compact title and description spaci
   assert.match(headerSource, /@media \(max-width:\s*720px\)/)
   assert.match(headerSource, /@media \(max-width:\s*720px\)[\s\S]*\.main-header p\s*\{[^}]*white-space:\s*normal/s)
   assert.doesNotMatch(headerSource, /\.main-header p\s*\{[^}]*margin:\s*10px 0 0/s)
+  assert.doesNotMatch(cardsGridSource, /\.cards-empty-state\s*\{[^}]*border-top/s)
 })
 
 test('workspace view delegates sidebar navigation and account chrome to a focused component', () => {

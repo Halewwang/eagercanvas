@@ -121,9 +121,17 @@ const mapProjectForRead = async (row, {
     : row.canvas_json
 })
 
+export const shouldUseLegacyPersonalProjectList = (activeWorkspace = {}) => (
+  activeWorkspace.kind !== 'team' && activeWorkspace.schemaVersion === 'legacy'
+)
+
 export const applyProjectListWorkspaceFilter = (query, activeWorkspace, userId) => {
   if (activeWorkspace.kind === 'team') {
     return query.eq('workspace_id', activeWorkspace.id).eq('access_mode', 'team')
+  }
+
+  if (shouldUseLegacyPersonalProjectList(activeWorkspace)) {
+    return query.eq('user_id', userId)
   }
 
   return query
@@ -131,23 +139,38 @@ export const applyProjectListWorkspaceFilter = (query, activeWorkspace, userId) 
     .eq('user_id', userId)
 }
 
+const listLegacyPersonalProjectRows = async (userId) => {
+  return supabase
+    .from('projects')
+    .select('id, user_id, name, thumbnail_url, created_at, updated_at')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+}
+
 export const listProjects = async (userId) => {
   const activeWorkspace = await getActiveWorkspace(userId)
-  let query = supabase
-    .from('projects')
-    .select('id, user_id, workspace_id, access_mode, name, thumbnail_url, created_at, updated_at')
-    .order('updated_at', { ascending: false })
+  let data = null
+  let error = null
 
-  query = applyProjectListWorkspaceFilter(query, activeWorkspace, userId)
+  if (shouldUseLegacyPersonalProjectList(activeWorkspace)) {
+    const legacyResult = await listLegacyPersonalProjectRows(userId)
+    data = legacyResult.data
+    error = legacyResult.error
+  } else {
+    let query = supabase
+      .from('projects')
+      .select('id, user_id, workspace_id, access_mode, name, thumbnail_url, created_at, updated_at')
+      .order('updated_at', { ascending: false })
 
-  let { data, error } = await query
+    query = applyProjectListWorkspaceFilter(query, activeWorkspace, userId)
+
+    const modernResult = await query
+    data = modernResult.data
+    error = modernResult.error
+  }
 
   if (error && isMissingProjectWorkspaceColumn(error)) {
-    const legacyResult = await supabase
-      .from('projects')
-      .select('id, user_id, name, thumbnail_url, created_at, updated_at')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
+    const legacyResult = await listLegacyPersonalProjectRows(userId)
     data = legacyResult.data
     error = legacyResult.error
   }

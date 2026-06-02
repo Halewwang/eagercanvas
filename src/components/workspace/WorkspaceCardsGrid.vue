@@ -175,7 +175,6 @@ const projectBadges = (item = {}) => {
 .cards-empty-state {
   grid-column: 1 / -1;
   min-height: 180px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
   color: rgba(236, 238, 244, 0.68);
   display: flex;
   flex-direction: column;

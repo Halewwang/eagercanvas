@@ -76,8 +76,26 @@ const createLegacyWorkspaceClient = ({ upserts = [] } = {}) => ({
 })
 
 test('mapWorkspace infers public and personal kinds from legacy workspace rows', () => {
-  assert.equal(mapWorkspace({ id: 'public-1', slug: 'shared-workspace', name: 'Shared Workspace', is_default: true }).kind, 'public')
-  assert.equal(mapWorkspace({ id: 'personal-1', slug: 'personal-user-1', name: 'Personal Workspace', is_default: false }).kind, 'personal')
+  const publicWorkspace = mapWorkspace({ id: 'public-1', slug: 'shared-workspace', name: 'Shared Workspace', is_default: true })
+  const personalWorkspace = mapWorkspace({ id: 'personal-1', slug: 'personal-user-1', name: 'Personal Workspace', is_default: false })
+
+  assert.equal(publicWorkspace.kind, 'public')
+  assert.equal(personalWorkspace.kind, 'personal')
+  assert.equal(publicWorkspace.schemaVersion, 'legacy')
+  assert.equal(personalWorkspace.schemaVersion, 'legacy')
+})
+
+test('mapWorkspace marks modern workspace rows when kind exists', () => {
+  const workspace = mapWorkspace({
+    id: 'personal-1',
+    slug: 'personal-user-1',
+    name: 'Personal Workspace',
+    kind: 'personal',
+    is_default: false
+  })
+
+  assert.equal(workspace.kind, 'personal')
+  assert.equal(workspace.schemaVersion, 'modern')
 })
 
 test('ensurePublicWorkspace falls back to legacy workspace columns when kind is missing', async () => {

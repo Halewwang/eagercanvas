@@ -43,6 +43,10 @@ export const getWorkspaceKind = (row = {}) => {
   return WORKSPACE_KIND.team
 }
 
+const getWorkspaceSchemaVersion = (row = {}) => (
+  Object.prototype.hasOwnProperty.call(row || {}, 'kind') ? 'modern' : 'legacy'
+)
+
 export const mapWorkspace = (row, role = 'member', memberCount = 1) => ({
   id: row.id,
   slug: row.slug,
@@ -50,7 +54,8 @@ export const mapWorkspace = (row, role = 'member', memberCount = 1) => ({
   kind: getWorkspaceKind(row),
   role,
   avatarUrl: row.avatar_url || '',
-  memberCount: Number(memberCount || 0)
+  memberCount: Number(memberCount || 0),
+  schemaVersion: getWorkspaceSchemaVersion(row)
 })
 
 const isMissingWorkspaceModernColumn = (error) => (
