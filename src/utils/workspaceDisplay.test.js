@@ -42,16 +42,65 @@ test('workspace display helpers preserve brand and section copy behavior', () =>
   assert.equal(workspaceDisplay.getWorkspaceSectionTitle('shared'), 'Shared with me')
   assert.equal(workspaceDisplay.getWorkspaceSectionTitle('projects'), 'My Project')
   assert.equal(
+    workspaceDisplay.getWorkspaceSectionTitle('projects', { currentWorkspace: { kind: 'team' } }),
+    'Team Workspace'
+  )
+  assert.equal(
     workspaceDisplay.getWorkspaceSectionDescription('featured'),
     'Community and workspace templates. Using one creates a full copy in the active workspace.'
   )
   assert.equal(
     workspaceDisplay.getWorkspaceSectionDescription('shared'),
-    'Team projects you can open in read-only mode'
+    'Projects shared directly with you by another user.'
   )
   assert.equal(
     workspaceDisplay.getWorkspaceSectionDescription('projects'),
     'Projects are created in the active workspace. Team members can view team projects by default.'
+  )
+  assert.equal(
+    workspaceDisplay.getWorkspaceSectionDescription('projects', { currentWorkspace: { kind: 'team' } }),
+    'Projects in this team workspace. Members can open team projects in read-only mode by default.'
+  )
+})
+
+test('workspace project section helper separates team viewers from direct shares', () => {
+  assert.equal(typeof workspaceDisplay.getWorkspaceProjectSectionKey, 'function')
+  assert.equal(
+    workspaceDisplay.getWorkspaceProjectSectionKey({
+      accessSource: 'direct_share',
+      accessMode: 'private',
+      permission: 'viewer'
+    }),
+    'shared'
+  )
+  assert.equal(
+    workspaceDisplay.getWorkspaceProjectSectionKey({
+      accessSource: 'team_workspace',
+      accessMode: 'team',
+      permission: 'viewer'
+    }),
+    'projects'
+  )
+  assert.equal(
+    workspaceDisplay.getWorkspaceProjectSectionKey({
+      accessMode: 'team',
+      permission: 'viewer'
+    }),
+    'projects'
+  )
+  assert.equal(
+    workspaceDisplay.getWorkspaceProjectSectionKey({
+      accessMode: 'private',
+      permission: 'viewer'
+    }),
+    'shared'
+  )
+  assert.equal(
+    workspaceDisplay.getWorkspaceProjectSectionKey({
+      accessMode: 'private',
+      permission: 'owner'
+    }),
+    'projects'
   )
 })
 

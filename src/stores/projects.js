@@ -41,6 +41,7 @@ const STORAGE_KEY_PREFIX = 'ai-canvas-projects-draft-meta'
 const TOMBSTONE_KEY_PREFIX = 'ai-canvas-projects-deleted'
 const BYPASS_AUTH_IN_DEV = isLocalPreviewEnabled()
 let offlineDraftSyncInFlight = null
+let projectListRequestToken = 0
 
 export const projects = ref([])
 export const projectsLoadState = ref({
@@ -313,6 +314,7 @@ const mergeRemoteWithLocalDrafts = (remoteProjects, localProjects) => {
 }
 
 export const loadProjects = async ({ allowLocalFallback = true } = {}) => {
+  const requestToken = ++projectListRequestToken
   const { isAuthenticated } = useAuthStore()
   if (!isAuthenticated.value) {
     projects.value = []
@@ -327,6 +329,7 @@ export const loadProjects = async ({ allowLocalFallback = true } = {}) => {
   await hydrateCanvasDraftCache()
   const localDrafts = await loadLocalCache()
   if (BYPASS_AUTH_IN_DEV) {
+    if (requestToken !== projectListRequestToken) return projects.value
     projects.value = sortProjectsByActivity(localDrafts).map((project) => ({ ...project, readState: 'local-only' }))
     projectsLoadState.value = {
       source: 'local-dev',
@@ -338,6 +341,7 @@ export const loadProjects = async ({ allowLocalFallback = true } = {}) => {
   }
   try {
     const response = await apiListProjects()
+    if (requestToken !== projectListRequestToken) return projects.value
     const tombstones = loadDeleteTombstones()
     const remote = (response?.data || [])
       .map(mapProjectFromApi)
@@ -356,6 +360,7 @@ export const loadProjects = async ({ allowLocalFallback = true } = {}) => {
     }
     return projects.value
   } catch (error) {
+    if (requestToken !== projectListRequestToken) return projects.value
     const fallbackError = error?.message || 'Project list unavailable'
     if (!allowLocalFallback) {
       projects.value = []

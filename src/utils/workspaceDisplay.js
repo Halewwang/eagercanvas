@@ -7,20 +7,32 @@ export const getWorkspaceBrand = ({ user = null, currentWorkspace = null } = {})
   return currentWorkspace?.name || 'Shared Workspace'
 }
 
-export const getWorkspaceSectionTitle = (activeSection) => {
+export const getWorkspaceSectionTitle = (activeSection, { currentWorkspace = null } = {}) => {
   if (activeSection === 'featured') return 'Share Templates'
   if (activeSection === 'shared') return 'Shared with me'
+  if (currentWorkspace?.kind === 'team') return 'Team Workspace'
   return 'My Project'
 }
 
-export const getWorkspaceSectionDescription = (activeSection) => {
+export const getWorkspaceSectionDescription = (activeSection, { currentWorkspace = null } = {}) => {
   if (activeSection === 'featured') {
     return 'Community and workspace templates. Using one creates a full copy in the active workspace.'
   }
   if (activeSection === 'shared') {
-    return 'Team projects you can open in read-only mode'
+    return 'Projects shared directly with you by another user.'
+  }
+  if (currentWorkspace?.kind === 'team') {
+    return 'Projects in this team workspace. Members can open team projects in read-only mode by default.'
   }
   return 'Projects are created in the active workspace. Team members can view team projects by default.'
+}
+
+export const getWorkspaceProjectSectionKey = (project = {}) => {
+  if (project.accessSource === 'direct_share') return 'shared'
+  if (project.accessSource === 'team_workspace') return 'projects'
+  if (project.accessMode === 'team') return 'projects'
+  if (project.permission === 'viewer') return 'shared'
+  return 'projects'
 }
 
 export const formatWorkspaceDate = (date, now = new Date()) => {

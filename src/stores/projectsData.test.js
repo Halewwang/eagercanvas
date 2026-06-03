@@ -34,6 +34,7 @@ test('project data helpers preserve API mapping and thumbnail sanitization', () 
     thumbnail: 'https://example.com/thumb.png',
     workspaceId: '',
     accessMode: 'private',
+    accessSource: '',
     permission: 'owner',
     ownerUserId: '',
     ownerDisplayName: '',
@@ -52,11 +53,18 @@ test('project data helpers preserve API mapping and thumbnail sanitization', () 
     mapProjectFromApi({
       id: 'project-2',
       name: 'Remote Without Canvas',
+      access_source: 'direct_share',
       created_at: '2026-05-01T00:00:00.000Z',
       updated_at: '2026-05-02T00:00:00.000Z'
-    }).canvasData,
-    undefined
+    }).accessSource,
+    'direct_share'
   )
+  assert.equal(mapProjectFromApi({
+    id: 'project-2',
+    name: 'Remote Without Canvas',
+    created_at: '2026-05-01T00:00:00.000Z',
+    updated_at: '2026-05-02T00:00:00.000Z'
+  }).canvasData, undefined)
 
   assert.deepEqual(mapProjectToApi({
     name: 'Local Project',
@@ -102,6 +110,7 @@ test('project data helpers preserve canvas cloning, summary, content, and versio
     thumbnail: '',
     workspaceId: '',
     accessMode: 'private',
+    accessSource: '',
     permission: 'owner',
     ownerUserId: '',
     ownerDisplayName: '',

@@ -40,3 +40,11 @@ test('projects store delegates activity sorting to project data helpers', async 
   assert.match(source, /sortProjectsByActivity[\s\S]*from '\.\/projectsData\.js'/)
   assert.doesNotMatch(source, /const getProjectActivityTs =/)
 })
+
+test('project list loading ignores stale responses from previous workspace switches', async () => {
+  const source = await readSource('./projects.js')
+
+  assert.match(source, /let projectListRequestToken = 0/)
+  assert.match(source, /const requestToken = \+\+projectListRequestToken/)
+  assert.match(source, /if \(requestToken !== projectListRequestToken\) return projects\.value/)
+})

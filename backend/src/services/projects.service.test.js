@@ -5,6 +5,7 @@ import test from 'node:test'
 import {
   applyProjectListWorkspaceFilter,
   mergeProjectListRows,
+  resolveProjectAccessSource,
   shouldUseLegacyPersonalProjectList
 } from './projects.service.js'
 
@@ -69,6 +70,33 @@ test('project listing merges direct shares without duplicating active workspace 
   )
 
   assert.deepEqual(rows.map((row) => row.id), ['shared-2', 'owned-1', 'shared-1'])
+})
+
+test('project access source separates owned, team workspace, and direct shares', () => {
+  assert.equal(
+    resolveProjectAccessSource(
+      { id: 'owned-1', user_id: 'user-1', workspace_id: 'personal-1', access_mode: 'private' },
+      'user-1',
+      { directSharedIds: new Set() }
+    ),
+    'owned'
+  )
+  assert.equal(
+    resolveProjectAccessSource(
+      { id: 'team-viewer-1', user_id: 'owner-1', workspace_id: 'team-1', access_mode: 'team' },
+      'user-1',
+      { directSharedIds: new Set() }
+    ),
+    'team_workspace'
+  )
+  assert.equal(
+    resolveProjectAccessSource(
+      { id: 'direct-1', user_id: 'owner-1', workspace_id: 'personal-1', access_mode: 'private' },
+      'user-1',
+      { directSharedIds: new Set(['direct-1']) }
+    ),
+    'direct_share'
+  )
 })
 
 test('project copy and direct sharing stay scoped to personal owner projects', () => {

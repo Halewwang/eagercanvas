@@ -116,6 +116,7 @@ const getOwnerProfiles = async (userIds = []) => {
 
 const mapProjectForRead = async (row, {
   permission = null,
+  accessSource = null,
   ownerProfile = null,
   includeCanvas = false
 } = {}) => ({
@@ -125,11 +126,26 @@ const mapProjectForRead = async (row, {
   owner_username: ownerProfile?.username || '',
   owner_email: ownerProfile?.email || '',
   permission: permission || 'none',
+  access_source: accessSource || 'owned',
   access_mode: row.access_mode || 'private',
   canvas_json: includeCanvas
     ? await normalizeCanvasForRead(row.canvas_json)
     : row.canvas_json
 })
+
+export const resolveProjectAccessSource = (row = {}, userId = '', options = {}) => {
+  const normalizedUserId = String(userId || '').trim()
+  if (normalizedUserId && String(row.user_id || '') === normalizedUserId) return 'owned'
+
+  const directSharedIds = options.directSharedIds instanceof Set
+    ? options.directSharedIds
+    : new Set(options.directSharedIds || [])
+  if (row?.id && directSharedIds.has(row.id)) return 'direct_share'
+
+  if (String(row.access_mode || '') === 'team') return 'team_workspace'
+  if (String(options.permission || '') === 'viewer') return 'direct_share'
+  return 'owned'
+}
 
 export const shouldUseLegacyPersonalProjectList = (activeWorkspace = {}) => (
   activeWorkspace.kind !== 'team' && activeWorkspace.schemaVersion === 'legacy'
@@ -245,6 +261,7 @@ export const listProjects = async (userId) => {
     if (permission === 'none') continue
     projects.push(await mapProjectForRead(row, {
       permission,
+      accessSource: resolveProjectAccessSource(row, userId, { directSharedIds, permission }),
       ownerProfile: ownerProfiles.get(row.user_id)
     }))
   }
@@ -259,6 +276,7 @@ export const getProject = async (userId, id) => {
 
   return mapProjectForRead(data, {
     permission,
+    accessSource: resolveProjectAccessSource(data, userId, { permission }),
     ownerProfile: ownerProfiles.get(data.user_id),
     includeCanvas: true
   })
@@ -317,6 +335,7 @@ export const createProject = async (userId, input) => {
   const ownerProfiles = await getOwnerProfiles([userId])
   return mapProjectForRead(data, {
     permission: 'owner',
+    accessSource: 'owned',
     ownerProfile: ownerProfiles.get(userId),
     includeCanvas: true
   })
@@ -369,6 +388,7 @@ export const copyProjectToWorkspace = async (userId, id, input = {}) => {
   const ownerProfiles = await getOwnerProfiles([userId])
   return mapProjectForRead(data, {
     permission: 'owner',
+    accessSource: 'owned',
     ownerProfile: ownerProfiles.get(userId),
     includeCanvas: true
   })
@@ -498,6 +518,7 @@ export const updateProject = async (userId, id, input) => {
   const ownerProfiles = await getOwnerProfiles([data.user_id])
   return mapProjectForRead(data, {
     permission,
+    accessSource: resolveProjectAccessSource(data, userId, { permission }),
     ownerProfile: ownerProfiles.get(data.user_id),
     includeCanvas: true
   })

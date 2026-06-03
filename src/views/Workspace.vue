@@ -170,6 +170,7 @@ import {
   getWorkspaceCardIconKey,
   getWorkspaceSectionDescription,
   getWorkspaceSectionTitle,
+  getWorkspaceProjectSectionKey,
   getWorkspaceProjectMenuOptions
 } from '@/utils/workspaceDisplay'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -233,11 +234,15 @@ const profileSaving = ref(false)
 const usageSummary = ref(null)
 const usageSummaryLoading = ref(false)
 
-const navItems = [
-  { key: 'projects', label: 'My Project', icon: FolderOpenOutline },
+const navItems = computed(() => [
+  {
+    key: 'projects',
+    label: currentWorkspace.value?.kind === 'team' ? 'Team Workspace' : 'My Project',
+    icon: FolderOpenOutline
+  },
   { key: 'shared', label: 'Shared with me', icon: PersonOutline },
   { key: 'featured', label: 'Shared Template', icon: BookmarkOutline }
-]
+])
 
 const templateTabs = [
   { key: 'community', label: 'Community' },
@@ -302,16 +307,16 @@ const workspaceBrand = computed(() => getWorkspaceBrand({
 
 const sidebarUsageSummary = computed(() => usageSummary.value)
 
-const sectionTitle = computed(() => getWorkspaceSectionTitle(activeSection.value))
+const sectionTitle = computed(() => getWorkspaceSectionTitle(activeSection.value, { currentWorkspace: currentWorkspace.value }))
 
-const sectionDescription = computed(() => getWorkspaceSectionDescription(activeSection.value))
+const sectionDescription = computed(() => getWorkspaceSectionDescription(activeSection.value, { currentWorkspace: currentWorkspace.value }))
 
 const sectionItems = computed(() => {
   if (activeSection.value === 'featured') return featuredTemplates.value
   if (activeSection.value === 'shared') {
-    return projects.value.filter((project) => project.permission === 'viewer')
+    return projects.value.filter((project) => getWorkspaceProjectSectionKey(project) === 'shared')
   }
-  return projects.value.filter((project) => project.permission !== 'viewer')
+  return projects.value.filter((project) => getWorkspaceProjectSectionKey(project) === 'projects')
 })
 
 const isProjectListUnavailable = computed(() => (
@@ -513,15 +518,28 @@ const loadWorkspaceProjects = async () => {
   await initProjectsStore({ allowLocalFallback: false })
 }
 
+const refreshWorkspaceTemplates = () => {
+  return loadTemplatesForActiveScope({ preferCache: true }).catch((error) => {
+    featuredTemplates.value = []
+    throw error
+  })
+}
+
+const refreshWorkspaceProjectsFirst = async () => {
+  await loadWorkspaceProjects()
+  void loadTemplatesForActiveScope({ preferCache: true }).catch((error) => {
+    featuredTemplates.value = []
+    notifier.error(getErrorMessage(error, 'Failed to refresh shared templates'))
+  })
+}
+
 const refreshWorkspaceData = async () => {
-  await Promise.all([
-    loadWorkspaceProjects(),
-    loadTemplatesForActiveScope({ preferCache: true })
-  ])
+  await loadWorkspaceProjects()
+  await refreshWorkspaceTemplates()
 }
 
 const runWorkspaceRefreshInBackground = () => {
-  void refreshWorkspaceData().catch((error) => {
+  void refreshWorkspaceProjectsFirst().catch((error) => {
     notifier.error(getErrorMessage(error, 'Failed to refresh workspace data'))
   })
 }

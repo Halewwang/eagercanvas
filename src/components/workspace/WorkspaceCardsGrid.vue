@@ -131,7 +131,7 @@ const resolvedEmptyStateTitle = computed(() => {
 const resolvedEmptyStateCopy = computed(() => {
   if (props.emptyStateCopy) return props.emptyStateCopy
   if (props.activeSection === 'featured') return 'Published community and workspace templates will appear here.'
-  if (props.activeSection === 'shared') return 'Projects shared with you by workspace members will appear here.'
+  if (props.activeSection === 'shared') return 'Projects shared directly with you will appear here.'
   return 'Create a project to start building in this workspace.'
 })
 

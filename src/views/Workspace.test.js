@@ -188,6 +188,8 @@ test('workspace view delegates sidebar navigation and account chrome to a focuse
   assert.match(workspaceSource, /@admin="router\.push\('\/admin\/dashboard'\)"/)
   assert.match(workspaceSource, /PersonOutline/)
   assert.match(workspaceSource, /BookmarkOutline/)
+  assert.match(workspaceSource, /const navItems = computed\(\(\) => \[/)
+  assert.match(workspaceSource, /currentWorkspace\.value\?\.kind === 'team'\s*\?\s*'Team Workspace'\s*:\s*'My Project'/)
   assert.match(workspaceSource, /\{ key: 'shared', label: 'Shared with me', icon: PersonOutline \}/)
   assert.match(workspaceSource, /\{ key: 'featured', label: 'Shared Template', icon: BookmarkOutline \}/)
   assert.doesNotMatch(workspaceSource, /label: 'Share Templates'/)
@@ -322,6 +324,14 @@ test('workspace shared templates render an empty state instead of a blank panel'
   assert.match(cardsGridSource, /class="cards-empty-state"/)
   assert.match(cardsGridSource, /No shared templates yet/)
   assert.match(cardsGridSource, /\.cards-empty-state\s*\{/)
+})
+
+test('workspace shared project empty state is limited to direct shares', () => {
+  const cardsGridSource = readWorkspaceComponentSource('WorkspaceCardsGrid')
+
+  assert.match(cardsGridSource, /No shared projects yet/)
+  assert.match(cardsGridSource, /Projects shared directly with you will appear here\./)
+  assert.doesNotMatch(cardsGridSource, /Projects shared with you by workspace members/)
 })
 
 test('workspace project card hover outline stays inside the cover media', () => {
@@ -506,10 +516,12 @@ test('workspace template canvas preview renders capped image assets instead of a
 test('workspace view delegates display copy and card derivation to workspace display helpers', () => {
   const displaySource = readWorkspaceUtilsSource('workspaceDisplay')
 
-  assert.match(workspaceSource, /import \{[\s\S]*getWorkspaceBrand[\s\S]*getWorkspaceSectionTitle[\s\S]*getWorkspaceProjectMenuOptions[\s\S]*\} from '@\/utils\/workspaceDisplay'/)
+  assert.match(workspaceSource, /import \{[\s\S]*getWorkspaceBrand[\s\S]*getWorkspaceSectionTitle[\s\S]*getWorkspaceProjectSectionKey[\s\S]*getWorkspaceProjectMenuOptions[\s\S]*\} from '@\/utils\/workspaceDisplay'/)
   assert.match(workspaceSource, /getWorkspaceBrand\(\{[\s\S]*user: user\.value[\s\S]*currentWorkspace: currentWorkspace\.value[\s\S]*\}\)/)
-  assert.match(workspaceSource, /getWorkspaceSectionTitle\(activeSection\.value\)/)
-  assert.match(workspaceSource, /getWorkspaceSectionDescription\(activeSection\.value\)/)
+  assert.match(workspaceSource, /getWorkspaceSectionTitle\(activeSection\.value,\s*\{ currentWorkspace: currentWorkspace\.value \}\)/)
+  assert.match(workspaceSource, /getWorkspaceSectionDescription\(activeSection\.value,\s*\{ currentWorkspace: currentWorkspace\.value \}\)/)
+  assert.match(workspaceSource, /getWorkspaceProjectSectionKey\(project\)/)
+  assert.doesNotMatch(workspaceSource, /project\.permission === 'viewer'/)
   assert.match(workspaceSource, /describeWorkspaceItem\(\{[\s\S]*activeSection: activeSection\.value[\s\S]*item[\s\S]*\}\)/)
   assert.match(workspaceSource, /getWorkspaceCardIconKey\(\{[\s\S]*activeSection: activeSection\.value[\s\S]*item[\s\S]*\}\)/)
   assert.match(workspaceSource, /ImageOutline/)
@@ -570,7 +582,9 @@ test('workspace template scope follows the effective backend scope after loading
 test('workspace switching updates the visible workspace before background refresh completes', () => {
   assert.match(workspaceSource, /const runWorkspaceRefreshInBackground = \(\) => \{/)
   assert.match(workspaceSource, /const refreshWorkspaceData = async \(\) => \{/)
-  assert.match(workspaceSource, /Promise\.all\(\[\s*loadWorkspaceProjects\(\),\s*loadTemplatesForActiveScope\(\{ preferCache: true \}\)\s*\]\)/)
+  assert.match(workspaceSource, /const refreshWorkspaceProjectsFirst = async \(\) => \{/)
+  assert.match(workspaceSource, /await loadWorkspaceProjects\(\)/)
+  assert.match(workspaceSource, /void loadTemplatesForActiveScope\(\{ preferCache: true \}\)\.catch/)
   assert.match(workspaceSource, /const selection = selectWorkspace\(workspaceId\)[\s\S]*activeSection\.value = 'projects'[\s\S]*await selection[\s\S]*runWorkspaceRefreshInBackground\(\)/)
   assert.doesNotMatch(workspaceSource, /await reloadWorkspaceData\(\)/)
 })
