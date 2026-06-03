@@ -78,6 +78,7 @@ export const markImageResultAssetsForClientPersistence = (result = {}) => {
 export const persistImageResultAssets = async (result = {}, options = {}) => {
   const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
   const persistDataUrl = options.persistDataUrl || persistDataUrlIfNeeded
+  const persistInlineDataUrls = options.persistInlineDataUrls === true
   const entries = Array.isArray(result?.data) ? [...result.data] : []
   if (!entries.length) return result
 
@@ -88,7 +89,7 @@ export const persistImageResultAssets = async (result = {}, options = {}) => {
 
       const fileName = `generated-${Date.now()}-${index}.png`
       if (isInlineDataUrl(remoteUrl)) {
-        if (shouldPersistInlineDataUrlBeforeResponse(remoteUrl)) {
+        if (persistInlineDataUrls || shouldPersistInlineDataUrlBeforeResponse(remoteUrl)) {
           const persistedUrl = await persistDataUrl(remoteUrl, fileName)
           return {
             ...entry,

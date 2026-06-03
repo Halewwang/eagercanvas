@@ -3,7 +3,7 @@ import { mock, test } from 'node:test'
 
 import { supabase } from '../config/supabase.js'
 import { buildVideoGenerationAssets } from './runs.service.js'
-import { upsertGeneratedMediaRecord } from './media-library.service.js'
+import { findGeneratedMediaRecordByRunId, upsertGeneratedMediaRecord } from './media-library.service.js'
 
 test('video generation assets keep source node id for later recovery', () => {
   const assets = buildVideoGenerationAssets(
@@ -131,6 +131,80 @@ test('generated media records do not store inline data URLs in metadata assets',
     assert.equal(result?.assets?.length, 1)
     assert.equal(insertCalls[0]?.metadata?.assets?.length, 1)
     assert.equal(insertCalls[0]?.metadata?.assets?.[0]?.url, 'https://storage.example.com/generated.png')
+  } finally {
+    restore.mock.restore()
+  }
+})
+
+test('findGeneratedMediaRecordByRunId returns normalized generated image assets', async () => {
+  const eqCalls = []
+  const containsCalls = []
+  const restore = mock.method(supabase, 'from', (table) => {
+    assert.equal(table, 'audit_logs')
+    return {
+      select() {
+        return this
+      },
+      eq(field, value) {
+        eqCalls.push([field, value])
+        return this
+      },
+      contains(field, value) {
+        containsCalls.push([field, value])
+        return this
+      },
+      order() {
+        return this
+      },
+      limit() {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'log_123',
+              created_at: '2026-06-03T03:00:00.000Z',
+              metadata: {
+                run_id: 'run_image_123',
+                project_id: 'project_123',
+                run_type: 'image',
+                model: 'gpt-image-lite',
+                status: 'completed',
+                preview_url: 'https://storage.example.com/generated.png',
+                output_count: 1,
+                assets: [
+                  {
+                    kind: 'image',
+                    url: 'https://storage.example.com/generated.png',
+                    previewUrl: 'https://storage.example.com/generated.png',
+                    fileName: 'generated-1.png',
+                    fileType: 'image/png',
+                    origin: 'generation'
+                  }
+                ]
+              }
+            }
+          ],
+          error: null
+        })
+      }
+    }
+  })
+
+  try {
+    const result = await findGeneratedMediaRecordByRunId({
+      userId: 'user_123',
+      runId: 'run_image_123'
+    })
+
+    assert.deepEqual(eqCalls, [
+      ['user_id', 'user_123'],
+      ['action', 'media.generated']
+    ])
+    assert.deepEqual(containsCalls, [
+      ['metadata', { run_id: 'run_image_123' }]
+    ])
+    assert.equal(result.status, 'completed')
+    assert.equal(result.model, 'gpt-image-lite')
+    assert.equal(result.assets[0].url, 'https://storage.example.com/generated.png')
   } finally {
     restore.mock.restore()
   }

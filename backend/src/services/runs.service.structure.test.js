@@ -30,6 +30,16 @@ test('runs.service returns synchronous image assets before noncritical completio
   assert.match(source, /if \(isImageRun && imageHasAssets\) \{[\s\S]*queueCompletedRunFinalization\(\{[\s\S]*return \{[\s\S]*status: 'completed'/)
 })
 
+test('runs.service wraps GPT Image lite in the existing image task polling contract', () => {
+  assert.match(source, /const LOCAL_IMAGE_RUN_TASK_PREFIX = 'local-image-run:'/)
+  assert.match(source, /export const isGptImageLiteImageRun = \(payload = \{\}\) =>/)
+  assert.match(source, /if \(isGptImageLiteImageRun\(payload\)\) \{[\s\S]*const imageTaskId = buildLocalImageRunTaskId\(run\.id\)[\s\S]*bindImageTaskOwnership\([\s\S]*queueImageLiteRunExecution\([\s\S]*status: 'running'[\s\S]*task_id: imageTaskId/)
+  assert.match(source, /persistImageResultAssets\(providerResponse, \{ persistInlineDataUrls: true \}\)/)
+  assert.match(source, /waitUntil\(executeQueuedImageRun\(params\)\)/)
+  assert.match(source, /findGeneratedMediaRecordByRunId/)
+  assert.match(source, /if \(isLocalImageRunTaskId\(taskId\)\) \{[\s\S]*return getLocalImageRunTaskResult\(\{ userId: _userId, taskId, runId \}\)/)
+})
+
 test('runs.service delegates task ownership and status helpers to run-task-records service', () => {
   assert.match(source, /from '\.\/run-task-records\.js'/)
   assert.doesNotMatch(source, /const bindVideoTaskOwnership =/)

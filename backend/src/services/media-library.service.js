@@ -318,6 +318,56 @@ export const upsertGeneratedMediaRecord = async ({
   }
 }
 
+export const findGeneratedMediaRecordByRunId = async ({
+  userId,
+  runId = ''
+} = {}) => {
+  const safeRunId = trimString(runId)
+  if (!userId || !safeRunId) return null
+
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('id, metadata, created_at')
+    .eq('user_id', userId)
+    .eq('action', 'media.generated')
+    .contains('metadata', { run_id: safeRunId })
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error) {
+    throw new HttpError(500, error.message, 'MEDIA_GENERATION_RECORD_FETCH_FAILED')
+  }
+
+  const entry = Array.isArray(data) ? data[0] : null
+  if (!entry) return null
+
+  const metadata = entry?.metadata || {}
+  const runType = trimString(metadata.run_type).toLowerCase()
+  const projectId = normalizeProjectId(metadata.project_id)
+  const model = trimString(metadata.model)
+  const assets = normalizeGeneratedAssets(metadata.assets, {
+    createdAt: entry.created_at,
+    runId: safeRunId,
+    projectId,
+    runType,
+    model,
+    sourceNodeId: metadata.source_node_id
+  })
+
+  return {
+    id: trimString(entry.id),
+    runId: safeRunId,
+    projectId,
+    runType,
+    model,
+    status: trimString(metadata.status),
+    error: trimString(metadata.error),
+    previewUrl: trimString(metadata.preview_url || assets[0]?.previewUrl || assets[0]?.url || ''),
+    outputCount: Number(metadata.output_count || assets.length || 0),
+    assets
+  }
+}
+
 export const listMediaAssets = async ({
   userId,
   projectId = '',
