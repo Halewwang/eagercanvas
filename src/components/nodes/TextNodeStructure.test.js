@@ -137,3 +137,9 @@ test('text node delegates passive status, progress, and error display to focused
   assert.doesNotMatch(sharedBindingStatusSource, /position:\s*absolute;/)
   assert.doesNotMatch(sharedBindingStatusSource, /top:\s*62px;/)
 })
+
+test('text node sends vision image inputs using 302-compatible image_url objects', () => {
+  assert.match(textNodeSource, /type:\s*'image_url'/)
+  assert.match(textNodeSource, /image_url:\s*\{\s*url:\s*imageSource\s*\}/s)
+  assert.doesNotMatch(textNodeSource, /image_url:\s*imageSource/)
+})

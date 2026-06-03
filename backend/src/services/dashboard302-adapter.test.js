@@ -166,13 +166,66 @@ test('Dashboard302 adapter sends Gemini image edits with references and tool par
   }
 
   assert.equal(requests.length, 1)
-  assert.match(requests[0].url, /\/ws\/api\/v3\/google\/nano-banana-pro\/edit$/)
+  assert.match(requests[0].url, /\/ws\/api\/v3\/google\/gemini-3-pro-image\/text-to-image$/)
   assert.equal(requests[0].method, 'POST')
   assert.equal(requests[0].body.prompt, 'Adjust camera angle only')
   assert.equal(requests[0].body.aspect_ratio, '16:9')
   assert.equal(requests[0].body.resolution, '4k')
   assert.deepEqual(requests[0].body.images, ['https://example.com/source.png'])
   assert.deepEqual(requests[0].body.tools, { camera: { horizontal_angle: 270 } })
+})
+
+test('Dashboard302 adapter sends Gemini Pro text-to-image through the current 302 ws endpoint', async () => {
+  const originalFetch = global.fetch
+  const requests = []
+
+  global.fetch = async (url, init) => {
+    requests.push({
+      url: String(url),
+      method: init?.method || 'GET',
+      body: init?.body ? JSON.parse(init.body) : null
+    })
+
+    return new Response(
+      JSON.stringify({
+        data: {
+          outputs: ['https://example.com/generated-pro.png'],
+          status: 'completed'
+        }
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      }
+    )
+  }
+
+  try {
+    const result = await new Dashboard302ProviderAdapter().imageGeneration(
+      {
+        model: 'gemini-3-pro-image-preview',
+        prompt: 'Create a product ad',
+        aspect_ratio: '3:4',
+        resolution: '2k'
+      },
+      { apiKey: 'sk-test' }
+    )
+
+    assert.equal(result.data[0].url, 'https://example.com/generated-pro.png')
+  } finally {
+    global.fetch = originalFetch
+  }
+
+  assert.equal(requests.length, 1)
+  assert.match(requests[0].url, /\/ws\/api\/v3\/google\/gemini-3-pro-image\/text-to-image$/)
+  assert.equal(requests[0].method, 'POST')
+  assert.deepEqual(requests[0].body, {
+    prompt: 'Create a product ad',
+    aspect_ratio: '3:4',
+    resolution: '2k',
+    enable_sync_mode: true,
+    enable_base64_output: false
+  })
 })
 
 test('Dashboard302 adapter returns completed prediction image outputs', async () => {

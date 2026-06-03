@@ -325,3 +325,65 @@ test('Dashboard302 video adapter polls Veo and generic video status from fallbac
   assert.match(requests[1].url, /\/302\/submit\/veo3-v2\/video-task-1$/)
   assert.equal(requests[1].method, 'GET')
 })
+
+test('Dashboard302 video adapter falls back when Veo ws route returns a provider route error', async () => {
+  const originalFetch = global.fetch
+  const requests = []
+
+  global.fetch = async (url, init) => {
+    requests.push({
+      url: String(url),
+      method: init?.method || 'GET',
+      body: init?.body ? JSON.parse(init.body) : null
+    })
+
+    if (String(url).endsWith('/ws/api/v3/google/veo3.1/text-to-video')) {
+      return new Response(
+        JSON.stringify({ message: 'Cannot POST /ws/api/v3/google/veo3.1/text-to-video' }),
+        {
+          status: 400,
+          headers: { 'content-type': 'application/json' }
+        }
+      )
+    }
+
+    return new Response(
+      JSON.stringify({
+        taskId: 'veo-v2-task',
+        status: 'SUBMITTED'
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      }
+    )
+  }
+
+  try {
+    const result = await new Dashboard302VideoProviderAdapter().videoGeneration(
+      {
+        model: 'veo-3.1',
+        prompt: 'Generate a product reveal',
+        aspect_ratio: '16:9',
+        duration: 8
+      },
+      { apiKey: 'sk-test' }
+    )
+
+    assert.equal(result.task_id, 'veo-v2-task')
+    assert.equal(result.status, 'processing')
+  } finally {
+    global.fetch = originalFetch
+  }
+
+  assert.equal(requests.length, 2)
+  assert.match(requests[0].url, /\/ws\/api\/v3\/google\/veo3\.1\/text-to-video$/)
+  assert.match(requests[1].url, /\/302\/submit\/veo3-v2$/)
+  assert.deepEqual(requests[1].body, {
+    prompt: 'Generate a product reveal',
+    model: 'veo3.1',
+    enhance_prompt: true,
+    aspect_ratio: '16:9',
+    duration: 8
+  })
+})

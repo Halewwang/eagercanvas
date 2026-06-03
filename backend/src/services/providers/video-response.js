@@ -21,7 +21,7 @@ export const isEndpointNotFoundError = (error) => {
   return (
     status === 404 ||
     status === 405 ||
-    /not found|no such endpoint|unknown endpoint|unsupported route/.test(message)
+    /not found|no such endpoint|unknown endpoint|unsupported route|cannot\s+(get|post|put|patch|delete)/.test(message)
   )
 }
 

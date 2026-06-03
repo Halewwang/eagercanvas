@@ -150,6 +150,55 @@ test('OpenAI adapter polls GPT Image 2 async results as processing when provider
   assert.match(requests[0], /\/v1\/async_result\?task_id=gpt-task-1$/)
 })
 
+test('OpenAI adapter falls back to root async result path for GPT Image 2 status', async () => {
+  const originalFetch = global.fetch
+  const requests = []
+
+  global.fetch = async (url) => {
+    requests.push(String(url))
+
+    if (String(url).includes('/v1/async_result')) {
+      return new Response(
+        JSON.stringify({ message: 'Cannot GET /v1/async_result' }),
+        {
+          status: 404,
+          headers: { 'content-type': 'application/json' }
+        }
+      )
+    }
+
+    return new Response(
+      JSON.stringify({
+        content_type: 'image/png',
+        data: 'https://file.302.ai/gpt/imgs/fallback-result.png',
+        err: '',
+        status_code: 200
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      }
+    )
+  }
+
+  try {
+    const result = await new OpenAiProviderAdapter().pollTaskStatus('gpt-task-1', {
+      apiKey: 'sk-test',
+      model: 'gpt-image-2'
+    })
+
+    assert.equal(result.task_id, 'gpt-task-1')
+    assert.equal(result.status, 'completed')
+    assert.equal(result.data[0].url, 'https://file.302.ai/gpt/imgs/fallback-result.png')
+  } finally {
+    global.fetch = originalFetch
+  }
+
+  assert.equal(requests.length, 2)
+  assert.match(requests[0], /\/v1\/async_result\?task_id=gpt-task-1$/)
+  assert.match(requests[1], /\/async_result\?task_id=gpt-task-1$/)
+})
+
 test('OpenAI adapter returns completed GPT Image 2 image results', async () => {
   const originalFetch = global.fetch
 

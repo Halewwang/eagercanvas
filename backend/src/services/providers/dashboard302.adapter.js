@@ -90,8 +90,9 @@ export const createWavespeedImage = async (payload = {}, requestOptions = {}) =>
 
 export const createGeminiImagePreview = async (payload = {}, requestOptions = {}) => {
   const model = String(payload.model_name || payload.model || '').trim().toLowerCase()
-  const endpointBase = model.includes('gemini-3-pro-image-preview')
-    ? '/ws/api/v3/google/nano-banana-pro'
+  const isGeminiPro = model.includes('gemini-3-pro-image-preview')
+  const endpointBase = isGeminiPro
+    ? '/ws/api/v3/google/gemini-3-pro-image'
     : '/ws/api/v3/google/nano-banana-2'
   const syncMode = payload.enable_sync_mode ?? true
   const images = Array.isArray(payload.images)
@@ -114,7 +115,7 @@ export const createGeminiImagePreview = async (payload = {}, requestOptions = {}
     body.tools = payload.tools
   }
 
-  const endpoint = images.length > 0
+  const endpoint = images.length > 0 && !isGeminiPro
     ? `${endpointBase}/edit`
     : `${endpointBase}/text-to-image`
   const raw = await callProvider(endpoint, body, 'POST', requestOptions)

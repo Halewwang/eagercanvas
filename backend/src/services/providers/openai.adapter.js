@@ -5,6 +5,7 @@ import { normalizeImageResponse } from './image-response.js'
 import { extensionFromMimeType, fetchBinaryFromSource } from './media-source.js'
 import {
   buildGptImage2AsyncResultPath,
+  buildGptImage2RootAsyncResultPath,
   buildGptImage2RequestBody,
   extractGptImage2TaskId,
   isGptImage2PendingResult
@@ -271,8 +272,27 @@ export const pollGptImage2TaskStatus = async (taskId, requestOptions = {}) => {
   if (!safeTaskId) return null
 
   let current
+  const statusPaths = [
+    buildGptImage2AsyncResultPath(safeTaskId),
+    buildGptImage2RootAsyncResultPath(safeTaskId)
+  ]
   try {
-    current = await callProvider(buildGptImage2AsyncResultPath(safeTaskId), null, 'GET', requestOptions)
+    let lastError
+    for (const path of statusPaths) {
+      try {
+        current = await callProvider(path, null, 'GET', requestOptions)
+        break
+      } catch (error) {
+        lastError = error
+        const message = String(error?.message || '').toLowerCase()
+        const status = Number(error?.status || 0)
+        const routeMissing = status === 404 || /cannot\s+get|not found|unknown endpoint|unsupported route/.test(message)
+        if (!routeMissing || path === statusPaths[statusPaths.length - 1]) {
+          throw error
+        }
+      }
+    }
+    if (!current && lastError) throw lastError
   } catch (error) {
     if (isGptImage2PendingResult({
       status: error?.status,

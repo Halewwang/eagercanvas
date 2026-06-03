@@ -224,6 +224,9 @@ export const extractGptImage2TaskId = (response = {}) => {
 export const buildGptImage2AsyncResultPath = (taskId = '') =>
   `/v1/async_result?task_id=${encodeURIComponent(String(taskId || '').trim())}`
 
+export const buildGptImage2RootAsyncResultPath = (taskId = '') =>
+  `/async_result?task_id=${encodeURIComponent(String(taskId || '').trim())}`
+
 export const isGptImage2PendingResult = (response = {}) => {
   const values = [
     response?.status,

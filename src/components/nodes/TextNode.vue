@@ -223,7 +223,7 @@ const runImageAnalysis = async () => {
       },
       {
         type: 'image_url',
-        image_url: imageSource
+        image_url: { url: imageSource }
       }
     ], true)
 
