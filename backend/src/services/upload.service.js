@@ -1,6 +1,6 @@
 import path from 'path'
 import { env } from '../config/env.js'
-import { supabase } from '../config/supabase.js'
+import { supabaseStorage as supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
 import { createTimeoutFetch } from '../utils/timeout-fetch.js'
 

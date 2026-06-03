@@ -27,8 +27,20 @@ test('image api core preserves size, resolution, task id, and output normalizati
   assert.equal(getImageTaskId({ data: { request_id: 'img-task-1' } }), 'img-task-1')
   assert.equal(getImageTaskStatus({ data: { status: 'SUCCEEDED' } }), 'succeeded')
   assert.deepEqual(
-    normalizeGeneratedImages({ data: [{ b64_json: 'data:image/png;base64,abc', revised_prompt: 'kept' }] }),
-    [{ url: 'data:image/png;base64,abc', revisedPrompt: 'kept' }]
+    normalizeGeneratedImages({
+      data: [{
+        b64_json: 'data:image/png;base64,abc',
+        revised_prompt: 'kept',
+        transient: true,
+        persist_error: 'storage failed'
+      }]
+    }),
+    [{
+      url: 'data:image/png;base64,abc',
+      revisedPrompt: 'kept',
+      transient: true,
+      persistError: 'storage failed'
+    }]
   )
 })
 

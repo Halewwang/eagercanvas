@@ -74,6 +74,7 @@ export const isExpiredRemoteUrl = (value = '', now = Date.now()) => {
 }
 
 const LEGACY_UPLOAD_FALLBACK_MAX_BYTES = 10 * 1024 * 1024
+const SIGNED_UPLOAD_TIMEOUT_MS = 120000
 
 export const dataUrlToFile = (dataUrl, fileName = 'image.png') => {
   const value = String(dataUrl || '')
@@ -99,6 +100,7 @@ const uploadFileToSignedUrl = (signedUrl, file, onProgress) =>
 
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', rawSignedUrl, true)
+    xhr.timeout = SIGNED_UPLOAD_TIMEOUT_MS
     xhr.setRequestHeader('x-upsert', 'false')
     if (file?.type) {
       xhr.setRequestHeader('content-type', file.type)
@@ -115,6 +117,7 @@ const uploadFileToSignedUrl = (signedUrl, file, onProgress) =>
 
     xhr.onerror = () => reject(new Error('Upload failed'))
     xhr.onabort = () => reject(new Error('Upload failed'))
+    xhr.ontimeout = () => reject(new Error('Upload timed out'))
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve()

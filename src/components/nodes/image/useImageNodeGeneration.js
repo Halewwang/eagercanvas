@@ -96,11 +96,19 @@ export const useImageNodeGeneration = ({
         throw new Error('No image output')
       }
 
-      const persistence = await resolveImagePersistence(
-        result[0].url,
-        generatedImageFileName(),
-        'Generated image persistence failed. Please retry.'
-      )
+      const firstResult = result[0]
+      const persistence = firstResult.transient
+        ? {
+            persistedUrl: '',
+            displayUrl: firstResult.url,
+            persisted: false,
+            persistError: firstResult.persistError || 'Generated image synchronization failed. Please retry.'
+          }
+        : await resolveImagePersistence(
+          firstResult.url,
+          generatedImageFileName(),
+          'Generated image persistence failed. Please retry.'
+        )
 
       updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(persistence, {
         loading: false,

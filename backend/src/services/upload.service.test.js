@@ -7,11 +7,11 @@ import { uploadRemoteFile } from './upload.service.js'
 
 const uploadServicePath = fileURLToPath(new URL('./upload.service.js', import.meta.url))
 
-test('upload service uses the shared timeout-bound Supabase client', () => {
+test('upload service uses the storage timeout-bound Supabase client', () => {
   const source = readFileSync(uploadServicePath, 'utf8')
 
   assert.doesNotMatch(source, /createClient\(env\.supabaseUrl,\s*env\.supabaseServiceRoleKey\)/)
-  assert.match(source, /from '\.\.\/config\/supabase\.js'/)
+  assert.match(source, /import \{ supabaseStorage as supabase \} from '\.\.\/config\/supabase\.js'/)
 })
 
 test('uploadRemoteFile aborts stalled remote asset fetches', async () => {

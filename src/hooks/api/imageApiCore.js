@@ -91,7 +91,9 @@ export const normalizeGeneratedImages = (response) => {
   return (Array.isArray(data) ? data : [data])
     .map(item => ({
       url: getImageUrl(item),
-      revisedPrompt: item?.revised_prompt || ''
+      revisedPrompt: item?.revised_prompt || '',
+      transient: item?.transient === true,
+      persistError: item?.persist_error || item?.persistError || ''
     }))
     .filter(item => item.url)
 }

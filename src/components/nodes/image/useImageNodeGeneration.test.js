@@ -152,6 +152,33 @@ test('image node generation keeps temporary output without saving the project', 
   ]])
 })
 
+test('image node generation does not re-upload transient inline provider output', async () => {
+  const inlineDataUrl = 'data:image/png;base64,generated'
+  const { calls, generation, messages } = await createHarness({
+    generateResult: [{
+      url: inlineDataUrl,
+      transient: true,
+      persistError: 'Generated image synchronization failed: storage unavailable'
+    }]
+  })
+
+  await generation.runImageGeneration('create')
+
+  assert.equal(calls.some((call) => call[0] === 'resolve-persistence'), false)
+  assert.equal(calls.some((call) => call[0] === 'save-project'), false)
+  const updateCall = calls.find((call) => call[0] === 'update-node' && call[2]?.kind === 'persistence-patch')
+  assert.equal(updateCall?.[2]?.persistence?.displayUrl, inlineDataUrl)
+  assert.equal(updateCall?.[2]?.persistence?.persisted, false)
+  assert.equal(
+    updateCall?.[2]?.persistence?.persistError,
+    'Generated image synchronization failed: storage unavailable'
+  )
+  assert.deepEqual(messages, [[
+    'warning',
+    'Image generated, but the result is still temporary. Refresh may lose it.'
+  ]])
+})
+
 test('image node generation records errors and clears the loading action', async () => {
   const { calls, generation, imageActionLoading, messages } = await createHarness({
     generateError: new Error('provider failed')
