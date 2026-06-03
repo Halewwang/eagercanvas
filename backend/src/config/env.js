@@ -27,6 +27,7 @@ export const env = {
   supabaseUrl: requireEnv('SUPABASE_URL', 'http://localhost'),
   supabaseServiceRoleKey: requireEnv('SUPABASE_SERVICE_ROLE_KEY', 'dev-service-role-key'),
   supabaseTimeoutMs: Number(process.env.SUPABASE_TIMEOUT_MS || 8000),
+  remoteAssetFetchTimeoutMs: Number(process.env.REMOTE_ASSET_FETCH_TIMEOUT_MS || 30000),
 
   jwtAccessSecret: requireEnv('JWT_ACCESS_SECRET', 'dev-access-secret'),
   jwtRefreshSecret: requireEnv('JWT_REFRESH_SECRET', 'dev-refresh-secret'),

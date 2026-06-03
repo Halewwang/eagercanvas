@@ -41,25 +41,30 @@ test('persistImageResultAssets replaces remote and inline provider image URLs', 
   assert.match(calls[1].fileName, /^generated-\d+-1\.png$/)
 })
 
-test('persistImageResultAssets does not leak inline data URLs when server synchronization fails', async () => {
+test('persistImageResultAssets keeps inline data URLs temporary when server synchronization fails', async () => {
   const inlineDataUrl = 'data:image/png;base64,aW1hZ2UtYnl0ZXM='
 
-  await assert.rejects(
-    () => persistImageResultAssets(
-      {
-        provider: 'derouter',
-        data: [
-          { url: inlineDataUrl }
-        ]
-      },
-      {
-        persistDataUrl: async () => {
-          throw new Error('storage unavailable')
-        }
+  const result = await persistImageResultAssets(
+    {
+      provider: 'derouter',
+      data: [
+        { url: inlineDataUrl }
+      ]
+    },
+    {
+      persistDataUrl: async () => {
+        throw new Error('storage unavailable')
       }
-    ),
-    /Generated image synchronization failed: storage unavailable/
+    }
   )
+
+  assert.deepEqual(result.data, [
+    {
+      url: inlineDataUrl,
+      transient: true,
+      persist_error: 'Generated image synchronization failed: storage unavailable'
+    }
+  ])
 })
 
 test('buildImageGenerationAssets excludes inline data URLs and keeps source node id', () => {

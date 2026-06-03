@@ -35,10 +35,13 @@ const persistInlineImageDataUrl = async (persistDataUrl, dataUrl, fileName) => {
     if (!persistedUrl || isInlineDataUrl(persistedUrl)) {
       throw new Error('server did not return a stable image URL')
     }
-    return persistedUrl
+    return { persistedUrl, persistError: '' }
   } catch (error) {
     const message = String(error?.message || 'server image storage failed').trim()
-    throw new Error(`Generated image synchronization failed: ${message}`)
+    return {
+      persistedUrl: '',
+      persistError: `Generated image synchronization failed: ${message}`
+    }
   }
 }
 
@@ -54,9 +57,24 @@ export const persistImageResultAssets = async (result = {}, options = {}) => {
       if (!remoteUrl) return entry
 
       const fileName = `generated-${Date.now()}-${index}.png`
-      const persistedUrl = isInlineDataUrl(remoteUrl)
-        ? await persistInlineImageDataUrl(persistDataUrl, remoteUrl, fileName)
-        : await persistRemoteUrl(remoteUrl, fileName).catch(() => remoteUrl)
+      if (isInlineDataUrl(remoteUrl)) {
+        const { persistedUrl, persistError } = await persistInlineImageDataUrl(persistDataUrl, remoteUrl, fileName)
+        if (persistedUrl) {
+          return {
+            ...entry,
+            url: persistedUrl
+          }
+        }
+
+        return {
+          ...entry,
+          url: remoteUrl,
+          transient: true,
+          persist_error: persistError
+        }
+      }
+
+      const persistedUrl = await persistRemoteUrl(remoteUrl, fileName).catch(() => remoteUrl)
 
       return {
         ...entry,

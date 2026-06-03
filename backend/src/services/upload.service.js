@@ -1,9 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
 import path from 'path'
 import { env } from '../config/env.js'
+import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
+import { createTimeoutFetch } from '../utils/timeout-fetch.js'
 
-const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey)
 const BUCKET_NAME = 'uploads'
 let bucketReady = false
 const UPLOAD_FILE_SIZE_LIMIT_BYTES = 150 * 1024 * 1024
@@ -66,6 +66,18 @@ const assertAllowedRemoteUrl = (rawUrl) => {
   }
 
   return parsed
+}
+
+const fetchRemoteAssetResponse = async (url) => {
+  const fetchWithTimeout = createTimeoutFetch(fetch, env.remoteAssetFetchTimeoutMs, 'Remote asset fetch')
+  try {
+    return await fetchWithTimeout(url)
+  } catch (error) {
+    if (error?.name === 'AbortError' || /aborted|timed out/i.test(String(error?.message || ''))) {
+      throw new HttpError(504, 'Remote asset fetch timed out', 'UPLOAD_REMOTE_FETCH_TIMEOUT')
+    }
+    throw error
+  }
 }
 
 const ensureBucket = async () => {
@@ -162,7 +174,7 @@ export const uploadDataUrl = async ({ dataUrl, fileName = '' }) => {
 
 export const uploadRemoteFile = async ({ url, fileName = '' }) => {
   const parsed = assertAllowedRemoteUrl(url)
-  const response = await fetch(parsed.toString())
+  const response = await fetchRemoteAssetResponse(parsed.toString())
   if (!response.ok) {
     throw new HttpError(response.status || 502, 'Remote asset fetch failed', 'UPLOAD_REMOTE_FETCH_FAILED')
   }
@@ -195,7 +207,7 @@ export const uploadRemoteFile = async ({ url, fileName = '' }) => {
 
 export const fetchRemoteAsset = async ({ url }) => {
   const parsed = assertAllowedRemoteUrl(url)
-  const response = await fetch(parsed.toString())
+  const response = await fetchRemoteAssetResponse(parsed.toString())
   if (!response.ok) {
     throw new HttpError(response.status || 502, 'Remote asset fetch failed', 'UPLOAD_REMOTE_FETCH_FAILED')
   }
