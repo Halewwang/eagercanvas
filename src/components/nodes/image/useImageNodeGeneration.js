@@ -97,20 +97,8 @@ export const useImageNodeGeneration = ({
       }
 
       const firstResult = result[0]
-      const persistence = firstResult.transient
-        ? {
-            persistedUrl: '',
-            displayUrl: firstResult.url,
-            persisted: false,
-            persistError: firstResult.persistError || 'Generated image synchronization failed. Please retry.'
-          }
-        : await resolveImagePersistence(
-          firstResult.url,
-          generatedImageFileName(),
-          'Generated image persistence failed. Please retry.'
-        )
-
-      updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(persistence, {
+      const sourceRefImages = buildSourceRefImages(refImages)
+      const resultMetadata = {
         loading: false,
         model: readReactiveValue(localImageModel),
         size: readReactiveValue(localImageSize),
@@ -120,9 +108,25 @@ export const useImageNodeGeneration = ({
         ratio: readReactiveValue(localImageRatio),
         resolution: readReactiveValue(localResolution),
         sourcePrompt: generationPrompt,
-        sourceRefImages: buildSourceRefImages(refImages),
+        sourceRefImages,
         error: ''
-      }))
+      }
+      const previewPersistence = {
+        persistedUrl: '',
+        displayUrl: firstResult.url,
+        persisted: false,
+        persistError: firstResult.persistError || 'Image is being saved in the background.'
+      }
+
+      updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(previewPersistence, resultMetadata))
+
+      const persistence = await resolveImagePersistence(
+        firstResult.url,
+        generatedImageFileName(),
+        'Generated image persistence failed. Please retry.'
+      )
+
+      updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(persistence, resultMetadata))
 
       if (!persistence.persisted) {
         dispatchMessage(messageApi, {

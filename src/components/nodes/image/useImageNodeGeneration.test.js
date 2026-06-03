@@ -62,7 +62,7 @@ const createHarness = async (overrides = {}) => {
     nodeId: () => 'image-node-1',
     projectSaveState: { value: overrides.saveState || { remoteSynced: true } },
     resetProgress: () => calls.push(['reset-progress']),
-    resolveImagePersistence: async (...args) => {
+    resolveImagePersistence: overrides.resolveImagePersistence || (async (...args) => {
       calls.push(['resolve-persistence', ...args])
       return overrides.persistence ?? {
         persistedUrl: 'https://cdn.example.com/generated.png',
@@ -70,7 +70,7 @@ const createHarness = async (overrides = {}) => {
         persisted: true,
         persistError: ''
       }
-    },
+    }),
     resolveImageSaveFeedback: (savedOk) => ({ mode: savedOk ? 'synced' : 'local-only' }),
     saveProject: async () => {
       calls.push(['save-project'])
@@ -133,6 +133,43 @@ test('image node generation creates a persisted image with merged references and
   assert.deepEqual(messages, [['success', 'Image regenerated']])
 })
 
+test('image node generation displays provider output before persistence completes', async () => {
+  const inlineDataUrl = 'data:image/png;base64,generated'
+  let resolvePersistence
+  const persistenceDone = new Promise((resolve) => {
+    resolvePersistence = resolve
+  })
+  const { calls, generation } = await createHarness({
+    generateResult: [{ url: inlineDataUrl, transient: true }],
+    resolveImagePersistence: async (...args) => {
+      calls.push(['resolve-persistence', ...args])
+      await persistenceDone
+      return {
+        persistedUrl: 'https://cdn.example.com/generated.png',
+        displayUrl: 'https://cdn.example.com/generated.png',
+        persisted: true,
+        persistError: ''
+      }
+    }
+  })
+
+  const runPromise = generation.runImageGeneration('create')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  const previewCall = calls.find((call) => call[0] === 'update-node' && call[2]?.kind === 'persistence-patch')
+  assert.equal(previewCall?.[2]?.persistence?.displayUrl, inlineDataUrl)
+  assert.equal(previewCall?.[2]?.persistence?.persisted, false)
+  assert.equal(calls.some((call) => call[0] === 'resolve-persistence'), true)
+  assert.equal(calls.some((call) => call[0] === 'save-project'), false)
+
+  resolvePersistence()
+  await runPromise
+
+  assert.deepEqual(calls.filter((call) => call[0] === 'save-project'), [['save-project']])
+  const persistedCalls = calls.filter((call) => call[0] === 'update-node' && call[2]?.kind === 'persistence-patch')
+  assert.equal(persistedCalls.at(-1)?.[2]?.persistence?.persistedUrl, 'https://cdn.example.com/generated.png')
+})
+
 test('image node generation keeps temporary output without saving the project', async () => {
   const { calls, generation, messages } = await createHarness({
     persistence: {
@@ -152,31 +189,28 @@ test('image node generation keeps temporary output without saving the project', 
   ]])
 })
 
-test('image node generation does not re-upload transient inline provider output', async () => {
+test('image node generation persists transient inline provider output after displaying it', async () => {
   const inlineDataUrl = 'data:image/png;base64,generated'
   const { calls, generation, messages } = await createHarness({
     generateResult: [{
       url: inlineDataUrl,
       transient: true,
-      persistError: 'Generated image synchronization failed: storage unavailable'
+      persistError: ''
     }]
   })
 
   await generation.runImageGeneration('create')
 
-  assert.equal(calls.some((call) => call[0] === 'resolve-persistence'), false)
-  assert.equal(calls.some((call) => call[0] === 'save-project'), false)
-  const updateCall = calls.find((call) => call[0] === 'update-node' && call[2]?.kind === 'persistence-patch')
-  assert.equal(updateCall?.[2]?.persistence?.displayUrl, inlineDataUrl)
-  assert.equal(updateCall?.[2]?.persistence?.persisted, false)
-  assert.equal(
-    updateCall?.[2]?.persistence?.persistError,
-    'Generated image synchronization failed: storage unavailable'
-  )
-  assert.deepEqual(messages, [[
-    'warning',
-    'Image generated, but the result is still temporary. Refresh may lose it.'
-  ]])
+  assert.deepEqual(calls.find((call) => call[0] === 'resolve-persistence')?.slice(0, 2), [
+    'resolve-persistence',
+    inlineDataUrl
+  ])
+  assert.deepEqual(calls.filter((call) => call[0] === 'save-project'), [['save-project']])
+  const updateCalls = calls.filter((call) => call[0] === 'update-node' && call[2]?.kind === 'persistence-patch')
+  assert.equal(updateCalls[0]?.[2]?.persistence?.displayUrl, inlineDataUrl)
+  assert.equal(updateCalls[0]?.[2]?.persistence?.persisted, false)
+  assert.equal(updateCalls.at(-1)?.[2]?.persistence?.persistedUrl, 'https://cdn.example.com/generated.png')
+  assert.deepEqual(messages, [['success', 'Image generated']])
 })
 
 test('image node generation records errors and clears the loading action', async () => {

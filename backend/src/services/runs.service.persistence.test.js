@@ -29,7 +29,7 @@ test('persistImageResultAssets replaces provider image URLs before history is st
   assert.equal(result.data[0].url, 'https://storage.example.com/persisted-image.png')
 })
 
-test('persistImageResultAssets uploads inline data image URLs before history is stored', async () => {
+test('persistImageResultAssets leaves inline data image URLs for client-side persistence', async () => {
   const dataUrl = 'data:image/png;base64,aW1hZ2UtYnl0ZXM='
 
   const result = await persistImageResultAssets(
@@ -44,7 +44,7 @@ test('persistImageResultAssets uploads inline data image URLs before history is 
       persistDataUrl: async (url, fileName) => {
         assert.equal(url, dataUrl)
         assert.match(fileName, /^generated-\d+-0\.png$/)
-        return 'https://storage.example.com/persisted-inline-image.png'
+        throw new Error('inline data URLs should not block the image response')
       },
       persistRemoteUrl: async () => {
         throw new Error('remote upload should not handle data URLs')
@@ -52,7 +52,11 @@ test('persistImageResultAssets uploads inline data image URLs before history is 
     }
   )
 
-  assert.equal(result.data[0].url, 'https://storage.example.com/persisted-inline-image.png')
+  assert.deepEqual(result.data[0], {
+    url: dataUrl,
+    transient: true,
+    persist_error: ''
+  })
 })
 
 test('buildImageGenerationAssets excludes inline data URLs from media history', () => {

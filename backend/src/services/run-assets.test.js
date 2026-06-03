@@ -8,7 +8,7 @@ import {
   persistVideoResultAsset
 } from './run-assets.js'
 
-test('persistImageResultAssets replaces remote and inline provider image URLs', async () => {
+test('persistImageResultAssets replaces remote URLs and leaves inline images for client persistence', async () => {
   const inlineDataUrl = 'data:image/png;base64,aW1hZ2UtYnl0ZXM='
   const calls = []
 
@@ -26,22 +26,21 @@ test('persistImageResultAssets replaces remote and inline provider image URLs', 
       },
       persistDataUrl: async (url, fileName) => {
         calls.push({ type: 'inline', url, fileName })
-        return 'https://storage.example.com/persisted-inline.png'
+        throw new Error('inline data URLs should not block the image response')
       }
     }
   )
 
-  assert.deepEqual(result.data.map((entry) => entry.url), [
-    'https://storage.example.com/persisted-remote.png',
-    'https://storage.example.com/persisted-inline.png'
+  assert.deepEqual(result.data, [
+    { url: 'https://storage.example.com/persisted-remote.png' },
+    { url: inlineDataUrl, transient: true, persist_error: '' }
   ])
   assert.equal(calls[0].type, 'remote')
   assert.match(calls[0].fileName, /^generated-\d+-0\.png$/)
-  assert.equal(calls[1].type, 'inline')
-  assert.match(calls[1].fileName, /^generated-\d+-1\.png$/)
+  assert.equal(calls.length, 1)
 })
 
-test('persistImageResultAssets keeps inline data URLs temporary when server synchronization fails', async () => {
+test('persistImageResultAssets does not wait on inline data URL storage', async () => {
   const inlineDataUrl = 'data:image/png;base64,aW1hZ2UtYnl0ZXM='
 
   const result = await persistImageResultAssets(
@@ -53,7 +52,7 @@ test('persistImageResultAssets keeps inline data URLs temporary when server sync
     },
     {
       persistDataUrl: async () => {
-        throw new Error('storage unavailable')
+        throw new Error('inline data URLs should be handled by the client')
       }
     }
   )
@@ -62,7 +61,7 @@ test('persistImageResultAssets keeps inline data URLs temporary when server sync
     {
       url: inlineDataUrl,
       transient: true,
-      persist_error: 'Generated image synchronization failed: storage unavailable'
+      persist_error: ''
     }
   ])
 })
