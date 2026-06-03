@@ -29,6 +29,26 @@ export const persistDataUrlIfNeeded = async (dataUrl, fileName) => {
   return uploadDataUrl({ dataUrl: raw, fileName }).then((result) => String(result?.url || '').trim() || raw)
 }
 
+export const markImageResultAssetsForClientPersistence = (result = {}) => {
+  const entries = Array.isArray(result?.data) ? [...result.data] : []
+  if (!entries.length) return result
+
+  return {
+    ...result,
+    data: entries.map((entry) => {
+      const remoteUrl = String(entry?.url || '').trim()
+      if (!remoteUrl || isPersistedUploadUrl(remoteUrl)) return entry
+
+      return {
+        ...entry,
+        url: remoteUrl,
+        transient: true,
+        persist_error: entry?.persist_error || ''
+      }
+    })
+  }
+}
+
 export const persistImageResultAssets = async (result = {}, options = {}) => {
   const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
   const entries = Array.isArray(result?.data) ? [...result.data] : []
@@ -137,6 +157,7 @@ export const buildImageGenerationAssets = (result = {}, sourceNodeId = '') =>
   (Array.isArray(result?.data) ? result.data : [])
     .map((item, index) => {
       const url = String(item?.url || '').trim()
+      if (item?.transient === true) return null
       if (!url || isInlineDataUrl(url)) return null
       return {
         kind: 'image',

@@ -137,3 +137,11 @@ test('canvas store delegates node actions to pure canvas action helpers', () => 
   assert.match(canvasSource, /removeCanvasNodeGraph\(\{/)
   assert.match(canvasSource, /duplicateCanvasNode\(\{/)
 })
+
+test('canvas store can update runtime node state without scheduling autosave', () => {
+  const canvasSource = readFileSync(new URL('./canvas.js', import.meta.url), 'utf8')
+
+  assert.match(canvasSource, /const updateNode = \(id, data, options = \{\}\) => \{/)
+  assert.match(canvasSource, /if \(options\.persist === false\) return/)
+  assert.match(canvasSource, /markCanvasDirty\(options\.changeType\)/)
+})

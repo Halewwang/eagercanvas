@@ -72,7 +72,7 @@ export const useImageNodeGeneration = ({
     }
 
     writeReactiveValue(imageActionLoading, mode)
-    updateNode(readReactiveValue(nodeId), getImageNodeActionPendingPatch())
+    updateNode(readReactiveValue(nodeId), getImageNodeActionPendingPatch(), { persist: false })
     try {
       const outputFormat = readReactiveValue(localOutputFormat)
       const generationPrompt = prompt || 'Generate a polished visual based on this reference.'
@@ -118,7 +118,7 @@ export const useImageNodeGeneration = ({
         persistError: firstResult.persistError || 'Image is being saved in the background.'
       }
 
-      updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(previewPersistence, resultMetadata))
+      updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(previewPersistence, resultMetadata), { persist: false })
 
       const persistence = await resolveImagePersistence(
         firstResult.url,
@@ -126,7 +126,11 @@ export const useImageNodeGeneration = ({
         'Generated image persistence failed. Please retry.'
       )
 
-      updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(persistence, resultMetadata))
+      updateNode(
+        readReactiveValue(nodeId),
+        buildImagePersistencePatch(persistence, resultMetadata),
+        persistence.persisted ? { changeType: 'node-generated' } : { persist: false }
+      )
 
       if (!persistence.persisted) {
         dispatchMessage(messageApi, {
@@ -139,7 +143,7 @@ export const useImageNodeGeneration = ({
       const savedOk = await saveProject()
       const saveState = readReactiveValue(projectSaveState) || {}
       const saveFeedback = resolveImageSaveFeedback(savedOk)
-      updateNode(readReactiveValue(nodeId), getImageNodeSaveFeedbackPatch({ saveFeedback }))
+      updateNode(readReactiveValue(nodeId), getImageNodeSaveFeedbackPatch({ saveFeedback }), { persist: false })
       dispatchMessage(messageApi, getImageNodeGenerationSaveMessage({
         saveFeedback,
         saveState,
@@ -148,7 +152,7 @@ export const useImageNodeGeneration = ({
       }))
     } catch (err) {
       const message = getErrorMessage(err, 'Image generation failed')
-      updateNode(readReactiveValue(nodeId), getImageNodeActionErrorPatch({ message }))
+      updateNode(readReactiveValue(nodeId), getImageNodeActionErrorPatch({ message }), { persist: false })
       dispatchMessage(messageApi, { type: 'error', text: message })
     } finally {
       writeReactiveValue(imageActionLoading, '')
@@ -158,7 +162,7 @@ export const useImageNodeGeneration = ({
   const handleStopGeneration = () => {
     resetProgress()
     writeReactiveValue(imageActionLoading, '')
-    updateNode(readReactiveValue(nodeId), getImageNodeActionErrorPatch({ fallbackMessage: 'Generation stopped' }))
+    updateNode(readReactiveValue(nodeId), getImageNodeActionErrorPatch({ fallbackMessage: 'Generation stopped' }), { persist: false })
     dispatchMessage(messageApi, { type: 'info', text: 'Generation stopped' })
   }
 

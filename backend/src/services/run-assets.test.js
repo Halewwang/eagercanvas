@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   buildImageGenerationAssets,
   buildVideoGenerationAssets,
+  markImageResultAssetsForClientPersistence,
   persistImageResultAssets,
   persistVideoResultAsset
 } from './run-assets.js'
@@ -66,12 +67,30 @@ test('persistImageResultAssets does not wait on inline data URL storage', async 
   ])
 })
 
+test('markImageResultAssetsForClientPersistence marks provider outputs transient without uploading', () => {
+  const inlineDataUrl = 'data:image/png;base64,aW1hZ2UtYnl0ZXM='
+  const result = markImageResultAssetsForClientPersistence({
+    data: [
+      { url: inlineDataUrl },
+      { url: 'https://provider.example.com/generated.png' },
+      { url: 'https://storage.example.com/storage/v1/object/public/uploads/generated.png' }
+    ]
+  })
+
+  assert.deepEqual(result.data, [
+    { url: inlineDataUrl, transient: true, persist_error: '' },
+    { url: 'https://provider.example.com/generated.png', transient: true, persist_error: '' },
+    { url: 'https://storage.example.com/storage/v1/object/public/uploads/generated.png' }
+  ])
+})
+
 test('buildImageGenerationAssets excludes inline data URLs and keeps source node id', () => {
   const assets = buildImageGenerationAssets(
     {
       data: [
         { url: 'https://storage.example.com/generated.png' },
-        { url: 'data:image/png;base64,aW1hZ2UtYnl0ZXM=' }
+        { url: 'data:image/png;base64,aW1hZ2UtYnl0ZXM=' },
+        { url: 'https://provider.example.com/transient.png', transient: true }
       ]
     },
     'node_image_1'

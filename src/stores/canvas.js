@@ -446,9 +446,10 @@ const getDefaultNodeData = (type) => {
 }
 
 // Update node data | 更新节点数据
-const updateNode = (id, data) => {
+const updateNode = (id, data, options = {}) => {
   nodes.value = updateCanvasNodeData(nodes.value, id, data)
-  markCanvasDirty()
+  if (options.persist === false) return
+  markCanvasDirty(options.changeType)
 }
 
 // Remove node | 删除节点

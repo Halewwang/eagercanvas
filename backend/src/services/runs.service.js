@@ -16,6 +16,7 @@ import {
   buildImageGenerationAssets,
   buildVideoGenerationAssets,
   extractProviderVideoUrl,
+  markImageResultAssetsForClientPersistence,
   persistImageResultAssets,
   persistVideoResultAsset,
   resolveVideoSourceNodeId
@@ -42,6 +43,7 @@ import { formatSseData, readChatCompletionSseStream } from '../utils/chat-sse.js
 export {
   buildImageGenerationAssets,
   buildVideoGenerationAssets,
+  markImageResultAssetsForClientPersistence,
   persistDataUrlIfNeeded,
   persistImageResultAssets,
   persistRemoteUrlIfNeeded,
@@ -109,6 +111,71 @@ const enrichUsageWith302Record = async (providerResponse = {}, fallbackUsage = {
   }
 }
 
+const shouldClientPersistImageResultAssets = (payload = {}) => {
+  const model = String(payload.model || payload.payload?.model || payload.payload?.model_name || '').trim().toLowerCase()
+  return model === 'gpt-image-lite'
+}
+
+const finalizeCompletedRun = async ({
+  userId,
+  run,
+  payload,
+  providerResponse,
+  providerAccess,
+  imageTaskId = '',
+  latencyMs = 0
+} = {}) => {
+  await supabase
+    .from('workflow_runs')
+    .update({ status: 'completed', finished_at: new Date().toISOString() })
+    .eq('id', run.id)
+
+  const baseUsage = extractUsageSnapshot(providerResponse)
+  const enrichedUsage = await enrichUsageWith302Record(providerResponse, baseUsage)
+  const imageCount = Array.isArray(providerResponse?.data) ? providerResponse.data.length : 0
+
+  await insertUsageEvent({
+    userId,
+    runId: run.id,
+    model: payload.model || payload.payload?.model,
+    apiName: providerAccess.apiName,
+    providerRequestId: enrichedUsage.requestId,
+    serviceCredentialId: providerAccess.serviceCredentialId,
+    upstreamTaskId: imageTaskId,
+    inputTokens: enrichedUsage.usage.inputTokens || 0,
+    outputTokens: enrichedUsage.usage.outputTokens || 0,
+    imageCount,
+    videoSeconds: payload.type === 'video' ? payload.payload?.seconds || 0 : 0,
+    latencyMs,
+    costUsd: enrichedUsage.usage.costUsd || 0,
+    estimatedCostUsd: baseUsage.costUsd || 0,
+    billedCostUsd: enrichedUsage.usage.costUsd || 0,
+    billingStatus: enrichedUsage.requestId ? 'billed' : 'estimated',
+    rawUsage: enrichedUsage.usage.rawUsage || providerResponse?.raw || null,
+    eventType: payload.type
+  })
+
+  if (payload.type === 'image') {
+    await upsertGeneratedMediaRecord({
+      userId,
+      runId: run.id,
+      projectId: payload.projectId,
+      runType: 'image',
+      model: payload.model || payload.payload?.model,
+      prompt: payload.payload?.prompt,
+      status: 'completed',
+      sourceNodeId: String(payload.payload?.sourceNodeId || '').trim(),
+      assets: buildImageGenerationAssets(providerResponse, String(payload.payload?.sourceNodeId || '').trim())
+    })
+  }
+}
+
+const queueCompletedRunFinalization = (params = {}) => {
+  void finalizeCompletedRun(params).catch((error) => {
+    console.warn('[runs] completed run finalization failed', error?.message || error)
+  })
+}
+
 export const createRun = async (userId, input) => {
   const payload = runSchema.parse(input)
   const providerAccess = await resolveRunProviderAccess(userId, payload)
@@ -135,7 +202,9 @@ export const createRun = async (userId, input) => {
       providerResponse = await providerChatCompletions(payload.payload, providerRequestOptions)
     } else if (payload.type === 'image') {
       providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
-      providerResponse = await persistImageResultAssets(providerResponse)
+      providerResponse = shouldClientPersistImageResultAssets(payload)
+        ? markImageResultAssetsForClientPersistence(providerResponse)
+        : await persistImageResultAssets(providerResponse)
     } else {
       providerResponse = await providerCreateVideo(payload.payload, providerRequestOptions)
       providerResponse = await persistVideoResultAsset(providerResponse)
@@ -277,6 +346,27 @@ export const createRun = async (userId, input) => {
       return {
         runId: run.id,
         status: 'running',
+        result: {
+          ...providerResponse,
+          run_id: run.id
+        }
+      }
+    }
+
+    if (isImageRun && imageHasAssets) {
+      queueCompletedRunFinalization({
+        userId,
+        run,
+        payload,
+        providerResponse,
+        providerAccess,
+        imageTaskId,
+        latencyMs
+      })
+
+      return {
+        runId: run.id,
+        status: 'completed',
         result: {
           ...providerResponse,
           run_id: run.id

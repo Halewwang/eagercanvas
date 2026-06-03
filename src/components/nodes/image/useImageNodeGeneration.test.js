@@ -116,7 +116,7 @@ test('image node generation creates a persisted image with merged references and
   await generation.runImageGeneration('regenerate')
 
   assert.equal(imageActionLoading.value, '')
-  assert.deepEqual(calls[0], ['update-node', 'image-node-1', { kind: 'action-pending' }])
+  assert.deepEqual(calls[0], ['update-node', 'image-node-1', { kind: 'action-pending' }, { persist: false }])
   assert.deepEqual(calls[1][0], 'generate')
   assert.equal(calls[1][1].output_compression, 100)
   assert.deepEqual(calls[1][1].image, [
@@ -159,6 +159,7 @@ test('image node generation displays provider output before persistence complete
   const previewCall = calls.find((call) => call[0] === 'update-node' && call[2]?.kind === 'persistence-patch')
   assert.equal(previewCall?.[2]?.persistence?.displayUrl, inlineDataUrl)
   assert.equal(previewCall?.[2]?.persistence?.persisted, false)
+  assert.deepEqual(previewCall?.[3], { persist: false })
   assert.equal(calls.some((call) => call[0] === 'resolve-persistence'), true)
   assert.equal(calls.some((call) => call[0] === 'save-project'), false)
 
@@ -168,6 +169,7 @@ test('image node generation displays provider output before persistence complete
   assert.deepEqual(calls.filter((call) => call[0] === 'save-project'), [['save-project']])
   const persistedCalls = calls.filter((call) => call[0] === 'update-node' && call[2]?.kind === 'persistence-patch')
   assert.equal(persistedCalls.at(-1)?.[2]?.persistence?.persistedUrl, 'https://cdn.example.com/generated.png')
+  assert.deepEqual(persistedCalls.at(-1)?.[3], { changeType: 'node-generated' })
 })
 
 test('image node generation keeps temporary output without saving the project', async () => {
@@ -209,7 +211,9 @@ test('image node generation persists transient inline provider output after disp
   const updateCalls = calls.filter((call) => call[0] === 'update-node' && call[2]?.kind === 'persistence-patch')
   assert.equal(updateCalls[0]?.[2]?.persistence?.displayUrl, inlineDataUrl)
   assert.equal(updateCalls[0]?.[2]?.persistence?.persisted, false)
+  assert.deepEqual(updateCalls[0]?.[3], { persist: false })
   assert.equal(updateCalls.at(-1)?.[2]?.persistence?.persistedUrl, 'https://cdn.example.com/generated.png')
+  assert.deepEqual(updateCalls.at(-1)?.[3], { changeType: 'node-generated' })
   assert.deepEqual(messages, [['success', 'Image generated']])
 })
 
@@ -229,7 +233,8 @@ test('image node generation records errors and clears the loading action', async
       payload: {
         message: 'Image generation failed: provider failed'
       }
-    }
+    },
+    { persist: false }
   ])
   assert.deepEqual(messages, [['error', 'Image generation failed: provider failed']])
 })
@@ -246,7 +251,7 @@ test('image node generation stop resets progress and marks the node stopped', as
     ['update-node', 'image-node-1', {
       kind: 'action-error',
       payload: { fallbackMessage: 'Generation stopped' }
-    }]
+    }, { persist: false }]
   ])
   assert.deepEqual(messages, [['info', 'Generation stopped']])
 })

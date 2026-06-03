@@ -21,6 +21,13 @@ test('runs.service preserves existing public helper exports for compatibility', 
   assert.match(source, /buildImageGenerationAssets,[\s\S]*buildVideoGenerationAssets[\s\S]*from '\.\/run-assets\.js'/)
 })
 
+test('runs.service returns synchronous image assets before noncritical completion bookkeeping', () => {
+  assert.match(source, /const shouldClientPersistImageResultAssets = \(payload = \{\}\) =>/)
+  assert.match(source, /markImageResultAssetsForClientPersistence\(providerResponse\)/)
+  assert.match(source, /const queueCompletedRunFinalization = \(params = \{\}\) => \{/)
+  assert.match(source, /if \(isImageRun && imageHasAssets\) \{[\s\S]*queueCompletedRunFinalization\(\{[\s\S]*return \{[\s\S]*status: 'completed'/)
+})
+
 test('runs.service delegates task ownership and status helpers to run-task-records service', () => {
   assert.match(source, /from '\.\/run-task-records\.js'/)
   assert.doesNotMatch(source, /const bindVideoTaskOwnership =/)
