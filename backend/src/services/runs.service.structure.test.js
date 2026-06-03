@@ -22,7 +22,9 @@ test('runs.service preserves existing public helper exports for compatibility', 
 })
 
 test('runs.service returns synchronous image assets before noncritical completion bookkeeping', () => {
-  assert.match(source, /const shouldClientPersistImageResultAssets = \(payload = \{\}\) =>/)
+  assert.match(source, /shouldPersistImageResultAssetsBeforeResponse/)
+  assert.match(source, /const shouldClientPersistImageResultAssets = \(payload = \{\}, providerResponse = \{\}\) =>/)
+  assert.match(source, /!shouldPersistImageResultAssetsBeforeResponse\(providerResponse\)/)
   assert.match(source, /markImageResultAssetsForClientPersistence\(providerResponse\)/)
   assert.match(source, /const queueCompletedRunFinalization = \(params = \{\}\) => \{/)
   assert.match(source, /if \(isImageRun && imageHasAssets\) \{[\s\S]*queueCompletedRunFinalization\(\{[\s\S]*return \{[\s\S]*status: 'completed'/)

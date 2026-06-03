@@ -67,6 +67,33 @@ test('persistImageResultAssets does not wait on inline data URL storage', async 
   ])
 })
 
+test('persistImageResultAssets uploads oversized inline data URLs before returning to the client', async () => {
+  const largeDataUrl = `data:image/png;base64,${'A'.repeat(3 * 1024 * 1024)}`
+  const calls = []
+
+  const result = await persistImageResultAssets(
+    {
+      provider: 'derouter',
+      data: [
+        { url: largeDataUrl }
+      ]
+    },
+    {
+      persistDataUrl: async (url, fileName) => {
+        calls.push({ url, fileName })
+        return 'https://storage.example.com/persisted-large.png'
+      }
+    }
+  )
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, largeDataUrl)
+  assert.match(calls[0].fileName, /^generated-\d+-0\.png$/)
+  assert.deepEqual(result.data, [
+    { url: 'https://storage.example.com/persisted-large.png' }
+  ])
+})
+
 test('markImageResultAssetsForClientPersistence marks provider outputs transient without uploading', () => {
   const inlineDataUrl = 'data:image/png;base64,aW1hZ2UtYnl0ZXM='
   const result = markImageResultAssetsForClientPersistence({

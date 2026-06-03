@@ -19,7 +19,8 @@ import {
   markImageResultAssetsForClientPersistence,
   persistImageResultAssets,
   persistVideoResultAsset,
-  resolveVideoSourceNodeId
+  resolveVideoSourceNodeId,
+  shouldPersistImageResultAssetsBeforeResponse
 } from './run-assets.js'
 import {
   assertImageTaskOwnership,
@@ -47,6 +48,7 @@ export {
   persistDataUrlIfNeeded,
   persistImageResultAssets,
   persistRemoteUrlIfNeeded,
+  shouldPersistImageResultAssetsBeforeResponse,
   persistVideoResultAsset
 } from './run-assets.js'
 
@@ -111,9 +113,9 @@ const enrichUsageWith302Record = async (providerResponse = {}, fallbackUsage = {
   }
 }
 
-const shouldClientPersistImageResultAssets = (payload = {}) => {
+const shouldClientPersistImageResultAssets = (payload = {}, providerResponse = {}) => {
   const model = String(payload.model || payload.payload?.model || payload.payload?.model_name || '').trim().toLowerCase()
-  return model === 'gpt-image-lite'
+  return model === 'gpt-image-lite' && !shouldPersistImageResultAssetsBeforeResponse(providerResponse)
 }
 
 const finalizeCompletedRun = async ({
@@ -202,7 +204,7 @@ export const createRun = async (userId, input) => {
       providerResponse = await providerChatCompletions(payload.payload, providerRequestOptions)
     } else if (payload.type === 'image') {
       providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
-      providerResponse = shouldClientPersistImageResultAssets(payload)
+      providerResponse = shouldClientPersistImageResultAssets(payload, providerResponse)
         ? markImageResultAssetsForClientPersistence(providerResponse)
         : await persistImageResultAssets(providerResponse)
     } else {
