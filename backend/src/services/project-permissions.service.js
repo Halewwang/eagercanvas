@@ -8,7 +8,29 @@ const PROJECT_ACCESS = Object.freeze({
   none: 'none'
 })
 
+const PROJECT_ACCESS_PRIORITY = Object.freeze({
+  [PROJECT_ACCESS.none]: 0,
+  [PROJECT_ACCESS.viewer]: 1,
+  [PROJECT_ACCESS.editor]: 2,
+  [PROJECT_ACCESS.owner]: 3
+})
+
 const isTeamProject = (project = {}) => String(project.access_mode || '') === 'team'
+
+const normalizeProjectAccess = (role = '') => {
+  const normalized = String(role || '').trim()
+  return Object.prototype.hasOwnProperty.call(PROJECT_ACCESS_PRIORITY, normalized)
+    ? normalized
+    : PROJECT_ACCESS.none
+}
+
+const assignProjectAccess = (accessByProjectId, projectId, role) => {
+  const normalized = normalizeProjectAccess(role)
+  const current = normalizeProjectAccess(accessByProjectId.get(projectId))
+  if (PROJECT_ACCESS_PRIORITY[normalized] > PROJECT_ACCESS_PRIORITY[current]) {
+    accessByProjectId.set(projectId, normalized)
+  }
+}
 
 const getProjectMemberRole = async (userId, projectId, { supabaseClient = supabase } = {}) => {
   if (!userId || !projectId) return ''
@@ -52,6 +74,74 @@ export const resolveProjectAccess = async (userId, project = {}, options = {}) =
   }
 
   return PROJECT_ACCESS.none
+}
+
+export const resolveProjectListAccessMap = async (userId, rows = [], options = {}) => {
+  const normalizedUserId = String(userId || '').trim()
+  const projects = (Array.isArray(rows) ? rows : []).filter((project) => project?.id)
+  const accessByProjectId = new Map(projects.map((project) => [project.id, PROJECT_ACCESS.none]))
+  if (!normalizedUserId || !projects.length) return accessByProjectId
+
+  const supabaseClient = options.supabaseClient || supabase
+  const directSharedIds = options.directSharedIds instanceof Set
+    ? options.directSharedIds
+    : new Set(options.directSharedIds || [])
+
+  const nonOwnedProjects = []
+  for (const project of projects) {
+    if (String(project.user_id || '') === normalizedUserId) {
+      accessByProjectId.set(project.id, PROJECT_ACCESS.owner)
+      continue
+    }
+    if (directSharedIds.has(project.id)) {
+      accessByProjectId.set(project.id, PROJECT_ACCESS.viewer)
+    }
+    nonOwnedProjects.push(project)
+  }
+
+  const projectIds = Array.from(new Set(nonOwnedProjects.map((project) => project.id).filter(Boolean)))
+  if (projectIds.length) {
+    const { data, error } = await supabaseClient
+      .from('project_members')
+      .select('project_id, role')
+      .eq('user_id', normalizedUserId)
+      .in('project_id', projectIds)
+
+    if (error) throw new HttpError(500, error.message, 'PROJECT_MEMBER_QUERY_FAILED')
+    ;(data || []).forEach((member) => {
+      assignProjectAccess(accessByProjectId, member.project_id, member.role)
+    })
+  }
+
+  const workspaceIds = Array.from(new Set(nonOwnedProjects
+    .filter((project) => (
+      isTeamProject(project) &&
+      accessByProjectId.get(project.id) === PROJECT_ACCESS.none &&
+      project.workspace_id
+    ))
+    .map((project) => project.workspace_id)))
+
+  if (workspaceIds.length) {
+    const { data, error } = await supabaseClient
+      .from('workspace_members')
+      .select('workspace_id, role')
+      .eq('user_id', normalizedUserId)
+      .in('workspace_id', workspaceIds)
+
+    if (error) throw new HttpError(500, error.message, 'WORKSPACE_MEMBER_QUERY_FAILED')
+    const memberWorkspaceIds = new Set((data || []).map((member) => member.workspace_id).filter(Boolean))
+    nonOwnedProjects.forEach((project) => {
+      if (
+        accessByProjectId.get(project.id) === PROJECT_ACCESS.none &&
+        isTeamProject(project) &&
+        memberWorkspaceIds.has(project.workspace_id)
+      ) {
+        accessByProjectId.set(project.id, PROJECT_ACCESS.viewer)
+      }
+    })
+  }
+
+  return accessByProjectId
 }
 
 export const assertProjectCanRead = async (userId, project, options = {}) => {

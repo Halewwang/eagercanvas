@@ -103,6 +103,13 @@ export const apiListFeaturedTemplates = (params = {}) =>
     silentNetworkErrorToast: true
   })
 
+export const apiGetSharedTemplate = (templateId) =>
+  apiRequest({
+    url: `/workspace/current/templates/${encodeURIComponent(templateId)}`,
+    method: 'get',
+    silentNetworkErrorToast: true
+  })
+
 export const apiGetProjectTemplateStatus = (projectId) =>
   apiRequest({
     url: `/workspace/current/projects/${projectId}/template`,

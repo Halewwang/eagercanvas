@@ -10,6 +10,7 @@ import {
   deleteTeamWorkspace,
   favoriteSharedTemplate,
   getCurrentWorkspace,
+  getSharedTemplateDetail,
   getWorkspaceMembers,
   getProjectTemplateStatus,
   joinWorkspaceInvite,
@@ -97,6 +98,11 @@ workspaceRouter.get('/current/templates', asyncHandler(async (req, res) => {
   const result = req.query?.scope
     ? await listTemplatesByScope(req.user.id, req.query.scope)
     : await listFeaturedTemplates(req.user.id)
+  res.json({ data: result })
+}))
+
+workspaceRouter.get('/current/templates/:templateId', asyncHandler(async (req, res) => {
+  const result = await getSharedTemplateDetail(req.user.id, req.params.templateId)
   res.json({ data: result })
 }))
 

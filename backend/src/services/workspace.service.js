@@ -37,6 +37,22 @@ const publishTemplateSchema = z.object({
 
 const templateScopeSchema = z.enum(['auto', 'community', 'workspace', 'my', 'favorites']).default('auto')
 
+const TEMPLATE_LIST_COLUMNS = [
+  'id',
+  'workspace_id',
+  'source_project_id',
+  'owner_user_id',
+  'owner_display_name',
+  'owner_avatar_url',
+  'title',
+  'description',
+  'cover_url',
+  'is_published',
+  'published_at',
+  'created_at',
+  'updated_at'
+].join(', ')
+
 const normalizeCanvasForStorage = async (canvasData) => sanitizeCanvasData(canvasData || {})
 
 const normalizeCanvasForRead = async (canvasData) => sanitizeCanvasData(canvasData || {})
@@ -103,6 +119,24 @@ const mapTemplate = async (row, options = {}) => ({
   updatedAt: row.updated_at
 })
 
+const mapTemplateSummary = (row, options = {}) => ({
+  id: row.id,
+  workspaceId: row.workspace_id,
+  workspaceKind: row.workspace_kind || options.workspaceKind || '',
+  sourceProjectId: row.source_project_id,
+  ownerUserId: row.owner_user_id,
+  ownerDisplayName: row.owner_display_name || 'Unknown user',
+  ownerAvatarUrl: row.owner_avatar_url || '',
+  title: row.title,
+  description: row.description || '',
+  coverUrl: row.cover_url || '',
+  isPublished: !!row.is_published,
+  isFavorite: options.favoriteTemplateIds?.has?.(row.id) || false,
+  publishedAt: row.published_at,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at
+})
+
 const getFavoriteTemplateIds = async (userId, templateIds = []) => {
   const ids = templateIds.filter(Boolean)
   if (!ids.length) return new Set()
@@ -116,12 +150,12 @@ const getFavoriteTemplateIds = async (userId, templateIds = []) => {
   return new Set((data || []).map((item) => item.template_id))
 }
 
-const mapTemplatesForRead = async (userId, rows = [], options = {}) => {
+const mapTemplateSummariesForRead = async (userId, rows = [], options = {}) => {
   const favoriteTemplateIds = await getFavoriteTemplateIds(userId, rows.map((row) => row.id))
-  return Promise.all((rows || []).map((row) => mapTemplate(row, {
+  return (rows || []).map((row) => mapTemplateSummary(row, {
     ...options,
     favoriteTemplateIds
-  })))
+  }))
 }
 
 const getTemplatePublishWorkspace = async (userId) => {
@@ -285,7 +319,7 @@ export const listTemplatesByScope = async (userId, rawScope = 'auto') => {
   const publicWorkspace = await ensurePublicWorkspace()
   let query = supabase
     .from('shared_project_templates')
-    .select('*')
+    .select(TEMPLATE_LIST_COLUMNS)
     .eq('is_published', true)
     .order('updated_at', { ascending: false })
   let workspace = activeWorkspace
@@ -349,11 +383,28 @@ export const listTemplatesByScope = async (userId, rawScope = 'auto') => {
   return {
     workspace,
     scope: effectiveScope,
-    templates: await mapTemplatesForRead(userId, readableTemplates, { workspaceKind })
+    templates: await mapTemplateSummariesForRead(userId, readableTemplates, { workspaceKind })
   }
 }
 
 export const listFeaturedTemplates = async (userId) => listTemplatesByScope(userId, 'auto')
+
+export const getSharedTemplateDetail = async (userId, templateId) => {
+  const { data, error } = await supabase
+    .from('shared_project_templates')
+    .select('*')
+    .eq('id', templateId)
+    .eq('is_published', true)
+    .maybeSingle()
+
+  if (error) throw new HttpError(500, error.message, 'TEMPLATE_GET_FAILED')
+  const { workspace } = await assertTemplateReadable(userId, data)
+
+  return {
+    workspace,
+    template: await mapTemplate(data, { workspaceKind: workspace.kind })
+  }
+}
 
 export const getProjectTemplateStatus = async (userId, projectId) => {
   const workspace = await getTemplatePublishWorkspace(userId)

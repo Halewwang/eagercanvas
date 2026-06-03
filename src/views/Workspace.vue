@@ -281,6 +281,7 @@ const {
   createWorkspaceDirectInvite,
   createWorkspaceInviteLink,
   favoriteSharedTemplate,
+  getSharedTemplate,
   joinWorkspaceInvite,
   loadFeaturedTemplates,
   loadPendingWorkspaceInvites,
@@ -727,9 +728,18 @@ const toggleFavoriteTemplate = async (template) => {
   }
 }
 
-const openTemplatePreview = (item) => {
+const openTemplatePreview = async (item) => {
   previewTemplate.value = item || null
   showTemplatePreviewModal.value = true
+  if (!item?.id || item.canvasData) return
+  try {
+    const template = await getSharedTemplate(item.id)
+    if (showTemplatePreviewModal.value && previewTemplate.value?.id === item.id && template) {
+      previewTemplate.value = { ...previewTemplate.value, ...template }
+    }
+  } catch {
+    // Keep the lightweight summary preview usable when detail loading fails.
+  }
 }
 
 const closeTemplatePreview = () => {
@@ -840,17 +850,22 @@ const loadWorkspaceSurfaces = async () => {
   }
   resetTemplateScopeForCurrentWorkspace()
 
-  try {
-    await loadPendingWorkspaceInvites()
-  } catch {
-    pendingWorkspaceInvites.value = []
-  }
-
-  try {
-    await loadTemplatesForActiveScope({ preferCache: true })
-  } catch {
-    featuredTemplates.value = []
-  }
+  await Promise.all([
+    (async () => {
+      try {
+        await loadPendingWorkspaceInvites()
+      } catch {
+        pendingWorkspaceInvites.value = []
+      }
+    })(),
+    (async () => {
+      try {
+        await loadTemplatesForActiveScope({ preferCache: true })
+      } catch {
+        featuredTemplates.value = []
+      }
+    })()
+  ])
 }
 
 onMounted(async () => {

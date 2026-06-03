@@ -8,6 +8,7 @@ import {
   apiFavoriteSharedTemplate,
   apiGetCurrentWorkspace,
   apiGetProjectTemplateStatus,
+  apiGetSharedTemplate,
   apiJoinWorkspaceInvite,
   apiLeaveWorkspace,
   apiListFeaturedTemplates,
@@ -119,6 +120,18 @@ const setFeaturedTemplatesForScope = (scope, templates = []) => {
   featuredTemplates.value = templates
   templateCache.set(getTemplateCacheKey(normalizedScope), templates)
   return featuredTemplates.value
+}
+
+const mergeTemplateIntoLoadedLists = (template) => {
+  if (!template?.id) return template
+  const mergeItems = (items = []) => items.map((item) => (
+    item.id === template.id ? { ...item, ...template } : item
+  ))
+  featuredTemplates.value = mergeItems(featuredTemplates.value)
+  for (const [key, templates] of templateCache.entries()) {
+    templateCache.set(key, mergeItems(templates))
+  }
+  return template
 }
 
 export const clearTemplateCache = () => {
@@ -456,6 +469,18 @@ export const getProjectTemplateStatus = async (projectId) => {
   return normalizeTemplate(response?.data?.template || null)
 }
 
+export const getSharedTemplate = async (templateId) => {
+  if (BYPASS_AUTH_IN_DEV) {
+    const template = normalizeTemplate(getLocalPreviewTemplateById(templateId))
+    currentWorkspace.value = getLocalPreviewWorkspace()
+    return mergeTemplateIntoLoadedLists(template)
+  }
+
+  const response = await apiGetSharedTemplate(templateId)
+  currentWorkspace.value = normalizeWorkspace(response?.data?.workspace || currentWorkspace.value)
+  return mergeTemplateIntoLoadedLists(normalizeTemplate(response?.data?.template || null))
+}
+
 export const publishProjectTemplate = async (projectId, payload) => {
   const response = await apiPublishProjectTemplate(projectId, payload)
   currentWorkspace.value = normalizeWorkspace(response?.data?.workspace || currentWorkspace.value)
@@ -519,6 +544,7 @@ export const useWorkspaceStore = () => ({
   deleteTeamWorkspace,
   loadFeaturedTemplates,
   clearTemplateCache,
+  getSharedTemplate,
   getProjectTemplateStatus,
   publishProjectTemplate,
   unpublishProjectTemplate,

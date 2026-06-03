@@ -154,6 +154,24 @@ const countWorkspaceMembers = async (workspaceId, { supabaseClient = supabase } 
   return count || 0
 }
 
+export const countWorkspaceMembersByWorkspaceId = async (workspaceIds = [], { supabaseClient = supabase } = {}) => {
+  const ids = Array.from(new Set((workspaceIds || []).filter(Boolean)))
+  const counts = new Map(ids.map((id) => [id, 0]))
+  if (!ids.length) return counts
+
+  const { data, error } = await supabaseClient
+    .from('workspace_members')
+    .select('workspace_id')
+    .in('workspace_id', ids)
+
+  if (error) return counts
+  ;(data || []).forEach((member) => {
+    if (!counts.has(member.workspace_id)) return
+    counts.set(member.workspace_id, counts.get(member.workspace_id) + 1)
+  })
+  return counts
+}
+
 export const ensurePublicWorkspace = async ({ supabaseClient = supabase } = {}) => {
   return upsertWorkspaceWithLegacyFallback({
     row: {
@@ -342,10 +360,10 @@ export const listUserWorkspaces = async (userId, { supabaseClient = supabase } =
   if (workspaceError) throw new HttpError(500, workspaceError.message, 'WORKSPACE_LIST_FAILED')
 
   const roleByWorkspaceId = new Map((memberships || []).map((item) => [item.workspace_id, item.role]))
-  const memberCounts = new Map()
-  await Promise.all((rows || []).map(async (row) => {
-    memberCounts.set(row.id, await countWorkspaceMembers(row.id, { supabaseClient }))
-  }))
+  const memberCounts = await countWorkspaceMembersByWorkspaceId(
+    (rows || []).map((row) => row.id),
+    { supabaseClient }
+  )
 
   const workspaces = (rows || [])
     .map((row) => mapWorkspace(row, roleByWorkspaceId.get(row.id) || 'member', memberCounts.get(row.id) || 1))

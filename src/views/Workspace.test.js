@@ -8,6 +8,7 @@ const styleSource = readFileSync(new URL('../style.css', import.meta.url), 'utf8
 const iconsSource = readFileSync(new URL('../icons/coolicons.js', import.meta.url), 'utf8')
 const projectsStoreSource = readFileSync(new URL('../stores/projects.js', import.meta.url), 'utf8')
 const projectsApiSource = readFileSync(new URL('../api/projects.js', import.meta.url), 'utf8')
+const workspaceApiSource = readFileSync(new URL('../api/workspace.js', import.meta.url), 'utf8')
 const usageApiSource = readFileSync(new URL('../api/usage.js', import.meta.url), 'utf8')
 
 function readWorkspaceComponentSource(name) {
@@ -543,7 +544,7 @@ test('workspace cloud surfaces fail softly while project list stays cloud author
   assert.match(workspaceSource, /const loadWorkspaceSurfaces = async \(\) => \{/)
   assert.match(workspaceSource, /try\s*\{\s*await loadWorkspaces\(\)\s*\}\s*catch/s)
   assert.doesNotMatch(workspaceSource, /loadCurrentWorkspace/)
-  assert.match(workspaceSource, /try\s*\{\s*await loadPendingWorkspaceInvites\(\)\s*\}\s*catch/s)
+  assert.match(workspaceSource, /Promise\.all\(\[\s*\(async \(\) => \{[\s\S]*loadPendingWorkspaceInvites\(\)/)
   assert.match(workspaceSource, /loadTemplatesForActiveScope\(\{ preferCache: true \}\)/)
   assert.match(workspaceSource, /await Promise\.all\(\[\s*loadWorkspaceProjects\(\),\s*loadWorkspaceSurfaces\(\)\s*\]\)/)
 })
@@ -607,4 +608,19 @@ test('workspace personal project actions support copying to joined teams and sha
   const loadSurfacesStart = workspaceSource.indexOf('const loadWorkspaceSurfaces = async () => {')
   assert.doesNotMatch(workspaceSource.slice(copyStart, shareStart), /await refreshWorkspaceData\(\)/)
   assert.doesNotMatch(workspaceSource.slice(shareStart, loadSurfacesStart), /await refreshWorkspaceData\(\)/)
+})
+
+test('workspace template preview fetches full canvas details on demand', () => {
+  assert.match(workspaceSource, /getSharedTemplate/)
+  assert.match(workspaceApiSource, /export const apiGetSharedTemplate/)
+  assert.match(workspaceSource, /const openTemplatePreview = async \(item\) => \{/)
+
+  const previewStart = workspaceSource.indexOf('const openTemplatePreview = async (item) => {')
+  const previewEnd = workspaceSource.indexOf('const closeTemplatePreview = () => {')
+  const previewSource = workspaceSource.slice(previewStart, previewEnd)
+
+  assert.match(previewSource, /showTemplatePreviewModal\.value = true/)
+  assert.match(previewSource, /await getSharedTemplate\(item\.id\)/)
+  assert.match(previewSource, /previewTemplate\.value = \{ \.\.\.previewTemplate\.value, \.\.\.template \}/)
+  assert.doesNotMatch(previewSource, /await useSharedTemplate/)
 })

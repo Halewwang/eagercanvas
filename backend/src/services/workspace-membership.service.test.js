@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
+  countWorkspaceMembersByWorkspaceId,
   ensurePersonalWorkspace,
   ensurePublicWorkspace,
   mapWorkspace
@@ -78,6 +79,39 @@ const createLegacyWorkspaceClient = ({ upserts = [] } = {}) => ({
   }
 })
 
+const createWorkspaceMemberCountClient = ({ members = [] } = {}) => {
+  const calls = []
+  return {
+    calls,
+    from(table) {
+      const query = {
+        inFilters: {},
+        select() {
+          calls.push(['select', table])
+          return this
+        },
+        in(column, values) {
+          this.inFilters[column] = values
+          return this
+        },
+        resolve() {
+          if (table !== 'workspace_members') return { data: [], error: null }
+          return {
+            data: members.filter((member) => (
+              (this.inFilters.workspace_id || []).includes(member.workspace_id)
+            )),
+            error: null
+          }
+        },
+        then(resolve, reject) {
+          return Promise.resolve(this.resolve()).then(resolve, reject)
+        }
+      }
+      return query
+    }
+  }
+}
+
 test('mapWorkspace infers public and personal kinds from legacy workspace rows', () => {
   const publicWorkspace = mapWorkspace({ id: 'public-1', slug: 'shared-workspace', name: 'Shared Workspace', is_default: true })
   const personalWorkspace = mapWorkspace({ id: 'personal-1', slug: 'personal-user-1', name: 'Personal Workspace', is_default: false })
@@ -101,6 +135,24 @@ test('mapWorkspace marks modern workspace rows when kind exists', () => {
   assert.equal(workspace.kind, 'personal')
   assert.equal(workspace.schemaVersion, 'modern')
   assert.equal(workspace.createdBy, 'user-1')
+})
+
+test('countWorkspaceMembersByWorkspaceId batches workspace member counts', async () => {
+  const supabaseClient = createWorkspaceMemberCountClient({
+    members: [
+      { workspace_id: 'workspace-1', user_id: 'user-1' },
+      { workspace_id: 'workspace-1', user_id: 'user-2' },
+      { workspace_id: 'workspace-2', user_id: 'user-1' },
+      { workspace_id: 'workspace-3', user_id: 'user-3' }
+    ]
+  })
+
+  const counts = await countWorkspaceMembersByWorkspaceId(['workspace-1', 'workspace-2'], { supabaseClient })
+
+  assert.equal(counts.get('workspace-1'), 2)
+  assert.equal(counts.get('workspace-2'), 1)
+  assert.equal(counts.has('workspace-3'), false)
+  assert.equal(supabaseClient.calls.filter((call) => call[1] === 'workspace_members').length, 1)
 })
 
 test('ensurePublicWorkspace falls back to legacy workspace columns when kind is missing', async () => {

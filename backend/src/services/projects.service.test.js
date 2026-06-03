@@ -77,3 +77,12 @@ test('project copy and direct sharing stay scoped to personal owner projects', (
   assert.match(projectsServiceSource, /PERSONAL_PROJECT_SHARE_REQUIRED/)
   assert.match(projectsServiceSource, /Only personal projects can be shared with a user/)
 })
+
+test('project listing uses batched access resolution instead of per-row permission lookups', () => {
+  const start = projectsServiceSource.indexOf('export const listProjects = async')
+  const end = projectsServiceSource.indexOf('export const getProject = async')
+  const listProjectsSource = projectsServiceSource.slice(start, end)
+
+  assert.match(listProjectsSource, /resolveProjectListAccessMap\(userId, rows, \{ directSharedIds \}\)/)
+  assert.doesNotMatch(listProjectsSource, /await resolveProjectAccess\(userId, row\)/)
+})

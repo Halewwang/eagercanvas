@@ -9,6 +9,7 @@ import {
   createProjectEditRequest,
   listProjectEditRequests,
   resolveProjectAccess,
+  resolveProjectListAccessMap,
   reviewProjectEditRequest
 } from './project-permissions.service.js'
 import {
@@ -237,9 +238,10 @@ export const listProjects = async (userId) => {
   const directSharedIds = new Set(directSharedRows.map((row) => row.id).filter(Boolean))
   const rows = mergeProjectListRows(data || [], directSharedRows)
   const ownerProfiles = await getOwnerProfiles(rows.map((row) => row.user_id))
+  const accessByProjectId = await resolveProjectListAccessMap(userId, rows, { directSharedIds })
   const projects = []
   for (const row of rows) {
-    const permission = directSharedIds.has(row.id) ? 'viewer' : await resolveProjectAccess(userId, row)
+    const permission = accessByProjectId.get(row.id) || 'none'
     if (permission === 'none') continue
     projects.push(await mapProjectForRead(row, {
       permission,
