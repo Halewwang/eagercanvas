@@ -59,6 +59,23 @@ test('image request helper routes Gemini preview with derived aspect ratio, reso
   assert.deepEqual(request.payload.images, ['https://example.com/first.png'])
 })
 
+test('image request helper treats Nano Banana Pro aliases as Gemini preview adapter models', () => {
+  const request = resolveImageGenerationRequest({
+    model: 'nano-banana-pro',
+    prompt: 'Create a 4K product shot',
+    size: '5120x2880',
+    image: 'https://example.com/source.png',
+    resolution: '4k'
+  })
+
+  assert.equal(request.kind, 'adapter')
+  assert.equal(request.adapter, 'dashboard302')
+  assert.equal(request.payload.model, 'nano-banana-pro')
+  assert.equal(request.payload.aspect_ratio, '16:9')
+  assert.equal(request.payload.resolution, '4k')
+  assert.deepEqual(request.payload.images, ['https://example.com/source.png'])
+})
+
 test('image request helper routes Wavespeed models with size fallback while preserving task flags', () => {
   const request = resolveImageGenerationRequest({
     model_name: 'wavespeed-ai/ghibli',

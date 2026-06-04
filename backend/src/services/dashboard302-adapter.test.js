@@ -298,6 +298,59 @@ test('Dashboard302 adapter keeps Gemini Pro 4K generation asynchronous to avoid 
   assert.equal(requests[0].body.enable_sync_mode, false)
 })
 
+test('Dashboard302 adapter routes Nano Banana Pro model aliases through the Gemini Pro async endpoint', async () => {
+  const originalFetch = global.fetch
+  const requests = []
+
+  global.fetch = async (url, init) => {
+    requests.push({
+      url: String(url),
+      method: init?.method || 'GET',
+      body: init?.body ? JSON.parse(init.body) : null
+    })
+
+    return new Response(
+      JSON.stringify({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'nano-pro-task-4k',
+          outputs: [],
+          status: 'created'
+        }
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      }
+    )
+  }
+
+  try {
+    const result = await new Dashboard302ProviderAdapter().imageGeneration(
+      {
+        model: 'nano-banana-pro',
+        prompt: 'Create a large product billboard',
+        aspect_ratio: '16:9',
+        resolution: '4k',
+        enable_sync_mode: true
+      },
+      { apiKey: 'sk-test' }
+    )
+
+    assert.equal(result.task_id, 'nano-pro-task-4k')
+    assert.equal(result.status, 'created')
+  } finally {
+    global.fetch = originalFetch
+  }
+
+  assert.equal(requests.length, 1)
+  assert.match(requests[0].url, /\/ws\/api\/v3\/google\/nano-banana-pro\/text-to-image$/)
+  assert.equal(requests[0].method, 'POST')
+  assert.equal(requests[0].body.resolution, '4k')
+  assert.equal(requests[0].body.enable_sync_mode, false)
+})
+
 test('Dashboard302 adapter returns completed prediction image outputs', async () => {
   const originalFetch = global.fetch
   const requests = []

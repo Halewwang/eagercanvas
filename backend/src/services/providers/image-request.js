@@ -63,7 +63,9 @@ export const isGeminiImagePreviewModel = (model = '') => {
   const safe = String(model || '').trim().toLowerCase()
   return (
     safe.includes('gemini-3.1-flash-image-preview') ||
-    safe.includes('gemini-3-pro-image-preview')
+    safe.includes('gemini-3-pro-image-preview') ||
+    safe.includes('nano-banana-2') ||
+    safe.includes('nano-banana-pro')
   )
 }
 

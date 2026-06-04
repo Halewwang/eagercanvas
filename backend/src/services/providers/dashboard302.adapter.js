@@ -29,7 +29,9 @@ const isGeminiImagePreviewModel = (model = '') => {
   const safe = String(model || '').trim().toLowerCase()
   return (
     safe.includes('gemini-3.1-flash-image-preview') ||
-    safe.includes('gemini-3-pro-image-preview')
+    safe.includes('gemini-3-pro-image-preview') ||
+    safe.includes('nano-banana-2') ||
+    safe.includes('nano-banana-pro')
   )
 }
 
@@ -95,7 +97,9 @@ export const createWavespeedImage = async (payload = {}, requestOptions = {}) =>
 
 export const createGeminiImagePreview = async (payload = {}, requestOptions = {}) => {
   const model = String(payload.model_name || payload.model || '').trim().toLowerCase()
-  const isGeminiPro = model.includes('gemini-3-pro-image-preview')
+  const isGeminiPro =
+    model.includes('gemini-3-pro-image-preview') ||
+    model.includes('nano-banana-pro')
   const endpointBase = isGeminiPro
     ? '/ws/api/v3/google/nano-banana-pro'
     : '/ws/api/v3/google/nano-banana-2'
