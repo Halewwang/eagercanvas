@@ -6,6 +6,7 @@ import {
   IMAGE_REQUEST_TIMEOUT_MS,
   getImageTaskId,
   getImageTaskStatus,
+  isPendingImageTaskStatus,
   normalizeGeneratedImages,
   normalizeResolution,
   ratioFromSize,
@@ -136,7 +137,7 @@ export const useImageGeneration = () => {
       if (generatedImages.length === 0) {
         const taskStatus = getImageTaskStatus(response)
         const id = getImageTaskId(response)
-        if (id && ['running', 'queued', 'pending', 'processing', 'in_progress', ''].includes(taskStatus)) {
+        if (id && isPendingImageTaskStatus(taskStatus)) {
           generatedImages = await pollImageTask(id, Number(modelConfig?.requestTimeoutMs || IMAGE_REQUEST_TIMEOUT_MS))
         }
       }

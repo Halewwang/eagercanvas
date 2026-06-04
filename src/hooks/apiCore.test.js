@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
   getImageTaskId,
   getImageTaskStatus,
+  isPendingImageTaskStatus,
   normalizeGeneratedImages,
   normalizeResolution,
   ratioFromSize,
@@ -42,6 +43,12 @@ test('image api core preserves size, resolution, task id, and output normalizati
       persistError: 'storage failed'
     }]
   )
+})
+
+test('image api core treats provider-created image tasks as pending for polling', () => {
+  assert.equal(isPendingImageTaskStatus('created'), true)
+  assert.equal(isPendingImageTaskStatus('running'), true)
+  assert.equal(isPendingImageTaskStatus('completed'), false)
 })
 
 test('video api core preserves task id, status, and nested result url extraction behavior', () => {

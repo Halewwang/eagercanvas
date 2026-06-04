@@ -75,6 +75,19 @@ export const getImageTaskStatus = (result) => String(
   ''
 ).toLowerCase()
 
+export const PENDING_IMAGE_TASK_STATUSES = new Set([
+  '',
+  'created',
+  'running',
+  'queued',
+  'pending',
+  'processing',
+  'in_progress'
+])
+
+export const isPendingImageTaskStatus = (status = '') =>
+  PENDING_IMAGE_TASK_STATUSES.has(String(status || '').trim().toLowerCase())
+
 export const getImageUrl = (item) => {
   const value = (
     item?.url ||

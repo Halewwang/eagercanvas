@@ -33,6 +33,11 @@ const isGeminiImagePreviewModel = (model = '') => {
   )
 }
 
+const normalizeGeminiImageResolution = (value = '') => {
+  const safe = String(value || '1k').trim().toLowerCase()
+  return ['1k', '2k', '4k'].includes(safe) ? safe : '1k'
+}
+
 const normalizeImageGenerationResult = async (rawResponse, { syncMode = true, requestOptions = {} } = {}) => {
   let raw = rawResponse
   let normalized = normalizeImageResponse(raw)
@@ -92,16 +97,19 @@ export const createGeminiImagePreview = async (payload = {}, requestOptions = {}
   const model = String(payload.model_name || payload.model || '').trim().toLowerCase()
   const isGeminiPro = model.includes('gemini-3-pro-image-preview')
   const endpointBase = isGeminiPro
-    ? '/ws/api/v3/google/gemini-3-pro-image'
+    ? '/ws/api/v3/google/nano-banana-pro'
     : '/ws/api/v3/google/nano-banana-2'
-  const syncMode = payload.enable_sync_mode ?? true
+  const resolution = normalizeGeminiImageResolution(payload.resolution)
+  const syncMode = isGeminiPro && resolution === '4k'
+    ? false
+    : payload.enable_sync_mode ?? true
   const images = Array.isArray(payload.images)
     ? payload.images.filter(Boolean)
     : []
   const body = {
     prompt: String(payload.prompt || '').trim(),
     aspect_ratio: String(payload.aspect_ratio || payload.ratio || '1:1').trim(),
-    resolution: String(payload.resolution || '1k').trim(),
+    resolution,
     enable_sync_mode: syncMode,
     enable_base64_output: payload.enable_base64_output ?? false
   }
@@ -115,7 +123,7 @@ export const createGeminiImagePreview = async (payload = {}, requestOptions = {}
     body.tools = payload.tools
   }
 
-  const endpoint = images.length > 0 && !isGeminiPro
+  const endpoint = images.length > 0
     ? `${endpointBase}/edit`
     : `${endpointBase}/text-to-image`
   const raw = await callProvider(endpoint, body, 'POST', requestOptions)
