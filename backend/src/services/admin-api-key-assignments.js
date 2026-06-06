@@ -39,6 +39,69 @@ const unwrapDataObject = (payload = {}) =>
     : payload
 
 const readRuntimeApiKey = (item = {}) => String(item?.api_key || item?.apiKey || '').trim()
+const DEFAULT_BILLING_INVENTORY_CONCURRENCY = 4
+
+const normalizeConcurrency = (value, fallback = DEFAULT_BILLING_INVENTORY_CONCURRENCY) => {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback
+  return Math.max(1, Math.floor(parsed))
+}
+
+const mapWithConcurrency = async (items = [], worker, concurrency = DEFAULT_BILLING_INVENTORY_CONCURRENCY) => {
+  const list = Array.isArray(items) ? items : []
+  if (!list.length) return []
+  const limit = Math.min(normalizeConcurrency(concurrency), list.length)
+  const results = new Array(list.length)
+  let nextIndex = 0
+
+  await Promise.all(Array.from({ length: limit }, async () => {
+    while (nextIndex < list.length) {
+      const index = nextIndex
+      nextIndex += 1
+      results[index] = await worker(list[index], index)
+    }
+  }))
+
+  return results
+}
+
+const loadBillingInventoryEntry = async ({
+  activeItems,
+  apiName,
+  getApiKey,
+  getApiKeyUsage
+}) => {
+  if (!activeItems.has(apiName)) return null
+  let detail = { api_name: apiName }
+
+  try {
+    detail = {
+      api_name: apiName,
+      ...unwrapDataObject(await getApiKey(apiName))
+    }
+  } catch {
+    return [apiName, detail]
+  }
+
+  const apiKey = readRuntimeApiKey(detail)
+  if (apiKey) {
+    try {
+      const usage = normalize302ApiKeyUsage(await getApiKeyUsage(apiKey))
+      detail = {
+        ...detail,
+        usage_total_cost: usage.totalCost,
+        usage_monthly_cost: usage.monthlyCost,
+        usage_daily_cost: usage.dailyCost,
+        usage_currency: usage.currency,
+        currency: usage.currency
+      }
+    } catch {
+      // Keep the key details, but do not fall back to list current_cost as billed usage.
+    }
+  }
+
+  return [apiName, detail]
+}
 
 export const loadApiKeyAssignments = async () => {
   const { data, error } = await supabase
@@ -72,7 +135,8 @@ export const loadUserApiKeyBillingInventory = async (
   {
     listApiKeys = get302ApiKeys,
     getApiKey = get302ApiKey,
-    getApiKeyUsage = get302ApiKeyUsageByKey
+    getApiKeyUsage = get302ApiKeyUsageByKey,
+    concurrency = DEFAULT_BILLING_INVENTORY_CONCURRENCY
   } = {}
 ) => {
   try {
@@ -92,38 +156,18 @@ export const loadUserApiKeyBillingInventory = async (
     const names = requestedNames.length ? requestedNames : [...activeItems.keys()]
     const inventory = new Map()
 
-    for (const apiName of names) {
-      if (!activeItems.has(apiName)) continue
-      let detail = { api_name: apiName }
-
-      try {
-        detail = {
-          api_name: apiName,
-          ...unwrapDataObject(await getApiKey(apiName))
-        }
-      } catch {
-        inventory.set(apiName, detail)
-        continue
-      }
-
-      const apiKey = readRuntimeApiKey(detail)
-      if (apiKey) {
-        try {
-          const usage = normalize302ApiKeyUsage(await getApiKeyUsage(apiKey))
-          detail = {
-            ...detail,
-            usage_total_cost: usage.totalCost,
-            usage_monthly_cost: usage.monthlyCost,
-            usage_daily_cost: usage.dailyCost,
-            usage_currency: usage.currency,
-            currency: usage.currency
-          }
-        } catch {
-          // Keep the key details, but do not fall back to list current_cost as billed usage.
-        }
-      }
-
-      inventory.set(apiName, detail)
+    const entries = await mapWithConcurrency(
+      names,
+      (apiName) => loadBillingInventoryEntry({
+        activeItems,
+        apiName,
+        getApiKey,
+        getApiKeyUsage
+      }),
+      concurrency
+    )
+    for (const entry of entries) {
+      if (entry) inventory.set(entry[0], entry[1])
     }
 
     return inventory

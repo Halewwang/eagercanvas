@@ -122,6 +122,70 @@ test('loadUserApiKeyBillingInventory enriches key details with usage-log cost', 
   assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')
 })
 
+test('loadUserApiKeyBillingInventory bounds concurrent key detail lookups', async () => {
+  const detailCalls = []
+  const detailResolvers = new Map()
+  const detailRelease = (apiName) => {
+    detailResolvers.get(apiName)?.({
+      data: {
+        api_name: apiName,
+        api_key: `sk-${apiName}`
+      }
+    })
+  }
+  const waitForMicrotasks = () => new Promise((resolve) => setImmediate(resolve))
+
+  const inventoryPromise = loadUserApiKeyBillingInventory(
+    [
+      { provider_api_name: 'eager_user_one' },
+      { provider_api_name: 'eager_user_two' },
+      { provider_api_name: 'eager_user_three' }
+    ],
+    {
+      concurrency: 2,
+      listApiKeys: async () => ({
+        data: [
+          { api_name: 'eager_user_one' },
+          { api_name: 'eager_user_two' },
+          { api_name: 'eager_user_three' }
+        ]
+      }),
+      getApiKey: async (apiName) => {
+        detailCalls.push(apiName)
+        return new Promise((resolve) => {
+          detailResolvers.set(apiName, resolve)
+        })
+      },
+      getApiKeyUsage: async (apiKey) => ({
+        data: {
+          total_cost: apiKey.endsWith('one') ? 1 : apiKey.endsWith('two') ? 2 : 3
+        }
+      })
+    }
+  )
+
+  try {
+    await waitForMicrotasks()
+    assert.deepEqual([...detailCalls], ['eager_user_one', 'eager_user_two'])
+
+    detailRelease('eager_user_one')
+    await waitForMicrotasks()
+    assert.deepEqual([...detailCalls], ['eager_user_one', 'eager_user_two', 'eager_user_three'])
+
+    detailRelease('eager_user_two')
+    detailRelease('eager_user_three')
+    const inventory = await inventoryPromise
+
+    assert.equal(inventory.get('eager_user_one').usage_total_cost, 1)
+    assert.equal(inventory.get('eager_user_two').usage_total_cost, 2)
+    assert.equal(inventory.get('eager_user_three').usage_total_cost, 3)
+  } finally {
+    detailRelease('eager_user_one')
+    detailRelease('eager_user_two')
+    detailRelease('eager_user_three')
+  }
+})
+
 test('loadUserApiKeyBillingInventory does not use list cost when detail lookup fails', async () => {
   const inventory = await loadUserApiKeyBillingInventory(
     [{ provider_api_name: 'eager_user_one', status: 'active' }],
