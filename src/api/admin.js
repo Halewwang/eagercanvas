@@ -95,10 +95,11 @@ export const getAdminIssues = (params) =>
     params
   })
 
-export const getAdminIssue = (issueGroupId) =>
+export const getAdminIssue = (issueGroupId, params) =>
   apiRequest({
     url: `/admin/issues/${encodeURIComponent(issueGroupId)}`,
-    method: 'get'
+    method: 'get',
+    params
   })
 
 export const updateAdminIssueStatus = (issueGroupId, status) =>

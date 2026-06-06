@@ -247,7 +247,9 @@ adminRouter.get('/issues', requirePermission(['admin.issue.read']), asyncHandler
 }))
 
 adminRouter.get('/issues/:issueGroupId', requirePermission(['admin.issue.read']), asyncHandler(async (req, res) => {
-  const result = await getIssueGroupForAdmin(req.params.issueGroupId)
+  const result = await getIssueGroupForAdmin(req.params.issueGroupId, {
+    groupIds: req.query.group_ids
+  })
   res.json({ data: result })
 }))
 

@@ -4,9 +4,13 @@ import {
   ADMIN_SECTION_BY_ROUTE_NAME,
   getAdminNavItems
 } from '@/utils/adminDisplay'
-import { getAdminSectionScrollCandidate } from './adminSectionNavigationCore.js'
+import {
+  getAdminSectionScrollCandidate,
+  resolveAdminScrollTarget,
+  shouldAutoScrollAdminSection
+} from './adminSectionNavigationCore.js'
 
-export { getAdminSectionScrollCandidate }
+export { getAdminSectionScrollCandidate, resolveAdminScrollTarget, shouldAutoScrollAdminSection }
 
 export const useAdminSectionNavigation = ({
   canReadAudit,
@@ -16,10 +20,12 @@ export const useAdminSectionNavigation = ({
   loadAll,
   route,
   router,
+  scrollTarget = null,
   showServiceSection,
   windowTarget = typeof window === 'undefined' ? null : window
 }) => {
   const activeSection = ref('overview')
+  let activeScrollTarget = null
   const navItems = computed(() => getAdminNavItems({
     canReadUsers: canReadUsers.value,
     showServiceSection: showServiceSection.value,
@@ -54,30 +60,40 @@ export const useAdminSectionNavigation = ({
   onMounted(async () => {
     await loadAll()
     await nextTick()
+    activeScrollTarget = resolveAdminScrollTarget({ scrollTarget, windowTarget }) || windowTarget
     const preferredSection = ADMIN_SECTION_BY_ROUTE_NAME[route.name] || 'overview'
     if (navItems.value.some((item) => item.key === preferredSection)) {
-      scrollToSection(preferredSection, { updateRoute: false })
+      if (shouldAutoScrollAdminSection({ routeName: route.name, sectionKey: preferredSection })) {
+        scrollToSection(preferredSection, { updateRoute: false })
+      } else {
+        activeSection.value = preferredSection
+        onMainScroll()
+      }
     } else {
       onMainScroll()
       if (route.name !== 'AdminDashboard') {
         router.replace({ name: 'AdminDashboard' })
       }
     }
-    windowTarget?.addEventListener?.('scroll', onMainScroll, { passive: true })
+    activeScrollTarget?.addEventListener?.('scroll', onMainScroll, { passive: true })
   })
 
   watch(() => route.name, async (name) => {
     const preferredSection = ADMIN_SECTION_BY_ROUTE_NAME[name] || 'overview'
     await nextTick()
     if (navItems.value.some((item) => item.key === preferredSection)) {
-      scrollToSection(preferredSection, { updateRoute: false })
+      if (shouldAutoScrollAdminSection({ routeName: name, sectionKey: preferredSection })) {
+        scrollToSection(preferredSection, { updateRoute: false })
+      } else {
+        activeSection.value = preferredSection
+      }
     } else if (route.name !== 'AdminDashboard') {
       router.replace({ name: 'AdminDashboard' })
     }
   })
 
   onBeforeUnmount(() => {
-    windowTarget?.removeEventListener?.('scroll', onMainScroll)
+    activeScrollTarget?.removeEventListener?.('scroll', onMainScroll)
   })
 
   return {

@@ -1,5 +1,14 @@
 const SCROLL_HEADER_OFFSET = 120
 
+export const shouldAutoScrollAdminSection = ({ routeName = '', sectionKey = '' } = {}) => {
+  return !(routeName === 'AdminDashboard' && sectionKey === 'overview')
+}
+
+export const resolveAdminScrollTarget = ({ scrollTarget = null, windowTarget = null } = {}) => {
+  if (scrollTarget) return scrollTarget
+  return windowTarget?.document?.getElementById?.('app') || null
+}
+
 export const getAdminSectionScrollCandidate = (
   navItems = [],
   getSectionEl = () => null,

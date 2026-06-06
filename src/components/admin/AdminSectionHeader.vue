@@ -4,7 +4,9 @@
       <h2 class="admin-section-title">{{ title }}</h2>
       <p v-if="caption" class="admin-section-caption">{{ caption }}</p>
     </div>
-    <slot name="actions" />
+    <div v-if="$slots.actions" class="admin-section-actions">
+      <slot name="actions" />
+    </div>
   </div>
 </template>
 
@@ -25,9 +27,24 @@ defineProps({
 .admin-section-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.admin-section-header > div:first-child {
+  min-width: 0;
+  flex: 1 1 280px;
+}
+
+.admin-section-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  max-width: 100%;
 }
 
 .admin-section-title {
@@ -40,5 +57,16 @@ defineProps({
   margin-top: 6px;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.48);
+}
+
+@media (max-width: 640px) {
+  .admin-section-header {
+    align-items: stretch;
+  }
+
+  .admin-section-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 </style>

@@ -32,8 +32,8 @@ test('admin issue inbox hook loads, filters, exports, and updates issues', async
         pagination: { page: 1, limit: 20, total: 1 }
       }
     },
-    fetchIssue: async (id) => {
-      calls.push(['detail', id])
+    fetchIssue: async (id, params) => {
+      calls.push(['detail', id, params])
       return { data: { group: { id }, events: [{ id: 'event-1' }] } }
     },
     patchIssueStatus: async (id, status) => calls.push(['patch', id, status]),
@@ -59,6 +59,7 @@ test('admin issue inbox hook loads, filters, exports, and updates issues', async
   hook.updateIssueQuery('severity', 'p1')
   await hook.loadIssues()
   await hook.openIssue('issue-1')
+  await hook.openIssue({ id: 'issue-1', merged_group_ids: ['issue-1', 'issue-2'] })
   await hook.setIssueStatus({ issueGroupId: 'issue-1', status: 'investigating' })
   await hook.exportIssues()
   await hook.notifyIssue('issue-1')
@@ -67,6 +68,7 @@ test('admin issue inbox hook loads, filters, exports, and updates issues', async
   assert.equal(hook.selectedIssue.value.group.id, 'issue-1')
   assert.equal(hook.lastExport.value.jsonFileName, 'issues.json')
   assert.ok(calls.some((call) => call[0] === 'patch' && call[2] === 'investigating'))
+  assert.ok(calls.some((call) => call[0] === 'detail' && call[2]?.group_ids === 'issue-1,issue-2'))
   assert.ok(calls.some((call) => call[0] === 'export' && call[1].severity === 'p1'))
   assert.ok(calls.some((call) => call[0] === 'notify'))
   assert.deepEqual(downloads.map((item) => item.fileName), ['issues.json', 'issues.md'])

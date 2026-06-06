@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
+import { mergeIssueDetails } from './issue-grouping.js'
 
 export const CODEX_ISSUE_SCHEMA_VERSION = 'codex_issue_table/v1'
 
@@ -19,6 +20,161 @@ const take = (values = [], limit = 10) => asArray(values).slice(0, limit)
 const safeTimestamp = (value) => String(value || new Date().toISOString()).replace(/[:.]/g, '-')
 
 const pickFromEvents = (events, key) => uniq(events.map((event) => event?.[key]).filter(Boolean))
+
+const normalizeIssuePathForOutput = (value = '') => String(value || '').replace(/^\/api\/v1(?=\/)/, '') || value
+
+const buildRepoInfo = ({
+  env = process.env,
+  root = repoRoot
+} = {}) => ({
+  root,
+  branch: env.VERCEL_GIT_COMMIT_REF
+    || env.GITHUB_REF_NAME
+    || env.GIT_BRANCH
+    || env.BRANCH
+    || 'unknown',
+  commit: env.VERCEL_GIT_COMMIT_SHA
+    || env.GITHUB_SHA
+    || env.VITE_APP_RELEASE_COMMIT
+    || env.RELEASE_COMMIT
+    || 'unknown',
+  build_id: env.VERCEL_DEPLOYMENT_ID
+    || env.VITE_APP_BUILD_ID
+    || env.BUILD_ID
+    || 'unknown',
+  environment: env.VERCEL_ENV || env.NODE_ENV || 'unknown'
+})
+
+const inferSuspectedFiles = (issue = {}) => {
+  const paths = [
+    ...asArray(issue.primary_scope?.backend?.api_paths),
+    ...asArray(issue.primary_scope?.frontend?.routes)
+  ].map(normalizeIssuePathForOutput)
+  const files = new Set()
+  const add = (...items) => items.filter(Boolean).forEach((item) => files.add(item))
+  const text = [
+    issue.title,
+    issue.category,
+    issue.source_layer,
+    ...paths,
+    ...asArray(issue.codex_diagnosis_inputs?.evidence_summary?.errors),
+    ...asArray(issue.codex_diagnosis_inputs?.sample_events).flatMap((event) => [
+      event.message_summary,
+      event.stack_summary,
+      event.api_path,
+      event.route
+    ])
+  ].filter(Boolean).join(' ')
+
+  if (/admin\/issues/i.test(text)) {
+    add(
+      'backend/src/routes/admin.routes.js',
+      'backend/src/services/admin-issues.service.js',
+      'backend/src/services/issue-codex-export.service.js',
+      'src/hooks/useAdminIssueInbox.js',
+      'src/components/admin/features/AdminIssueInboxSection.vue'
+    )
+  }
+  if (/admin\/users/i.test(text)) {
+    add(
+      'backend/src/routes/admin.routes.js',
+      'backend/src/services/admin-users-list.js',
+      'src/views/AdminUsers.vue'
+    )
+  }
+  if (/auth\/(me|refresh)/i.test(text)) {
+    add(
+      'backend/src/routes/auth.routes.js',
+      'src/api/auth.js',
+      'src/stores/auth.js',
+      'src/utils/request.js'
+    )
+  }
+  if (/images\/:taskid|images\/generations/i.test(text)) {
+    add(
+      'backend/src/routes/index.js',
+      'backend/src/services/runs.service.js',
+      'backend/src/services/run-task-records.js',
+      'backend/src/services/run-assets.js'
+    )
+  }
+  if (/projects(\/|:|$)/i.test(text)) {
+    add(
+      'backend/src/routes/projects.routes.js',
+      'backend/src/services/projects.service.js',
+      'src/api/projects.js'
+    )
+  }
+  if (/workspace\/current\/templates|workspace\/workspaces/i.test(text)) {
+    add(
+      'backend/src/routes/workspace.routes.js',
+      'backend/src/services/workspace.service.js',
+      'src/api/workspace.js'
+    )
+  }
+  if (/302\/(api-record|balance)/i.test(text)) {
+    add(
+      'backend/src/routes/admin.routes.js',
+      'backend/src/services/dashboard302.service.js',
+      'backend/src/services/admin-usage.service.js'
+    )
+  }
+  if (issue.source_layer === 'provider' || issue.primary_scope?.provider?.providers?.length) {
+    add(
+      'backend/src/services/provider.service.js',
+      'backend/src/services/provider-http-client.js',
+      'backend/src/services/run-provider-access.js'
+    )
+  }
+  if (/erofs|read-only file system/i.test(text)) {
+    add(
+      'backend/src/services/issue-codex-export.service.js',
+      'backend/src/routes/admin.routes.js'
+    )
+  }
+  if (issue.source_layer === 'frontend') {
+    add('src/observability/index.js', 'src/utils/request.js')
+  }
+  return [...files]
+}
+
+const buildReproduction = (issue = {}) => {
+  const route = issue.primary_scope?.frontend?.routes?.[0]
+  const apiPath = issue.primary_scope?.backend?.api_paths?.[0]
+  const steps = []
+  if (route) steps.push(`Open ${route}.`)
+  if (/admin\/issues\/export/.test(String(apiPath))) {
+    steps.push('Click 导出 Codex in the admin Issue Inbox.')
+  } else if (apiPath) {
+    const method = issue.primary_scope?.backend?.methods?.[0] || 'GET'
+    steps.push(`Trigger ${method} ${apiPath} and capture the request_id.`)
+  }
+  if (!steps.length) steps.push('Replay the latest_request_id and compare neighboring sample_events.')
+  return {
+    steps,
+    requires_live_provider: Boolean(issue.primary_scope?.provider?.providers?.length),
+    requires_admin_session: steps.some((step) => /admin/i.test(step))
+  }
+}
+
+const buildValidation = (issue = {}) => {
+  const commands = new Set(['npm run check'])
+  if (['backend', 'database', 'provider', 'performance'].includes(issue.source_layer)) commands.add('npm run test:backend')
+  if (issue.source_layer === 'frontend') commands.add('npm run test:frontend')
+  commands.add('npm run build')
+  const browserSmoke = []
+  const route = issue.primary_scope?.frontend?.routes?.[0]
+  if (route) browserSmoke.push(`${route} with VITE_BYPASS_AUTH=true`)
+  if (/admin\/issues/i.test(String(issue.primary_scope?.backend?.api_paths?.[0] || ''))) {
+    browserSmoke.push('/admin/issues export and detail smoke')
+  }
+  return {
+    commands: [...commands],
+    browser_smoke: uniq(browserSmoke)
+  }
+}
+
+const getRootCauseHints = (group = {}) => asArray(group.codex_handoff?.root_cause_hints)
 
 const inferInvestigationSteps = (group, events = []) => {
   const steps = []
@@ -44,9 +200,12 @@ const inferInvestigationSteps = (group, events = []) => {
 
 export const createCodexIssueTable = ({
   details = [],
-  generatedAt = new Date().toISOString()
+  generatedAt = new Date().toISOString(),
+  filters = {},
+  repo = buildRepoInfo()
 } = {}) => {
-  const issues = details.map(({ group, events = [] }) => {
+  const mergedDetails = mergeIssueDetails(details)
+  const issues = mergedDetails.map(({ group, events = [] }, index) => {
     const eventList = asArray(events)
     const frontendRoutes = uniq([
       ...asArray(group?.evidence_summary?.routes),
@@ -56,7 +215,7 @@ export const createCodexIssueTable = ({
     const apiPaths = uniq([
       ...asArray(group?.evidence_summary?.api_paths),
       ...pickFromEvents(eventList, 'path_template')
-    ])
+    ].map(normalizeIssuePathForOutput))
     const providers = uniq([
       ...asArray(group?.evidence_summary?.providers),
       ...pickFromEvents(eventList, 'provider')
@@ -86,14 +245,19 @@ export const createCodexIssueTable = ({
       db_operation: event.db_operation || null,
       db_code: event.db_code || null,
       error_code: event.error_code || null,
-      message_summary: event.message_summary || null
+      message_summary: event.message_summary || null,
+      stack_summary: event.stack_summary || null
     }))
 
-    return {
+    const issue = {
+      id: `ISS-${String(generatedAt).slice(0, 10).replace(/-/g, '')}-${String(index + 1).padStart(3, '0')}`,
       issue_group_id: group.id,
+      merged_issue_group_ids: asArray(group.merged_group_ids).length ? group.merged_group_ids : [group.id],
+      merged_group_count: Number(group.merged_group_count || 1),
       fingerprint: group.fingerprint,
       status: group.status,
       severity: group.severity,
+      priority: String(group.severity || '').toUpperCase(),
       title: group.title,
       source_layer: group.source_layer,
       category: group.category,
@@ -132,7 +296,7 @@ export const createCodexIssueTable = ({
       root_cause: {
         suspected_layer: group.root_cause_layer || group.source_layer || 'unknown',
         confidence: group.root_cause_confidence || 'unknown',
-        hints: asArray(group.codex_handoff?.root_cause_hints)
+        hints: getRootCauseHints(group)
       },
       codex_diagnosis_inputs: {
         latest_request_id: group.latest_request_id || null,
@@ -143,11 +307,49 @@ export const createCodexIssueTable = ({
       },
       suggested_investigation: inferInvestigationSteps(group, eventList)
     }
+    const suspectedFiles = uniq([
+      ...asArray(group.codex_handoff?.suspected_files),
+      ...inferSuspectedFiles(issue)
+    ])
+    return {
+      ...issue,
+      impact: {
+        events: issue.event_count,
+        affected_users: issue.affected.users,
+        affected_sessions: issue.affected.sessions,
+        affected_routes: issue.affected.routes,
+        first_seen: issue.first_seen_at,
+        last_seen: issue.last_seen_at
+      },
+      evidence: {
+        routes: issue.primary_scope.frontend.routes,
+        api_paths: issue.primary_scope.backend.api_paths,
+        request_ids: issue.primary_scope.backend.request_ids,
+        providers: issue.primary_scope.provider.providers,
+        models: issue.primary_scope.provider.models,
+        db_tables: issue.primary_scope.database.tables,
+        db_operations: issue.primary_scope.database.operations,
+        db_codes: issue.primary_scope.database.codes,
+        errors: asArray(group.evidence_summary?.errors)
+      },
+      root_cause_hints: issue.root_cause.hints,
+      suspected_files: suspectedFiles,
+      reproduction: buildReproduction(issue),
+      validation: buildValidation(issue),
+      redaction: {
+        prompt_omitted: true,
+        media_omitted: true,
+        user_exported_as_hash: true
+      }
+    }
   })
 
   return {
     schema: CODEX_ISSUE_SCHEMA_VERSION,
+    schema_version: CODEX_ISSUE_SCHEMA_VERSION,
     generated_at: generatedAt,
+    repo,
+    filters,
     issue_count: issues.length,
     issues
   }
@@ -161,8 +363,8 @@ export const renderCodexIssueMarkdown = (table) => {
     `Generated: ${table.generated_at}`,
     `Issues: ${table.issue_count}`,
     '',
-    '| Severity | Layer | Status | Title | Scope | Latest request | Suggested start |',
-    '| --- | --- | --- | --- | --- | --- | --- |'
+    '| Priority | Source | Issue ID | Title | Impact | Evidence | Root-Cause Signal | Suspected Files | Repro | Validation |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
   ]
 
   table.issues.forEach((issue) => {
@@ -172,8 +374,12 @@ export const renderCodexIssueMarkdown = (table) => {
       issue.primary_scope.provider.models[0],
       issue.primary_scope.database.tables[0]
     ].filter(Boolean).join('<br>') || '-'
-    const start = issue.suggested_investigation[0] || '-'
-    lines.push(`| ${issue.severity} | ${issue.source_layer} | ${issue.status} | ${issue.title} | ${scope} | ${issue.codex_diagnosis_inputs.latest_request_id || '-'} | ${start} |`)
+    const impact = `${issue.impact.events} events, ${issue.impact.affected_users} users`
+    const rootSignal = issue.root_cause_hints[0] || issue.root_cause.suspected_layer || '-'
+    const suspectedFiles = issue.suspected_files.slice(0, 3).join('<br>') || '-'
+    const repro = issue.reproduction.steps[0] || '-'
+    const validation = issue.validation.commands.join('<br>') || '-'
+    lines.push(`| ${issue.priority} | ${issue.source_layer} | ${issue.id} | ${issue.title} | ${impact} | ${scope} | ${rootSignal} | ${suspectedFiles} | ${repro} | ${validation} |`)
   })
 
   table.issues.forEach((issue, index) => {
@@ -182,10 +388,12 @@ export const renderCodexIssueMarkdown = (table) => {
       `## ${index + 1}. ${issue.title}`,
       '',
       `- Group: \`${issue.issue_group_id}\``,
+      `- Merged groups: ${issue.merged_issue_group_ids.map((id) => `\`${id}\``).join(', ')}`,
       `- Fingerprint: \`${issue.fingerprint}\``,
       `- Root cause: ${issue.root_cause.suspected_layer} (${issue.root_cause.confidence})`,
       `- First/last seen: ${issue.first_seen_at} / ${issue.last_seen_at}`,
       `- Affected: ${issue.affected.users} users, ${issue.affected.sessions} sessions, ${issue.affected.routes} routes`,
+      `- Suspected files: ${issue.suspected_files.map((file) => `\`${file}\``).join(', ') || '-'}`,
       '',
       '### Sample Events',
       '',
@@ -200,9 +408,11 @@ export const renderCodexIssueMarkdown = (table) => {
 
 export const buildCodexIssueExportPayload = ({
   details,
-  generatedAt = new Date().toISOString()
+  generatedAt = new Date().toISOString(),
+  filters = {},
+  repo = buildRepoInfo()
 } = {}) => {
-  const table = createCodexIssueTable({ details, generatedAt })
+  const table = createCodexIssueTable({ details, generatedAt, filters, repo })
   const baseName = `issue-inbox-${safeTimestamp(generatedAt)}`
   const jsonFileName = `${baseName}.json`
   const markdownFileName = `${baseName}.md`
@@ -221,10 +431,12 @@ export const writeCodexIssueExport = async ({
   details,
   outputDir = DEFAULT_OUTPUT_DIR,
   generatedAt = new Date().toISOString(),
+  filters = {},
+  repo = buildRepoInfo(),
   writeFile = fs.writeFile,
   mkdir = fs.mkdir
 } = {}) => {
-  const payload = buildCodexIssueExportPayload({ details, generatedAt })
+  const payload = buildCodexIssueExportPayload({ details, generatedAt, filters, repo })
   await mkdir(outputDir, { recursive: true })
   const jsonPath = path.join(outputDir, payload.jsonFileName)
   const markdownPath = path.join(outputDir, payload.markdownFileName)
@@ -283,8 +495,8 @@ export const exportCodexIssues = async ({
     events: eventsByFingerprint.get(group.fingerprint) || []
   }))
   const result = writeFiles
-    ? await writeCodexIssueExport({ details, outputDir, generatedAt })
-    : buildCodexIssueExportPayload({ details, generatedAt })
+    ? await writeCodexIssueExport({ details, outputDir, generatedAt, filters })
+    : buildCodexIssueExportPayload({ details, generatedAt, filters })
   return {
     generatedAt,
     issueCount: result.table.issue_count,

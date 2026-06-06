@@ -6,6 +6,20 @@ const LONG_HEX_RE = /[a-f0-9]{24,}/gi
 const NUMERIC_ID_RE = /\/\d{5,}(?=\/|$)/g
 
 const clean = (value) => String(value || '').trim().toLowerCase()
+const statusClass = (value) => {
+  const status = Number(value)
+  if (!Number.isFinite(status)) return ''
+  return `${Math.floor(status / 100)}xx`
+}
+
+const hasFilesystemError = (payload = {}) => /erofs|read-only file system/i.test([
+  payload.error_code,
+  payload.db_code,
+  payload.message_summary,
+  payload.stack_summary,
+  payload.metadata?.error_code,
+  payload.metadata?.details
+].filter(Boolean).join(' '))
 
 export const normalizeIssuePath = (value = '') => {
   const path = String(value || '').split('?')[0]
@@ -36,17 +50,21 @@ const providerParts = (payload) => [
 
 const databaseParts = (payload) => [
   'database',
+  hasFilesystemError(payload) ? 'filesystem' : 'database',
+  clean(payload.method),
+  normalizeIssuePath(payload.path_template || payload.route),
   clean(payload.db_operation),
   clean(payload.db_table),
-  clean(payload.db_code || payload.error_code),
-  clean(payload.metadata?.constraint || payload.message_summary)
+  clean(payload.db_code || payload.error_code)
 ]
 
 const performanceParts = (payload) => [
   'performance',
-  clean(payload.route_name || payload.route),
+  clean(payload.method),
+  normalizeIssuePath(payload.path_template || payload.route_name || payload.route),
+  statusClass(payload.status_code),
   clean(payload.metadata?.metric_name || payload.category),
-  clean(payload.metadata?.threshold_bucket || payload.duration_ms)
+  clean(payload.metadata?.threshold_bucket || 'slow')
 ]
 
 const frontendParts = (payload) => [

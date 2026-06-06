@@ -4,11 +4,12 @@
     caption="官方消耗同步、请求查询和服务调用日志集中在这里处理。"
   >
     <template #actions>
-      <AdminMicroButton :disabled="loading302" @click="emit('refresh-service-data')">
+      <AdminMicroButton size="md" :disabled="loading302" @click="emit('refresh-service-data')">
         {{ loading302 ? '刷新中...' : '刷新服务数据' }}
       </AdminMicroButton>
       <AdminMicroButton
         v-if="canReconcileBilling"
+        size="md"
         tone="primary"
         :disabled="reconcilingBilling"
         @click="emit('reconcile-billing')"

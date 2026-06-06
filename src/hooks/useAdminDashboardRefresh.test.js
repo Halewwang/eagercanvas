@@ -107,3 +107,27 @@ test('admin dashboard refresh keeps the shell in local preview when admin sessio
 
   assert.deepEqual(calls, [])
 })
+
+test('admin dashboard refresh skips live data loaders in local preview after preview permissions are available', async () => {
+  const { useAdminDashboardRefresh: useLocalPreviewRefresh } = await loadHook('true')
+  const calls = []
+  const deps = createDeps({
+    auth: {
+      loadAdminSession: async () => {
+        calls.push('auth')
+        return true
+      }
+    },
+    load302All: async () => calls.push('service'),
+    loadIssues: async () => calls.push('issues'),
+    loadLogs: async () => calls.push('audit'),
+    loadUsage: async () => calls.push('usage'),
+    loadUsers: async () => calls.push('users')
+  })
+
+  const { loadAll } = useLocalPreviewRefresh(deps)
+
+  await loadAll()
+
+  assert.deepEqual(calls, ['auth'])
+})

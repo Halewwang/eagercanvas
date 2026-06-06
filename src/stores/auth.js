@@ -12,9 +12,10 @@ import {
   verifyLoginCode,
   verifyRegisterCode
 } from '@/api/auth'
-import { isLocalPreviewEnabled } from '@/utils/localPreview'
+import { getLocalPreviewAdminSession, isLocalPreviewEnabled } from '@/utils/localPreview'
 
 const BYPASS_AUTH_IN_DEV = isLocalPreviewEnabled()
+const LOCAL_PREVIEW_ADMIN_SESSION = getLocalPreviewAdminSession()
 const BYPASS_USER = {
   id: 'dev-bypass-user',
   email: 'preview@local.dev',
@@ -22,13 +23,20 @@ const BYPASS_USER = {
   serviceStatus: 'active'
 }
 
-const user = ref(null)
-const accessToken = ref('')
-const bootstrapped = ref(false)
-const adminUser = ref(null)
-const roles = ref([])
-const permissions = ref([])
-const adminBootstrapped = ref(false)
+const user = ref(BYPASS_AUTH_IN_DEV ? { ...BYPASS_USER } : null)
+const accessToken = ref(BYPASS_AUTH_IN_DEV ? 'dev-bypass-token' : '')
+const bootstrapped = ref(BYPASS_AUTH_IN_DEV)
+const adminUser = ref(BYPASS_AUTH_IN_DEV ? { ...LOCAL_PREVIEW_ADMIN_SESSION.user } : null)
+const roles = ref(BYPASS_AUTH_IN_DEV ? [...LOCAL_PREVIEW_ADMIN_SESSION.roles] : [])
+const permissions = ref(BYPASS_AUTH_IN_DEV ? [...LOCAL_PREVIEW_ADMIN_SESSION.permissions] : [])
+const adminBootstrapped = ref(BYPASS_AUTH_IN_DEV)
+
+const applyLocalPreviewAdminSession = () => {
+  adminUser.value = { ...LOCAL_PREVIEW_ADMIN_SESSION.user }
+  roles.value = [...LOCAL_PREVIEW_ADMIN_SESSION.roles]
+  permissions.value = [...LOCAL_PREVIEW_ADMIN_SESSION.permissions]
+  adminBootstrapped.value = true
+}
 
 const readToken = () => {
   return getStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
@@ -79,6 +87,7 @@ export const useAuthStore = () => {
     if (BYPASS_AUTH_IN_DEV) {
       persistToken('dev-bypass-token')
       user.value = { ...BYPASS_USER }
+      applyLocalPreviewAdminSession()
       bootstrapped.value = true
       return
     }
@@ -116,6 +125,11 @@ export const useAuthStore = () => {
   }
 
   const loadAdminSession = async ({ force = false } = {}) => {
+    if (BYPASS_AUTH_IN_DEV) {
+      applyLocalPreviewAdminSession()
+      return true
+    }
+
     if (!isAuthenticated.value) {
       adminUser.value = null
       roles.value = []

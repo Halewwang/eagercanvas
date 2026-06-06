@@ -66,3 +66,47 @@ test('provider fingerprints separate provider and model failures', () => {
 
   assert.notEqual(gpt, lite)
 })
+
+test('slow request fingerprints merge the same normalized endpoint without duration drift', () => {
+  const first = buildIssueFingerprint({
+    source_layer: 'performance',
+    category: 'slow_request',
+    method: 'GET',
+    path_template: '/api/v1/images/task_abc123456789',
+    status_code: 304,
+    duration_ms: 3605
+  })
+  const second = buildIssueFingerprint({
+    source_layer: 'performance',
+    category: 'slow_request',
+    method: 'GET',
+    path_template: '/api/v1/images/task_def987654321',
+    status_code: 304,
+    duration_ms: 12576
+  })
+
+  assert.equal(first, second)
+})
+
+test('filesystem EROFS fingerprints merge repeated export failures by endpoint', () => {
+  const first = buildIssueFingerprint({
+    source_layer: 'database',
+    category: 'db_error',
+    method: 'POST',
+    path_template: '/api/v1/admin/issues/export',
+    db_code: 'EROFS',
+    error_code: 'EROFS',
+    message_summary: "EROFS: read-only file system, open '/var/task/docs/codex-issue-inbox/issue-a.json'"
+  })
+  const second = buildIssueFingerprint({
+    source_layer: 'database',
+    category: 'db_error',
+    method: 'POST',
+    path_template: '/api/v1/admin/issues/export',
+    db_code: 'EROFS',
+    error_code: 'EROFS',
+    message_summary: "EROFS: read-only file system, open '/var/task/docs/codex-issue-inbox/issue-b.json'"
+  })
+
+  assert.equal(first, second)
+})

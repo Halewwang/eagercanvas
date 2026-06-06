@@ -43,6 +43,39 @@ test('admin section scroll candidate falls back to overview when no section elem
   )
 })
 
+test('admin route entry keeps the dashboard overview at the top of the shell', () => {
+  assert.equal(typeof navigation.shouldAutoScrollAdminSection, 'function')
+
+  assert.equal(navigation.shouldAutoScrollAdminSection({
+    routeName: 'AdminDashboard',
+    sectionKey: 'overview'
+  }), false)
+  assert.equal(navigation.shouldAutoScrollAdminSection({
+    routeName: 'AdminUsers',
+    sectionKey: 'users'
+  }), true)
+  assert.equal(navigation.shouldAutoScrollAdminSection({
+    routeName: 'AdminDashboard',
+    sectionKey: 'users'
+  }), true)
+})
+
+test('admin section navigation prefers the app scroll container over window', () => {
+  assert.equal(typeof navigation.resolveAdminScrollTarget, 'function')
+
+  const explicitTarget = { id: 'explicit' }
+  const appTarget = { id: 'app' }
+  const windowTarget = {
+    document: {
+      getElementById: (id) => (id === 'app' ? appTarget : null)
+    }
+  }
+
+  assert.equal(navigation.resolveAdminScrollTarget({ scrollTarget: explicitTarget, windowTarget }), explicitTarget)
+  assert.equal(navigation.resolveAdminScrollTarget({ windowTarget }), appTarget)
+  assert.equal(navigation.resolveAdminScrollTarget({ windowTarget: {} }), null)
+})
+
 test('admin section navigation composable is exported for the admin page container', () => {
   assert.match(navigationHookSource, /export const useAdminSectionNavigation/)
   assert.match(navigationHookSource, /ADMIN_ROUTE_NAME_BY_SECTION/)

@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
+import { mergeIssueGroupRows } from './issue-grouping.js'
 
 const ISSUE_GROUP_COLUMNS = 'id, created_at, updated_at, first_seen_at, last_seen_at, fingerprint, source_layer, category, severity, status, title, event_count, affected_users, affected_sessions, affected_routes, affected_builds, latest_build_id, latest_release_commit, latest_request_id, sample_event_ids, root_cause_layer, root_cause_confidence, evidence_summary, codex_handoff, last_notified_at, notification_count'
 const ISSUE_EVENT_COLUMNS = 'id, created_at, source_layer, category, severity, environment, build_id, release_commit, user_id, session_hash, request_id, trace_id, route, route_name, component, method, path_template, status_code, duration_ms, provider, model, upstream_endpoint, upstream_status, db_table, db_operation, db_code, error_code, message_summary, stack_summary, fingerprint, metadata'
@@ -27,6 +28,7 @@ export const listIssueGroupsForAdmin = async ({
   const safeLimit = normalizeLimit(limit)
   const start = (safePage - 1) * safeLimit
   const end = start + safeLimit - 1
+  const rawEnd = 99
 
   let query = supabase
     .from('issue_groups')
@@ -42,42 +44,76 @@ export const listIssueGroupsForAdmin = async ({
 
   const { data, error, count } = await query
     .order('last_seen_at', { ascending: false })
-    .range(start, end)
+    .range(0, rawEnd)
 
   if (error) throw new HttpError(500, error.message, 'ISSUE_GROUP_QUERY_FAILED')
+  const mergedItems = mergeIssueGroupRows(data || [])
+  const pagedItems = mergedItems.slice(start, end + 1)
 
   return {
-    items: data || [],
+    items: pagedItems,
     pagination: {
       page: safePage,
       limit: safeLimit,
-      total: Number(count || 0)
+      total: mergedItems.length || Number(count || 0)
     }
   }
 }
 
 export const getIssueGroupForAdmin = async (issueGroupId, fallback = {}) => {
-  const { data: group, error } = await supabase
-    .from('issue_groups')
-    .select(ISSUE_GROUP_COLUMNS)
-    .eq('id', issueGroupId)
-    .maybeSingle()
+  const requestedGroupIds = splitCsv(fallback.groupIds || fallback.group_ids)
+  const safeGroupIds = requestedGroupIds.includes(issueGroupId)
+    ? requestedGroupIds
+    : [issueGroupId, ...requestedGroupIds].filter(Boolean)
+
+  const readGroups = async () => {
+    if (safeGroupIds.length > 1) {
+      return supabase
+        .from('issue_groups')
+        .select(ISSUE_GROUP_COLUMNS)
+        .in('id', safeGroupIds)
+    }
+    const result = await supabase
+      .from('issue_groups')
+      .select(ISSUE_GROUP_COLUMNS)
+      .eq('id', issueGroupId)
+      .maybeSingle()
+    return {
+      data: result.data ? [result.data] : [],
+      error: result.error
+    }
+  }
+
+  const { data: groupRows, error } = await readGroups()
 
   if (error) throw new HttpError(500, error.message, 'ISSUE_GROUP_QUERY_FAILED')
-  if (!group) throw new HttpError(404, 'Issue group not found', 'ISSUE_GROUP_NOT_FOUND')
+  if (!groupRows?.length) throw new HttpError(404, 'Issue group not found', 'ISSUE_GROUP_NOT_FOUND')
 
-  const fingerprint = group.fingerprint || fallback.fingerprint
+  const fingerprints = groupRows.map((group) => group.fingerprint).filter(Boolean)
+  if (!fingerprints.length && fallback.fingerprint) fingerprints.push(fallback.fingerprint)
   let events = []
-  if (fingerprint) {
-    const { data: eventRows, error: eventsError } = await supabase
+  if (fingerprints.length) {
+    let eventQuery = supabase
       .from('issue_events')
       .select(ISSUE_EVENT_COLUMNS)
-      .eq('fingerprint', fingerprint)
+    eventQuery = fingerprints.length === 1
+      ? eventQuery.eq('fingerprint', fingerprints[0])
+      : eventQuery.in('fingerprint', fingerprints)
+    const { data: eventRows, error: eventsError } = await eventQuery
       .order('created_at', { ascending: false })
       .limit(50)
     if (eventsError) throw new HttpError(500, eventsError.message, 'ISSUE_EVENT_QUERY_FAILED')
     events = eventRows || []
   }
+
+  const eventsByFingerprint = new Map()
+  events.forEach((event) => {
+    const bucket = eventsByFingerprint.get(event.fingerprint) || []
+    bucket.push(event)
+    eventsByFingerprint.set(event.fingerprint, bucket)
+  })
+  const mergedGroups = mergeIssueGroupRows(groupRows, { eventsByFingerprint })
+  const group = mergedGroups[0] || groupRows[0]
 
   return { group, events }
 }

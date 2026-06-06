@@ -5,55 +5,58 @@
     caption="汇总线上报错、慢请求、模型供应商 / 数据库异常和前端运行问题，供 Codex 定位修复。"
   >
     <template #actions>
-      <div class="admin-issue-toolbar">
-        <select
-          class="admin-issue-select"
-          :value="issueQuery.status"
-          @change="emit('update-issue-query', 'status', $event.target.value)"
-        >
-          <option value="">全部状态</option>
-          <option value="open">待处理</option>
-          <option value="investigating">处理中</option>
-          <option value="resolved">已解决</option>
-          <option value="ignored">已忽略</option>
-        </select>
-        <select
-          class="admin-issue-select"
-          :value="issueQuery.severity"
-          @change="emit('update-issue-query', 'severity', $event.target.value)"
-        >
-          <option value="">全部级别</option>
-          <option value="p0">P0</option>
-          <option value="p1">P1</option>
-          <option value="p2">P2</option>
-          <option value="p3">P3</option>
-        </select>
-        <select
-          class="admin-issue-select"
-          :value="issueQuery.source_layer"
-          @change="emit('update-issue-query', 'source_layer', $event.target.value)"
-        >
-          <option value="">全部层级</option>
-          <option value="frontend">前端</option>
-          <option value="backend">后端</option>
-          <option value="database">数据库</option>
-          <option value="provider">模型供应商</option>
-          <option value="performance">性能</option>
-          <option value="ux">交互体验</option>
-        </select>
-        <button class="admin-issue-button" type="button" :disabled="loadingIssues" @click="emit('load-issues')">
-          刷新
-        </button>
-        <button
+      <AdminFilterToolbar align="end" compact>
+        <AdminFilterField label="状态">
+          <AdminControlField
+            tag="select"
+            :value="issueQuery.status"
+            @change="emit('update-issue-query', 'status', $event.target.value)"
+          >
+            <option value="">全部状态</option>
+            <option value="open">待处理</option>
+            <option value="investigating">处理中</option>
+            <option value="resolved">已解决</option>
+            <option value="ignored">已忽略</option>
+          </AdminControlField>
+        </AdminFilterField>
+        <AdminFilterField label="级别">
+          <AdminControlField
+            tag="select"
+            :value="issueQuery.severity"
+            @change="emit('update-issue-query', 'severity', $event.target.value)"
+          >
+            <option value="">全部级别</option>
+            <option value="p0">P0</option>
+            <option value="p1">P1</option>
+            <option value="p2">P2</option>
+            <option value="p3">P3</option>
+          </AdminControlField>
+        </AdminFilterField>
+        <AdminFilterField label="层级">
+          <AdminControlField
+            tag="select"
+            :value="issueQuery.source_layer"
+            @change="emit('update-issue-query', 'source_layer', $event.target.value)"
+          >
+            <option value="">全部层级</option>
+            <option value="frontend">前端</option>
+            <option value="backend">后端</option>
+            <option value="database">数据库</option>
+            <option value="provider">模型供应商</option>
+            <option value="performance">性能</option>
+            <option value="ux">交互体验</option>
+          </AdminControlField>
+        </AdminFilterField>
+        <AdminMicroButton :disabled="loadingIssues" @click="emit('load-issues')">刷新</AdminMicroButton>
+        <AdminMicroButton
           v-if="canExportIssues"
-          class="admin-issue-button"
-          type="button"
+          tone="primary"
           :disabled="issueActionLoading === 'export'"
           @click="emit('export-issues')"
         >
           导出 Codex
-        </button>
-      </div>
+        </AdminMicroButton>
+      </AdminFilterToolbar>
     </template>
   </AdminSectionHeader>
 
@@ -74,6 +77,7 @@
           <th class="px-3 py-3">层级</th>
           <th class="px-3 py-3">标题</th>
           <th class="px-3 py-3">次数</th>
+          <th class="px-3 py-3">同类</th>
           <th class="px-3 py-3">最近</th>
           <th class="px-3 py-3">状态</th>
           <th class="px-3 py-3">操作</th>
@@ -87,12 +91,13 @@
             <td class="px-3 py-3 text-white/80">{{ String(issue.severity || '').toUpperCase() }}</td>
             <td class="px-3 py-3 text-white/70">{{ sourceLayerLabel(issue.source_layer) }}</td>
             <td class="px-3 py-3">
-              <button class="admin-issue-title-button" type="button" @click="emit('open-issue', issue.id)">
+              <button class="admin-issue-title-button" type="button" @click="emit('open-issue', issue)">
                 {{ issue.title || issue.fingerprint }}
               </button>
               <div class="mt-1 text-xs text-white/40">{{ issue.latest_request_id || issue.fingerprint }}</div>
             </td>
             <td class="px-3 py-3 text-white/70">{{ issue.event_count || 0 }}</td>
+            <td class="px-3 py-3 text-white/60">{{ issue.merged_group_count || 1 }}</td>
             <td class="px-3 py-3 text-white/60">{{ formatDateTime(issue.last_seen_at) }}</td>
             <td class="px-3 py-3">
               <AdminStatusPill :class-name="statusClass(issue.status)">
@@ -101,18 +106,17 @@
             </td>
             <td class="px-3 py-3">
               <div class="flex flex-wrap gap-2">
-                <button class="admin-issue-link" type="button" @click="emit('open-issue', issue.id)">
+                <AdminMicroButton size="xs" @click="emit('open-issue', issue)">
                   详情
-                </button>
-                <button
+                </AdminMicroButton>
+                <AdminMicroButton
                   v-if="canNotifyIssues"
-                  class="admin-issue-link"
-                  type="button"
+                  size="xs"
                   :disabled="issueActionLoading === `notify:${issue.id}`"
                   @click="emit('notify-issue', issue.id)"
                 >
                   通知
-                </button>
+                </AdminMicroButton>
               </div>
             </td>
           </tr>
@@ -122,22 +126,18 @@
       <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-white/45">
         <span>第 {{ issuePagination.page || issueQuery.page }} / {{ totalPages }} 页</span>
         <div class="flex gap-2">
-          <button
-            class="admin-issue-button"
-            type="button"
+          <AdminMicroButton
             :disabled="(issuePagination.page || 1) <= 1"
             @click="emit('update-issue-query', 'page', (issuePagination.page || 1) - 1); emit('load-issues')"
           >
             上一页
-          </button>
-          <button
-            class="admin-issue-button"
-            type="button"
+          </AdminMicroButton>
+          <AdminMicroButton
             :disabled="(issuePagination.page || 1) >= totalPages"
             @click="emit('update-issue-query', 'page', (issuePagination.page || 1) + 1); emit('load-issues')"
           >
             下一页
-          </button>
+          </AdminMicroButton>
         </div>
       </div>
     </AdminPanelCard>
@@ -174,19 +174,25 @@
             <span>影响路由</span>
             <strong>{{ selectedIssue.group.affected_routes || 0 }}</strong>
           </div>
+          <div class="admin-issue-kv">
+            <span>同类合并</span>
+            <strong>{{ selectedIssue.group.merged_group_count || 1 }}</strong>
+          </div>
+          <div class="admin-issue-kv">
+            <span>事件数量</span>
+            <strong>{{ selectedIssue.group.event_count || 0 }}</strong>
+          </div>
         </div>
 
         <div v-if="canUpdateIssues" class="flex flex-wrap gap-2">
-          <button
+          <AdminMicroButton
             v-for="status in statusOptions"
             :key="status"
-            class="admin-issue-button"
-            type="button"
             :disabled="selectedIssue.group.status === status || issueActionLoading === `status:${selectedIssue.group.id}`"
             @click="emit('update-issue-status', { issueGroupId: selectedIssue.group.id, status })"
           >
             {{ statusLabel(status) }}
-          </button>
+          </AdminMicroButton>
         </div>
 
         <pre class="admin-issue-json">{{ toPrettyJson(selectedIssue.group.codex_handoff || selectedIssue.group.evidence_summary) }}</pre>
@@ -218,7 +224,11 @@
 
 <script setup>
 import { computed } from 'vue'
+import AdminControlField from '@/components/admin/AdminControlField.vue'
 import AdminEmptyState from '@/components/admin/AdminEmptyState.vue'
+import AdminFilterField from '@/components/admin/AdminFilterField.vue'
+import AdminFilterToolbar from '@/components/admin/AdminFilterToolbar.vue'
+import AdminMicroButton from '@/components/admin/AdminMicroButton.vue'
 import AdminPanelCard from '@/components/admin/AdminPanelCard.vue'
 import AdminSectionHeader from '@/components/admin/AdminSectionHeader.vue'
 import AdminStatusPill from '@/components/admin/AdminStatusPill.vue'
@@ -289,26 +299,6 @@ const statusClass = (status) => {
 </script>
 
 <style scoped>
-.admin-issue-select,
-.admin-issue-button {
-  min-width: 0;
-  min-height: 32px;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 8px;
-  padding: 0 10px;
-  color: rgb(255 255 255 / 82%);
-  background: rgb(255 255 255 / 6%);
-  font-size: 12px;
-}
-
-.admin-issue-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  max-width: 100%;
-}
-
 .admin-issue-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -320,19 +310,12 @@ const statusClass = (status) => {
   min-width: 0;
 }
 
-.admin-issue-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.admin-issue-title-button,
-.admin-issue-link {
+.admin-issue-title-button {
   color: rgb(255 255 255 / 86%);
   text-align: left;
 }
 
-.admin-issue-title-button:hover,
-.admin-issue-link:hover {
+.admin-issue-title-button:hover {
   color: #fff;
 }
 

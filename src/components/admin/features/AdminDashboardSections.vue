@@ -12,7 +12,7 @@
     frame-class="mb-8"
   >
     <AdminUserServiceSection
-      v-bind="userServiceSection"
+      v-bind="userServiceContentProps"
       @activate-service="emit('activate-service', $event)"
       @activate-user="emit('activate-user', $event)"
       @delete-user="emit('delete-user', $event)"
@@ -35,7 +35,7 @@
     frame-class="mb-8 space-y-6"
   >
     <AdminServiceReconciliationSection
-      v-bind="serviceReconciliationSection"
+      v-bind="serviceReconciliationContentProps"
       @load-api-logs="emit('load-api-logs')"
       @query-record="emit('query-record')"
       @reconcile-billing="emit('reconcile-billing')"
@@ -51,7 +51,7 @@
     frame-class="mb-8"
   >
     <AdminAuditLogSection
-      v-bind="auditLogSection"
+      v-bind="auditLogContentProps"
       @load-logs="emit('load-logs')"
       @update-log-query="(key, value) => emit('update-audit-log-query', key, value)"
     />
@@ -74,7 +74,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import AdminDashboardSectionFrame from '@/components/admin/AdminDashboardSectionFrame.vue'
 import AdminAuditLogSection from './AdminAuditLogSection.vue'
 import AdminOverviewSection from './AdminOverviewSection.vue'
@@ -113,13 +113,21 @@ const emit = defineEmits([
   'update:statusFilter'
 ])
 
-defineProps({
+const props = defineProps({
   overviewSection: { type: Object, default: () => ({}) },
   userServiceSection: { type: Object, default: () => ({}) },
   serviceReconciliationSection: { type: Object, default: () => ({}) },
   auditLogSection: { type: Object, default: () => ({}) },
   issueInboxSection: { type: Object, default: () => ({}) }
 })
+
+const omitSectionOnlyProps = (section, omittedKeys) => Object.fromEntries(
+  Object.entries(section || {}).filter(([key]) => !omittedKeys.includes(key))
+)
+
+const userServiceContentProps = computed(() => omitSectionOnlyProps(props.userServiceSection, ['canReadUsers']))
+const serviceReconciliationContentProps = computed(() => omitSectionOnlyProps(props.serviceReconciliationSection, ['showServiceSection']))
+const auditLogContentProps = computed(() => omitSectionOnlyProps(props.auditLogSection, ['canReadAudit']))
 
 const overviewRef = ref(null)
 const usersRef = ref(null)

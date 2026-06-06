@@ -1,18 +1,17 @@
 <template>
   <AdminPanelCard
     title="服务调用日志查询"
+    caption="按时间范围和分页条件查询官方调用日志。"
     title-class="text-sm font-medium text-white"
-    header-class="mb-3 flex flex-wrap items-center justify-between gap-2"
+    header-class="mb-3"
     panel-class="admin-panel-card rounded-2xl p-4"
   >
-    <template #actions>
-      <AdminServiceApiLogFilters
-        :loading-api-logs="loadingApiLogs"
-        :log302-query="log302Query"
-        @load-api-logs="emit('load-api-logs')"
-        @update-log-query="forwardLogQueryUpdate"
-      />
-    </template>
+    <AdminServiceApiLogFilters
+      :loading-api-logs="loadingApiLogs"
+      :log302-query="log302Query"
+      @load-api-logs="emit('load-api-logs')"
+      @update-log-query="forwardLogQueryUpdate"
+    />
     <AdminEmptyState v-if="apiLogs.length === 0">暂无服务调用日志</AdminEmptyState>
     <AdminTableShell v-else min-width-class="min-w-[860px]" body-row-class="border-b border-white/5">
       <template #header>

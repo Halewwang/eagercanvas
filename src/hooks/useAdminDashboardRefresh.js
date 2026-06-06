@@ -28,12 +28,14 @@ export const useAdminDashboardRefresh = ({
   ))
 
   const loadAll = async () => {
+    const isLocalPreview = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
     const allowed = await auth.loadAdminSession({ force: true })
     if (!allowed) {
-      if (import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true') return
+      if (isLocalPreview) return
       router.replace('/')
       return
     }
+    if (isLocalPreview) return
 
     await Promise.all([
       canReadUsage.value && loadUsage(),

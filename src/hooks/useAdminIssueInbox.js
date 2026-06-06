@@ -70,11 +70,13 @@ export const useAdminIssueInbox = ({
     }
   }
 
-  const openIssue = async (issueGroupId) => {
+  const openIssue = async (issueOrId) => {
+    const issueGroupId = typeof issueOrId === 'object' ? issueOrId?.id : issueOrId
+    const mergedGroupIds = Array.isArray(issueOrId?.merged_group_ids) ? issueOrId.merged_group_ids : []
     if (!issueGroupId || !canReadIssues.value) return
     loadingIssueDetail.value = true
     try {
-      const rsp = await fetchIssue(issueGroupId)
+      const rsp = await fetchIssue(issueGroupId, mergedGroupIds.length > 1 ? { group_ids: mergedGroupIds.join(',') } : undefined)
       selectedIssue.value = rsp?.data || null
     } catch (error) {
       if (!error?.__handled) getMessageApi()?.error(getErrorMessage(error, '加载问题详情失败'))
