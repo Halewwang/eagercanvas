@@ -10,6 +10,7 @@ import { extensionFromMimeType, fetchBinaryFromSource } from './media-source.js'
 const DEFAULT_DEROUTER_BASE_URL = 'https://api-direct.derouter.ai/openai/v1'
 const DEFAULT_DEROUTER_TIMEOUT_MS = 300000
 const MIN_DEROUTER_TIMEOUT_MS = 300000
+const DEROUTER_TRANSIENT_MAX_ATTEMPTS = 2
 const DEROUTER_REFERENCE_MAX_BYTES = 4 * 1024 * 1024
 const DEROUTER_REFERENCE_OPTIMIZATION_ATTEMPTS = [
   { maxEdge: 1536, quality: 82 },
@@ -100,6 +101,90 @@ const extractDerouterErrorMessage = (data, status) => {
   return message || `Derouter request failed: ${status}`
 }
 
+const extractDerouterErrorCode = (data, message = '') => {
+  const found = [
+    data?.error?.code,
+    data?.code,
+    data?.error_code
+  ].find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+  if (found) return String(found).trim()
+
+  const match = String(message || '').match(/\(code=([^)]+)\)/i)
+  return match ? match[1].trim() : ''
+}
+
+const extractDerouterRequestId = (data, message = '', headers = null) => {
+  const found = [
+    data?.error?.request_id,
+    data?.error?.requestId,
+    data?.request_id,
+    data?.requestId,
+    headers?.get?.('x-request-id'),
+    headers?.get?.('request-id')
+  ].find((value) => value !== undefined && value !== null && String(value).trim() !== '')
+  if (found) return String(found).trim()
+
+  const match = String(message || '').match(/request ID\s+([a-z0-9-]+)/i)
+  return match ? match[1].trim() : ''
+}
+
+const isDerouterTransientServerError = ({ status, code, message }) => {
+  const safeCode = String(code || '').trim().toLowerCase()
+  const safeMessage = String(message || '').toLowerCase()
+  return (
+    safeCode === 'server_error' ||
+    safeMessage.includes('server_error') ||
+    [500, 502, 503, 504].includes(Number(status))
+  )
+}
+
+const readDerouterBodyValue = (body, key) => {
+  if (body?.get && typeof body.get === 'function') {
+    const value = body.get(key)
+    return value === undefined || value === null ? '' : String(value)
+  }
+  return body?.[key] === undefined || body?.[key] === null ? '' : String(body[key])
+}
+
+const countDerouterImages = (body) => {
+  if (body?.getAll && typeof body.getAll === 'function') {
+    return body.getAll('image').length
+  }
+  return 0
+}
+
+const buildDerouterFailureLog = ({
+  status,
+  path,
+  body,
+  multipart,
+  message,
+  code = '',
+  requestId = '',
+  attempt = 0,
+  retrying = false
+}) => {
+  const summary = {
+    status,
+    path,
+    multipart,
+    model: readDerouterBodyValue(body, 'model'),
+    size: readDerouterBodyValue(body, 'size'),
+    quality: readDerouterBodyValue(body, 'quality'),
+    background: readDerouterBodyValue(body, 'background'),
+    output_format: readDerouterBodyValue(body, 'output_format'),
+    imageCount: countDerouterImages(body),
+    message,
+    code,
+    requestId,
+    ...(retrying ? { attempt, retrying: true } : {})
+  }
+
+  return Object.fromEntries(
+    Object.entries(summary).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  )
+}
+
 const callDerouter = async (path, body, { multipart = false } = {}, requestOptions = {}) => {
   const baseUrl = resolveDerouterBaseUrl(requestOptions)
   if (!baseUrl) {
@@ -107,36 +192,57 @@ const callDerouter = async (path, body, { multipart = false } = {}, requestOptio
   }
 
   const timeoutMs = resolveDerouterTimeoutMs(requestOptions)
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const response = await fetch(buildProviderUrl(baseUrl, path), {
-      method: 'POST',
-      headers: buildDerouterHeaders(
-        requestOptions,
-        multipart ? {} : { 'Content-Type': 'application/json' }
-      ),
-      body: multipart ? body : JSON.stringify(body),
-      signal: controller.signal
-    })
-    const data = await parseDerouterResponse(response)
+  for (let attempt = 1; attempt <= DEROUTER_TRANSIENT_MAX_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const response = await fetch(buildProviderUrl(baseUrl, path), {
+        method: 'POST',
+        headers: buildDerouterHeaders(
+          requestOptions,
+          multipart ? {} : { 'Content-Type': 'application/json' }
+        ),
+        body: multipart ? body : JSON.stringify(body),
+        signal: controller.signal
+      })
+      const data = await parseDerouterResponse(response)
 
-    if (!response.ok) {
-      throw new HttpError(response.status, extractDerouterErrorMessage(data, response.status), 'DEROUTER_ERROR')
-    }
+      if (!response.ok) {
+        const message = extractDerouterErrorMessage(data, response.status)
+        const code = extractDerouterErrorCode(data, message)
+        const requestId = extractDerouterRequestId(data, message, response.headers)
+        const retrying = (
+          attempt < DEROUTER_TRANSIENT_MAX_ATTEMPTS &&
+          isDerouterTransientServerError({ status: response.status, code, message })
+        )
+        console.warn('[derouter] image request failed', buildDerouterFailureLog({
+          status: response.status,
+          path,
+          body,
+          multipart,
+          message,
+          code,
+          requestId,
+          attempt,
+          retrying
+        }))
+        if (retrying) continue
+        throw new HttpError(response.status, message, 'DEROUTER_ERROR')
+      }
 
-    return data || {}
-  } catch (error) {
-    if (error?.name === 'AbortError' || /^this operation was aborted$/i.test(String(error?.message || ''))) {
-      throw new HttpError(
-        504,
-        `Derouter image request timed out after ${timeoutMs}ms. Please retry.`,
-        'DEROUTER_TIMEOUT'
-      )
+      return data || {}
+    } catch (error) {
+      if (error?.name === 'AbortError' || /^this operation was aborted$/i.test(String(error?.message || ''))) {
+        throw new HttpError(
+          504,
+          `Derouter image request timed out after ${timeoutMs}ms. Please retry.`,
+          'DEROUTER_TIMEOUT'
+        )
+      }
+      throw error
+    } finally {
+      clearTimeout(timer)
     }
-    throw error
-  } finally {
-    clearTimeout(timer)
   }
 }
 
@@ -197,10 +303,21 @@ const normalizeDerouterImageResponse = (raw = {}, body = {}) => {
 
 export const buildDerouterImageRequestBody = (payload = {}) => {
   const body = buildGptImage2RequestBody(payload)
-  return {
-    ...body,
-    model: 'gpt-image-2'
+  const nextBody = {
+    model: 'gpt-image-2',
+    prompt: body.prompt,
+    size: body.size
   }
+
+  if (body.quality && body.quality !== 'auto') nextBody.quality = body.quality
+  if (body.background && body.background !== 'auto') nextBody.background = body.background
+  if (body.output_format && body.output_format !== 'png') nextBody.output_format = body.output_format
+  if (body.moderation && body.moderation !== 'auto') nextBody.moderation = body.moderation
+  if (body.output_compression !== undefined && body.output_compression !== 100) {
+    nextBody.output_compression = body.output_compression
+  }
+
+  return nextBody
 }
 
 const appendDerouterMultipartImages = async (formData, images = []) => {

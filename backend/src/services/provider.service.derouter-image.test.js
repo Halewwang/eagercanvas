@@ -61,6 +61,185 @@ test('GPT Image lite generation calls derouter synchronous image endpoint', asyn
   assert.equal(Object.hasOwn(requests[0].body, 'resolution'), false)
 })
 
+test('GPT Image lite generation omits derouter default image params', async () => {
+  const originalFetch = global.fetch
+  const requests = []
+
+  global.fetch = async (url, init) => {
+    requests.push({
+      url: String(url),
+      body: init?.body ? JSON.parse(init.body) : null
+    })
+
+    return new Response(
+      JSON.stringify({
+        data: [{ b64_json: 'aW1hZ2UtYnl0ZXM=' }]
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      }
+    )
+  }
+
+  try {
+    await providerGenerateImage(
+      {
+        model: 'gpt-image-lite',
+        prompt: 'A product shot',
+        ratio: '1:1',
+        resolution: '1k',
+        quality: 'auto',
+        background: 'auto',
+        output_format: 'png',
+        moderation: 'auto'
+      },
+      {
+        derouterApiBaseUrl: 'https://derouter.test/openai/v1',
+        derouterApiKey: 'sk-derouter'
+      }
+    )
+  } finally {
+    global.fetch = originalFetch
+  }
+
+  assert.equal(requests.length, 1)
+  assert.deepEqual(Object.keys(requests[0].body).sort(), ['model', 'prompt', 'size'])
+  assert.equal(requests[0].body.size, '1024x1024')
+})
+
+test('GPT Image lite 400 errors log a safe derouter request summary', async () => {
+  const originalFetch = global.fetch
+  const originalWarn = console.warn
+  const warnings = []
+
+  global.fetch = async () => new Response(
+    JSON.stringify({ error: { message: 'invalid size' } }),
+    {
+      status: 400,
+      headers: { 'content-type': 'application/json' }
+    }
+  )
+  console.warn = (...args) => warnings.push(args)
+
+  try {
+    await assert.rejects(
+      () => providerGenerateImage(
+        {
+          model: 'gpt-image-lite',
+          prompt: 'Do not log this prompt',
+          ratio: '16:9',
+          resolution: '2k',
+          quality: 'high',
+          output_format: 'webp'
+        },
+        {
+          derouterApiBaseUrl: 'https://derouter.test/openai/v1',
+          derouterApiKey: 'sk-derouter'
+        }
+      ),
+      (error) => {
+        assert.equal(error.status, 400)
+        assert.equal(error.code, 'DEROUTER_ERROR')
+        return true
+      }
+    )
+  } finally {
+    global.fetch = originalFetch
+    console.warn = originalWarn
+  }
+
+  assert.equal(warnings.length, 1)
+  assert.equal(warnings[0][0], '[derouter] image request failed')
+  assert.deepEqual(warnings[0][1], {
+    status: 400,
+    path: '/images/generations',
+    multipart: false,
+    model: 'gpt-image-2',
+    size: '2560x1440',
+    quality: 'high',
+    output_format: 'webp',
+    imageCount: 0,
+    message: 'invalid size'
+  })
+  assert.doesNotMatch(JSON.stringify(warnings), /Do not log this prompt|sk-derouter/)
+})
+
+test('GPT Image lite retries derouter upstream server_error once with request id logging', async () => {
+  const originalFetch = global.fetch
+  const originalWarn = console.warn
+  const requests = []
+  const warnings = []
+
+  global.fetch = async (url, init) => {
+    requests.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : null })
+    if (requests.length === 1) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: 'server_error',
+            message: 'api_error: server_error: An error occurred while processing your request. Please include the request ID 6a46778df057-466a-9404-b19938d1502c in your message. (code=server_error)'
+          }
+        }),
+        {
+          status: 400,
+          headers: { 'content-type': 'application/json' }
+        }
+      )
+    }
+
+    return new Response(
+      JSON.stringify({
+        data: [{ b64_json: 'cmV0cmllZC1pbWFnZQ==' }]
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      }
+    )
+  }
+  console.warn = (...args) => warnings.push(args)
+
+  try {
+    const result = await providerGenerateImage(
+      {
+        model: 'gpt-image-lite',
+        prompt: 'Do not log retry prompt',
+        ratio: '1:1',
+        resolution: '1k',
+        quality: 'medium'
+      },
+      {
+        derouterApiBaseUrl: 'https://derouter.test/openai/v1',
+        derouterApiKey: 'sk-derouter'
+      }
+    )
+
+    assert.equal(result.data[0].url, 'data:image/png;base64,cmV0cmllZC1pbWFnZQ==')
+  } finally {
+    global.fetch = originalFetch
+    console.warn = originalWarn
+  }
+
+  assert.equal(requests.length, 2)
+  assert.equal(warnings.length, 1)
+  assert.deepEqual(warnings[0][1], {
+    status: 400,
+    path: '/images/generations',
+    multipart: false,
+    model: 'gpt-image-2',
+    size: '1024x1024',
+    quality: 'medium',
+    imageCount: 0,
+    message: 'api_error: server_error: An error occurred while processing your request. Please include the request ID 6a46778df057-466a-9404-b19938d1502c in your message. (code=server_error)',
+    code: 'server_error',
+    requestId: '6a46778df057-466a-9404-b19938d1502c',
+    attempt: 1,
+    retrying: true
+  })
+  assert.doesNotMatch(JSON.stringify(warnings), /Do not log retry prompt|sk-derouter/)
+})
+
 test('GPT Image lite edit calls derouter multipart image endpoint', async () => {
   const originalFetch = global.fetch
   const requests = []
@@ -175,6 +354,7 @@ test('GPT Image lite edit compresses large reference images before derouter mult
 
 test('GPT Image lite reports derouter 413 without leaking upstream HTML', async () => {
   const originalFetch = global.fetch
+  const originalWarn = console.warn
 
   global.fetch = async () => new Response(
     '<html><head><title>413 Request Entity Too Large</title></head><body><center><h1>413 Request Entity Too Large</h1></center><hr><center>nginx</center></body></html>',
@@ -183,6 +363,7 @@ test('GPT Image lite reports derouter 413 without leaking upstream HTML', async 
       headers: { 'content-type': 'text/html' }
     }
   )
+  console.warn = () => {}
 
   try {
     await assert.rejects(
@@ -209,6 +390,7 @@ test('GPT Image lite reports derouter 413 without leaking upstream HTML', async 
     )
   } finally {
     global.fetch = originalFetch
+    console.warn = originalWarn
   }
 })
 
