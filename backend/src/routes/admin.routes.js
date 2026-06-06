@@ -260,6 +260,7 @@ adminRouter.patch('/issues/:issueGroupId', requirePermission(['admin.issue.updat
 adminRouter.post('/issues/export', requirePermission(['admin.issue.export']), asyncHandler(async (req, res) => {
   const payload = exportIssuesSchema.parse(req.body || {})
   const result = await exportCodexIssues({
+    writeFiles: false,
     filters: {
       status: payload.status,
       severity: payload.severity,
@@ -271,8 +272,10 @@ adminRouter.post('/issues/export', requirePermission(['admin.issue.export']), as
     data: {
       generatedAt: result.generatedAt,
       issueCount: result.issueCount,
-      jsonPath: result.jsonPath,
-      markdownPath: result.markdownPath
+      jsonFileName: result.jsonFileName,
+      markdownFileName: result.markdownFileName,
+      jsonContent: result.jsonContent,
+      markdownContent: result.markdownContent
     }
   })
 }))

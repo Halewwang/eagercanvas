@@ -22,6 +22,7 @@ const { useAdminIssueInbox } = await import(`data:text/javascript;base64,${Buffe
 test('admin issue inbox hook loads, filters, exports, and updates issues', async () => {
   const calls = []
   const messages = { success: (value) => calls.push(['success', value]), error: (value) => calls.push(['error', value]) }
+  const downloads = []
   const hook = useAdminIssueInbox({
     canReadIssues: ref(true),
     fetchIssues: async (params) => {
@@ -38,13 +39,21 @@ test('admin issue inbox hook loads, filters, exports, and updates issues', async
     patchIssueStatus: async (id, status) => calls.push(['patch', id, status]),
     exportIssuesRequest: async (payload) => {
       calls.push(['export', payload])
-      return { data: { jsonPath: '/tmp/issues.json' } }
+      return {
+        data: {
+          jsonFileName: 'issues.json',
+          jsonContent: '{"ok":true}',
+          markdownFileName: 'issues.md',
+          markdownContent: '# Issues'
+        }
+      }
     },
     notifyIssueRequest: async (id) => {
       calls.push(['notify', id])
       return { data: { ok: true } }
     },
-    getMessageApi: () => messages
+    getMessageApi: () => messages,
+    downloadFile: (payload) => downloads.push(payload)
   })
 
   hook.updateIssueQuery('severity', 'p1')
@@ -56,8 +65,10 @@ test('admin issue inbox hook loads, filters, exports, and updates issues', async
 
   assert.equal(hook.issues.value[0].id, 'issue-1')
   assert.equal(hook.selectedIssue.value.group.id, 'issue-1')
-  assert.equal(hook.lastExport.value.jsonPath, '/tmp/issues.json')
+  assert.equal(hook.lastExport.value.jsonFileName, 'issues.json')
   assert.ok(calls.some((call) => call[0] === 'patch' && call[2] === 'investigating'))
   assert.ok(calls.some((call) => call[0] === 'export' && call[1].severity === 'p1'))
   assert.ok(calls.some((call) => call[0] === 'notify'))
+  assert.deepEqual(downloads.map((item) => item.fileName), ['issues.json', 'issues.md'])
+  assert.ok(calls.some((call) => call[0] === 'success' && /生成并下载/.test(call[1])))
 })

@@ -198,6 +198,25 @@ export const renderCodexIssueMarkdown = (table) => {
   return `${lines.join('\n')}\n`
 }
 
+export const buildCodexIssueExportPayload = ({
+  details,
+  generatedAt = new Date().toISOString()
+} = {}) => {
+  const table = createCodexIssueTable({ details, generatedAt })
+  const baseName = `issue-inbox-${safeTimestamp(generatedAt)}`
+  const jsonFileName = `${baseName}.json`
+  const markdownFileName = `${baseName}.md`
+  const jsonContent = `${JSON.stringify(table, null, 2)}\n`
+  const markdownContent = renderCodexIssueMarkdown(table)
+  return {
+    table,
+    jsonFileName,
+    markdownFileName,
+    jsonContent,
+    markdownContent
+  }
+}
+
 export const writeCodexIssueExport = async ({
   details,
   outputDir = DEFAULT_OUTPUT_DIR,
@@ -205,14 +224,13 @@ export const writeCodexIssueExport = async ({
   writeFile = fs.writeFile,
   mkdir = fs.mkdir
 } = {}) => {
-  const table = createCodexIssueTable({ details, generatedAt })
+  const payload = buildCodexIssueExportPayload({ details, generatedAt })
   await mkdir(outputDir, { recursive: true })
-  const baseName = `issue-inbox-${safeTimestamp(generatedAt)}`
-  const jsonPath = path.join(outputDir, `${baseName}.json`)
-  const markdownPath = path.join(outputDir, `${baseName}.md`)
-  await writeFile(jsonPath, `${JSON.stringify(table, null, 2)}\n`, 'utf8')
-  await writeFile(markdownPath, renderCodexIssueMarkdown(table), 'utf8')
-  return { table, jsonPath, markdownPath }
+  const jsonPath = path.join(outputDir, payload.jsonFileName)
+  const markdownPath = path.join(outputDir, payload.markdownFileName)
+  await writeFile(jsonPath, payload.jsonContent, 'utf8')
+  await writeFile(markdownPath, payload.markdownContent, 'utf8')
+  return { ...payload, jsonPath, markdownPath }
 }
 
 const buildGroupQuery = ({
@@ -253,7 +271,8 @@ export const exportCodexIssues = async ({
   filters = {},
   outputDir = DEFAULT_OUTPUT_DIR,
   generatedAt = new Date().toISOString(),
-  supabaseClient = supabase
+  supabaseClient = supabase,
+  writeFiles = true
 } = {}) => {
   const { data: groups, error } = await buildGroupQuery(filters, supabaseClient)
   if (error) throw new HttpError(500, error.message, 'ISSUE_EXPORT_GROUPS_FAILED')
@@ -263,12 +282,18 @@ export const exportCodexIssues = async ({
     group,
     events: eventsByFingerprint.get(group.fingerprint) || []
   }))
-  const result = await writeCodexIssueExport({ details, outputDir, generatedAt })
+  const result = writeFiles
+    ? await writeCodexIssueExport({ details, outputDir, generatedAt })
+    : buildCodexIssueExportPayload({ details, generatedAt })
   return {
     generatedAt,
     issueCount: result.table.issue_count,
     jsonPath: result.jsonPath,
     markdownPath: result.markdownPath,
+    jsonFileName: result.jsonFileName,
+    markdownFileName: result.markdownFileName,
+    jsonContent: result.jsonContent,
+    markdownContent: result.markdownContent,
     table: result.table
   }
 }

@@ -10,6 +10,20 @@ import { getErrorMessage } from '@/utils'
 
 const getWindowMessageApi = () => (typeof window === 'undefined' ? null : window.$message)
 
+const downloadTextFile = ({ fileName, content, type = 'text/plain;charset=utf-8' } = {}) => {
+  if (!fileName || !content || typeof window === 'undefined' || typeof document === 'undefined') return false
+  const blob = new Blob([content], { type })
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+  return true
+}
+
 export const useAdminIssueInbox = ({
   canReadIssues,
   fetchIssues = getAdminIssues,
@@ -17,7 +31,8 @@ export const useAdminIssueInbox = ({
   patchIssueStatus = updateAdminIssueStatus,
   exportIssuesRequest = exportAdminIssues,
   notifyIssueRequest = notifyAdminIssue,
-  getMessageApi = getWindowMessageApi
+  getMessageApi = getWindowMessageApi,
+  downloadFile = downloadTextFile
 }) => {
   const issues = ref([])
   const selectedIssue = ref(null)
@@ -92,7 +107,21 @@ export const useAdminIssueInbox = ({
         limit: issueQuery.value.limit
       })
       lastExport.value = rsp?.data || null
-      getMessageApi()?.success?.('Codex 问题收件箱已导出')
+      if (lastExport.value?.jsonContent) {
+        downloadFile({
+          fileName: lastExport.value.jsonFileName || 'codex-issue-inbox.json',
+          content: lastExport.value.jsonContent,
+          type: 'application/json;charset=utf-8'
+        })
+      }
+      if (lastExport.value?.markdownContent) {
+        downloadFile({
+          fileName: lastExport.value.markdownFileName || 'codex-issue-inbox.md',
+          content: lastExport.value.markdownContent,
+          type: 'text/markdown;charset=utf-8'
+        })
+      }
+      getMessageApi()?.success?.('Codex 问题收件箱已生成并下载')
       return lastExport.value
     } catch (error) {
       if (!error?.__handled) getMessageApi()?.error(getErrorMessage(error, '导出问题收件箱失败'))
@@ -135,4 +164,5 @@ export const useAdminIssueInbox = ({
   }
 }
 
+export { downloadTextFile }
 export default useAdminIssueInbox

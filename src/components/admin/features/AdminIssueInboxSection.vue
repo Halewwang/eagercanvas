@@ -2,7 +2,7 @@
   <AdminSectionHeader
     class="mb-5"
     title="问题收件箱"
-    caption="汇总线上报错、慢请求、Provider/DB 异常和前端运行问题，供 Codex 定位修复。"
+    caption="汇总线上报错、慢请求、模型供应商 / 数据库异常和前端运行问题，供 Codex 定位修复。"
   >
     <template #actions>
       <div class="admin-issue-toolbar">
@@ -12,10 +12,10 @@
           @change="emit('update-issue-query', 'status', $event.target.value)"
         >
           <option value="">全部状态</option>
-          <option value="open">Open</option>
-          <option value="investigating">Investigating</option>
-          <option value="resolved">Resolved</option>
-          <option value="ignored">Ignored</option>
+          <option value="open">待处理</option>
+          <option value="investigating">处理中</option>
+          <option value="resolved">已解决</option>
+          <option value="ignored">已忽略</option>
         </select>
         <select
           class="admin-issue-select"
@@ -34,12 +34,12 @@
           @change="emit('update-issue-query', 'source_layer', $event.target.value)"
         >
           <option value="">全部层级</option>
-          <option value="frontend">Frontend</option>
-          <option value="backend">Backend</option>
-          <option value="database">Database</option>
-          <option value="provider">Provider</option>
-          <option value="performance">Performance</option>
-          <option value="ux">UX</option>
+          <option value="frontend">前端</option>
+          <option value="backend">后端</option>
+          <option value="database">数据库</option>
+          <option value="provider">模型供应商</option>
+          <option value="performance">性能</option>
+          <option value="ux">交互体验</option>
         </select>
         <button class="admin-issue-button" type="button" :disabled="loadingIssues" @click="emit('load-issues')">
           刷新
@@ -64,10 +64,10 @@
   <div v-else class="admin-issue-layout">
     <AdminPanelCard
       :title="`问题列表 (${issuePagination.total || issues.length})`"
-      :caption="loadingIssues ? '正在加载最新问题分组' : '按 fingerprint 聚合后的问题分组'"
+      :caption="loadingIssues ? '正在加载最新问题分组' : '按问题指纹聚合后的问题分组'"
       panel-class="admin-panel-card rounded-2xl p-4 md:p-5"
     >
-      <AdminEmptyState v-if="!loadingIssues && issues.length === 0">暂无 Issue 分组</AdminEmptyState>
+      <AdminEmptyState v-if="!loadingIssues && issues.length === 0">暂无问题分组</AdminEmptyState>
       <AdminTableShell v-else min-width-class="min-w-[760px]">
         <template #header>
           <th class="px-3 py-3">级别</th>
@@ -85,7 +85,7 @@
             :class="[rowClass, selectedIssue?.group?.id === issue.id ? 'bg-white/[0.05]' : '']"
           >
             <td class="px-3 py-3 text-white/80">{{ String(issue.severity || '').toUpperCase() }}</td>
-            <td class="px-3 py-3 text-white/70">{{ issue.source_layer || '-' }}</td>
+            <td class="px-3 py-3 text-white/70">{{ sourceLayerLabel(issue.source_layer) }}</td>
             <td class="px-3 py-3">
               <button class="admin-issue-title-button" type="button" @click="emit('open-issue', issue.id)">
                 {{ issue.title || issue.fingerprint }}
@@ -96,7 +96,7 @@
             <td class="px-3 py-3 text-white/60">{{ formatDateTime(issue.last_seen_at) }}</td>
             <td class="px-3 py-3">
               <AdminStatusPill :class-name="statusClass(issue.status)">
-                {{ issue.status || 'open' }}
+                {{ statusLabel(issue.status) }}
               </AdminStatusPill>
             </td>
             <td class="px-3 py-3">
@@ -120,7 +120,7 @@
       </AdminTableShell>
 
       <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-white/45">
-        <span>Page {{ issuePagination.page || issueQuery.page }} / {{ totalPages }}</span>
+        <span>第 {{ issuePagination.page || issueQuery.page }} / {{ totalPages }} 页</span>
         <div class="flex gap-2">
           <button
             class="admin-issue-button"
@@ -148,7 +148,7 @@
       panel-class="admin-panel-card rounded-2xl p-4 md:p-5"
     >
       <AdminEmptyState v-if="!selectedIssue">
-        选择一个问题查看 request、route、provider、database 和 sample events。
+        选择一个问题查看请求、路由、模型供应商、数据库和示例事件。
       </AdminEmptyState>
 
       <div v-else class="space-y-4">
@@ -159,19 +159,19 @@
 
         <div class="grid grid-cols-2 gap-3 text-xs">
           <div class="admin-issue-kv">
-            <span>Root</span>
-            <strong>{{ selectedIssue.group.root_cause_layer || selectedIssue.group.source_layer || '-' }}</strong>
+            <span>根因层级</span>
+            <strong>{{ sourceLayerLabel(selectedIssue.group.root_cause_layer || selectedIssue.group.source_layer) }}</strong>
           </div>
           <div class="admin-issue-kv">
-            <span>Confidence</span>
-            <strong>{{ selectedIssue.group.root_cause_confidence || '-' }}</strong>
+            <span>置信度</span>
+            <strong>{{ confidenceLabel(selectedIssue.group.root_cause_confidence) }}</strong>
           </div>
           <div class="admin-issue-kv">
-            <span>Users</span>
+            <span>影响用户</span>
             <strong>{{ selectedIssue.group.affected_users || 0 }}</strong>
           </div>
           <div class="admin-issue-kv">
-            <span>Routes</span>
+            <span>影响路由</span>
             <strong>{{ selectedIssue.group.affected_routes || 0 }}</strong>
           </div>
         </div>
@@ -185,14 +185,14 @@
             :disabled="selectedIssue.group.status === status || issueActionLoading === `status:${selectedIssue.group.id}`"
             @click="emit('update-issue-status', { issueGroupId: selectedIssue.group.id, status })"
           >
-            {{ status }}
+            {{ statusLabel(status) }}
           </button>
         </div>
 
         <pre class="admin-issue-json">{{ toPrettyJson(selectedIssue.group.codex_handoff || selectedIssue.group.evidence_summary) }}</pre>
 
         <div>
-          <div class="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Sample Events</div>
+          <div class="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">示例事件</div>
           <div class="space-y-2">
             <div
               v-for="event in selectedIssue.events"
@@ -209,7 +209,7 @@
         </div>
 
         <div v-if="lastExport" class="break-all rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-white/55">
-          最近导出：{{ lastExport.markdownPath || lastExport.jsonPath }}
+          最近导出：{{ lastExport.markdownFileName || lastExport.jsonFileName || lastExport.markdownPath || lastExport.jsonPath }}
         </div>
       </div>
     </AdminPanelCard>
@@ -252,6 +252,33 @@ const props = defineProps({
 
 const statusOptions = ['open', 'investigating', 'resolved', 'ignored']
 const totalPages = computed(() => Math.max(1, Math.ceil(Number(props.issuePagination.total || 0) / Number(props.issuePagination.limit || 20))))
+
+const STATUS_LABELS = {
+  open: '待处理',
+  investigating: '处理中',
+  resolved: '已解决',
+  ignored: '已忽略'
+}
+
+const SOURCE_LAYER_LABELS = {
+  frontend: '前端',
+  backend: '后端',
+  database: '数据库',
+  provider: '模型供应商',
+  performance: '性能',
+  ux: '交互体验'
+}
+
+const CONFIDENCE_LABELS = {
+  high: '高',
+  medium: '中',
+  low: '低',
+  unknown: '未知'
+}
+
+const statusLabel = (status) => STATUS_LABELS[status] || '待处理'
+const sourceLayerLabel = (sourceLayer) => SOURCE_LAYER_LABELS[sourceLayer] || sourceLayer || '-'
+const confidenceLabel = (confidence) => CONFIDENCE_LABELS[confidence] || confidence || '-'
 
 const statusClass = (status) => {
   if (status === 'resolved') return 'ui-status-pill-active'

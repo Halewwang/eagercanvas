@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  buildCodexIssueExportPayload,
   CODEX_ISSUE_SCHEMA_VERSION,
   createCodexIssueTable,
   renderCodexIssueMarkdown,
@@ -93,4 +94,16 @@ test('writeCodexIssueExport writes json and markdown files with deterministic na
   assert.ok(writes.some((call) => call[0] === 'mkdir' && call[1] === '/tmp/codex-issues'))
   assert.ok(writes.some((call) => call[1].endsWith('issue-inbox-2026-06-06T00-02-00-000Z.json')))
   assert.ok(writes.some((call) => call[1].endsWith('issue-inbox-2026-06-06T00-02-00-000Z.md')))
+})
+
+test('buildCodexIssueExportPayload returns downloadable content without writing files', () => {
+  const payload = buildCodexIssueExportPayload({
+    details,
+    generatedAt: '2026-06-06T00:02:00.000Z'
+  })
+
+  assert.equal(payload.jsonFileName, 'issue-inbox-2026-06-06T00-02-00-000Z.json')
+  assert.equal(payload.markdownFileName, 'issue-inbox-2026-06-06T00-02-00-000Z.md')
+  assert.match(payload.jsonContent, /"schema": "codex_issue_table\/v1"/)
+  assert.match(payload.markdownContent, /# Codex Issue Inbox/)
 })
