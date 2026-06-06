@@ -27,7 +27,17 @@ test('runs.service returns synchronous image assets before noncritical completio
   assert.match(source, /!shouldPersistImageResultAssetsBeforeResponse\(providerResponse\)/)
   assert.match(source, /markImageResultAssetsForClientPersistence\(providerResponse\)/)
   assert.match(source, /const queueCompletedRunFinalization = \(params = \{\}\) => \{/)
+  assert.match(source, /waitUntil\(finalizeCompletedRun\(params\)\.catch\(\(error\) => \{[\s\S]*completed run finalization failed/)
   assert.match(source, /if \(isImageRun && imageHasAssets\) \{[\s\S]*queueCompletedRunFinalization\(\{[\s\S]*return \{[\s\S]*status: 'completed'/)
+})
+
+test('getImageTask returns completed provider image URLs before persistence finalization', () => {
+  const getImageTaskSource = source.match(/export const getImageTask = async \(_userId, taskId\) => \{[\s\S]*?\n  return result\n\}/)?.[0] || ''
+  assert.ok(getImageTaskSource, 'getImageTask source should be found')
+  assert.doesNotMatch(getImageTaskSource, /await persistImageResultAssets\(rawResult\)/)
+  assert.match(getImageTaskSource, /const result = markImageResultAssetsForClientPersistence\(rawResult\)/)
+  assert.match(getImageTaskSource, /queueImageTaskResultFinalization\(\{[\s\S]*rawResult[\s\S]*sourceNodeId/)
+  assert.match(getImageTaskSource, /return result/)
 })
 
 test('runs.service wraps GPT Image lite in the existing image task polling contract', () => {

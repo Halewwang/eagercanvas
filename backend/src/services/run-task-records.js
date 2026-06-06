@@ -20,15 +20,17 @@ export const bindVideoTaskOwnership = async ({ userId, runId, taskId, sourceNode
   }
 }
 
-export const bindImageTaskOwnership = async ({ userId, runId, taskId, model = '' }) => {
+export const bindImageTaskOwnership = async ({ userId, runId, taskId, model = '', sourceNodeId = '' }) => {
   if (!taskId) return
+  const safeSourceNodeId = String(sourceNodeId || '').trim()
   const { error } = await supabase.from('audit_logs').insert({
     user_id: userId,
     action: 'image.task.created',
     metadata: {
       run_id: runId,
       task_id: taskId,
-      model: String(model || '').trim()
+      model: String(model || '').trim(),
+      ...(safeSourceNodeId ? { source_node_id: safeSourceNodeId } : {})
     }
   })
   if (error) {
@@ -88,13 +90,14 @@ export const findImageRunContextByTask = async ({ userId, taskId }) => {
 
   if (error) {
     console.warn('[image] resolve run context by task failed', error.message)
-    return { runId: '', model: '' }
+    return { runId: '', model: '', sourceNodeId: '' }
   }
 
   const metadata = data?.[0]?.metadata || {}
   return {
     runId: metadata?.run_id ? String(metadata.run_id) : '',
-    model: metadata?.model ? String(metadata.model) : ''
+    model: metadata?.model ? String(metadata.model) : '',
+    sourceNodeId: metadata?.source_node_id ? String(metadata.source_node_id) : ''
   }
 }
 

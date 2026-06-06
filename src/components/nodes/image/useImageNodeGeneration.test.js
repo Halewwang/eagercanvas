@@ -123,6 +123,7 @@ test('image node generation creates a persisted image with merged references and
     'https://cdn.example.com/current.png',
     'https://cdn.example.com/ref.png'
   ])
+  assert.equal(calls[1][1].sourceNodeId, 'image-node-1')
   assert.deepEqual(calls.find((call) => call[0] === 'resolve-persistence')?.slice(0, 3), [
     'resolve-persistence',
     'https://tmp.example.com/generated.png',

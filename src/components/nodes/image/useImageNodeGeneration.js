@@ -89,6 +89,7 @@ export const useImageNodeGeneration = ({
         ratio: readReactiveValue(localImageRatio),
         aspect_ratio: readReactiveValue(localImageRatio),
         resolution: readReactiveValue(localResolution),
+        sourceNodeId: readReactiveValue(nodeId),
         image: mergedRefs
       })
 

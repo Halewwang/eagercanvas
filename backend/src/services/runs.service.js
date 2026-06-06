@@ -203,9 +203,90 @@ const finalizeCompletedRun = async ({
 }
 
 const queueCompletedRunFinalization = (params = {}) => {
-  void finalizeCompletedRun(params).catch((error) => {
+  waitUntil(finalizeCompletedRun(params).catch((error) => {
     console.warn('[runs] completed run finalization failed', error?.message || error)
+  }))
+}
+
+const finalizeImageTaskResult = async ({
+  userId,
+  runId = '',
+  run = null,
+  providerAccess = {},
+  rawResult = {},
+  taskId = '',
+  sourceNodeId = ''
+} = {}) => {
+  const result = await persistImageResultAssets(rawResult)
+  await syncRunStatusFromImageTask({ userId, runId, taskResult: result })
+
+  if (!runId) return result
+
+  const status = String(result?.status || '').toLowerCase()
+  const hasAssets = Array.isArray(result?.data) && result.data.length > 0
+  if (!hasAssets || !['completed', 'success', 'succeed', 'succeeded', 'done', 'finished', ''].includes(status)) {
+    return result
+  }
+
+  const safeSourceNodeId = String(sourceNodeId || '').trim()
+  const baseUsage = extractUsageSnapshot(result)
+  const enrichedUsage = await enrichUsageWith302Record(result, baseUsage)
+  const usagePatch = {
+    input_tokens: enrichedUsage.usage.inputTokens || 0,
+    output_tokens: enrichedUsage.usage.outputTokens || 0,
+    image_count: result.data.length,
+    cost_usd: enrichedUsage.usage.costUsd || 0,
+    estimated_cost_usd: baseUsage.costUsd || 0,
+    billed_cost_usd: enrichedUsage.usage.costUsd || 0,
+    billing_status: enrichedUsage.requestId ? 'billed' : 'estimated',
+    provider_request_id: enrichedUsage.requestId || extractProviderTaskId(result) || taskId,
+    api_name: providerAccess.apiName || null,
+    service_credential_id: providerAccess.serviceCredentialId || null,
+    upstream_task_id: extractProviderTaskId(result) || taskId,
+    raw_usage: enrichedUsage.usage.rawUsage || result?.raw || null
+  }
+  const usageEvent = await updateUsageEventByRunId(runId, usagePatch)
+  if (!usageEvent) {
+    await insertUsageEvent({
+      userId,
+      runId,
+      model: run?.model || '',
+      apiName: providerAccess.apiName,
+      providerRequestId: usagePatch.provider_request_id,
+      serviceCredentialId: providerAccess.serviceCredentialId,
+      upstreamTaskId: usagePatch.upstream_task_id,
+      inputTokens: enrichedUsage.usage.inputTokens || 0,
+      outputTokens: enrichedUsage.usage.outputTokens || 0,
+      imageCount: result.data.length,
+      latencyMs: 0,
+      costUsd: enrichedUsage.usage.costUsd || 0,
+      estimatedCostUsd: baseUsage.costUsd || 0,
+      billedCostUsd: enrichedUsage.usage.costUsd || 0,
+      billingStatus: enrichedUsage.requestId ? 'billed' : 'estimated',
+      rawUsage: enrichedUsage.usage.rawUsage || result?.raw || null,
+      eventType: 'image'
+    })
+  }
+
+  await upsertGeneratedMediaRecord({
+    userId,
+    runId,
+    projectId: run?.project_id,
+    runType: 'image',
+    model: run?.model || '',
+    prompt: '',
+    status: 'completed',
+    sourceNodeId: safeSourceNodeId,
+    assets: buildImageGenerationAssets(result, safeSourceNodeId)
   })
+
+  return result
+}
+
+const queueImageTaskResultFinalization = (params = {}) => {
+  waitUntil(finalizeImageTaskResult(params).catch((error) => {
+    console.warn('[runs] image task result finalization failed', error?.message || error)
+  }))
 }
 
 const finalizeQueuedImageRun = async ({
@@ -371,7 +452,8 @@ export const createRun = async (userId, input) => {
         userId,
         runId: run.id,
         taskId: imageTaskId,
-        model: getImageRunModel(payload)
+        model: getImageRunModel(payload),
+        sourceNodeId: String(payload.payload?.sourceNodeId || '').trim()
       })
 
       await insertUsageEvent({
@@ -534,7 +616,8 @@ export const createRun = async (userId, input) => {
         userId,
         runId: run.id,
         taskId: imageTaskId,
-        model: payload.model || payload.payload?.model
+        model: payload.model || payload.payload?.model,
+        sourceNodeId: String(payload.payload?.sourceNodeId || '').trim()
       })
 
       await supabase
@@ -883,63 +966,22 @@ export const getImageTask = async (_userId, taskId) => {
     model: imageRunContext.model || run?.model || ''
   }
   const rawResult = await providerImageStatus(taskId, providerRequestOptions)
-  const result = await persistImageResultAssets(rawResult)
-  await syncRunStatusFromImageTask({ userId: _userId, runId, taskResult: result })
+  const result = markImageResultAssetsForClientPersistence(rawResult)
+  const status = String(result?.status || '').toLowerCase()
+  const hasAssets = Array.isArray(result?.data) && result.data.length > 0
 
-  if (runId) {
-    const status = String(result?.status || '').toLowerCase()
-    if (Array.isArray(result?.data) && result.data.length > 0 && ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished', ''].includes(status)) {
-      const baseUsage = extractUsageSnapshot(result)
-      const enrichedUsage = await enrichUsageWith302Record(result, baseUsage)
-      const usagePatch = {
-        input_tokens: enrichedUsage.usage.inputTokens || 0,
-        output_tokens: enrichedUsage.usage.outputTokens || 0,
-        image_count: Array.isArray(result?.data) ? result.data.length : 0,
-        cost_usd: enrichedUsage.usage.costUsd || 0,
-        estimated_cost_usd: baseUsage.costUsd || 0,
-        billed_cost_usd: enrichedUsage.usage.costUsd || 0,
-        billing_status: enrichedUsage.requestId ? 'billed' : 'estimated',
-        provider_request_id: enrichedUsage.requestId || extractProviderTaskId(result) || taskId,
-        api_name: providerAccess.apiName || null,
-        service_credential_id: providerAccess.serviceCredentialId || null,
-        upstream_task_id: extractProviderTaskId(result) || taskId,
-        raw_usage: enrichedUsage.usage.rawUsage || result?.raw || null
-      }
-      const usageEvent = await updateUsageEventByRunId(runId, usagePatch)
-      if (!usageEvent) {
-        await insertUsageEvent({
-          userId: _userId,
-          runId,
-          model: run?.model || '',
-          apiName: providerAccess.apiName,
-          providerRequestId: usagePatch.provider_request_id,
-          serviceCredentialId: providerAccess.serviceCredentialId,
-          upstreamTaskId: usagePatch.upstream_task_id,
-          inputTokens: enrichedUsage.usage.inputTokens || 0,
-          outputTokens: enrichedUsage.usage.outputTokens || 0,
-          imageCount: Array.isArray(result?.data) ? result.data.length : 0,
-          latencyMs: 0,
-          costUsd: enrichedUsage.usage.costUsd || 0,
-          estimatedCostUsd: baseUsage.costUsd || 0,
-          billedCostUsd: enrichedUsage.usage.costUsd || 0,
-          billingStatus: enrichedUsage.requestId ? 'billed' : 'estimated',
-          rawUsage: enrichedUsage.usage.rawUsage || result?.raw || null,
-          eventType: 'image'
-        })
-      }
-
-      await upsertGeneratedMediaRecord({
-        userId: _userId,
-        runId,
-        projectId: run?.project_id,
-        runType: 'image',
-        model: run?.model || '',
-        prompt: '',
-        status: 'completed',
-        sourceNodeId: '',
-        assets: buildImageGenerationAssets(result)
-      })
-    }
+  if (hasAssets && ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished', ''].includes(status)) {
+    queueImageTaskResultFinalization({
+      userId: _userId,
+      runId,
+      run,
+      providerAccess,
+      rawResult,
+      taskId,
+      sourceNodeId: imageRunContext.sourceNodeId
+    })
+  } else {
+    await syncRunStatusFromImageTask({ userId: _userId, runId, taskResult: result })
   }
 
   return result

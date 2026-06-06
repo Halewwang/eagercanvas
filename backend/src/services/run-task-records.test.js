@@ -59,7 +59,8 @@ test('bindImageTaskOwnership stores run id, task id, and normalized model metada
       userId: 'user_123',
       runId: 'run_123',
       taskId: 'task_123',
-      model: ' gpt-image-2 '
+      model: ' gpt-image-2 ',
+      sourceNodeId: ' image-node-1 '
     })
   } finally {
     restore.mock.restore()
@@ -72,7 +73,8 @@ test('bindImageTaskOwnership stores run id, task id, and normalized model metada
       metadata: {
         run_id: 'run_123',
         task_id: 'task_123',
-        model: 'gpt-image-2'
+        model: 'gpt-image-2',
+        source_node_id: 'image-node-1'
       }
     }
   ])
@@ -102,7 +104,8 @@ test('findImageRunContextByTask returns run id and model from task metadata', as
         {
           metadata: {
             run_id: 'run_image_123',
-            model: 'gpt-image-2'
+            model: 'gpt-image-2',
+            source_node_id: 'image-node-1'
           }
         }
       ]
@@ -117,7 +120,8 @@ test('findImageRunContextByTask returns run id and model from task metadata', as
 
     assert.deepEqual(context, {
       runId: 'run_image_123',
-      model: 'gpt-image-2'
+      model: 'gpt-image-2',
+      sourceNodeId: 'image-node-1'
     })
   } finally {
     restore.mock.restore()

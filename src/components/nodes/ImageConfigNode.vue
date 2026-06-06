@@ -600,6 +600,7 @@ const handleGenerate = async (mode = 'auto') => {
       model: localModel.value,
       prompt: sourcePrompt,
       projectId: currentProjectId.value,
+      sourceNodeId: imageNodeId,
       n: 1,
       ratio: localRatio.value || ratioFromSizeKey(localSize.value),
       aspect_ratio: localRatio.value || ratioFromSizeKey(localSize.value),

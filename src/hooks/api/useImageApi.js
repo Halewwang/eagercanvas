@@ -15,7 +15,6 @@ import {
 
 /**
  * Image generation composable | 图片生成组合式函数
- * Simplified for open source - fixed input/output format
  */
 export const useImageGeneration = () => {
   const { loading, error, status, reset, setLoading, setError, setSuccess } = useApiState()
@@ -109,6 +108,7 @@ export const useImageGeneration = () => {
         }
       }
       if (params.image_url) requestData.image_url = params.image_url
+      if (params.sourceNodeId) requestData.sourceNodeId = params.sourceNodeId
       for (const key of ['horizontal_angle', 'vertical_angle', 'zoom']) {
         if (params[key] !== undefined && params[key] !== null) {
           requestData[key] = params[key]
