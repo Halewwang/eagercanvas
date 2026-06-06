@@ -33,6 +33,13 @@ import {
   updateUserServiceLimits
 } from '../services/service-access.service.js'
 import { syncProviderBillingRecords } from '../services/billing-reconciliation.service.js'
+import {
+  getIssueGroupForAdmin,
+  listIssueGroupsForAdmin,
+  updateIssueGroupStatus
+} from '../services/admin-issues.service.js'
+import { exportCodexIssues } from '../services/issue-codex-export.service.js'
+import { sendIssueAlertForGroup } from '../services/issue-notification.service.js'
 
 export const adminRouter = Router()
 adminRouter.use(authRequired)
@@ -75,6 +82,18 @@ const reconcileSchema = z.object({
   startTime: z.string().optional(),
   endTime: z.string().optional(),
   pageSize: z.number().int().min(1).max(500).optional()
+})
+
+const updateIssueStatusSchema = z.object({
+  status: z.enum(['open', 'investigating', 'resolved', 'ignored'])
+})
+
+const exportIssuesSchema = z.object({
+  status: z.string().optional(),
+  severity: z.string().optional(),
+  sourceLayer: z.string().optional(),
+  source_layer: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional()
 })
 
 adminRouter.get('/session', requirePermission(['admin.dashboard.read']), asyncHandler(async (req, res) => {
@@ -211,6 +230,56 @@ adminRouter.get('/audit-logs', requirePermission(['admin.audit.read']), asyncHan
     limit: req.query.limit
   })
   res.json({ data: result.items, pagination: result.pagination })
+}))
+
+adminRouter.get('/issues', requirePermission(['admin.issue.read']), asyncHandler(async (req, res) => {
+  const result = await listIssueGroupsForAdmin({
+    status: req.query.status,
+    severity: req.query.severity,
+    sourceLayer: req.query.source_layer,
+    category: req.query.category,
+    from: req.query.from,
+    to: req.query.to,
+    page: req.query.page,
+    limit: req.query.limit
+  })
+  res.json({ data: result.items, pagination: result.pagination })
+}))
+
+adminRouter.get('/issues/:issueGroupId', requirePermission(['admin.issue.read']), asyncHandler(async (req, res) => {
+  const result = await getIssueGroupForAdmin(req.params.issueGroupId)
+  res.json({ data: result })
+}))
+
+adminRouter.patch('/issues/:issueGroupId', requirePermission(['admin.issue.update']), asyncHandler(async (req, res) => {
+  const payload = updateIssueStatusSchema.parse(req.body || {})
+  const data = await updateIssueGroupStatus(req.params.issueGroupId, payload.status)
+  res.json({ data })
+}))
+
+adminRouter.post('/issues/export', requirePermission(['admin.issue.export']), asyncHandler(async (req, res) => {
+  const payload = exportIssuesSchema.parse(req.body || {})
+  const result = await exportCodexIssues({
+    filters: {
+      status: payload.status,
+      severity: payload.severity,
+      sourceLayer: payload.sourceLayer || payload.source_layer,
+      limit: payload.limit
+    }
+  })
+  res.json({
+    data: {
+      generatedAt: result.generatedAt,
+      issueCount: result.issueCount,
+      jsonPath: result.jsonPath,
+      markdownPath: result.markdownPath
+    }
+  })
+}))
+
+adminRouter.post('/issues/:issueGroupId/notify', requirePermission(['admin.issue.notify']), asyncHandler(async (req, res) => {
+  const result = await sendIssueAlertForGroup(req.params.issueGroupId)
+  res.json({ data: result })
 }))
 
 adminRouter.get('/usage/summary', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {

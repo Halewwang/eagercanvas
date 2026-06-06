@@ -7,6 +7,7 @@ import { resolveActiveUserServiceCredential } from '../services/service-access.s
 import { adminRouter } from './admin.routes.js'
 import { authRouter } from './auth.routes.js'
 import { mediaLibraryRouter } from './media-library.routes.js'
+import { observabilityRouter } from './observability.routes.js'
 import { projectsRouter } from './projects.routes.js'
 import { runsRouter } from './runs.routes.js'
 import { usageRouter } from './usage.routes.js'
@@ -26,6 +27,7 @@ apiRouter.use('/projects', projectsRouter)
 apiRouter.use('/workspace', workspaceRouter)
 apiRouter.use('/runs', runsRouter)
 apiRouter.use('/media-library', mediaLibraryRouter)
+apiRouter.use('/observability', observabilityRouter)
 apiRouter.use('/usage', usageRouter)
 apiRouter.use('/admin', adminRouter)
 apiRouter.use('/usage-admin', usageAdminRouter)

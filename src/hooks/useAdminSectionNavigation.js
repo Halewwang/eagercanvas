@@ -10,6 +10,7 @@ export { getAdminSectionScrollCandidate }
 
 export const useAdminSectionNavigation = ({
   canReadAudit,
+  canReadIssues = { value: false },
   canReadUsers,
   dashboardSectionsRef,
   loadAll,
@@ -22,7 +23,8 @@ export const useAdminSectionNavigation = ({
   const navItems = computed(() => getAdminNavItems({
     canReadUsers: canReadUsers.value,
     showServiceSection: showServiceSection.value,
-    canReadAudit: canReadAudit.value
+    canReadAudit: canReadAudit.value,
+    canReadIssues: canReadIssues.value
   }))
 
   const getSectionEl = (key) => dashboardSectionsRef.value?.getSectionEl(key) || null

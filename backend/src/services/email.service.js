@@ -48,3 +48,35 @@ export const sendVerificationCodeEmail = async ({ email, code, purpose = 'login'
     )
   }
 }
+
+export const sendIssueAlertEmail = async ({ to, subject, html, text = '' }) => {
+  if (!resend || !env.resendFromEmail) {
+    return { ok: true, status: 'skipped', reason: 'EMAIL_NOT_CONFIGURED' }
+  }
+
+  try {
+    const result = await resend.emails.send({
+      from: env.resendFromEmail,
+      to,
+      subject,
+      html,
+      text
+    })
+
+    if (result?.error) {
+      return {
+        ok: false,
+        status: 'failed',
+        error: getResendErrorMessage(result.error) || 'Failed to send issue alert email'
+      }
+    }
+
+    return { ok: true, status: 'sent', id: result?.data?.id || result?.id || null }
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'failed',
+      error: getResendErrorMessage(error) || 'Failed to send issue alert email'
+    }
+  }
+}

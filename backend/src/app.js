@@ -7,6 +7,7 @@ import { apiRouter } from './routes/index.js'
 import { env } from './config/env.js'
 import { errorMiddleware } from './middleware/error.js'
 import { rateLimit } from './middleware/rate-limit.js'
+import { createRequestObserver } from './middleware/request-observer.js'
 
 export const app = express()
 
@@ -60,6 +61,7 @@ app.use((req, res, next) => {
   res.setHeader('x-request-id', req.requestId)
   next()
 })
+app.use(createRequestObserver())
 
 app.use('/api/v1', apiRouter)
 

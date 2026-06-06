@@ -3,6 +3,7 @@ export { default as AdminAuditLogPaginationSummary } from './AdminAuditLogPagina
 export { default as AdminAuditLogRow } from './AdminAuditLogRow.vue'
 export { default as AdminAuditLogSection } from './AdminAuditLogSection.vue'
 export { default as AdminDashboardSections } from './AdminDashboardSections.vue'
+export { default as AdminIssueInboxSection } from './AdminIssueInboxSection.vue'
 export { default as AdminOverviewInsightPanel } from './AdminOverviewInsightPanel.vue'
 export { default as AdminOverviewMetricGrid } from './AdminOverviewMetricGrid.vue'
 export { default as AdminOverviewSection } from './AdminOverviewSection.vue'

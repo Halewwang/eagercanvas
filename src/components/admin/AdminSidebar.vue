@@ -18,20 +18,11 @@
       />
     </template>
 
-    <template #meta>
-      <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-        <p class="text-xs uppercase tracking-[0.16em] text-white/45">访问范围</p>
-        <div class="mt-3 flex flex-wrap gap-2">
-          <AdminPermissionChip v-for="item in accessScope" :key="item" :label="item" />
-        </div>
-      </div>
-    </template>
   </AdminSidebarFrame>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import AdminPermissionChip from './AdminPermissionChip.vue'
 import AdminSidebarFrame from './AdminSidebarFrame.vue'
 import AdminSidebarNavItem from './AdminSidebarNavItem.vue'
 

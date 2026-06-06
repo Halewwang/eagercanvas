@@ -18,6 +18,12 @@ const parseOrigins = (value = '') => {
     .filter(Boolean)
 }
 
+const parseBoolean = (value, fallback = false) => {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (!normalized) return fallback
+  return ['1', 'true', 'yes', 'on'].includes(normalized)
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT || 8787),
@@ -37,6 +43,12 @@ export const env = {
 
   resendApiKey: process.env.RESEND_API_KEY || '',
   resendFromEmail: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+  issueAlertEnabled: parseBoolean(process.env.ISSUE_ALERT_ENABLED, false),
+  issueAlertEmails: process.env.ISSUE_ALERT_EMAILS || '',
+  issueAlertMinSeverity: process.env.ISSUE_ALERT_MIN_SEVERITY || 'p1',
+  issueAlertCooldownMinutes: Number(process.env.ISSUE_ALERT_COOLDOWN_MINUTES || 60),
+  issueAlertEvidenceDelaySeconds: Number(process.env.ISSUE_ALERT_EVIDENCE_DELAY_SECONDS || 0),
+  issueAlertMaxPerHour: Number(process.env.ISSUE_ALERT_MAX_PER_HOUR || 10),
 
   providerApiBaseUrl: process.env.PROVIDER_API_BASE_URL || 'https://api.302ai.cn',
   providerApiBaseUrls: process.env.PROVIDER_API_BASE_URLS || '',

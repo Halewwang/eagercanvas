@@ -35,12 +35,17 @@
       :user-service-section="userServiceSectionProps"
       :service-reconciliation-section="serviceReconciliationSectionProps"
       :audit-log-section="auditLogSectionProps"
+      :issue-inbox-section="issueInboxSectionProps"
       @activate-service="activateService"
       @activate-user="activateUser"
       @delete-user="deleteUser"
       @disable-service="disableService"
       @load-api-logs="loadApiLogs"
+      @load-issues="loadIssues"
       @load-logs="loadLogs"
+      @export-issues="exportIssues"
+      @notify-issue="notifyIssue"
+      @open-issue="openIssue"
       @query-record="queryRecord"
       @reconcile-billing="reconcileBilling"
       @refresh-overview="refreshOverview"
@@ -51,6 +56,8 @@
       @set-user-page="setUserPage"
       @suspend-user="suspendUser"
       @update-audit-log-query="updateAuditLogQuery"
+      @update-issue-query="updateIssueQuery"
+      @update-issue-status="setIssueStatus"
       @update-log-query="updateLog302Query"
       @update:record-request-id="recordRequestId = $event"
       @update-role-selection="updateRoleSelection"
@@ -58,7 +65,6 @@
       @update:search-query="userSearchQuery = $event"
       @update:status-filter="userStatusFilter = $event"
     />
-
   </AdminShell>
 </template>
 
@@ -72,6 +78,7 @@ import { useAdminAccessState } from '@/hooks/useAdminAccessState'
 import { useAdminDashboardData } from '@/hooks/useAdminDashboardData'
 import { useAdminDashboardRefresh } from '@/hooks/useAdminDashboardRefresh'
 import { useAdminDisplayState } from '@/hooks/useAdminDisplayState'
+import { useAdminIssueInbox } from '@/hooks/useAdminIssueInbox'
 import { useAdminUsersDashboardSections } from '@/hooks/useAdminUsersDashboardSections'
 import { useAdminUserActions } from '@/hooks/useAdminUserActions'
 import { useAdminServiceOps } from '@/hooks/useAdminServiceOps'
@@ -81,9 +88,7 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
-
 const dashboardSectionsRef = ref(null)
-
 const accessState = useAdminAccessState({ auth })
 const {
   accessScope,
@@ -93,6 +98,7 @@ const {
   canManageRoles,
   canManageUserStatus,
   canReadAudit,
+  canReadIssues,
   canReadUsage,
   canReadUsers,
   canReconcileBilling,
@@ -103,7 +109,6 @@ const {
   showServiceSection,
   showUserActions
 } = accessState
-
 const usersState = useAdminUsersState({
   canReadUsers
 })
@@ -130,7 +135,6 @@ const {
   users,
   visibleUserPages
 } = usersState
-
 const dashboardData = useAdminDashboardData({
   canReadAudit,
   canReadUsage
@@ -150,7 +154,6 @@ const {
   usageSeries,
   usageSummary
 } = dashboardData
-
 const displayState = useAdminDisplayState({
   activeServiceUsers,
   canReadAudit,
@@ -175,7 +178,6 @@ const {
   toPrettyJson,
   topModelLabel
 } = displayState
-
 const serviceOps = useAdminServiceOps({
   canReadUsage,
   canManageApiKeys: computed(() => false),
@@ -198,33 +200,47 @@ const {
   serviceLoadNotice,
   updateLog302Query
 } = serviceOps
-
+const issueInbox = useAdminIssueInbox({
+  canReadIssues
+})
+const {
+  exportIssues,
+  loadIssues,
+  loadingIssues,
+  notifyIssue,
+  openIssue,
+  setIssueStatus,
+  updateIssueQuery
+} = issueInbox
 const {
   isRefreshing,
   loadAll
 } = useAdminDashboardRefresh({
   auth,
   canReadAudit,
+  canReadIssues,
   canReadUsage,
   canReadUsers,
   load302All,
+  loadIssues,
   loadLogs,
   loadUsage,
   loadUsers,
   loading302,
+  loadingIssues,
   loadingLogs,
   loadingOverview,
   loadingUsers,
   router,
   showServiceSection
 })
-
 const {
   activeSection,
   navItems,
   scrollToSection
 } = useAdminSectionNavigation({
   canReadAudit,
+  canReadIssues,
   canReadUsers,
   dashboardSectionsRef,
   loadAll: () => loadAll(),
@@ -232,7 +248,6 @@ const {
   router,
   showServiceSection
 })
-
 const userActions = useAdminUserActions({
   canActivateService,
   canDisableService,
@@ -263,9 +278,9 @@ const {
   suspendUser,
   updateServiceLimits
 } = userActions
-
 const {
   auditLogSectionProps,
+  issueInboxSectionProps,
   overviewSectionProps,
   serviceReconciliationSectionProps,
   userServiceSectionProps
@@ -276,9 +291,8 @@ const {
   displayState,
   serviceOps,
   userActions,
+  issueInbox,
   auth
 })
-
 const goHome = () => router.push('/')
-
 </script>

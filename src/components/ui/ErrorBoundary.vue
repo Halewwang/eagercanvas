@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onErrorCaptured, ref } from 'vue'
+import { reportErrorBoundaryIssue } from '@/observability'
 
 const error = ref(null)
 
@@ -12,8 +13,9 @@ const resetBoundary = () => {
   error.value = null
 }
 
-onErrorCaptured((capturedError) => {
+onErrorCaptured((capturedError, _instance, info) => {
   error.value = capturedError
+  reportErrorBoundaryIssue(capturedError, { component: 'ErrorBoundary', info })
   return false
 })
 </script>

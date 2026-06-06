@@ -21,7 +21,7 @@ const props = defineProps({
 
 const sectionRef = ref(null)
 const sectionClass = computed(() => [
-  'admin-dashboard-section-frame scroll-mt-6 rounded-2xl p-5 md:p-6',
+  'admin-dashboard-section-frame min-w-0 overflow-hidden scroll-mt-6 rounded-2xl p-5 md:p-6',
   props.frameClass
 ])
 

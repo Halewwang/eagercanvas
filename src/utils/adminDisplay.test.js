@@ -62,25 +62,28 @@ test('admin display navigation helpers preserve nav items, routes, and access la
     overview: 'AdminDashboard',
     users: 'AdminUsers',
     service: 'AdminService',
-    audit: 'AdminAudit'
+    audit: 'AdminAudit',
+    issues: 'AdminIssues'
   })
   assert.deepEqual(adminDisplay.ADMIN_SECTION_BY_ROUTE_NAME, {
     AdminDashboard: 'overview',
     AdminUsers: 'users',
     AdminService: 'service',
-    AdminAudit: 'audit'
+    AdminAudit: 'audit',
+    AdminIssues: 'issues'
   })
 
   assert.deepEqual(adminDisplay.getAdminNavItems({}), [
     { key: 'overview', label: '概览', note: '总览' }
   ])
   assert.deepEqual(
-    adminDisplay.getAdminNavItems({ canReadUsers: true, showServiceSection: true, canReadAudit: true }),
+    adminDisplay.getAdminNavItems({ canReadUsers: true, showServiceSection: true, canReadAudit: true, canReadIssues: true }),
     [
       { key: 'overview', label: '概览', note: '总览' },
       { key: 'users', label: '用户服务', note: '开通' },
       { key: 'service', label: '消耗对账', note: '同步' },
-      { key: 'audit', label: '审计日志', note: '追踪' }
+      { key: 'audit', label: '审计日志', note: '追踪' },
+      { key: 'issues', label: '问题收件箱', note: '修复' }
     ]
   )
 
@@ -91,9 +94,10 @@ test('admin display navigation helpers preserve nav items, routes, and access la
       canReadUsage: true,
       canActivateService: true,
       canReconcileBilling: true,
-      canReadAudit: true
+      canReadAudit: true,
+      canReadIssues: true
     }),
-    ['概览', '用户', '用量', '服务访问', '对账', '审计']
+    ['概览', '用户', '用量', '服务访问', '对账', '审计', '问题']
   )
   assert.deepEqual(adminDisplay.getAdminAccessScope({ canDisableService: true }), ['概览', '服务访问'])
 })

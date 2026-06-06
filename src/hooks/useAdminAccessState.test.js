@@ -52,6 +52,8 @@ test('admin access state composable owns permission and session derived state', 
   assert.match(accessHookSource, /export const useAdminAccessState/)
   assert.match(accessHookSource, /getAdminAccessScope/)
   assert.match(accessHookSource, /admin\.user\.read/)
+  assert.match(accessHookSource, /admin\.issue\.read/)
+  assert.match(accessHookSource, /admin\.issue\.export/)
   assert.match(accessHookSource, /admin\.service_access\.activate/)
   assert.match(accessHookSource, /showServiceSection/)
   assert.match(accessHookSource, /showUserActions/)

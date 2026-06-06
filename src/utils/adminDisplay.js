@@ -42,23 +42,26 @@ export const ADMIN_ROUTE_NAME_BY_SECTION = {
   overview: 'AdminDashboard',
   users: 'AdminUsers',
   service: 'AdminService',
-  audit: 'AdminAudit'
+  audit: 'AdminAudit',
+  issues: 'AdminIssues'
 }
 
 export const ADMIN_SECTION_BY_ROUTE_NAME = {
   AdminDashboard: 'overview',
   AdminUsers: 'users',
   AdminService: 'service',
-  AdminAudit: 'audit'
+  AdminAudit: 'audit',
+  AdminIssues: 'issues'
 }
 
-export const getAdminNavItems = ({ canReadUsers = false, showServiceSection = false, canReadAudit = false } = {}) => {
+export const getAdminNavItems = ({ canReadUsers = false, showServiceSection = false, canReadAudit = false, canReadIssues = false } = {}) => {
   const items = [
     { key: 'overview', label: '概览', note: '总览' }
   ]
   if (canReadUsers) items.push({ key: 'users', label: '用户服务', note: '开通' })
   if (showServiceSection) items.push({ key: 'service', label: '消耗对账', note: '同步' })
   if (canReadAudit) items.push({ key: 'audit', label: '审计日志', note: '追踪' })
+  if (canReadIssues) items.push({ key: 'issues', label: '问题收件箱', note: '修复' })
   return items
 }
 
@@ -69,7 +72,8 @@ export const getAdminAccessScope = ({
   canDisableService = false,
   canResetService = false,
   canReconcileBilling = false,
-  canReadAudit = false
+  canReadAudit = false,
+  canReadIssues = false
 } = {}) => {
   const items = ['概览']
   if (canReadUsers) items.push('用户')
@@ -77,6 +81,7 @@ export const getAdminAccessScope = ({
   if (canActivateService || canDisableService || canResetService) items.push('服务访问')
   if (canReconcileBilling) items.push('对账')
   if (canReadAudit) items.push('审计')
+  if (canReadIssues) items.push('问题')
   return items
 }
 

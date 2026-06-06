@@ -3,13 +3,16 @@ import { computed } from 'vue'
 export const useAdminDashboardRefresh = ({
   auth,
   canReadAudit,
+  canReadIssues = { value: false },
   canReadUsage,
   canReadUsers,
   load302All,
+  loadIssues = async () => {},
   loadLogs,
   loadUsage,
   loadUsers,
   loading302,
+  loadingIssues = { value: false },
   loadingLogs,
   loadingOverview,
   loadingUsers,
@@ -20,7 +23,8 @@ export const useAdminDashboardRefresh = ({
     loadingOverview.value ||
     loadingUsers.value ||
     loadingLogs.value ||
-    loading302.value
+    loading302.value ||
+    loadingIssues.value
   ))
 
   const loadAll = async () => {
@@ -35,7 +39,8 @@ export const useAdminDashboardRefresh = ({
       canReadUsage.value && loadUsage(),
       canReadUsers.value && loadUsers(),
       showServiceSection.value && load302All(),
-      canReadAudit.value && loadLogs()
+      canReadAudit.value && loadLogs(),
+      canReadIssues.value && loadIssues()
     ].filter(Boolean))
   }
 

@@ -24,11 +24,15 @@ const createDeps = () => ({
   canDisableService: ref(false),
   canManageRoles: ref(true),
   canManageUserStatus: ref(true),
+  canExportIssues: ref(true),
+  canNotifyIssues: ref(true),
   canReadAudit: ref(true),
+  canReadIssues: ref(true),
   canReadUsage: ref(true),
   canReadUsers: ref(true),
   canReconcileBilling: ref(false),
   canResetService: ref(true),
+  canUpdateIssues: ref(true),
   canUpdateServiceLimits: ref(true),
   cards: ref([{ label: 'Users' }]),
   deleting: ref({ 'user-1': false }),
@@ -37,6 +41,13 @@ const createDeps = () => ({
   formatRoleList: fn,
   formatUsd: fn,
   isSelf: fn,
+  issueActionLoading: ref(''),
+  issuePagination: ref({ total: 1 }),
+  issueQuery: ref({ status: 'open' }),
+  issues: ref([{ id: 'issue-1' }]),
+  lastExport: ref({ jsonPath: '/tmp/issues.json' }),
+  loadingIssueDetail: ref(false),
+  loadingIssues: ref(false),
   loading302: ref(false),
   loadingApiLogs: ref(false),
   loadingLogs: ref(false),
@@ -57,6 +68,7 @@ const createDeps = () => ({
   roleOptions: ref([{ value: 'admin' }]),
   saving: ref({ 'user-1': false }),
   selectedRoles: ref({ 'user-1': 'admin' }),
+  selectedIssue: ref({ group: { id: 'issue-1' }, events: [] }),
   serviceActivationRate: ref(50),
   serviceLoadNotice: ref(''),
   serviceLoading: ref({ 'user-1': false }),
@@ -89,7 +101,8 @@ test('admin dashboard section props composable groups section-facing props', () 
     overviewSectionProps,
     userServiceSectionProps,
     serviceReconciliationSectionProps,
-    auditLogSectionProps
+    auditLogSectionProps,
+    issueInboxSectionProps
   } = sectionPropsModule.useAdminDashboardSectionProps(deps)
 
   assert.equal(overviewSectionProps.value.activeServiceUsers, 2)
@@ -114,6 +127,11 @@ test('admin dashboard section props composable groups section-facing props', () 
   assert.deepEqual(auditLogSectionProps.value.pagination, { total: 5 })
   assert.strictEqual(auditLogSectionProps.value.toPrettyJson, fn)
 
+  assert.equal(issueInboxSectionProps.value.canReadIssues, true)
+  assert.equal(issueInboxSectionProps.value.canExportIssues, true)
+  assert.deepEqual(issueInboxSectionProps.value.issues, [{ id: 'issue-1' }])
+  assert.equal(issueInboxSectionProps.value.selectedIssue.group.id, 'issue-1')
+
   deps.activeServiceUsers.value = 4
   deps.auth.permissions.value = ['admin.user.read']
   deps.userSearchQuery.value = 'owner'
@@ -131,5 +149,6 @@ test('admin dashboard section props composable owns grouped prop assembly', () =
   assert.match(sectionPropsSource, /userServiceSectionProps/)
   assert.match(sectionPropsSource, /serviceReconciliationSectionProps/)
   assert.match(sectionPropsSource, /auditLogSectionProps/)
+  assert.match(sectionPropsSource, /issueInboxSectionProps/)
   assert.match(sectionPropsSource, /permissionCount/)
 })

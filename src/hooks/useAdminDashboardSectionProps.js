@@ -15,11 +15,15 @@ export const useAdminDashboardSectionProps = ({
   canDisableService,
   canManageRoles,
   canManageUserStatus,
+  canExportIssues,
+  canNotifyIssues,
   canReadAudit,
+  canReadIssues,
   canReadUsage,
   canReadUsers,
   canReconcileBilling,
   canResetService,
+  canUpdateIssues,
   canUpdateServiceLimits,
   cards,
   deleting,
@@ -28,6 +32,13 @@ export const useAdminDashboardSectionProps = ({
   formatRoleList,
   formatUsd,
   isSelf,
+  issueActionLoading,
+  issuePagination,
+  issueQuery,
+  issues,
+  lastExport,
+  loadingIssueDetail,
+  loadingIssues,
   loading302,
   loadingApiLogs,
   loadingLogs,
@@ -48,6 +59,7 @@ export const useAdminDashboardSectionProps = ({
   roleOptions,
   saving,
   selectedRoles,
+  selectedIssue,
   serviceActivationRate,
   serviceLoadNotice,
   serviceLoading,
@@ -157,8 +169,26 @@ export const useAdminDashboardSectionProps = ({
     toPrettyJson
   }))
 
+  const issueInboxSectionProps = computed(() => ({
+    canExportIssues: unref(canExportIssues),
+    canNotifyIssues: unref(canNotifyIssues),
+    canReadIssues: unref(canReadIssues),
+    canUpdateIssues: unref(canUpdateIssues),
+    formatDateTime,
+    issueActionLoading: unref(issueActionLoading),
+    issuePagination: unref(issuePagination),
+    issueQuery: unref(issueQuery),
+    issues: unref(issues),
+    lastExport: unref(lastExport),
+    loadingIssueDetail: unref(loadingIssueDetail),
+    loadingIssues: unref(loadingIssues),
+    selectedIssue: unref(selectedIssue),
+    toPrettyJson
+  }))
+
   return {
     auditLogSectionProps,
+    issueInboxSectionProps,
     overviewSectionProps,
     serviceReconciliationSectionProps,
     userServiceSectionProps

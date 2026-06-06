@@ -48,11 +48,27 @@
   <AdminDashboardSectionFrame
     ref="auditRef"
     :show="auditLogSection.canReadAudit"
+    frame-class="mb-8"
   >
     <AdminAuditLogSection
       v-bind="auditLogSection"
       @load-logs="emit('load-logs')"
       @update-log-query="(key, value) => emit('update-audit-log-query', key, value)"
+    />
+  </AdminDashboardSectionFrame>
+
+  <AdminDashboardSectionFrame
+    ref="issuesRef"
+    :show="issueInboxSection.canReadIssues"
+  >
+    <AdminIssueInboxSection
+      v-bind="issueInboxSection"
+      @export-issues="emit('export-issues')"
+      @load-issues="emit('load-issues')"
+      @notify-issue="emit('notify-issue', $event)"
+      @open-issue="emit('open-issue', $event)"
+      @update-issue-query="(key, value) => emit('update-issue-query', key, value)"
+      @update-issue-status="emit('update-issue-status', $event)"
     />
   </AdminDashboardSectionFrame>
 </template>
@@ -62,6 +78,7 @@ import { ref } from 'vue'
 import AdminDashboardSectionFrame from '@/components/admin/AdminDashboardSectionFrame.vue'
 import AdminAuditLogSection from './AdminAuditLogSection.vue'
 import AdminOverviewSection from './AdminOverviewSection.vue'
+import AdminIssueInboxSection from './AdminIssueInboxSection.vue'
 import AdminServiceReconciliationSection from './AdminServiceReconciliationSection.vue'
 import AdminUserServiceSection from './AdminUserServiceSection.vue'
 
@@ -71,7 +88,11 @@ const emit = defineEmits([
   'delete-user',
   'disable-service',
   'load-api-logs',
+  'load-issues',
   'load-logs',
+  'export-issues',
+  'notify-issue',
+  'open-issue',
   'query-record',
   'reconcile-billing',
   'refresh-overview',
@@ -82,6 +103,8 @@ const emit = defineEmits([
   'set-user-page',
   'suspend-user',
   'update-audit-log-query',
+  'update-issue-query',
+  'update-issue-status',
   'update-log-query',
   'update-role-selection',
   'update-service-limits',
@@ -94,13 +117,15 @@ defineProps({
   overviewSection: { type: Object, default: () => ({}) },
   userServiceSection: { type: Object, default: () => ({}) },
   serviceReconciliationSection: { type: Object, default: () => ({}) },
-  auditLogSection: { type: Object, default: () => ({}) }
+  auditLogSection: { type: Object, default: () => ({}) },
+  issueInboxSection: { type: Object, default: () => ({}) }
 })
 
 const overviewRef = ref(null)
 const usersRef = ref(null)
 const serviceRef = ref(null)
 const auditRef = ref(null)
+const issuesRef = ref(null)
 
 const getFramedSectionEl = (sectionRef) => sectionRef.value?.getSectionEl?.() || sectionRef.value
 
@@ -108,6 +133,7 @@ const getSectionEl = (key) => {
   if (key === 'users') return getFramedSectionEl(usersRef)
   if (key === 'service') return getFramedSectionEl(serviceRef)
   if (key === 'audit') return getFramedSectionEl(auditRef)
+  if (key === 'issues') return getFramedSectionEl(issuesRef)
   return overviewRef.value
 }
 

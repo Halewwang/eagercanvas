@@ -18,13 +18,16 @@ const { useAdminDashboardRefresh } = await loadHook()
 const createDeps = (overrides = {}) => ({
   auth: { loadAdminSession: async () => true },
   canReadAudit: ref(true),
+  canReadIssues: ref(true),
   canReadUsage: ref(true),
   canReadUsers: ref(true),
   loading302: ref(false),
+  loadingIssues: ref(false),
   loadingLogs: ref(false),
   loadingOverview: ref(false),
   loadingUsers: ref(false),
   load302All: async () => {},
+  loadIssues: async () => {},
   loadLogs: async () => {},
   loadUsage: async () => {},
   loadUsers: async () => {},
@@ -44,6 +47,7 @@ test('admin dashboard refresh runs the existing visible data loaders after sessi
     },
     loading302: ref(true),
     load302All: async () => calls.push('service'),
+    loadIssues: async () => calls.push('issues'),
     loadLogs: async () => calls.push('audit'),
     loadUsage: async () => calls.push('usage'),
     loadUsers: async () => calls.push('users')
@@ -59,7 +63,8 @@ test('admin dashboard refresh runs the existing visible data loaders after sessi
     'usage',
     'users',
     'service',
-    'audit'
+    'audit',
+    'issues'
   ])
 })
 
@@ -68,6 +73,7 @@ test('admin dashboard refresh redirects and skips data loaders when the admin se
   const deps = createDeps({
     auth: { loadAdminSession: async () => false },
     load302All: async () => calls.push('service'),
+    loadIssues: async () => calls.push('issues'),
     loadLogs: async () => calls.push('audit'),
     loadUsage: async () => calls.push('usage'),
     loadUsers: async () => calls.push('users'),
@@ -88,6 +94,7 @@ test('admin dashboard refresh keeps the shell in local preview when admin sessio
   const deps = createDeps({
     auth: { loadAdminSession: async () => false },
     load302All: async () => calls.push('service'),
+    loadIssues: async () => calls.push('issues'),
     loadLogs: async () => calls.push('audit'),
     loadUsage: async () => calls.push('usage'),
     loadUsers: async () => calls.push('users'),

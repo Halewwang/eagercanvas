@@ -88,6 +88,39 @@ export const getAdminAuditLogs = (params) =>
     params
   })
 
+export const getAdminIssues = (params) =>
+  apiRequest({
+    url: '/admin/issues',
+    method: 'get',
+    params
+  })
+
+export const getAdminIssue = (issueGroupId) =>
+  apiRequest({
+    url: `/admin/issues/${encodeURIComponent(issueGroupId)}`,
+    method: 'get'
+  })
+
+export const updateAdminIssueStatus = (issueGroupId, status) =>
+  apiRequest({
+    url: `/admin/issues/${encodeURIComponent(issueGroupId)}`,
+    method: 'patch',
+    data: { status }
+  })
+
+export const exportAdminIssues = (payload = {}) =>
+  apiRequest({
+    url: '/admin/issues/export',
+    method: 'post',
+    data: payload
+  })
+
+export const notifyAdminIssue = (issueGroupId) =>
+  apiRequest({
+    url: `/admin/issues/${encodeURIComponent(issueGroupId)}/notify`,
+    method: 'post'
+  })
+
 export const getAdminUsageSummary = (params) =>
   apiRequest({
     url: '/admin/usage/summary',

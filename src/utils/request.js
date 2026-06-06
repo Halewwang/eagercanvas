@@ -7,6 +7,7 @@ import axios from 'axios'
 import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from './constants'
 import { notifier } from './notifier.js'
 import { getStoredValue, removeStoredValue, setStoredValue } from './storage.js'
+import { OBSERVABILITY_SLOW_API_MS, reportApiIssue } from '@/observability'
 
 // Create axios instance | 创建 axios 实例
 const instance = axios.create({
@@ -17,6 +18,27 @@ const instance = axios.create({
 
 let isRefreshing = false
 let refreshQueue = []
+
+const getRequestTime = () => {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now()
+  }
+  return Date.now()
+}
+
+const createClientRequestId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `web-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+const getRequestDuration = (config = {}) => {
+  const startedAt = Number(config?.metadata?.startedAt || 0)
+  return startedAt ? Math.max(0, getRequestTime() - startedAt) : 0
+}
+
+const isObservabilityRequest = (config = {}) => String(config?.url || '').includes('/observability/events')
 
 const queueRequest = (resolve, reject) => {
   refreshQueue.push({ resolve, reject })
@@ -34,6 +56,14 @@ const flushQueue = (error, token = '') => {
 instance.interceptors.request.use(
   (config) => {
     const accessToken = getStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
+    config.metadata = {
+      ...(config.metadata || {}),
+      startedAt: getRequestTime()
+    }
+    config.headers = config.headers || {}
+    if (!config.headers['x-request-id'] && !config.headers['X-Request-Id']) {
+      config.headers['x-request-id'] = createClientRequestId()
+    }
     
     if (accessToken) {
       config.headers['Authorization'] = `Bearer ${accessToken}`
@@ -52,6 +82,16 @@ instance.interceptors.response.use(
   (res) => {
     const { data, code, message } = res.data || {}
     const silent = !!res.config?.silentErrorToast
+    const durationMs = getRequestDuration(res.config)
+    if (!isObservabilityRequest(res.config) && durationMs >= OBSERVABILITY_SLOW_API_MS) {
+      reportApiIssue({
+        category: 'performance',
+        severity: 'p2',
+        response: res,
+        config: res.config,
+        durationMs
+      })
+    }
     
     // Handle stream response | 处理流响应
     if (res.config.responseType === 'stream') {
@@ -77,6 +117,18 @@ instance.interceptors.response.use(
     const silent = !!error?.config?.silentErrorToast
     const silentNetwork = !!error?.config?.silentNetworkErrorToast
     const isTimeout = error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''))
+    const durationMs = getRequestDuration(error?.config)
+
+    if (!isObservabilityRequest(error?.config)) {
+      reportApiIssue({
+        category: 'api_error',
+        severity: Number(response?.status || 0) >= 500 ? 'p1' : 'p2',
+        error,
+        response,
+        config: error?.config,
+        durationMs
+      })
+    }
 
     if (response) {
       const { status, data } = response
