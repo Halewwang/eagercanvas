@@ -10,10 +10,33 @@ const normalizeBaseUrl = (input = '') => {
     .replace(/\/v1$/i, '')
 }
 
+const splitBaseUrls = (value = '') =>
+  String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+export const resolveDashboard302BaseUrls = (
+  dashboardBaseUrl = '',
+  providerBaseUrl = '',
+  providerBaseUrls = ''
+) => {
+  const candidates = [
+    ...splitBaseUrls(dashboardBaseUrl),
+    ...splitBaseUrls(providerBaseUrls),
+    ...splitBaseUrls(providerBaseUrl),
+    'https://api.302ai.cn',
+    'https://api.302.ai'
+  ]
+
+  const normalized = candidates.map((item) => normalizeBaseUrl(item)).filter(Boolean)
+  return [...new Set(normalized)]
+}
+
 export const resolveDashboard302BaseUrl = (dashboardBaseUrl = '', _providerBaseUrl = '') => {
   const explicit = String(dashboardBaseUrl || '').trim()
   const provider = String(_providerBaseUrl || '').trim()
-  return normalizeBaseUrl(explicit || provider || 'https://api.302ai.cn')
+  return resolveDashboard302BaseUrls(explicit, provider)[0]
 }
 
 export const assert302DashboardSuccess = (data = {}) => {
@@ -69,6 +92,11 @@ const parseResponse = async (response) => {
   } catch {
     return { raw: text }
   }
+}
+
+const isRetryableDashboardRequestError = (error) => {
+  const status = Number(error?.status || 0)
+  return error?.name === 'AbortError' || !status || status === 429 || status >= 500
 }
 
 const toNullableNumber = (...values) => {
@@ -162,54 +190,45 @@ const get302ApiKeyAuthHeader = (apiKey = '') => {
 const runtimeApiKeyCache = new Map()
 const RUNTIME_API_KEY_TTL_MS = 60 * 1000
 
-const call302Dashboard = async (path, options = {}) => {
-  const { method = 'GET', params = null, body } = options
+const getDashboardBaseUrls = () =>
+  resolveDashboard302BaseUrls(env.dashboard302ApiBaseUrl, env.providerApiBaseUrl, env.providerApiBaseUrls)
+
+const request302DashboardWithBase = async (baseUrl, path, options = {}) => {
+  const { method = 'GET', params = null, body, authHeader } = options
   const controller = new AbortController()
   const timeoutMs = Number(env.dashboard302TimeoutMs || env.providerTimeoutMs || 30000)
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const authHeaders = getAuthHeaders()
-    let lastBusinessError = null
-
-    for (const authHeader of authHeaders) {
-      const url = new URL(`${resolveDashboard302BaseUrl(env.dashboard302ApiBaseUrl, env.providerApiBaseUrl)}${path}`)
-      if (params && typeof params === 'object') {
-        Object.entries(params).forEach(([k, v]) => {
-          if (v === undefined || v === null || String(v).trim() === '') return
-          url.searchParams.set(k, String(v))
-        })
-      }
-
-      const response = await fetch(url.toString(), {
-        method,
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/json'
-        },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal
+    const url = new URL(`${baseUrl}${path}`)
+    if (params && typeof params === 'object') {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v === undefined || v === null || String(v).trim() === '') return
+        url.searchParams.set(k, String(v))
       })
-
-      const data = await parseResponse(response)
-
-      if (!response.ok) {
-        throw new HttpError(
-          response.status,
-          data?.msg || data?.message || data?.error?.message || `302 dashboard request failed: ${response.status}`,
-          'DASHBOARD_302_ERROR'
-        )
-      }
-
-      if (shouldRetry302DashboardWithNextKey(data) && authHeader !== authHeaders[authHeaders.length - 1]) {
-        lastBusinessError = data
-        continue
-      }
-
-      return assert302DashboardSuccess(data)
     }
 
-    return assert302DashboardSuccess(lastBusinessError)
+    const response = await fetch(url.toString(), {
+      method,
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/json'
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal
+    })
+
+    const data = await parseResponse(response)
+
+    if (!response.ok) {
+      throw new HttpError(
+        response.status,
+        data?.msg || data?.message || data?.error?.message || `302 dashboard request failed: ${response.status}`,
+        'DASHBOARD_302_ERROR'
+      )
+    }
+
+    return data
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw new HttpError(504, '302 dashboard request timeout', 'DASHBOARD_302_TIMEOUT')
@@ -220,15 +239,50 @@ const call302Dashboard = async (path, options = {}) => {
   }
 }
 
-const call302ApiKeyUsage = async (path, options = {}) => {
-  const { params = null, apiKey = '' } = options
-  const { safeKey, authHeader } = get302ApiKeyAuthHeader(apiKey)
+const call302Dashboard = async (path, options = {}) => {
+  const { method = 'GET', params = null, body } = options
+  const authHeaders = getAuthHeaders()
+  const baseUrls = getDashboardBaseUrls()
+  let lastBusinessError = null
+  let lastError = null
+
+  for (const authHeader of authHeaders) {
+    for (const baseUrl of baseUrls) {
+      try {
+        const data = await request302DashboardWithBase(baseUrl, path, {
+          method,
+          params,
+          body,
+          authHeader
+        })
+
+        if (shouldRetry302DashboardWithNextKey(data) && authHeader !== authHeaders[authHeaders.length - 1]) {
+          lastBusinessError = data
+          break
+        }
+
+        return assert302DashboardSuccess(data)
+      } catch (error) {
+        lastError = error
+        if (!isRetryableDashboardRequestError(error) || baseUrl === baseUrls[baseUrls.length - 1]) {
+          throw error
+        }
+      }
+    }
+  }
+
+  if (lastBusinessError) return assert302DashboardSuccess(lastBusinessError)
+  throw lastError || new HttpError(502, '302 dashboard request failed', 'DASHBOARD_302_ERROR')
+}
+
+const request302ApiKeyUsageWithBase = async (baseUrl, path, options = {}) => {
+  const { params = null, authHeader, safeKey } = options
   const controller = new AbortController()
   const timeoutMs = Number(env.dashboard302TimeoutMs || env.providerTimeoutMs || 30000)
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const url = new URL(`${resolveDashboard302BaseUrl(env.dashboard302ApiBaseUrl, env.providerApiBaseUrl)}${path}`)
+    const url = new URL(`${baseUrl}${path}`)
     if (params && typeof params === 'object') {
       Object.entries(params).forEach(([k, v]) => {
         if (v === undefined || v === null || String(v).trim() === '') return
@@ -253,7 +307,7 @@ const call302ApiKeyUsage = async (path, options = {}) => {
       throw new HttpError(response.ok ? 400 : response.status, message, 'DASHBOARD_302_USAGE_ERROR')
     }
 
-    return assert302DashboardSuccess(data)
+    return data
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw new HttpError(504, '302 usage-log request timeout', 'DASHBOARD_302_TIMEOUT')
@@ -262,6 +316,32 @@ const call302ApiKeyUsage = async (path, options = {}) => {
   } finally {
     clearTimeout(timer)
   }
+}
+
+const call302ApiKeyUsage = async (path, options = {}) => {
+  const { params = null, apiKey = '' } = options
+  const { safeKey, authHeader } = get302ApiKeyAuthHeader(apiKey)
+  const baseUrls = getDashboardBaseUrls()
+  let lastError = null
+
+  for (const baseUrl of baseUrls) {
+    try {
+      const data = await request302ApiKeyUsageWithBase(baseUrl, path, {
+        params,
+        authHeader,
+        safeKey
+      })
+
+      return assert302DashboardSuccess(data)
+    } catch (error) {
+      lastError = error
+      if (!isRetryableDashboardRequestError(error) || baseUrl === baseUrls[baseUrls.length - 1]) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError || new HttpError(502, '302 usage-log request failed', 'DASHBOARD_302_USAGE_ERROR')
 }
 
 export const get302Balance = () => call302Dashboard('/dashboard/balance')

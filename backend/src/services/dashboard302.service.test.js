@@ -5,12 +5,14 @@ import {
   resolveDashboard302BaseUrl,
   assert302DashboardSuccess,
   buildDashboard302AuthHeaders,
+  get302Balance,
   shouldRetry302DashboardWithNextKey,
   normalize302ApiKeyList,
   normalize302ApiKeyUsage,
   normalize302ApiRecordList,
   normalizeDashboardRecord
 } from './dashboard302.service.js'
+import { env } from '../config/env.js'
 import { attachProviderResponseMetadata } from './provider-response-metadata.js'
 
 test('inherits provider host for dashboard management requests by default', () => {
@@ -32,6 +34,47 @@ test('builds dashboard auth candidates with provider key fallback', () => {
   assert.deepEqual(buildDashboard302AuthHeaders('sk-dashboard', 'sk-provider'), [
     'Bearer sk-dashboard',
     'Bearer sk-provider'
+  ])
+})
+
+test('dashboard management requests retry provider base url fallbacks after network failures', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const requests = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302ai.cn'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = 'https://api.302ai.cn'
+  env.providerApiBaseUrls = 'https://api.302ai.cn,https://api.302.ai'
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url) => {
+    requests.push(String(url))
+    if (String(url).startsWith('https://api.302ai.cn')) {
+      throw new TypeError('fetch failed')
+    }
+    return new Response(JSON.stringify({ code: 0, data: { balance: 12.3 } }), { status: 200 })
+  }
+
+  try {
+    const result = await get302Balance()
+    assert.deepEqual(result, { code: 0, data: { balance: 12.3 } })
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(requests, [
+    'https://api.302ai.cn/dashboard/balance',
+    'https://api.302.ai/dashboard/balance'
   ])
 })
 
