@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   exportAdminIssues,
   getAdminIssue,
@@ -9,6 +9,8 @@ import {
 import { getErrorMessage } from '@/utils'
 
 const getWindowMessageApi = () => (typeof window === 'undefined' ? null : window.$message)
+const uniq = (values = []) => [...new Set(values.filter(Boolean))]
+const asArray = (value) => Array.isArray(value) ? value.filter(Boolean) : []
 
 const downloadTextFile = ({ fileName, content, type = 'text/plain;charset=utf-8' } = {}) => {
   if (!fileName || !content || typeof window === 'undefined' || typeof document === 'undefined') return false
@@ -26,6 +28,7 @@ const downloadTextFile = ({ fileName, content, type = 'text/plain;charset=utf-8'
 
 export const useAdminIssueInbox = ({
   canReadIssues,
+  canUpdateIssues = ref(false),
   fetchIssues = getAdminIssues,
   fetchIssue = getAdminIssue,
   patchIssueStatus = updateAdminIssueStatus,
@@ -42,6 +45,30 @@ export const useAdminIssueInbox = ({
   const loadingIssueDetail = ref(false)
   const issueActionLoading = ref('')
   const lastExport = ref(null)
+  const selectedIssueIds = ref([])
+  const autoResolveExportedIssues = ref(true)
+
+  const getIssueId = (issueOrId) => (typeof issueOrId === 'object' ? issueOrId?.id : issueOrId)
+  const getVisibleIssueIds = () => issues.value.map((issue) => issue.id).filter(Boolean)
+  const getIssueExportGroupIds = (issue) => {
+    if (!issue?.id) return []
+    return asArray(issue.merged_group_ids).length ? asArray(issue.merged_group_ids) : [issue.id]
+  }
+  const selectedIssueRows = computed(() => {
+    const selected = new Set(selectedIssueIds.value)
+    return issues.value.filter((issue) => selected.has(issue.id))
+  })
+  const selectedIssueCount = computed(() => selectedIssueIds.value.length)
+  const selectedExportGroupIds = computed(() => uniq(selectedIssueRows.value.flatMap(getIssueExportGroupIds)))
+  const allVisibleIssuesSelected = computed(() => {
+    const visibleIssueIds = getVisibleIssueIds()
+    return visibleIssueIds.length > 0 && visibleIssueIds.every((id) => selectedIssueIds.value.includes(id))
+  })
+
+  const pruneSelectedIssues = () => {
+    const visible = new Set(getVisibleIssueIds())
+    selectedIssueIds.value = selectedIssueIds.value.filter((id) => visible.has(id))
+  }
 
   const updateIssueQuery = (key, value) => {
     if (!['status', 'severity', 'source_layer', 'page', 'limit'].includes(key)) return
@@ -58,6 +85,7 @@ export const useAdminIssueInbox = ({
     try {
       const rsp = await fetchIssues(issueQuery.value)
       issues.value = Array.isArray(rsp?.data) ? rsp.data : []
+      pruneSelectedIssues()
       issuePagination.value = rsp?.pagination || {
         page: issueQuery.value.page,
         limit: issueQuery.value.limit,
@@ -68,6 +96,27 @@ export const useAdminIssueInbox = ({
     } finally {
       loadingIssues.value = false
     }
+  }
+
+  const toggleIssueSelection = (issueOrId, selected) => {
+    const issueId = getIssueId(issueOrId)
+    if (!issueId) return
+    const current = new Set(selectedIssueIds.value)
+    if (selected) current.add(issueId)
+    else current.delete(issueId)
+    selectedIssueIds.value = getVisibleIssueIds().filter((id) => current.has(id))
+  }
+
+  const toggleAllVisibleIssueSelection = (selected) => {
+    selectedIssueIds.value = selected ? getVisibleIssueIds() : []
+  }
+
+  const clearIssueSelection = () => {
+    selectedIssueIds.value = []
+  }
+
+  const setAutoResolveExportedIssues = (value) => {
+    autoResolveExportedIssues.value = Boolean(value)
   }
 
   const openIssue = async (issueOrId) => {
@@ -99,14 +148,33 @@ export const useAdminIssueInbox = ({
     }
   }
 
-  const exportIssues = async () => {
+  const markIssueGroupsResolved = async (issueGroupIds = []) => {
+    const ids = uniq(issueGroupIds)
+    if (!ids.length) return []
+    issueActionLoading.value = 'resolve:selected'
+    const results = await Promise.all(ids.map((id) => patchIssueStatus(id, 'resolved')))
+    clearIssueSelection()
+    await loadIssues()
+    if (selectedIssue.value?.group?.id && ids.includes(selectedIssue.value.group.id)) {
+      selectedIssue.value = null
+    }
+    return results
+  }
+
+  const exportIssues = async ({ selectedOnly = false } = {}) => {
+    const exportGroupIds = selectedOnly ? selectedExportGroupIds.value : []
+    if (selectedOnly && !exportGroupIds.length) {
+      getMessageApi()?.error?.('请先选择需要导出的线上问题')
+      return null
+    }
     issueActionLoading.value = 'export'
     try {
       const rsp = await exportIssuesRequest({
         status: issueQuery.value.status,
         severity: issueQuery.value.severity,
         source_layer: issueQuery.value.source_layer,
-        limit: issueQuery.value.limit
+        limit: issueQuery.value.limit,
+        ...(exportGroupIds.length ? { issueGroupIds: exportGroupIds } : {})
       })
       lastExport.value = rsp?.data || null
       if (lastExport.value?.jsonContent) {
@@ -123,7 +191,12 @@ export const useAdminIssueInbox = ({
           type: 'text/markdown;charset=utf-8'
         })
       }
-      getMessageApi()?.success?.('Codex 问题收件箱已生成并下载')
+      if (exportGroupIds.length && autoResolveExportedIssues.value && canUpdateIssues.value) {
+        await markIssueGroupsResolved(exportGroupIds)
+        getMessageApi()?.success?.('Codex 问题已导出，选中问题已标记已解决')
+      } else {
+        getMessageApi()?.success?.('Codex 问题收件箱已生成并下载')
+      }
       return lastExport.value
     } catch (error) {
       if (!error?.__handled) getMessageApi()?.error(getErrorMessage(error, '导出问题收件箱失败'))
@@ -149,6 +222,9 @@ export const useAdminIssueInbox = ({
   }
 
   return {
+    allVisibleIssuesSelected,
+    autoResolveExportedIssues,
+    clearIssueSelection,
     exportIssues,
     issueActionLoading,
     issuePagination,
@@ -160,8 +236,14 @@ export const useAdminIssueInbox = ({
     loadingIssues,
     notifyIssue,
     openIssue,
+    selectedExportGroupIds,
+    selectedIssueCount,
+    selectedIssueIds,
     selectedIssue,
     setIssueStatus,
+    setAutoResolveExportedIssues,
+    toggleAllVisibleIssueSelection,
+    toggleIssueSelection,
     updateIssueQuery
   }
 }

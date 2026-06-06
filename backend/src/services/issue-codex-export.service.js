@@ -16,6 +16,10 @@ const EVENT_COLUMNS = 'id, created_at, source_layer, category, severity, environ
 const asArray = (value) => Array.isArray(value) ? value.filter(Boolean) : []
 const uniq = (values = []) => [...new Set(values.filter(Boolean))]
 const take = (values = [], limit = 10) => asArray(values).slice(0, limit)
+const normalizeIssueGroupIds = (value = []) => {
+  const rawValues = Array.isArray(value) ? value : String(value || '').split(',')
+  return uniq(rawValues.map((item) => String(item || '').trim()).filter(Boolean)).slice(0, 100)
+}
 
 const safeTimestamp = (value) => String(value || new Date().toISOString()).replace(/[:.]/g, '-')
 
@@ -449,11 +453,21 @@ const buildGroupQuery = ({
   status = '',
   severity = '',
   sourceLayer = '',
+  issueGroupIds = [],
+  issue_group_ids = [],
   limit = 50
 } = {}, supabaseClient) => {
   let query = supabaseClient
     .from('issue_groups')
     .select(GROUP_COLUMNS)
+
+  const selectedGroupIds = normalizeIssueGroupIds(issueGroupIds.length ? issueGroupIds : issue_group_ids)
+  if (selectedGroupIds.length) {
+    query = query.in('id', selectedGroupIds)
+    return query
+      .order('last_seen_at', { ascending: false })
+      .limit(Math.max(1, Math.min(100, selectedGroupIds.length)))
+  }
 
   if (status) query = query.eq('status', status)
   if (severity) query = query.in('severity', String(severity).split(',').map((item) => item.trim()).filter(Boolean))

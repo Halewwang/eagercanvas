@@ -1,64 +1,86 @@
 <template>
   <AdminSectionHeader
-    class="mb-5"
+    class="mb-4"
     title="问题收件箱"
     caption="汇总线上报错、慢请求、模型供应商 / 数据库异常和前端运行问题，供 Codex 定位修复。"
-  >
-    <template #actions>
-      <AdminFilterToolbar align="end" compact>
-        <AdminFilterField label="状态">
-          <AdminControlField
-            tag="select"
-            :value="issueQuery.status"
-            @change="emit('update-issue-query', 'status', $event.target.value)"
-          >
-            <option value="">全部状态</option>
-            <option value="open">待处理</option>
-            <option value="investigating">处理中</option>
-            <option value="resolved">已解决</option>
-            <option value="ignored">已忽略</option>
-          </AdminControlField>
-        </AdminFilterField>
-        <AdminFilterField label="级别">
-          <AdminControlField
-            tag="select"
-            :value="issueQuery.severity"
-            @change="emit('update-issue-query', 'severity', $event.target.value)"
-          >
-            <option value="">全部级别</option>
-            <option value="p0">P0</option>
-            <option value="p1">P1</option>
-            <option value="p2">P2</option>
-            <option value="p3">P3</option>
-          </AdminControlField>
-        </AdminFilterField>
-        <AdminFilterField label="层级">
-          <AdminControlField
-            tag="select"
-            :value="issueQuery.source_layer"
-            @change="emit('update-issue-query', 'source_layer', $event.target.value)"
-          >
-            <option value="">全部层级</option>
-            <option value="frontend">前端</option>
-            <option value="backend">后端</option>
-            <option value="database">数据库</option>
-            <option value="provider">模型供应商</option>
-            <option value="performance">性能</option>
-            <option value="ux">交互体验</option>
-          </AdminControlField>
-        </AdminFilterField>
-        <AdminMicroButton :disabled="loadingIssues" @click="emit('load-issues')">刷新</AdminMicroButton>
-        <AdminMicroButton
-          v-if="canExportIssues"
-          tone="primary"
-          :disabled="issueActionLoading === 'export'"
-          @click="emit('export-issues')"
+  />
+
+  <div v-if="canReadIssues" class="admin-issue-toolbar mb-5">
+    <AdminFilterToolbar class="admin-issue-filter-group" compact>
+      <AdminFilterField label="状态">
+        <AdminControlField
+          tag="select"
+          :value="issueQuery.status"
+          @change="emit('update-issue-query', 'status', $event.target.value)"
         >
-          导出 Codex
-        </AdminMicroButton>
-      </AdminFilterToolbar>
-    </template>
-  </AdminSectionHeader>
+          <option value="">全部状态</option>
+          <option value="open">待处理</option>
+          <option value="investigating">处理中</option>
+          <option value="resolved">已解决</option>
+          <option value="ignored">已忽略</option>
+        </AdminControlField>
+      </AdminFilterField>
+      <AdminFilterField label="级别">
+        <AdminControlField
+          tag="select"
+          :value="issueQuery.severity"
+          @change="emit('update-issue-query', 'severity', $event.target.value)"
+        >
+          <option value="">全部级别</option>
+          <option value="p0">P0</option>
+          <option value="p1">P1</option>
+          <option value="p2">P2</option>
+          <option value="p3">P3</option>
+        </AdminControlField>
+      </AdminFilterField>
+      <AdminFilterField label="层级">
+        <AdminControlField
+          tag="select"
+          :value="issueQuery.source_layer"
+          @change="emit('update-issue-query', 'source_layer', $event.target.value)"
+        >
+          <option value="">全部层级</option>
+          <option value="frontend">前端</option>
+          <option value="backend">后端</option>
+          <option value="database">数据库</option>
+          <option value="provider">模型供应商</option>
+          <option value="performance">性能</option>
+          <option value="ux">交互体验</option>
+        </AdminControlField>
+      </AdminFilterField>
+      <AdminMicroButton :disabled="loadingIssues" @click="emit('load-issues')">刷新</AdminMicroButton>
+    </AdminFilterToolbar>
+
+    <div class="admin-issue-action-group">
+      <span v-if="canExportIssues" class="admin-issue-batch-summary">
+        已选 {{ selectedIssueCount }} 项 · 导出 {{ selectedExportGroupIds.length }} 组
+      </span>
+      <label v-if="canExportIssues && canUpdateIssues" class="admin-issue-auto-resolve">
+        <input
+          class="admin-issue-checkbox"
+          type="checkbox"
+          :checked="autoResolveExportedIssues"
+          @change="emit('update-auto-resolve-exported-issues', $event.target.checked)"
+        >
+        <span>导出后标记已解决</span>
+      </label>
+      <AdminMicroButton
+        v-if="canExportIssues"
+        :disabled="selectedIssueCount <= 0 || issueActionLoading === 'export'"
+        @click="emit('export-issues', { selectedOnly: true })"
+      >
+        导出选中
+      </AdminMicroButton>
+      <AdminMicroButton
+        v-if="canExportIssues"
+        tone="primary"
+        :disabled="issueActionLoading === 'export'"
+        @click="emit('export-issues')"
+      >
+        导出当前筛选
+      </AdminMicroButton>
+    </div>
+  </div>
 
   <AdminEmptyState v-if="!canReadIssues">
     当前角色没有问题收件箱读取权限。
@@ -71,8 +93,18 @@
       panel-class="admin-panel-card rounded-2xl p-4 md:p-5"
     >
       <AdminEmptyState v-if="!loadingIssues && issues.length === 0">暂无问题分组</AdminEmptyState>
-      <AdminTableShell v-else min-width-class="min-w-[760px]">
+      <AdminTableShell v-else min-width-class="min-w-[880px]">
         <template #header>
+          <th class="w-10 px-3 py-3">
+            <input
+              class="admin-issue-checkbox"
+              type="checkbox"
+              aria-label="选择本页所有问题"
+              :checked="allVisibleIssuesSelected"
+              :disabled="loadingIssues || issues.length === 0"
+              @change="emit('toggle-all-issue-selection', $event.target.checked)"
+            >
+          </th>
           <th class="px-3 py-3">级别</th>
           <th class="px-3 py-3">层级</th>
           <th class="px-3 py-3">标题</th>
@@ -88,6 +120,15 @@
             :key="issue.id"
             :class="[rowClass, selectedIssue?.group?.id === issue.id ? 'bg-white/[0.05]' : '']"
           >
+            <td class="px-3 py-3">
+              <input
+                class="admin-issue-checkbox"
+                type="checkbox"
+                :aria-label="`选择问题 ${issue.title || issue.fingerprint || issue.id}`"
+                :checked="selectedIssueIds.includes(issue.id)"
+                @change="emit('toggle-issue-selection', [issue, $event.target.checked])"
+              >
+            </td>
             <td class="px-3 py-3 text-white/80">{{ String(issue.severity || '').toUpperCase() }}</td>
             <td class="px-3 py-3 text-white/70">{{ sourceLayerLabel(issue.source_layer) }}</td>
             <td class="px-3 py-3">
@@ -239,11 +280,16 @@ const emit = defineEmits([
   'load-issues',
   'notify-issue',
   'open-issue',
+  'toggle-all-issue-selection',
+  'toggle-issue-selection',
+  'update-auto-resolve-exported-issues',
   'update-issue-query',
   'update-issue-status'
 ])
 
 const props = defineProps({
+  allVisibleIssuesSelected: { type: Boolean, default: false },
+  autoResolveExportedIssues: { type: Boolean, default: true },
   canExportIssues: { type: Boolean, default: false },
   canNotifyIssues: { type: Boolean, default: false },
   canReadIssues: { type: Boolean, default: false },
@@ -257,6 +303,9 @@ const props = defineProps({
   loadingIssueDetail: { type: Boolean, default: false },
   loadingIssues: { type: Boolean, default: false },
   selectedIssue: { type: Object, default: null },
+  selectedExportGroupIds: { type: Array, default: () => [] },
+  selectedIssueCount: { type: Number, default: 0 },
+  selectedIssueIds: { type: Array, default: () => [] },
   toPrettyJson: { type: Function, default: (value) => JSON.stringify(value || {}, null, 2) }
 })
 
@@ -319,6 +368,68 @@ const statusClass = (status) => {
   color: #fff;
 }
 
+.admin-issue-toolbar {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgb(255 255 255 / 2.5%);
+}
+
+.admin-issue-filter-group {
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.admin-issue-filter-group :deep(.admin-filter-field) {
+  flex: 0 1 156px;
+}
+
+.admin-issue-filter-group :deep(.ui-text-input),
+.admin-issue-filter-group :deep(.ui-micro-btn),
+.admin-issue-action-group :deep(.ui-micro-btn),
+.admin-issue-batch-summary,
+.admin-issue-auto-resolve {
+  min-height: 38px;
+}
+
+.admin-issue-action-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-issue-batch-summary,
+.admin-issue-auto-resolve {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  padding: 8px 10px;
+  color: rgb(255 255 255 / 58%);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.admin-issue-batch-summary {
+  color: rgb(255 255 255 / 48%);
+  background: rgb(255 255 255 / 3%);
+}
+
+.admin-issue-checkbox {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: rgb(255 255 255 / 82%);
+}
+
 .admin-issue-kv {
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 8px;
@@ -348,6 +459,24 @@ const statusClass = (status) => {
   font-size: 11px;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .admin-issue-toolbar {
+    padding: 10px;
+  }
+
+  .admin-issue-filter-group {
+    justify-content: flex-start;
+  }
+
+  .admin-issue-filter-group :deep(.admin-filter-field) {
+    flex: 1 1 150px;
+  }
+
+  .admin-issue-action-group {
+    justify-content: flex-start;
+  }
 }
 
 @media (min-width: 1600px) {

@@ -446,6 +446,16 @@ test('admin feature modules delegate form control styling to the shared module',
   assert.deepEqual(directControlClassUsers, [])
 })
 
+test('admin issue inbox toolbar separates filters from batch actions', () => {
+  assert.match(adminIssueInboxSectionSource, /class="[^"]*admin-issue-toolbar/)
+  assert.match(adminIssueInboxSectionSource, /class="admin-issue-filter-group"/)
+  assert.match(adminIssueInboxSectionSource, /class="admin-issue-action-group"/)
+  assert.match(adminIssueInboxSectionSource, /class="admin-issue-batch-summary"/)
+  assert.ok(adminIssueInboxSectionSource.indexOf('class="admin-issue-filter-group"') < adminIssueInboxSectionSource.indexOf('class="admin-issue-action-group"'))
+  assert.doesNotMatch(adminIssueInboxSectionSource, /<AdminFilterToolbar align="end" compact>/)
+  assert.doesNotMatch(adminIssueInboxSectionSource, /\.admin-issue-action-group\s*\{[\s\S]*?justify-content:\s*flex-end/)
+})
+
 test('admin user service summary metrics use the shared compact metric card module', () => {
   assert.ok(existsSync(adminCompactMetricCardUrl))
   assert.ok(existsSync(userServiceSummaryMetricsUrl))

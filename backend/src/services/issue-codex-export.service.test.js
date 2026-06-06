@@ -5,6 +5,7 @@ import {
   buildCodexIssueExportPayload,
   CODEX_ISSUE_SCHEMA_VERSION,
   createCodexIssueTable,
+  exportCodexIssues,
   renderCodexIssueMarkdown,
   writeCodexIssueExport
 } from './issue-codex-export.service.js'
@@ -106,6 +107,90 @@ test('buildCodexIssueExportPayload returns downloadable content without writing 
   assert.equal(payload.markdownFileName, 'issue-inbox-2026-06-06T00-02-00-000Z.md')
   assert.match(payload.jsonContent, /"schema": "codex_issue_table\/v1"/)
   assert.match(payload.markdownContent, /# Codex Issue Inbox/)
+})
+
+test('exportCodexIssues limits export to selected issue group ids', async () => {
+  const calls = []
+  const makeGroup = (id, fingerprint, path) => ({
+    id,
+    fingerprint,
+    status: 'open',
+    severity: 'p2',
+    title: `performance slow_request ${path}`,
+    source_layer: 'performance',
+    category: 'slow_request',
+    first_seen_at: '2026-06-06T00:00:00.000Z',
+    last_seen_at: '2026-06-06T00:01:00.000Z',
+    event_count: 1,
+    affected_users: 1,
+    evidence_summary: {
+      api_paths: [path],
+      request_ids: [`req-${id}`],
+      errors: ['Slow request']
+    }
+  })
+  const supabaseClient = {
+    from(table) {
+      if (table === 'issue_groups') {
+        return {
+          select() { return this },
+          in(column, values) {
+            calls.push(['groups.in', column, values])
+            return this
+          },
+          eq(column, value) {
+            calls.push(['groups.eq', column, value])
+            return this
+          },
+          order() { return this },
+          limit(value) {
+            calls.push(['groups.limit', value])
+            return Promise.resolve({
+              data: [
+                makeGroup('issue-a', 'sha-a', '/api/v1/admin/issues'),
+                makeGroup('issue-b', 'sha-b', '/api/v1/images/:taskId')
+              ],
+              error: null
+            })
+          }
+        }
+      }
+      if (table === 'issue_events') {
+        return {
+          select() { return this },
+          in(column, values) {
+            calls.push(['events.in', column, values])
+            return this
+          },
+          order() { return this },
+          limit() {
+            return Promise.resolve({ data: [], error: null })
+          }
+        }
+      }
+      throw new Error(`unexpected table ${table}`)
+    }
+  }
+
+  const result = await exportCodexIssues({
+    filters: {
+      status: 'open',
+      severity: 'p2',
+      issueGroupIds: ['issue-a', 'issue-b']
+    },
+    generatedAt: '2026-06-06T00:02:00.000Z',
+    supabaseClient,
+    writeFiles: false
+  })
+
+  assert.deepEqual(
+    calls.find((call) => call[0] === 'groups.in'),
+    ['groups.in', 'id', ['issue-a', 'issue-b']]
+  )
+  assert.ok(!calls.some((call) => call[0] === 'groups.eq' && call[1] === 'status'))
+  assert.ok(!calls.some((call) => call[0] === 'groups.eq' && call[1] === 'source_layer'))
+  assert.equal(result.issueCount, 2)
+  assert.deepEqual(result.table.issues.map((issue) => issue.issue_group_id).sort(), ['issue-a', 'issue-b'])
 })
 
 test('createCodexIssueTable merges similar groups and includes Codex repair context', () => {

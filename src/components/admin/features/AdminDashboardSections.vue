@@ -63,10 +63,13 @@
   >
     <AdminIssueInboxSection
       v-bind="issueInboxSection"
-      @export-issues="emit('export-issues')"
+      @export-issues="emit('export-issues', $event)"
       @load-issues="emit('load-issues')"
       @notify-issue="emit('notify-issue', $event)"
       @open-issue="emit('open-issue', $event)"
+      @toggle-all-issue-selection="emit('toggle-all-issue-selection', $event)"
+      @toggle-issue-selection="emit('toggle-issue-selection', ...$event)"
+      @update-auto-resolve-exported-issues="emit('update-auto-resolve-exported-issues', $event)"
       @update-issue-query="(key, value) => emit('update-issue-query', key, value)"
       @update-issue-status="emit('update-issue-status', $event)"
     />
@@ -102,7 +105,10 @@ const emit = defineEmits([
   'save-roles',
   'set-user-page',
   'suspend-user',
+  'toggle-all-issue-selection',
+  'toggle-issue-selection',
   'update-audit-log-query',
+  'update-auto-resolve-exported-issues',
   'update-issue-query',
   'update-issue-status',
   'update-log-query',

@@ -32,6 +32,8 @@ export const useAdminDashboardSectionProps = ({
   formatRoleList,
   formatUsd,
   isSelf,
+  allVisibleIssuesSelected,
+  autoResolveExportedIssues,
   issueActionLoading,
   issuePagination,
   issueQuery,
@@ -59,7 +61,10 @@ export const useAdminDashboardSectionProps = ({
   roleOptions,
   saving,
   selectedRoles,
+  selectedExportGroupIds,
   selectedIssue,
+  selectedIssueCount,
+  selectedIssueIds,
   serviceActivationRate,
   serviceLoadNotice,
   serviceLoading,
@@ -170,6 +175,8 @@ export const useAdminDashboardSectionProps = ({
   }))
 
   const issueInboxSectionProps = computed(() => ({
+    allVisibleIssuesSelected: unref(allVisibleIssuesSelected),
+    autoResolveExportedIssues: unref(autoResolveExportedIssues),
     canExportIssues: unref(canExportIssues),
     canNotifyIssues: unref(canNotifyIssues),
     canReadIssues: unref(canReadIssues),
@@ -182,7 +189,10 @@ export const useAdminDashboardSectionProps = ({
     lastExport: unref(lastExport),
     loadingIssueDetail: unref(loadingIssueDetail),
     loadingIssues: unref(loadingIssues),
+    selectedExportGroupIds: unref(selectedExportGroupIds),
     selectedIssue: unref(selectedIssue),
+    selectedIssueCount: unref(selectedIssueCount),
+    selectedIssueIds: unref(selectedIssueIds),
     toPrettyJson
   }))
 

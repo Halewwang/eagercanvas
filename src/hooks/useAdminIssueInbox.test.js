@@ -74,3 +74,53 @@ test('admin issue inbox hook loads, filters, exports, and updates issues', async
   assert.deepEqual(downloads.map((item) => item.fileName), ['issues.json', 'issues.md'])
   assert.ok(calls.some((call) => call[0] === 'success' && /生成并下载/.test(call[1])))
 })
+
+test('admin issue inbox hook exports selected merged groups and marks them resolved', async () => {
+  const calls = []
+  const messages = { success: (value) => calls.push(['success', value]), error: (value) => calls.push(['error', value]) }
+  const hook = useAdminIssueInbox({
+    canReadIssues: ref(true),
+    canUpdateIssues: ref(true),
+    fetchIssues: async (params) => {
+      calls.push(['list', params])
+      return {
+        data: [
+          { id: 'issue-1', severity: 'p1', merged_group_ids: ['issue-1', 'issue-2'] },
+          { id: 'issue-3', severity: 'p2' }
+        ],
+        pagination: { page: 1, limit: 20, total: 2 }
+      }
+    },
+    patchIssueStatus: async (id, status) => calls.push(['patch', id, status]),
+    exportIssuesRequest: async (payload) => {
+      calls.push(['export', payload])
+      return {
+        data: {
+          jsonFileName: 'selected.json',
+          jsonContent: '{"selected":true}',
+          markdownFileName: 'selected.md',
+          markdownContent: '# Selected'
+        }
+      }
+    },
+    getMessageApi: () => messages,
+    downloadFile: () => {}
+  })
+
+  await hook.loadIssues()
+  hook.toggleIssueSelection({ id: 'issue-1', merged_group_ids: ['issue-1', 'issue-2'] }, true)
+  assert.deepEqual(hook.selectedIssueIds.value, ['issue-1'])
+  assert.equal(hook.selectedIssueCount.value, 1)
+  assert.deepEqual(hook.selectedExportGroupIds.value.sort(), ['issue-1', 'issue-2'])
+
+  await hook.exportIssues({ selectedOnly: true })
+
+  const exportCall = calls.find((call) => call[0] === 'export')
+  assert.deepEqual(exportCall[1].issueGroupIds, ['issue-1', 'issue-2'])
+  assert.deepEqual(
+    calls.filter((call) => call[0] === 'patch').map((call) => call.slice(1)),
+    [['issue-1', 'resolved'], ['issue-2', 'resolved']]
+  )
+  assert.deepEqual(hook.selectedIssueIds.value, [])
+  assert.ok(calls.some((call) => call[0] === 'success' && /已标记已解决/.test(call[1])))
+})

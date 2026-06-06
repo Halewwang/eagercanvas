@@ -93,6 +93,8 @@ const exportIssuesSchema = z.object({
   severity: z.string().optional(),
   sourceLayer: z.string().optional(),
   source_layer: z.string().optional(),
+  issueGroupIds: z.array(z.string().min(1)).max(100).optional(),
+  issue_group_ids: z.array(z.string().min(1)).max(100).optional(),
   limit: z.number().int().min(1).max(100).optional()
 })
 
@@ -267,6 +269,7 @@ adminRouter.post('/issues/export', requirePermission(['admin.issue.export']), as
       status: payload.status,
       severity: payload.severity,
       sourceLayer: payload.sourceLayer || payload.source_layer,
+      issueGroupIds: payload.issueGroupIds || payload.issue_group_ids || [],
       limit: payload.limit
     }
   })

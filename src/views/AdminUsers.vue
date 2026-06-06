@@ -56,6 +56,9 @@
       @set-user-page="setUserPage"
       @suspend-user="suspendUser"
       @update-audit-log-query="updateAuditLogQuery"
+      @toggle-all-issue-selection="toggleAllVisibleIssueSelection"
+      @toggle-issue-selection="toggleIssueSelection"
+      @update-auto-resolve-exported-issues="setAutoResolveExportedIssues"
       @update-issue-query="updateIssueQuery"
       @update-issue-status="setIssueStatus"
       @update-log-query="updateLog302Query"
@@ -103,6 +106,7 @@ const {
   canReadUsers,
   canReconcileBilling,
   canResetService,
+  canUpdateIssues,
   canUpdateServiceLimits,
   displayName,
   isSelf,
@@ -200,22 +204,18 @@ const {
   serviceLoadNotice,
   updateLog302Query
 } = serviceOps
-const issueInbox = useAdminIssueInbox({
-  canReadIssues
-})
+const issueInbox = useAdminIssueInbox({ canReadIssues, canUpdateIssues })
 const {
   exportIssues,
   loadIssues,
   loadingIssues,
   notifyIssue,
   openIssue,
-  setIssueStatus,
+  setAutoResolveExportedIssues, setIssueStatus,
+  toggleAllVisibleIssueSelection, toggleIssueSelection,
   updateIssueQuery
 } = issueInbox
-const {
-  isRefreshing,
-  loadAll
-} = useAdminDashboardRefresh({
+const { isRefreshing, loadAll } = useAdminDashboardRefresh({
   auth,
   canReadAudit,
   canReadIssues,
