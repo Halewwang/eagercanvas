@@ -1,5 +1,5 @@
 <template>
-  <td v-if="canManageRoles || canManageUserStatus" class="px-3 py-4">
+  <td v-if="canManageRoles || canManageUserStatus" class="admin-user-action-cell px-3 py-4">
     <AdminUserAccountActions
       :can-manage-roles="canManageRoles"
       :can-manage-user-status="canManageUserStatus"

@@ -5,6 +5,7 @@ import addPlus from '@iconify-icons/ci/add-plus'
 import image from '@iconify-icons/ci/image'
 import arrowUpRight from '@iconify-icons/ci/arrow-up-right-md'
 import refresh from '@iconify-icons/ci/refresh'
+import homeOutline from '@iconify-icons/ci/home-outline'
 import fileDocument from '@iconify-icons/ci/file-document'
 import folderOpen from '@iconify-icons/ci/folder-open'
 import moreHorizontal from '@iconify-icons/ci/more-horizontal'
@@ -12,6 +13,11 @@ import edit from '@iconify-icons/ci/edit'
 import copy from '@iconify-icons/ci/copy'
 import settings from '@iconify-icons/ci/settings'
 import trashFull from '@iconify-icons/ci/trash-full'
+import save from '@iconify-icons/ci/save'
+import pauseCircle from '@iconify-icons/ci/pause-circle'
+import playCircleOutline from '@iconify-icons/ci/play-circle-outline'
+import usersGroup from '@iconify-icons/ci/users-group'
+import chartBar from '@iconify-icons/ci/bar-chart'
 import chevronLeft from '@iconify-icons/ci/chevron-left'
 import chevronDown from '@iconify-icons/ci/chevron-down'
 import chevronUp from '@iconify-icons/ci/chevron-up'
@@ -54,6 +60,7 @@ export const AddOutline = wrap(addPlus)
 export const ImageOutline = wrap(image)
 export const SendOutline = wrap(arrowUpRight)
 export const RefreshOutline = wrap(refresh)
+export const HomeOutline = wrap(homeOutline)
 export const DocumentOutline = wrap(fileDocument)
 export const FolderOutline = wrap(folderOpen)
 export const EllipsisHorizontalOutline = wrap(moreHorizontal)
@@ -61,6 +68,11 @@ export const CreateOutline = wrap(edit)
 export const CopyOutline = wrap(copy)
 export const SettingsOutline = wrap(settings)
 export const TrashOutline = wrap(trashFull)
+export const SaveOutline = wrap(save)
+export const PauseCircleOutline = wrap(pauseCircle)
+export const PlayCircleOutline = wrap(playCircleOutline)
+export const UsersOutline = wrap(usersGroup)
+export const ChartOutline = wrap(chartBar)
 
 export const ChevronBackOutline = wrap(chevronLeft)
 export const ChevronDownOutline = wrap(chevronDown)

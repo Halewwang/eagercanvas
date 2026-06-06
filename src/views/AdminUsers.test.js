@@ -27,6 +27,7 @@ const adminDashboardSectionFrameUrl = new URL('../components/admin/AdminDashboar
 const adminPanelCardUrl = new URL('../components/admin/AdminPanelCard.vue', import.meta.url)
 const adminPageHeaderUrl = new URL('../components/admin/AdminPageHeader.vue', import.meta.url)
 const adminNoticeUrl = new URL('../components/admin/AdminNotice.vue', import.meta.url)
+const adminPaginationBarUrl = new URL('../components/admin/AdminPaginationBar.vue', import.meta.url)
 const adminSidebarUrl = new URL('../components/admin/AdminSidebar.vue', import.meta.url)
 const adminSidebarFrameUrl = new URL('../components/admin/AdminSidebarFrame.vue', import.meta.url)
 const adminSidebarNavItemUrl = new URL('../components/admin/AdminSidebarNavItem.vue', import.meta.url)
@@ -62,6 +63,7 @@ const userServiceActivationActionUrl = new URL('../components/admin/features/Adm
 const userServiceActiveActionsUrl = new URL('../components/admin/features/AdminUserServiceActiveActions.vue', import.meta.url)
 const userServiceActionsCellUrl = new URL('../components/admin/features/AdminUserServiceActionsCell.vue', import.meta.url)
 const userAccountActionsCellUrl = new URL('../components/admin/features/AdminUserAccountActionsCell.vue', import.meta.url)
+const userOperationsCellUrl = new URL('../components/admin/features/AdminUserOperationsCell.vue', import.meta.url)
 const userServicePaginationUrl = new URL('../components/admin/features/AdminUserServicePagination.vue', import.meta.url)
 const userServiceEmptyStateUrl = new URL('../components/admin/features/AdminUserServiceEmptyState.vue', import.meta.url)
 const userServiceResultsPanelUrl = new URL('../components/admin/features/AdminUserServiceResultsPanel.vue', import.meta.url)
@@ -89,6 +91,7 @@ const adminUsersDashboardSectionsUrl = new URL('../hooks/useAdminUsersDashboardS
 const adminDashboardDataUrl = new URL('../hooks/useAdminDashboardData.js', import.meta.url)
 const adminAccessStateUrl = new URL('../hooks/useAdminAccessState.js', import.meta.url)
 const adminDisplayStateUrl = new URL('../hooks/useAdminDisplayState.js', import.meta.url)
+const adminDisplayUrl = new URL('../utils/adminDisplay.js', import.meta.url)
 const usageAdminSidebarUrl = new URL('../components/admin/features/UsageAdminSidebar.vue', import.meta.url)
 const usageOverviewSectionUrl = new URL('../components/admin/features/UsageAdminOverviewSection.vue', import.meta.url)
 const usageCredentialsSectionUrl = new URL('../components/admin/features/UsageAdminCredentialsSection.vue', import.meta.url)
@@ -118,6 +121,7 @@ const adminDashboardSectionFrameSource = existsSync(adminDashboardSectionFrameUr
 const adminPanelCardSource = existsSync(adminPanelCardUrl) ? readFileSync(adminPanelCardUrl, 'utf8') : ''
 const adminPageHeaderSource = existsSync(adminPageHeaderUrl) ? readFileSync(adminPageHeaderUrl, 'utf8') : ''
 const adminNoticeSource = existsSync(adminNoticeUrl) ? readFileSync(adminNoticeUrl, 'utf8') : ''
+const adminPaginationBarSource = existsSync(adminPaginationBarUrl) ? readFileSync(adminPaginationBarUrl, 'utf8') : ''
 const adminSidebarSource = existsSync(adminSidebarUrl) ? readFileSync(adminSidebarUrl, 'utf8') : ''
 const adminSidebarFrameSource = existsSync(adminSidebarFrameUrl) ? readFileSync(adminSidebarFrameUrl, 'utf8') : ''
 const adminSidebarNavItemSource = existsSync(adminSidebarNavItemUrl) ? readFileSync(adminSidebarNavItemUrl, 'utf8') : ''
@@ -163,6 +167,7 @@ const userServiceActiveActionsSource = existsSync(userServiceActiveActionsUrl)
   : ''
 const userServiceActionsCellSource = existsSync(userServiceActionsCellUrl) ? readFileSync(userServiceActionsCellUrl, 'utf8') : ''
 const userAccountActionsCellSource = existsSync(userAccountActionsCellUrl) ? readFileSync(userAccountActionsCellUrl, 'utf8') : ''
+const userOperationsCellSource = existsSync(userOperationsCellUrl) ? readFileSync(userOperationsCellUrl, 'utf8') : ''
 const userServicePaginationSource = existsSync(userServicePaginationUrl) ? readFileSync(userServicePaginationUrl, 'utf8') : ''
 const userServiceEmptyStateSource = existsSync(userServiceEmptyStateUrl) ? readFileSync(userServiceEmptyStateUrl, 'utf8') : ''
 const userServiceResultsPanelSource = existsSync(userServiceResultsPanelUrl) ? readFileSync(userServiceResultsPanelUrl, 'utf8') : ''
@@ -196,8 +201,9 @@ const adminUsersDashboardSectionsSource = existsSync(adminUsersDashboardSections
 const adminDashboardDataSource = existsSync(adminDashboardDataUrl) ? readFileSync(adminDashboardDataUrl, 'utf8') : ''
 const adminAccessStateSource = existsSync(adminAccessStateUrl) ? readFileSync(adminAccessStateUrl, 'utf8') : ''
 const adminDisplayStateSource = existsSync(adminDisplayStateUrl) ? readFileSync(adminDisplayStateUrl, 'utf8') : ''
+const adminDisplaySource = existsSync(adminDisplayUrl) ? readFileSync(adminDisplayUrl, 'utf8') : ''
 const usageAdminSidebarSource = existsSync(usageAdminSidebarUrl) ? readFileSync(usageAdminSidebarUrl, 'utf8') : ''
-const adminUsersModuleSource = `${source}\n${adminDashboardSectionsSource}\n${adminAuditLogSectionSource}\n${adminAuditLogFiltersSource}\n${adminAuditLogPaginationSummarySource}\n${adminAuditLogRowSource}\n${adminOverviewInsightPanelSource}\n${adminOverviewMetricGridSource}\n${adminOverviewSectionSource}\n${adminOverviewSessionPanelSource}\n${adminOverviewTopSpendersListSource}\n${adminOverviewUsageTrendPanelSource}\n${adminInfoLineSource}\n${adminDashboardSectionFrameSource}\n${userAccountActionsSource}\n${userAccountActionsCellSource}\n${userRoleActionsSource}\n${userStatusActionsSource}\n${userIdentityCellSource}\n${userIdentityMetaSource}\n${userReconciliationCellSource}\n${userServiceFiltersSource}\n${userServiceFilterSummarySource}\n${userServiceHeaderSource}\n${userServiceStatusCellSource}\n${userServiceActionsSource}\n${userServiceActionsCellSource}\n${userServicePaginationSource}\n${userServiceEmptyStateSource}\n${userServiceResultsPanelSource}\n${userServiceRowSource}\n${userServiceSummaryMetricsSource}\n${userServiceTableHeaderSource}\n${userServiceTableSource}\n${userServiceSectionSource}\n${userUsageCellSource}\n${serviceApiLogFiltersSource}\n${serviceApiLogRowSource}\n${serviceApiLogsPanelSource}\n${serviceRecordQueryPanelSource}\n${serviceRecordSummarySource}\n${serviceReconciliationHeaderSource}\n${serviceReconciliationSummaryMetricsSource}\n${serviceReconciliationSectionSource}`
+const adminUsersModuleSource = `${source}\n${adminDashboardSectionsSource}\n${adminAuditLogSectionSource}\n${adminAuditLogFiltersSource}\n${adminAuditLogPaginationSummarySource}\n${adminAuditLogRowSource}\n${adminOverviewInsightPanelSource}\n${adminOverviewMetricGridSource}\n${adminOverviewSectionSource}\n${adminOverviewSessionPanelSource}\n${adminOverviewTopSpendersListSource}\n${adminOverviewUsageTrendPanelSource}\n${adminInfoLineSource}\n${adminDashboardSectionFrameSource}\n${userAccountActionsSource}\n${userAccountActionsCellSource}\n${userOperationsCellSource}\n${userRoleActionsSource}\n${userStatusActionsSource}\n${userIdentityCellSource}\n${userIdentityMetaSource}\n${userReconciliationCellSource}\n${userServiceFiltersSource}\n${userServiceFilterSummarySource}\n${userServiceHeaderSource}\n${userServiceStatusCellSource}\n${userServiceActionsSource}\n${userServiceActionsCellSource}\n${userServicePaginationSource}\n${userServiceEmptyStateSource}\n${userServiceResultsPanelSource}\n${userServiceRowSource}\n${userServiceSummaryMetricsSource}\n${userServiceTableHeaderSource}\n${userServiceTableSource}\n${userServiceSectionSource}\n${userUsageCellSource}\n${serviceApiLogFiltersSource}\n${serviceApiLogRowSource}\n${serviceApiLogsPanelSource}\n${serviceRecordQueryPanelSource}\n${serviceRecordSummarySource}\n${serviceReconciliationHeaderSource}\n${serviceReconciliationSummaryMetricsSource}\n${serviceReconciliationSectionSource}`
 const serviceReconciliationModuleSource = `${serviceReconciliationSectionSource}\n${serviceReconciliationHeaderSource}\n${serviceApiLogFiltersSource}\n${serviceApiLogRowSource}\n${serviceApiLogsPanelSource}\n${serviceRecordQueryPanelSource}\n${serviceRecordSummarySource}\n${serviceReconciliationSummaryMetricsSource}`
 const usageAdminModuleSource = [
   usageAdminSource,
@@ -306,7 +312,7 @@ test('admin user operation editors use the shared editor card module', () => {
   assert.match(adminEditorCardSource, /<slot \/>/)
 
   for (const actionSource of [userServiceActionsSource, userAccountActionsSource]) {
-    assert.match(actionSource, /<AdminEditorCard>/)
+    assert.match(actionSource, /<AdminEditorCard(?:\s+class="admin-user-action-card [^"]+")?>/)
     assert.match(actionSource, /<\/AdminEditorCard>/)
     assert.doesNotMatch(actionSource, /action-editor-card/)
     assert.doesNotMatch(actionSource, /account-editor-card/)
@@ -356,7 +362,7 @@ test('admin user operation editor controls use the shared editor style layer', (
   assert.doesNotMatch(userServiceActivationActionSource, /class="ui-micro-btn ui-micro-btn-primary admin-editor-main"/)
 
   assert.match(userStatusActionsSource, /<AdminEditorBlock/)
-  assert.match(userStatusActionsSource, /<AdminEditorActions>/)
+  assert.match(userStatusActionsSource, /<AdminEditorActions/)
   assert.match(userStatusActionsSource, /<AdminMicroButton/)
   assert.match(`${userServiceActionsSource}\n${userStatusActionsSource}`, /<AdminEditorActions/)
   assert.match(userRoleActionsSource, /<AdminEditorSelect/)
@@ -450,10 +456,122 @@ test('admin issue inbox toolbar separates filters from batch actions', () => {
   assert.match(adminIssueInboxSectionSource, /class="[^"]*admin-issue-toolbar/)
   assert.match(adminIssueInboxSectionSource, /class="admin-issue-filter-group"/)
   assert.match(adminIssueInboxSectionSource, /class="admin-issue-action-group"/)
+  assert.match(adminIssueInboxSectionSource, /class="admin-issue-batch-group"/)
+  assert.match(adminIssueInboxSectionSource, /class="admin-issue-export-group"/)
   assert.match(adminIssueInboxSectionSource, /class="admin-issue-batch-summary"/)
   assert.ok(adminIssueInboxSectionSource.indexOf('class="admin-issue-filter-group"') < adminIssueInboxSectionSource.indexOf('class="admin-issue-action-group"'))
   assert.doesNotMatch(adminIssueInboxSectionSource, /<AdminFilterToolbar align="end" compact>/)
-  assert.doesNotMatch(adminIssueInboxSectionSource, /\.admin-issue-action-group\s*\{[\s\S]*?justify-content:\s*flex-end/)
+  assert.match(adminIssueInboxSectionSource, /\.admin-issue-filter-group :deep\(\.admin-filter-field\)\s*\{[\s\S]*?flex:\s*1 1 180px/)
+  assert.doesNotMatch(adminIssueInboxSectionSource, /\.admin-issue-filter-group :deep\(\.admin-filter-field\)\s*\{[\s\S]*?flex:\s*0 1 156px/)
+  assert.match(adminIssueInboxSectionSource, /\.admin-issue-action-group\s*\{[\s\S]*?justify-content:\s*space-between/)
+  assert.match(adminIssueInboxSectionSource, /\.admin-issue-export-group\s*\{[\s\S]*?justify-content:\s*flex-end/)
+})
+
+test('admin dashboard filter toolbars avoid oversized empty gutters', () => {
+  assert.match(adminFilterToolbarSource, /fit:\s*\{\s*type: Boolean/)
+  assert.match(adminFilterToolbarSource, /grid:\s*\{\s*type: Boolean/)
+  assert.match(adminFilterToolbarSource, /admin-filter-toolbar-fit/)
+  assert.match(adminFilterToolbarSource, /admin-filter-toolbar-grid/)
+  assert.match(adminFilterToolbarSource, /grid-template-columns:\s*var\(--admin-filter-toolbar-columns/)
+  assert.match(adminFilterToolbarSource, /width:\s*fit-content/)
+
+  assert.match(serviceApiLogFiltersSource, /<AdminFilterToolbar class="admin-service-log-filters" compact grid>/)
+  assert.match(serviceApiLogFiltersSource, /--admin-filter-toolbar-columns:\s*minmax\(180px, 1fr\) minmax\(180px, 1fr\) 76px 76px auto/)
+  assert.match(serviceApiLogFiltersSource, /@media \(max-width: 1180px\)/)
+
+  assert.match(adminAuditLogFiltersSource, /<AdminFilterToolbar class="admin-audit-log-filters" compact fit grid>/)
+  assert.match(adminAuditLogFiltersSource, /--admin-filter-toolbar-columns:\s*96px 96px auto/)
+  assert.match(adminAuditLogFiltersSource, /@media \(max-width: 640px\)/)
+})
+
+test('admin shared buttons and sidebar navigation render icons consistently', () => {
+  assert.match(adminMicroButtonSource, /icon:\s*\{/)
+  assert.match(adminMicroButtonSource, /ui-micro-btn-icon/)
+  assert.match(adminMicroButtonSource, /resolveButtonIcon/)
+  assert.match(adminHeaderActionButtonSource, /:icon="HomeOutline"/)
+  assert.match(adminSidebarSource, /resolveSidebarNavIcon/)
+  assert.match(adminSidebarSource, /:icon="resolveSidebarNavIcon\(item\.key\)"/)
+  assert.match(adminSidebarNavItemSource, /admin-sidebar-nav-icon/)
+})
+
+test('admin select controls reserve space for the right-side menu indicator', () => {
+  assert.match(adminControlFieldSource, /ui-select-input/)
+  assert.match(adminControlFieldSource, /appearance:\s*none/)
+  assert.match(adminControlFieldSource, /padding-right:\s*36px/)
+  assert.match(adminControlFieldSource, /background-position:\s*right 14px center/)
+})
+
+test('admin service page removes duplicated header shortcuts and inline audit list', () => {
+  assert.match(source, /<AdminPageHeader/)
+  assert.doesNotMatch(source, /:can-read-users="canReadUsers"/)
+  assert.doesNotMatch(source, /:show-service-section="showServiceSection"/)
+  assert.doesNotMatch(source, /@refresh="loadAll"/)
+  assert.doesNotMatch(source, /@open-users="scrollToSection\('users'\)"/)
+  assert.doesNotMatch(source, /@open-service="scrollToSection\('service'\)"/)
+  assert.match(source, /@go-home="goHome"/)
+
+  assert.equal((adminPageHeaderSource.match(/<AdminHeaderActionButton/g) || []).length, 1)
+  assert.match(adminPageHeaderSource, /返回首页/)
+  assert.doesNotMatch(adminPageHeaderSource, /刷新数据/)
+  assert.doesNotMatch(adminPageHeaderSource, /用户服务/)
+  assert.doesNotMatch(adminPageHeaderSource, /消耗对账/)
+  assert.doesNotMatch(adminPageHeaderSource, /\$emit\('refresh'\)/)
+
+  assert.match(adminDashboardSectionsSource, /:show="auditLogSection\.canReadAudit && activeRouteSection === 'audit'"/)
+  assert.match(source, /:active-route-section="activeRouteSection"/)
+  assert.match(source, /ADMIN_SECTION_BY_ROUTE_NAME/)
+  assert.match(adminDisplaySource, /\{ key: 'audit', label: '审计日志', note: '追踪' \}/)
+})
+
+test('admin user service rows group billing and actions into compact hierarchy cards', () => {
+  assert.match(userUsageCellSource, /class="admin-user-usage-card"/)
+  assert.match(userUsageCellSource, /class="admin-user-usage-stat admin-user-usage-stat-primary"/)
+  assert.match(userUsageCellSource, /调用次数/)
+  assert.match(userUsageCellSource, /官方成本/)
+  assert.match(userUsageCellSource, /高频模型/)
+  assert.match(userUsageCellSource, /admin-user-usage-meta/)
+
+  assert.match(userReconciliationCellSource, /class="admin-user-reconciliation-card"/)
+  assert.match(userReconciliationCellSource, /对账状态/)
+  assert.match(userReconciliationCellSource, /异常账单/)
+  assert.match(userReconciliationCellSource, /最近活跃/)
+  assert.match(userReconciliationCellSource, /admin-user-reconciliation-grid/)
+
+  assert.match(userOperationsCellSource, /class="admin-user-operations-cell/)
+  assert.match(userOperationsCellSource, /class="admin-user-operations-card"/)
+  assert.match(userServiceActionsSource, /class="admin-user-action-card admin-user-action-card-service"/)
+  assert.match(userAccountActionsSource, /class="admin-user-action-card admin-user-action-card-account"/)
+  assert.match(userServiceActiveActionsSource, /class="admin-user-action-row"/)
+  assert.match(userStatusActionsSource, /class="admin-user-action-row"/)
+})
+
+test('admin reconciliation controls keep request and log filters compact and prefilled', () => {
+  assert.match(serviceRecordQueryPanelSource, /class="admin-record-query-toolbar"/)
+  assert.match(serviceRecordQueryPanelSource, /--admin-filter-toolbar-columns:\s*minmax\(0, 1fr\) auto/)
+  assert.doesNotMatch(serviceRecordQueryPanelSource, /<AdminFilterToolbar compact>/)
+
+  assert.match(serviceApiLogFiltersSource, /--admin-filter-toolbar-columns:\s*minmax\(180px, 1fr\) minmax\(180px, 1fr\) 76px 76px auto/)
+  assert.match(serviceApiLogsPanelSource, /class="admin-service-log-results"/)
+  assert.match(serviceApiLogsPanelSource, /\.admin-service-log-results\s*\{[\s\S]*?margin-top:\s*16px/)
+  assert.match(adminServiceOpsSource, /createAdminServiceLogQuery/)
+  assert.doesNotMatch(adminServiceOpsSource, /start: '', end: ''/)
+})
+
+test('admin issue inbox constrains long result and detail lists with shared pagination', () => {
+  assert.ok(existsSync(adminPaginationBarUrl))
+  assert.match(adminIssueInboxSectionSource, /import AdminPaginationBar from '@\/components\/admin\/AdminPaginationBar\.vue'/)
+  assert.match(adminIssueInboxSectionSource, /const ISSUE_EVENT_PAGE_SIZE = 4/)
+  assert.match(adminIssueInboxSectionSource, /const visibleIssueEvents = computed\(\(\) =>/)
+  assert.match(adminIssueInboxSectionSource, /selectedIssueEvents\.value\.slice\(start, start \+ ISSUE_EVENT_PAGE_SIZE\)/)
+  assert.match(adminIssueInboxSectionSource, /watch\(\(\) => props\.selectedIssue\?\.group\?\.id, \(\) => \{/)
+  assert.match(adminIssueInboxSectionSource, /eventPage\.value = 1/)
+  assert.match(adminIssueInboxSectionSource, /v-for="event in visibleIssueEvents"/)
+  assert.match(adminIssueInboxSectionSource, /<AdminPaginationBar[\s\S]+:page="issueListPage"[\s\S]+:limit="issueListLimit"[\s\S]+:total="issueListTotal"[\s\S]+item-label="组"[\s\S]+@set-page="setIssueListPage"/)
+  assert.match(adminIssueInboxSectionSource, /<AdminPaginationBar[\s\S]+:page="eventPage"[\s\S]+:limit="ISSUE_EVENT_PAGE_SIZE"[\s\S]+:total="selectedIssueEvents\.length"[\s\S]+item-label="条事件"[\s\S]+@set-page="setIssueEventPage"/)
+  assert.match(adminIssueInboxSectionSource, /const setIssueListPage = \(page\) => \{/)
+  assert.match(adminIssueInboxSectionSource, /emit\('update-issue-query', 'page', page\)/)
+  assert.match(adminIssueInboxSectionSource, /emit\('load-issues'\)/)
+  assert.doesNotMatch(adminIssueInboxSectionSource, /<span>第 \{\{ issuePagination\.page \|\| issueQuery\.page \}\} \/ \{\{ totalPages \}\} 页<\/span>/)
 })
 
 test('admin user service summary metrics use the shared compact metric card module', () => {
@@ -491,7 +609,7 @@ test('admin user service header uses a focused feature module', () => {
   assert.match(userServiceHeaderSource, /<AdminSectionHeader/)
   assert.match(userServiceHeaderSource, /title="用户服务"/)
   assert.match(userServiceHeaderSource, /caption="围绕用户服务状态、开通操作、官方消耗和待处理事项组织。"/)
-  assert.match(userServiceHeaderSource, /<AdminMicroButton :disabled="loadingUsers" @click="emit\('refresh-users'\)">/)
+  assert.match(userServiceHeaderSource, /<AdminMicroButton size="md" :disabled="loadingUsers" @click="emit\('refresh-users'\)">/)
   assert.match(userServiceHeaderSource, /loadingUsers \? '刷新中\.\.\.' : '刷新用户列表'/)
   assert.match(userServiceHeaderSource, /defineEmits\(\['refresh-users'\]\)/)
   assert.match(userServiceHeaderSource, /loadingUsers:\s*\{\s*type: Boolean,\s*default: false\s*\}/s)
@@ -545,11 +663,12 @@ test('admin user service table uses a focused feature module', () => {
   assert.doesNotMatch(userServiceTableSource, /<th v-if="showUserActions" class="px-3 py-4">服务操作<\/th>/)
 
   assert.match(userServiceTableHeaderSource, /<th class="px-3 py-4">用户<\/th>/)
-  assert.match(userServiceTableHeaderSource, /<th class="px-3 py-4">服务状态<\/th>/)
+  assert.doesNotMatch(userServiceTableHeaderSource, /<th class="px-3 py-4">服务状态<\/th>/)
   assert.match(userServiceTableHeaderSource, /<th class="px-3 py-4">官方消耗<\/th>/)
   assert.match(userServiceTableHeaderSource, /<th class="px-3 py-4">对账<\/th>/)
-  assert.match(userServiceTableHeaderSource, /<th v-if="showUserActions" class="px-3 py-4">服务操作<\/th>/)
-  assert.match(userServiceTableHeaderSource, /<th v-if="canManageRoles \|\| canManageUserStatus" class="px-3 py-4">账号与角色<\/th>/)
+  assert.match(userServiceTableHeaderSource, /<th v-if="showUserActions \|\| canManageRoles \|\| canManageUserStatus" class="px-3 py-4">操作与权限<\/th>/)
+  assert.doesNotMatch(userServiceTableHeaderSource, /服务操作/)
+  assert.doesNotMatch(userServiceTableHeaderSource, /账号与角色/)
   assert.match(userServiceTableHeaderSource, /showUserActions:\s*\{\s*type: Boolean,\s*default: false\s*\}/s)
 })
 
@@ -567,8 +686,7 @@ test('admin user service table delegates rows to a focused row module', () => {
 
   assert.match(userServiceRowSource, /<tr/)
   assert.match(userServiceRowSource, /<AdminUserIdentityCell/)
-  assert.match(userServiceRowSource, /<AdminUserServiceActionsCell/)
-  assert.match(userServiceRowSource, /<AdminUserAccountActionsCell/)
+  assert.match(userServiceRowSource, /<AdminUserOperationsCell/)
   assert.match(userServiceRowSource, /@update-role-selection="forwardRoleSelection"/)
 })
 
@@ -605,12 +723,12 @@ test('admin user service row operations use focused feature modules', () => {
   assert.ok(existsSync(userServiceActivationActionUrl))
   assert.ok(existsSync(userServiceActiveActionsUrl))
   assert.ok(existsSync(userServiceActionsCellUrl))
+  assert.ok(existsSync(userOperationsCellUrl))
   assert.ok(existsSync(userAccountActionsUrl))
   assert.ok(existsSync(userAccountActionsCellUrl))
   assert.ok(existsSync(userRoleActionsUrl))
   assert.ok(existsSync(userStatusActionsUrl))
-  assert.match(userServiceRowSource, /<AdminUserServiceActionsCell/)
-  assert.match(userServiceRowSource, /<AdminUserAccountActionsCell/)
+  assert.match(userServiceRowSource, /<AdminUserOperationsCell/)
   assert.match(userServiceRowSource, /:user="user"/)
   assert.match(userServiceRowSource, /@activate-service="emit\('activate-service', \$event\)"/)
   assert.match(userServiceRowSource, /@update-service-limits="emit\('update-service-limits', \$event\)"/)
@@ -622,16 +740,24 @@ test('admin user service row operations use focused feature modules', () => {
   assert.doesNotMatch(userServiceRowSource, /<AdminUserAccountActions\s/)
   assert.doesNotMatch(userServiceTableSource, /const updateRoleSelection =/)
 
-  assert.match(userServiceActionsCellSource, /<td v-if="showUserActions" class="px-3 py-4">/)
+  assert.match(userServiceActionsCellSource, /<td v-if="showUserActions" class="admin-user-action-cell px-3 py-4">/)
   assert.match(userServiceActionsCellSource, /<AdminUserServiceActions/)
   assert.match(userServiceActionsCellSource, /@activate-service="emit\('activate-service', \$event\)"/)
   assert.match(userServiceActionsCellSource, /@update-service-limits="emit\('update-service-limits', \$event\)"/)
 
-  assert.match(userAccountActionsCellSource, /<td v-if="canManageRoles \|\| canManageUserStatus" class="px-3 py-4">/)
+  assert.match(userAccountActionsCellSource, /<td v-if="canManageRoles \|\| canManageUserStatus" class="admin-user-action-cell px-3 py-4">/)
   assert.match(userAccountActionsCellSource, /<AdminUserAccountActions/)
   assert.match(userAccountActionsCellSource, /@update-role-selection="forwardRoleSelection"/)
 
-  assert.match(userServiceActionsSource, /<AdminEditorCard>/)
+  assert.match(userOperationsCellSource, /<AdminEditorCard class="admin-user-operations-card">/)
+  assert.match(userOperationsCellSource, /<AdminUserServiceActivationAction/)
+  assert.match(userOperationsCellSource, /<AdminUserServiceActiveActions/)
+  assert.match(userOperationsCellSource, /<AdminUserRoleActions/)
+  assert.match(userOperationsCellSource, /<AdminUserStatusActions/)
+  assert.match(userOperationsCellSource, /@update-service-limits="emit\('update-service-limits', \$event\)"/)
+  assert.match(userOperationsCellSource, /@update-role-selection="forwardRoleSelection"/)
+
+  assert.match(userServiceActionsSource, /<AdminEditorCard class="admin-user-action-card admin-user-action-card-service">/)
   assert.match(userServiceActionsSource, /import AdminUserServiceActivationAction from '\.\/AdminUserServiceActivationAction\.vue'/)
   assert.match(userServiceActionsSource, /import AdminUserServiceActiveActions from '\.\/AdminUserServiceActiveActions\.vue'/)
   assert.match(userServiceActionsSource, /<AdminUserServiceActivationAction\s+:can-activate-service="canActivateService"/)
@@ -661,7 +787,7 @@ test('admin user service row operations use focused feature modules', () => {
   assert.match(userServiceActiveActionsSource, /emit\('disable-service', user\)/)
   assert.match(userServiceActiveActionsSource, /emit\('update-service-limits', user\)/)
 
-  assert.match(userAccountActionsSource, /<AdminEditorCard>/)
+  assert.match(userAccountActionsSource, /<AdminEditorCard class="admin-user-action-card admin-user-action-card-account">/)
   assert.match(userAccountActionsSource, /<AdminUserRoleActions/)
   assert.match(userAccountActionsSource, /<AdminUserStatusActions/)
   assert.match(userAccountActionsSource, /@update-role-selection="forwardRoleSelection"/)
@@ -675,13 +801,87 @@ test('admin user service row operations use focused feature modules', () => {
   assert.match(userStatusActionsSource, /emit\('delete-user', user\)/)
 })
 
+test('admin user service row combines service and account operations into one compact cell', () => {
+  assert.ok(existsSync(userOperationsCellUrl))
+
+  assert.match(userServiceTableHeaderSource, /<th v-if="showUserActions \|\| canManageRoles \|\| canManageUserStatus" class="px-3 py-4">操作与权限<\/th>/)
+  assert.doesNotMatch(userServiceTableHeaderSource, /服务状态/)
+  assert.doesNotMatch(userServiceTableHeaderSource, /服务操作/)
+  assert.doesNotMatch(userServiceTableHeaderSource, /账号与角色/)
+
+  assert.match(userServiceRowSource, /<AdminUserOperationsCell/)
+  assert.doesNotMatch(userServiceRowSource, /<AdminUserServiceStatusCell/)
+  assert.doesNotMatch(userServiceRowSource, /<AdminUserServiceActionsCell/)
+  assert.doesNotMatch(userServiceRowSource, /<AdminUserAccountActionsCell/)
+
+  assert.match(userOperationsCellSource, /<td v-if="showUserActions \|\| canManageRoles \|\| canManageUserStatus" class="admin-user-operations-cell px-3 py-4">/)
+  assert.match(userOperationsCellSource, /class="admin-user-operations-card"/)
+  assert.match(userOperationsCellSource, /<AdminUserServiceActivationAction/)
+  assert.match(userOperationsCellSource, /<AdminUserServiceActiveActions/)
+  assert.match(userOperationsCellSource, /<AdminUserRoleActions/)
+  assert.match(userOperationsCellSource, /<AdminUserStatusActions/)
+  assert.match(userOperationsCellSource, /@update-role-selection="forwardRoleSelection"/)
+  assert.match(userOperationsCellSource, /admin-user-operations-card\s*\{/)
+  assert.match(userOperationsCellSource, /admin-user-operations-service/)
+  assert.match(userOperationsCellSource, /admin-user-operations-account/)
+})
+
+test('admin user service rows keep api identity compact and role controls inline', () => {
+  assert.match(userServiceRowSource, /<AdminUserIdentityCell/)
+  assert.doesNotMatch(userServiceRowSource, /<AdminUserIdentityCell[\s\S]+:service-status-class="serviceStatusClass"[\s\S]+:service-status-label="serviceStatusLabel"/)
+  assert.doesNotMatch(userServiceRowSource, /import AdminUserServiceStatusCell/)
+
+  assert.doesNotMatch(userIdentityCellSource, /import AdminStatusPill from '@\/components\/admin\/AdminStatusPill\.vue'/)
+  assert.doesNotMatch(userIdentityCellSource, /serviceStatusClass\(user\.service\?\.serviceStatus\)/)
+  assert.doesNotMatch(userIdentityCellSource, /serviceStatusLabel\(user\.service\?\.serviceStatus\)/)
+  assert.match(userIdentityCellSource, /class="admin-user-api-line"/)
+  assert.match(userIdentityCellSource, /<span class="admin-user-api-prefix">API:<\/span>/)
+  assert.match(userIdentityCellSource, /user\.service\?\.serviceIdentifier \|\| '尚未开通'/)
+
+  assert.match(userRoleActionsSource, /class="admin-user-role-row"/)
+  assert.match(userRoleActionsSource, /<AdminEditorSelect[\s\S]+<AdminEditorMainButton/s)
+  assert.match(userRoleActionsSource, /grid-template-columns:\s*minmax\(0, 1fr\) auto/)
+  assert.match(userRoleActionsSource, /\.admin-user-role-row :deep\(\.admin-editor-select\)/)
+})
+
+test('admin user service display cards align heights and place api below id', () => {
+  assert.match(userIdentityCellSource, /class="admin-user-name"/)
+  assert.match(userIdentityCellSource, /class="admin-user-email"/)
+  assert.match(userIdentityCellSource, /class="admin-user-id-line"/)
+  assert.match(userIdentityCellSource, /class="admin-user-id-value">ID: \{\{ user\.id \}\}<\/span>/)
+  assert.match(userIdentityCellSource, /class="admin-user-api-line"/)
+  assert.match(userIdentityCellSource, /class="admin-user-api-prefix">API:<\/span>/)
+  assert.match(userIdentityCellSource, /class="admin-user-service-id"/)
+  assert.match(userIdentityCellSource, /admin-user-meta-group\s*\{[\s\S]+margin-top:\s*auto/)
+  assert.match(userIdentityCellSource, /min-height:\s*138px/)
+  assert.doesNotMatch(userIdentityCellSource, /<p class="mt-1 text-\[11px\] text-white\/35">ID:/)
+  assert.doesNotMatch(userIdentityCellSource, /<AdminStatusPill/)
+
+  assert.match(userUsageCellSource, /class="admin-user-usage-cell px-3 py-4/)
+  assert.match(userUsageCellSource, /min-height:\s*138px/)
+  assert.match(userUsageCellSource, /height:\s*100%/)
+  assert.match(userReconciliationCellSource, /class="admin-user-reconciliation-cell px-3 py-4/)
+  assert.match(userReconciliationCellSource, /min-height:\s*138px/)
+  assert.match(userReconciliationCellSource, /height:\s*100%/)
+})
+
+test('admin user operation service and account buttons evenly fill available width', () => {
+  assert.match(userOperationsCellSource, /admin-user-operations-action-slot :deep\(\.admin-user-action-row\)\s*\{[\s\S]+grid-template-columns:\s*repeat\(auto-fit, minmax\(0, 1fr\)\)/)
+  assert.match(userOperationsCellSource, /admin-user-operations-card :deep\(\.admin-user-action-row \.ui-micro-btn\)\s*\{[\s\S]+width:\s*100%/)
+  assert.match(userOperationsCellSource, /admin-user-operations-card :deep\(\.admin-user-action-row \.ui-micro-btn\)\s*\{[\s\S]+justify-content:\s*center/)
+  assert.match(userOperationsCellSource, /admin-user-operations-action-slot :deep\(\.admin-editor-main\)\s*\{[\s\S]+width:\s*100%/)
+  assert.match(userStatusActionsSource, /admin-user-status-row :deep\(\.admin-user-action-row\)\s*\{[\s\S]+display:\s*grid/)
+  assert.match(userStatusActionsSource, /admin-user-status-row :deep\(\.admin-user-action-row\)\s*\{[\s\S]+grid-template-columns:\s*repeat\(auto-fit, minmax\(0, 1fr\)\)/)
+  assert.match(userStatusActionsSource, /admin-user-status-row :deep\(\.ui-micro-btn\)\s*\{[\s\S]+width:\s*100%/)
+  assert.match(userStatusActionsSource, /admin-user-status-row :deep\(\.ui-micro-btn\)\s*\{[\s\S]+justify-content:\s*center/)
+})
+
 test('admin user service display cells use focused feature modules', () => {
   for (const url of [
     adminStatusPillUrl,
     adminTagPillUrl,
     userIdentityCellUrl,
     userIdentityMetaUrl,
-    userServiceStatusCellUrl,
     userUsageCellUrl,
     userReconciliationCellUrl
   ]) {
@@ -689,12 +889,12 @@ test('admin user service display cells use focused feature modules', () => {
   }
 
   assert.match(userServiceRowSource, /<AdminUserIdentityCell/)
-  assert.match(userServiceRowSource, /<AdminUserServiceStatusCell/)
+  assert.doesNotMatch(userServiceRowSource, /<AdminUserServiceStatusCell/)
   assert.match(userServiceRowSource, /<AdminUserUsageCell/)
   assert.match(userServiceRowSource, /<AdminUserReconciliationCell/)
   assert.match(userServiceRowSource, /:user="user"/)
   assert.match(userServiceRowSource, /:role-label="roleLabel"/)
-  assert.match(userServiceRowSource, /:service-status-class="serviceStatusClass"/)
+  assert.doesNotMatch(userServiceRowSource, /:service-status-class="serviceStatusClass"/)
   assert.match(userServiceRowSource, /:format-usd="formatUsd"/)
   assert.match(userServiceRowSource, /:format-date-time="formatDateTime"/)
   assert.doesNotMatch(userServiceTableSource, /item\.displayName/)
@@ -717,9 +917,11 @@ test('admin user service display cells use focused feature modules', () => {
   assert.doesNotMatch(styleSource, /\.ui-status-pill-deleted\s*\{/)
 
   assert.match(userIdentityCellSource, /user\.displayName/)
+  assert.doesNotMatch(userIdentityCellSource, /import AdminStatusPill from '@\/components\/admin\/AdminStatusPill\.vue'/)
   assert.match(userIdentityCellSource, /import AdminUserIdentityMeta from '\.\/AdminUserIdentityMeta\.vue'/)
+  assert.doesNotMatch(userIdentityCellSource, /serviceStatusClass\(user\.service\?\.serviceStatus\)/)
+  assert.doesNotMatch(userIdentityCellSource, /serviceStatusLabel\(user\.service\?\.serviceStatus\)/)
   assert.match(userIdentityCellSource, /<AdminUserIdentityMeta\s+:role-label="roleLabel"\s+:status-class="statusClass"\s+:status-label="statusLabel"\s+:user="user"\s+\/>/)
-  assert.doesNotMatch(userIdentityCellSource, /<AdminStatusPill/)
   assert.doesNotMatch(userIdentityCellSource, /<AdminTagPill/)
   assert.doesNotMatch(userIdentityCellSource, /suspendedReason/)
   assert.doesNotMatch(userIdentityCellSource, /class="ui-status-pill"/)
@@ -742,6 +944,7 @@ test('admin user service display cells use focused feature modules', () => {
 
 test('admin user service pagination uses a focused feature module', () => {
   assert.ok(existsSync(userServicePaginationUrl))
+  assert.ok(existsSync(adminPaginationBarUrl))
   assert.match(userServiceResultsPanelSource, /<AdminUserServicePagination/)
   assert.match(userServiceResultsPanelSource, /:total-user-pages="totalUserPages"/)
   assert.match(userServiceResultsPanelSource, /:user-page="userPage"/)
@@ -752,12 +955,18 @@ test('admin user service pagination uses a focused feature module', () => {
   assert.doesNotMatch(userServiceSectionSource, /v-for="page in visibleUserPages"/)
 
   assert.match(userServicePaginationSource, /v-if="totalUserPages > 1"/)
-  assert.match(userServicePaginationSource, /上一页/)
-  assert.match(userServicePaginationSource, /下一页/)
-  assert.match(userServicePaginationSource, /v-for="page in visibleUserPages"/)
-  assert.match(userServicePaginationSource, /emit\('set-user-page', userPage - 1\)/)
-  assert.match(userServicePaginationSource, /emit\('set-user-page', page\)/)
-  assert.match(userServicePaginationSource, /emit\('set-user-page', userPage \+ 1\)/)
+  assert.match(userServicePaginationSource, /import AdminPaginationBar from '@\/components\/admin\/AdminPaginationBar\.vue'/)
+  assert.match(userServicePaginationSource, /<AdminPaginationBar/)
+  assert.match(userServicePaginationSource, /:page="userPage"/)
+  assert.match(userServicePaginationSource, /:total-pages="totalUserPages"/)
+  assert.match(userServicePaginationSource, /:visible-pages="visibleUserPages"/)
+  assert.match(userServicePaginationSource, /@set-page="emit\('set-user-page', \$event\)"/)
+  assert.doesNotMatch(userServicePaginationSource, /<AdminMicroButton/)
+  assert.match(adminPaginationBarSource, /class="admin-pagination-bar"/)
+  assert.match(adminPaginationBarSource, /import AdminMicroButton from '\.\/AdminMicroButton\.vue'/)
+  assert.match(adminPaginationBarSource, /emit\('set-page', normalizedPage - 1\)/)
+  assert.match(adminPaginationBarSource, /emit\('set-page', page\)/)
+  assert.match(adminPaginationBarSource, /emit\('set-page', normalizedPage \+ 1\)/)
 })
 
 test('admin service reconciliation notices use the shared notice module', () => {
@@ -804,6 +1013,7 @@ test('admin service reconciliation query panels compose the shared panel card mo
   assert.match(serviceReconciliationSectionSource, /<AdminServiceApiLogsPanel/)
   assert.match(serviceReconciliationSectionSource, /<AdminServiceRecordQueryPanel/)
   assert.match(serviceReconciliationSectionSource, /:api-logs="apiLogs"/)
+  assert.match(serviceReconciliationSectionSource, /:api-log-pagination="apiLogPagination"/)
   assert.match(serviceReconciliationSectionSource, /:loading-record="loadingRecord"/)
   assert.match(serviceReconciliationSectionSource, /:loading-api-logs="loadingApiLogs"/)
   assert.match(serviceReconciliationSectionSource, /:log302-query="log302Query"/)
@@ -821,6 +1031,8 @@ test('admin service reconciliation query panels compose the shared panel card mo
   assert.doesNotMatch(serviceApiLogsPanelSource, /ui-glass-card/)
   assert.match(serviceApiLogsPanelSource, /title="服务调用日志查询"/)
   assert.match(serviceApiLogsPanelSource, /caption="按时间范围和分页条件查询官方调用日志。"/)
+  assert.match(serviceApiLogsPanelSource, /apiLogPagination:\s*\{\s*type: Object,\s*default: \(\) => \(\{ page: 1, limit: 10, total: 0 \}\)\s*\}/s)
+  assert.match(serviceApiLogsPanelSource, /import AdminPaginationBar from '@\/components\/admin\/AdminPaginationBar\.vue'/)
   assert.match(serviceApiLogsPanelSource, /import AdminServiceApiLogFilters from '\.\/AdminServiceApiLogFilters\.vue'/)
   assert.match(serviceApiLogsPanelSource, /import AdminServiceApiLogRow from '\.\/AdminServiceApiLogRow\.vue'/)
   assert.match(serviceApiLogsPanelSource, /<AdminServiceApiLogFilters\s+:loading-api-logs="loadingApiLogs"\s+:log302-query="log302Query"\s+@load-api-logs="emit\('load-api-logs'\)"\s+@update-log-query="forwardLogQueryUpdate"\s+\/>/)
@@ -829,23 +1041,29 @@ test('admin service reconciliation query panels compose the shared panel card mo
   assert.match(serviceApiLogsPanelSource, /<AdminServiceApiLogRow\s+v-for="\(item, idx\) in apiLogs"\s+:key="item\.request_id \|\| item\.id \|\| idx"\s+:index="idx"\s+:item="item"\s+:row-class="rowClass"\s+\/>/)
   assert.match(serviceApiLogsPanelSource, /<AdminEmptyState/)
   assert.match(serviceApiLogsPanelSource, /<AdminTableShell/)
+  assert.match(serviceApiLogsPanelSource, /<AdminPaginationBar[\s\S]+:page="apiLogPage"[\s\S]+:limit="apiLogLimit"[\s\S]+:total="apiLogTotal"[\s\S]+@set-page="setApiLogPage"/)
   assert.match(serviceApiLogsPanelSource, /const forwardLogQueryUpdate = \(key, value\) =>/)
   assert.match(serviceApiLogsPanelSource, /emit\('update-log-query', key, value\)/)
+  assert.match(serviceApiLogsPanelSource, /const setApiLogPage = \(page\) => \{/)
+  assert.match(serviceApiLogsPanelSource, /emit\('update-log-query', 'page', page\)/)
+  assert.match(serviceApiLogsPanelSource, /emit\('load-api-logs'\)/)
   assert.doesNotMatch(serviceApiLogsPanelSource, /<tr v-for="\(item, idx\) in apiLogs"/)
   assert.doesNotMatch(serviceApiLogsPanelSource, /<AdminControlField/)
   assert.doesNotMatch(serviceApiLogsPanelSource, /<AdminMicroButton/)
   assert.doesNotMatch(serviceApiLogsPanelSource, /updateNumericLogQuery/)
   assert.doesNotMatch(serviceApiLogsPanelSource, /item\.request_id \|\| item\.requestId \|\| item\.id/)
-  assert.match(serviceApiLogFiltersSource, /<AdminFilterToolbar>/)
+  assert.match(serviceApiLogFiltersSource, /<AdminFilterToolbar class="admin-service-log-filters" compact grid>/)
   assert.match(serviceApiLogFiltersSource, /import AdminFilterToolbar from '@\/components\/admin\/AdminFilterToolbar\.vue'/)
   assert.match(serviceApiLogFiltersSource, /<AdminFilterField label="开始时间"/)
   assert.match(serviceApiLogFiltersSource, /<AdminFilterField label="结束时间"/)
   assert.match(serviceApiLogFiltersSource, /<AdminFilterField label="页码"/)
   assert.match(serviceApiLogFiltersSource, /<AdminFilterField label="每页"/)
   assert.match(serviceApiLogFiltersSource, /<AdminControlField[\s\S]+:value="log302Query\.start"[\s\S]+type="datetime-local"[\s\S]+@input="updateLogQuery\('start', \$event\)"/)
-  assert.match(serviceApiLogFiltersSource, /<AdminControlField[\s\S]+:value="log302Query\.limit"[\s\S]+type="number"[\s\S]+max="50"[\s\S]+variant="number"[\s\S]+@input="updateNumericLogQuery\('limit', \$event\)"/)
-  assert.match(serviceApiLogFiltersSource, /<AdminMicroButton :disabled="loadingApiLogs" @click="emit\('load-api-logs'\)">查询<\/AdminMicroButton>/)
+  assert.match(serviceApiLogFiltersSource, /<AdminControlField[\s\S]+:value="log302Query\.limit"[\s\S]+type="number"[\s\S]+max="20"[\s\S]+variant="number"[\s\S]+@input="updateNumericLogQuery\('limit', \$event\)"/)
+  assert.match(serviceApiLogFiltersSource, /<AdminMicroButton size="md" :disabled="loadingApiLogs" @click="emit\('load-api-logs'\)">查询<\/AdminMicroButton>/)
   assert.match(serviceApiLogFiltersSource, /emit\('update-log-query', key, value\)/)
+  assert.match(serviceApiLogFiltersSource, /clampPaginationValue\(key, event\.target\.value\)/)
+  assert.doesNotMatch(serviceApiLogFiltersSource, /!\w-\[190px\]/)
   assert.ok(existsSync(serviceApiLogRowUrl))
   assert.match(serviceApiLogRowSource, /<tr :class="rowClass">/)
   assert.match(serviceApiLogRowSource, /item\.request_id \|\| item\.requestId \|\| item\.id \|\| '-'/)
@@ -858,10 +1076,11 @@ test('admin service reconciliation query panels compose the shared panel card mo
   assert.doesNotMatch(serviceRecordQueryPanelSource, /ui-glass-card/)
   assert.match(serviceRecordQueryPanelSource, /title="消耗详情（请求 ID）"/)
   assert.match(serviceRecordQueryPanelSource, /caption="按 request_id 查看单次调用的成本和用量明细。"/)
-  assert.match(serviceRecordQueryPanelSource, /<AdminFilterToolbar>/)
+  assert.match(serviceRecordQueryPanelSource, /<AdminFilterToolbar class="admin-record-query-toolbar" compact grid>/)
   assert.match(serviceRecordQueryPanelSource, /<AdminFilterField label="请求 ID">/)
-  assert.match(serviceRecordQueryPanelSource, /<AdminEmptyState v-else>/)
+  assert.match(serviceRecordQueryPanelSource, /<AdminEmptyState v-else class="mt-3">/)
   assert.match(serviceRecordQueryPanelSource, /placeholder="粘贴请求 ID"/)
+  assert.match(serviceRecordQueryPanelSource, /<AdminMicroButton size="md" :disabled="loadingRecord" @click="emit\('query-record'\)">/)
   assert.match(serviceRecordQueryPanelSource, /emit\('query-record'\)/)
   assert.match(serviceRecordQueryPanelSource, /emit\('update:recordRequestId'/)
   assert.match(serviceRecordQueryPanelSource, /import AdminServiceRecordSummary from '\.\/AdminServiceRecordSummary\.vue'/)
@@ -1009,26 +1228,28 @@ test('admin page delegates the top header actions to a shared module', () => {
   assert.match(source, /<AdminPageHeader/)
   assert.match(source, /:display-name="displayName"/)
   assert.match(source, /:access-scope="accessScope"/)
-  assert.match(source, /:is-refreshing="isRefreshing"/)
-  assert.match(source, /:can-read-users="canReadUsers"/)
-  assert.match(source, /:show-service-section="showServiceSection"/)
-  assert.match(source, /@refresh="loadAll"/)
-  assert.match(source, /@open-users="scrollToSection\('users'\)"/)
-  assert.match(source, /@open-service="scrollToSection\('service'\)"/)
+  assert.doesNotMatch(source, /:is-refreshing="isRefreshing"/)
+  assert.doesNotMatch(source, /:can-read-users="canReadUsers"/)
+  assert.doesNotMatch(source, /:show-service-section="showServiceSection"/)
+  assert.doesNotMatch(source, /@refresh="loadAll"/)
+  assert.doesNotMatch(source, /@open-users="scrollToSection\('users'\)"/)
+  assert.doesNotMatch(source, /@open-service="scrollToSection\('service'\)"/)
   assert.match(source, /@go-home="goHome"/)
   assert.doesNotMatch(source, /<header class="mb-8 border-b border-white\/10 pb-6">/)
 
   assert.ok(existsSync(adminPageHeaderUrl))
   assert.match(adminPageHeaderSource, /管理后台/)
   assert.match(adminPageHeaderSource, /欢迎回来/)
-  assert.match(adminPageHeaderSource, /刷新数据/)
+  assert.doesNotMatch(adminPageHeaderSource, /刷新数据/)
   assert.match(adminPageHeaderSource, /返回首页/)
-  assert.match(adminPageHeaderSource, /\$emit\('refresh'\)/)
+  assert.doesNotMatch(adminPageHeaderSource, /\$emit\('refresh'\)/)
   assert.match(adminPageHeaderSource, /import AdminHeaderActionButton from '\.\/AdminHeaderActionButton\.vue'/)
-  assert.equal((adminPageHeaderSource.match(/<AdminHeaderActionButton/g) || []).length, 4)
+  assert.equal((adminPageHeaderSource.match(/<AdminHeaderActionButton/g) || []).length, 1)
   assert.doesNotMatch(adminPageHeaderSource, /class="ui-action-btn/)
   assert.match(adminHeaderActionButtonSource, /import AdminMicroButton from '\.\/AdminMicroButton\.vue'/)
+  assert.match(adminHeaderActionButtonSource, /import \{ HomeOutline \} from '@\/icons\/coolicons'/)
   assert.match(adminHeaderActionButtonSource, /<AdminMicroButton/)
+  assert.match(adminHeaderActionButtonSource, /:icon="HomeOutline"/)
   assert.match(adminHeaderActionButtonSource, /size="md"/)
   assert.doesNotMatch(adminHeaderActionButtonSource, /\.ui-action-btn\s*\{/)
   assert.match(adminMicroButtonSource, /ui-micro-btn-md/)
@@ -1085,6 +1306,7 @@ test('admin page delegates dashboard section composition to a page-level feature
   assert.ok(source.split('\n').length < 300, 'AdminUsers.vue should stay below 300 lines as a route container')
   assert.match(source, /<AdminDashboardSections/)
   assert.match(source, /ref="dashboardSectionsRef"/)
+  assert.match(source, /:active-route-section="activeRouteSection"/)
   assert.match(source, /:overview-section="overviewSectionProps"/)
   assert.match(source, /:user-service-section="userServiceSectionProps"/)
   assert.match(source, /:service-reconciliation-section="serviceReconciliationSectionProps"/)
@@ -1117,12 +1339,15 @@ test('admin page delegates dashboard section composition to a page-level feature
   assert.match(adminDashboardSectionsSource, /v-bind="serviceReconciliationContentProps"/)
   assert.match(adminDashboardSectionsSource, /<AdminAuditLogSection/)
   assert.match(adminDashboardSectionsSource, /v-bind="auditLogContentProps"/)
+  assert.match(adminDashboardSectionsSource, /activeRouteSection: \{ type: String, default: 'overview' \}/)
   assert.match(adminDashboardSectionsSource, /overviewSection: \{ type: Object/)
   assert.match(adminDashboardSectionsSource, /userServiceSection: \{ type: Object/)
   assert.match(adminDashboardSectionsSource, /serviceReconciliationSection: \{ type: Object/)
   assert.match(adminDashboardSectionsSource, /auditLogSection: \{ type: Object/)
   assert.doesNotMatch(adminDashboardSectionsSource, /activeServiceUsers: \{ type:/)
   assert.doesNotMatch(adminDashboardSectionsSource, /auditLogs: \{ type:/)
+  assert.match(adminUsersDashboardSectionsSource, /apiLogPagination: serviceOps\.apiLogPagination/)
+  assert.match(adminDashboardSectionPropsSource, /apiLogPagination: unref\(apiLogPagination\)/)
   assert.match(adminDashboardSectionsSource, /defineExpose/)
   assert.match(adminDashboardSectionsSource, /getSectionEl/)
 
@@ -1165,7 +1390,7 @@ test('admin dashboard sections compose the shared section frame module', () => {
   assert.match(adminDashboardSectionsSource, /ref="auditRef"/)
   assert.match(adminDashboardSectionsSource, /:show="userServiceSection\.canReadUsers"/)
   assert.match(adminDashboardSectionsSource, /:show="serviceReconciliationSection\.showServiceSection"/)
-  assert.match(adminDashboardSectionsSource, /:show="auditLogSection\.canReadAudit"/)
+  assert.match(adminDashboardSectionsSource, /:show="auditLogSection\.canReadAudit && activeRouteSection === 'audit'"/)
   assert.match(adminDashboardSectionsSource, /v-bind="userServiceContentProps"/)
   assert.match(adminDashboardSectionsSource, /v-bind="serviceReconciliationContentProps"/)
   assert.match(adminDashboardSectionsSource, /v-bind="auditLogContentProps"/)
@@ -1192,8 +1417,9 @@ test('admin page delegates route section navigation to a composable', () => {
   assert.match(source, /scrollToSection/)
   assert.match(source, /activeSection/)
   assert.match(source, /navItems/)
+  assert.match(source, /ADMIN_SECTION_BY_ROUTE_NAME/)
+  assert.match(source, /activeRouteSection/)
   assert.doesNotMatch(source, /ADMIN_ROUTE_NAME_BY_SECTION/)
-  assert.doesNotMatch(source, /ADMIN_SECTION_BY_ROUTE_NAME/)
   assert.doesNotMatch(source, /const getSectionEl =/)
   assert.doesNotMatch(source, /const onMainScroll =/)
   assert.doesNotMatch(source, /window\.addEventListener\('scroll'/)
@@ -1353,6 +1579,9 @@ test('admin page delegates dashboard usage and audit data loading to a composabl
   assert.match(adminDashboardDataSource, /getAdminAuditLogs/)
   assert.match(adminDashboardDataSource, /getAdminUsageSummary/)
   assert.match(adminDashboardDataSource, /getAdminUsageTimeseries/)
+  assert.match(adminDashboardDataSource, /const DEFAULT_AUDIT_LOG_PAGE_SIZE = 10/)
+  assert.match(adminDashboardDataSource, /const pagination = ref\(\{ page: 1, limit: DEFAULT_AUDIT_LOG_PAGE_SIZE, total: 0 \}\)/)
+  assert.match(adminDashboardDataSource, /const logQuery = ref\(\{ page: 1, limit: DEFAULT_AUDIT_LOG_PAGE_SIZE \}\)/)
   assert.match(adminDashboardDataSource, /getAdminAuditPagination/)
   assert.match(adminDashboardDataSource, /getAdminUsageBarWidth/)
 })
@@ -1365,13 +1594,19 @@ test('admin page delegates service log query updates to the service ops composab
 
   assert.match(adminServiceOpsSource, /updateLog302Query/)
   assert.match(adminServiceOpsSource, /updateAdminLog302Query/)
+  assert.match(adminServiceOpsSource, /createAdminServiceLogQuery/)
   assert.match(adminServiceOpsSource, /log302Query/)
+  assert.match(adminServiceOpsSource, /const DEFAULT_API_LOG_PAGE_SIZE = 10/)
+  assert.match(adminServiceOpsSource, /const log302Query = reactive\(createAdminServiceLogQuery\(\{ pageSize: DEFAULT_API_LOG_PAGE_SIZE \}\)\)/)
+  assert.match(adminServiceOpsSource, /const apiLogPagination = ref\(\{ page: 1, limit: DEFAULT_API_LOG_PAGE_SIZE, total: 0 \}\)/)
+  assert.match(adminServiceOpsSource, /apiLogPagination\.value = rsp\?\.data\?\.pagination \|\| \{/)
+  assert.match(adminServiceOpsSource, /apiLogPagination,/)
 })
 
 test('admin page delegates refresh orchestration to a composable', () => {
   assert.ok(existsSync(adminDashboardRefreshUrl))
   assert.match(source, /useAdminDashboardRefresh/)
-  assert.match(source, /isRefreshing/)
+  assert.doesNotMatch(source, /isRefreshing/)
   assert.match(source, /loadAll/)
   assert.doesNotMatch(source, /const isRefreshing = computed/)
   assert.doesNotMatch(source, /const loadAll = async/)
@@ -1521,7 +1756,7 @@ test('admin overview detail panels compose the shared info line module', () => {
 test('admin page delegates audit logs to a feature module', () => {
   assert.match(adminDashboardSectionsSource, /<AdminAuditLogSection/)
   assert.match(adminDashboardSectionsSource, /ref="auditRef"/)
-  assert.match(adminDashboardSectionsSource, /:show="auditLogSection\.canReadAudit"/)
+  assert.match(adminDashboardSectionsSource, /:show="auditLogSection\.canReadAudit && activeRouteSection === 'audit'"/)
   assert.match(adminDashboardSectionsSource, /v-bind="auditLogContentProps"/)
   assert.match(source, /auditLogSectionProps/)
   assert.match(adminDashboardSectionPropsSource, /auditLogs: unref\(auditLogs\)/)
@@ -1534,15 +1769,18 @@ test('admin page delegates audit logs to a feature module', () => {
   assert.ok(existsSync(adminAuditLogFiltersUrl))
   assert.ok(existsSync(adminAuditLogPaginationSummaryUrl))
   assert.ok(existsSync(adminAuditLogRowUrl))
+  assert.ok(existsSync(adminPaginationBarUrl))
   assert.match(adminAuditLogSectionSource, /后台审计日志/)
   assert.match(adminAuditLogSectionSource, /后台关键操作审计轨迹/)
   assert.match(adminAuditLogSectionSource, /暂无审计日志/)
   assert.match(adminAuditLogSectionSource, /import AdminAuditLogFilters from '\.\/AdminAuditLogFilters\.vue'/)
   assert.match(adminAuditLogSectionSource, /import AdminAuditLogPaginationSummary from '\.\/AdminAuditLogPaginationSummary\.vue'/)
   assert.match(adminAuditLogSectionSource, /import AdminAuditLogRow from '\.\/AdminAuditLogRow\.vue'/)
-  assert.match(adminAuditLogSectionSource, /<AdminAuditLogFilters\s+:loading-logs="loadingLogs"\s+:log-query="logQuery"\s+@load-logs="emit\('load-logs'\)"\s+@update-log-query="forwardLogQueryUpdate"\s+\/>/)
+  assert.match(adminAuditLogSectionSource, /<AdminSectionHeader[\s\S]+\/>/)
+  assert.doesNotMatch(adminAuditLogSectionSource, /<template #actions>/)
+  assert.match(adminAuditLogSectionSource, /<AdminAuditLogFilters\s+class="mb-4"\s+:loading-logs="loadingLogs"\s+:log-query="logQuery"\s+@load-logs="emit\('load-logs'\)"\s+@update-log-query="forwardLogQueryUpdate"\s+\/>/)
   assert.match(adminAuditLogSectionSource, /<AdminAuditLogRow\s+v-for="log in auditLogs"\s+:key="log\.id"\s+:format-date-time="formatDateTime"\s+:log="log"\s+:row-class="rowClass"\s+:to-pretty-json="toPrettyJson"\s+\/>/)
-  assert.match(adminAuditLogSectionSource, /<AdminAuditLogPaginationSummary :pagination="pagination" \/>/)
+  assert.match(adminAuditLogSectionSource, /<AdminAuditLogPaginationSummary :loading="loadingLogs" :pagination="pagination" @set-page="setAuditLogPage" \/>/)
   assert.doesNotMatch(adminAuditLogSectionSource, /<tr v-for="log in auditLogs"/)
   assert.doesNotMatch(adminAuditLogSectionSource, /<AdminControlField/)
   assert.doesNotMatch(adminAuditLogSectionSource, /<AdminMicroButton/)
@@ -1552,8 +1790,11 @@ test('admin page delegates audit logs to a feature module', () => {
   assert.match(adminAuditLogSectionSource, /const emit = defineEmits\(\['load-logs', 'update-log-query'\]\)/)
   assert.match(adminAuditLogSectionSource, /const forwardLogQueryUpdate = \(key, value\) =>/)
   assert.match(adminAuditLogSectionSource, /emit\('update-log-query', key, value\)/)
+  assert.match(adminAuditLogSectionSource, /const setAuditLogPage = \(page\) => \{/)
+  assert.match(adminAuditLogSectionSource, /emit\('update-log-query', 'page', page\)/)
+  assert.match(adminAuditLogSectionSource, /emit\('load-logs'\)/)
 
-  assert.match(adminAuditLogFiltersSource, /<AdminFilterToolbar>/)
+  assert.match(adminAuditLogFiltersSource, /<AdminFilterToolbar class="admin-audit-log-filters" compact fit grid>/)
   assert.match(adminAuditLogFiltersSource, /import AdminFilterField from '@\/components\/admin\/AdminFilterField\.vue'/)
   assert.match(adminAuditLogFiltersSource, /import AdminFilterToolbar from '@\/components\/admin\/AdminFilterToolbar\.vue'/)
   assert.match(adminAuditLogFiltersSource, /import AdminControlField from '@\/components\/admin\/AdminControlField\.vue'/)
@@ -1561,14 +1802,18 @@ test('admin page delegates audit logs to a feature module', () => {
   assert.match(adminAuditLogFiltersSource, /<AdminFilterField label="页码"/)
   assert.match(adminAuditLogFiltersSource, /<AdminFilterField label="每页"/)
   assert.match(adminAuditLogFiltersSource, /<AdminControlField[\s\S]+:value="logQuery\.page"[\s\S]+type="number"[\s\S]+min="1"[\s\S]+variant="number"[\s\S]+@input="updateLogQuery\('page', \$event\)"/)
-  assert.match(adminAuditLogFiltersSource, /<AdminControlField[\s\S]+:value="logQuery\.limit"[\s\S]+type="number"[\s\S]+max="100"[\s\S]+variant="number"[\s\S]+@input="updateLogQuery\('limit', \$event\)"/)
-  assert.match(adminAuditLogFiltersSource, /<AdminMicroButton :disabled="loadingLogs" @click="emit\('load-logs'\)">查询<\/AdminMicroButton>/)
-  assert.match(adminAuditLogFiltersSource, /emit\('update-log-query', key, toNumberInput\(event\.target\.value\)\)/)
-  assert.match(adminAuditLogFiltersSource, /Number\.parseFloat\(value\)/)
+  assert.match(adminAuditLogFiltersSource, /<AdminControlField[\s\S]+:value="logQuery\.limit"[\s\S]+type="number"[\s\S]+max="20"[\s\S]+variant="number"[\s\S]+@input="updateLogQuery\('limit', \$event\)"/)
+  assert.match(adminAuditLogFiltersSource, /<AdminMicroButton size="md" :disabled="loadingLogs" @click="emit\('load-logs'\)">查询<\/AdminMicroButton>/)
+  assert.match(adminAuditLogFiltersSource, /emit\('update-log-query', key, clampPaginationValue\(key, event\.target\.value\)\)/)
+  assert.match(adminAuditLogFiltersSource, /Math\.min\(20, parsed\)/)
 
-  assert.match(adminAuditLogPaginationSummarySource, /<p class="mt-3 text-xs text-white\/45">/)
-  assert.match(adminAuditLogPaginationSummarySource, /第 \{\{ pagination\.page \}\} 页 · 每页 \{\{ pagination\.limit \}\} 条 · 共 \{\{ pagination\.total \}\} 条/)
-  assert.match(adminAuditLogPaginationSummarySource, /default: \(\) => \(\{ page: 1, limit: 20, total: 0 \}\)/)
+  assert.match(adminAuditLogPaginationSummarySource, /import AdminPaginationBar from '@\/components\/admin\/AdminPaginationBar\.vue'/)
+  assert.match(adminAuditLogPaginationSummarySource, /<AdminPaginationBar/)
+  assert.match(adminAuditLogPaginationSummarySource, /:page="auditLogPage"/)
+  assert.match(adminAuditLogPaginationSummarySource, /:limit="auditLogLimit"/)
+  assert.match(adminAuditLogPaginationSummarySource, /:total="auditLogTotal"/)
+  assert.match(adminAuditLogPaginationSummarySource, /@set-page="emit\('set-page', \$event\)"/)
+  assert.match(adminAuditLogPaginationSummarySource, /default: \(\) => \(\{ page: 1, limit: 10, total: 0 \}\)/)
 
   assert.match(adminAuditLogRowSource, /<tr :class="rowClass">/)
   assert.match(adminAuditLogRowSource, /formatDateTime\(log\.createdAt\)/)

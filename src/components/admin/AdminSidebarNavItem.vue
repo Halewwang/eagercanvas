@@ -5,7 +5,15 @@
     :class="{ 'admin-sidebar-nav-item-active': active }"
     :href="href"
   >
-    <span>{{ label }}</span>
+    <span class="admin-sidebar-nav-main">
+      <component
+        :is="icon"
+        v-if="icon"
+        class="admin-sidebar-nav-icon"
+        aria-hidden="true"
+      />
+      <span>{{ label }}</span>
+    </span>
     <span class="admin-sidebar-nav-note">{{ note }}</span>
   </a>
   <button
@@ -15,7 +23,15 @@
     :class="{ 'admin-sidebar-nav-item-active': active }"
     @click="$emit('select')"
   >
-    <span>{{ label }}</span>
+    <span class="admin-sidebar-nav-main">
+      <component
+        :is="icon"
+        v-if="icon"
+        class="admin-sidebar-nav-icon"
+        aria-hidden="true"
+      />
+      <span>{{ label }}</span>
+    </span>
     <span class="admin-sidebar-nav-note">{{ note }}</span>
   </button>
 </template>
@@ -39,6 +55,10 @@ defineProps({
   href: {
     type: String,
     default: ''
+  },
+  icon: {
+    type: [Object, Function],
+    default: null
   }
 })
 </script>
@@ -57,6 +77,25 @@ defineProps({
   font-size: 13px;
   color: rgba(255, 255, 255, 0.62);
   transition: all 0.2s ease;
+}
+
+.admin-sidebar-nav-main {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-sidebar-nav-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.admin-sidebar-nav-item-active .admin-sidebar-nav-icon,
+.admin-sidebar-nav-item:hover .admin-sidebar-nav-icon {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .admin-sidebar-nav-item:hover {

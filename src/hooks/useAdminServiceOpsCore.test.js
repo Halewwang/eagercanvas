@@ -27,6 +27,24 @@ test('admin service log query update ignores unsupported keys', () => {
   assert.deepEqual(query, { page: 1, limit: 20, start: '', end: '' })
 })
 
+test('admin service log query defaults to the current day range for visible time filters', () => {
+  assert.equal(typeof serviceOpsCore.createAdminServiceLogQuery, 'function')
+  assert.equal(typeof serviceOpsCore.formatAdminServiceLocalDateTime, 'function')
+
+  const query = serviceOpsCore.createAdminServiceLogQuery({
+    now: new Date(2026, 5, 6, 19, 12, 44),
+    pageSize: 10
+  })
+
+  assert.deepEqual(query, {
+    page: 1,
+    limit: 10,
+    start: '2026-06-06T00:00',
+    end: '2026-06-06T19:12'
+  })
+  assert.equal(serviceOpsCore.formatAdminServiceLocalDateTime(new Date(2026, 0, 2, 3, 4, 5)), '2026-01-02T03:04')
+})
+
 test('admin service key form helpers preserve defaults and draft coercion', () => {
   assert.equal(typeof serviceOpsCore.createAdminServiceKeyForm, 'function')
   assert.equal(typeof serviceOpsCore.buildAdminServiceKeyDraft, 'function')

@@ -1,5 +1,5 @@
 <template>
-  <AdminEditorCard>
+  <AdminEditorCard class="admin-user-action-card admin-user-action-card-account">
     <AdminUserRoleActions
       :can-manage-roles="canManageRoles"
       :is-self="isSelf"
@@ -89,3 +89,14 @@ const forwardRoleSelection = (userId, role) => {
   emit('update-role-selection', userId, role)
 }
 </script>
+
+<style scoped>
+.admin-user-action-card {
+  min-width: 184px;
+  gap: 10px;
+}
+
+.admin-user-action-card-account {
+  background: rgba(255, 255, 255, 0.025);
+}
+</style>

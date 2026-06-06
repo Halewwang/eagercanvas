@@ -1,5 +1,5 @@
 <template>
-  <AdminEditorCard>
+  <AdminEditorCard class="admin-user-action-card admin-user-action-card-service">
     <AdminEditorBlock v-if="canActivateService || canDisableService || canResetService || canUpdateServiceLimits">
       <AdminUserServiceActivationAction
         :can-activate-service="canActivateService"
@@ -68,3 +68,14 @@ const {
   }
 })
 </script>
+
+<style scoped>
+.admin-user-action-card {
+  min-width: 184px;
+  gap: 10px;
+}
+
+.admin-user-action-card-service {
+  background: rgba(255, 255, 255, 0.025);
+}
+</style>

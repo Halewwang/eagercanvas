@@ -12,6 +12,7 @@ import { getErrorMessage } from '@/utils'
 import { notifier } from '@/utils/notifier'
 import {
   buildAdminServiceKeyDraft,
+  createAdminServiceLogQuery,
   createAdminServiceKeyForm,
   getAdminServiceNoticeMessage,
   prefixAdminServiceNotice,
@@ -20,10 +21,19 @@ import {
   updateAdminLog302Query
 } from './useAdminServiceOpsCore.js'
 
+const DEFAULT_API_LOG_PAGE_SIZE = 10
+
 export const useAdminServiceOps = ({
   canReadUsage,
   canManageApiKeys,
   canAssignApiKeys,
+  fetchApiKeys = getAdmin302ApiKeys,
+  fetchApiRecord = getAdmin302ApiRecord,
+  fetchBalance = getAdmin302Balance,
+  fetchRecord = getAdmin302Record,
+  createApiKeyRequest = createAdmin302ApiKey,
+  deleteApiKeyRequest = deleteAdmin302ApiKey,
+  updateApiKeyRequest = updateAdmin302ApiKey,
   loadUsers,
   loadLogs
 }) => {
@@ -32,8 +42,9 @@ export const useAdminServiceOps = ({
   const recordRequestId = ref('')
   const recordData = ref(null)
   const loadingRecord = ref(false)
-  const log302Query = reactive({ page: 1, limit: 20, start: '', end: '' })
+  const log302Query = reactive(createAdminServiceLogQuery({ pageSize: DEFAULT_API_LOG_PAGE_SIZE }))
   const apiLogs = ref([])
+  const apiLogPagination = ref({ page: 1, limit: DEFAULT_API_LOG_PAGE_SIZE, total: 0 })
   const loadingApiLogs = ref(false)
   const serviceLoadNotice = ref('')
   const apiKeys = ref([])
@@ -60,7 +71,7 @@ export const useAdminServiceOps = ({
     if (!canReadUsage.value) return
     loadingBalance.value = true
     try {
-      const rsp = await getAdmin302Balance()
+      const rsp = await fetchBalance()
       balance.value = String(rsp?.data?.balance ?? '')
       return { ok: true }
     } catch (error) {
@@ -79,7 +90,7 @@ export const useAdminServiceOps = ({
     if (!id) return notifier.warning('请输入请求 ID')
     loadingRecord.value = true
     try {
-      const rsp = await getAdmin302Record(id)
+      const rsp = await fetchRecord(id)
       recordData.value = rsp?.data || null
     } catch (error) {
       if (!error?.__handled) notifier.error(getErrorMessage(error, '查询消耗记录失败'))
@@ -92,16 +103,22 @@ export const useAdminServiceOps = ({
     if (!canReadUsage.value) return
     loadingApiLogs.value = true
     try {
-      const rsp = await getAdmin302ApiRecord({
+      const rsp = await fetchApiRecord({
         page: log302Query.page,
         limit: log302Query.limit,
         start_time: toAdminServiceUnixSeconds(log302Query.start),
         end_time: toAdminServiceUnixSeconds(log302Query.end)
       })
       apiLogs.value = Array.isArray(rsp?.data?.items) ? rsp.data.items : []
+      apiLogPagination.value = rsp?.data?.pagination || {
+        page: log302Query.page,
+        limit: log302Query.limit,
+        total: apiLogs.value.length
+      }
       return { ok: true }
     } catch (error) {
       apiLogs.value = []
+      apiLogPagination.value = { page: log302Query.page, limit: log302Query.limit, total: 0 }
       const message = getAdminServiceNoticeMessage('加载服务调用日志失败', error, getErrorMessage)
       if (!silent && !error?.__handled) notifier.error(message)
       return { ok: false, message: prefixAdminServiceNotice('服务调用日志', message), error }
@@ -116,7 +133,7 @@ export const useAdminServiceOps = ({
     if (!canManageApiKeys.value && !canAssignApiKeys.value) return
     loadingKeys.value = true
     try {
-      const rsp = await getAdmin302ApiKeys()
+      const rsp = await fetchApiKeys()
       const list = Array.isArray(rsp?.data) ? rsp.data : []
       apiKeys.value = list
       const drafts = {}
@@ -141,7 +158,7 @@ export const useAdminServiceOps = ({
     }
     creatingApiKey.value = true
     try {
-      await createAdmin302ApiKey({ ...createKeyForm, api_name: createKeyForm.api_name.trim() })
+      await createApiKeyRequest({ ...createKeyForm, api_name: createKeyForm.api_name.trim() })
       notifier.success('服务凭证创建成功')
       resetAdminServiceKeyForm(createKeyForm)
       await loadApiKeys()
@@ -159,7 +176,7 @@ export const useAdminServiceOps = ({
     if (!draft) return
     updatingKeys.value = { ...updatingKeys.value, [name]: true }
     try {
-      await updateAdmin302ApiKey(name, { ...draft, api_name: name })
+      await updateApiKeyRequest(name, { ...draft, api_name: name })
       notifier.success('服务凭证更新成功')
       await loadApiKeys()
     } catch (error) {
@@ -176,7 +193,7 @@ export const useAdminServiceOps = ({
     if (!ok) return
     deletingKeys.value = { ...deletingKeys.value, [name]: true }
     try {
-      await deleteAdmin302ApiKey(name)
+      await deleteApiKeyRequest(name)
       notifier.success('服务凭证删除成功')
       await Promise.all([loadApiKeys(), loadUsers(), loadLogs()])
     } catch (error) {
@@ -205,6 +222,7 @@ export const useAdminServiceOps = ({
   return {
     apiKeyOptions,
     apiKeys,
+    apiLogPagination,
     apiLogs,
     balanceDisplay,
     createApiKey,

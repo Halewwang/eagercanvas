@@ -10,6 +10,32 @@ export const createAdminServiceKeyForm = createAdminServiceCredentialForm
 
 export const buildAdminServiceKeyDraft = buildAdminServiceCredentialDraft
 
+const padDateTimeUnit = (value) => String(value).padStart(2, '0')
+
+export const formatAdminServiceLocalDateTime = (date = new Date()) => {
+  const safeDate = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(safeDate.getTime())) return ''
+  const year = safeDate.getFullYear()
+  const month = padDateTimeUnit(safeDate.getMonth() + 1)
+  const day = padDateTimeUnit(safeDate.getDate())
+  const hours = padDateTimeUnit(safeDate.getHours())
+  const minutes = padDateTimeUnit(safeDate.getMinutes())
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+export const createAdminServiceLogQuery = ({ now = new Date(), pageSize = 10 } = {}) => {
+  const safeNow = now instanceof Date ? now : new Date(now)
+  const current = Number.isNaN(safeNow.getTime()) ? new Date() : safeNow
+  const dayStart = new Date(current)
+  dayStart.setHours(0, 0, 0, 0)
+  return {
+    page: 1,
+    limit: pageSize,
+    start: formatAdminServiceLocalDateTime(dayStart),
+    end: formatAdminServiceLocalDateTime(current)
+  }
+}
+
 export const toAdminServiceUnixSeconds = (value) => {
   if (!value) return undefined
   const ts = Date.parse(value)

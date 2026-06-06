@@ -1,6 +1,7 @@
 <template>
   <AdminEditorMainButton
     v-if="canActivateService && ['not_enabled', 'create_failed', 'deleted'].includes(user.service?.serviceStatus || 'not_enabled')"
+    icon="play"
     :disabled="serviceLoading[user.id] || user.status === 'deleted'"
     @click="emit('activate-service', user)"
   >

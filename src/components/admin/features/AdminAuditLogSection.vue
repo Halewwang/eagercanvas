@@ -3,16 +3,15 @@
     class="mb-5"
     title="后台审计日志"
     caption="后台关键操作审计轨迹。"
-  >
-    <template #actions>
-      <AdminAuditLogFilters
-        :loading-logs="loadingLogs"
-        :log-query="logQuery"
-        @load-logs="emit('load-logs')"
-        @update-log-query="forwardLogQueryUpdate"
-      />
-    </template>
-  </AdminSectionHeader>
+  />
+
+  <AdminAuditLogFilters
+    class="mb-4"
+    :loading-logs="loadingLogs"
+    :log-query="logQuery"
+    @load-logs="emit('load-logs')"
+    @update-log-query="forwardLogQueryUpdate"
+  />
 
   <AdminEmptyState v-if="auditLogs.length === 0">暂无审计日志</AdminEmptyState>
   <AdminTableShell v-else min-width-class="min-w-[980px]">
@@ -35,7 +34,7 @@
     </template>
   </AdminTableShell>
 
-  <AdminAuditLogPaginationSummary :pagination="pagination" />
+  <AdminAuditLogPaginationSummary :loading="loadingLogs" :pagination="pagination" @set-page="setAuditLogPage" />
 </template>
 
 <script setup>
@@ -77,5 +76,10 @@ defineProps({
 
 const forwardLogQueryUpdate = (key, value) => {
   emit('update-log-query', key, value)
+}
+
+const setAuditLogPage = (page) => {
+  emit('update-log-query', 'page', page)
+  emit('load-logs')
 }
 </script>

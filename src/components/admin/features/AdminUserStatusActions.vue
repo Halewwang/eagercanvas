@@ -1,30 +1,35 @@
 <template>
-  <AdminEditorBlock v-if="canManageUserStatus">
-    <p class="text-[11px] text-white/45">账号</p>
-    <AdminEditorActions>
-      <AdminMicroButton
-        v-if="canManageUserStatus && user.status === 'active'"
-        :disabled="statusLoading[user.id] || isSelf(user)"
-        @click="emit('suspend-user', user)"
-      >
-        {{ isSelf(user) ? '禁止操作自己' : '暂停' }}
-      </AdminMicroButton>
-      <AdminMicroButton
-        v-if="canManageUserStatus && user.status === 'suspended'"
-        :disabled="statusLoading[user.id] || isSelf(user)"
-        @click="emit('activate-user', user)"
-      >
-        {{ statusLoading[user.id] ? '更新中...' : (isSelf(user) ? '禁止操作自己' : '恢复') }}
-      </AdminMicroButton>
-      <AdminMicroButton
-        v-if="canManageUserStatus"
-        tone="danger"
-        :disabled="deleting[user.id] || user.status === 'deleted' || isSelf(user)"
-        @click="emit('delete-user', user)"
-      >
-        {{ deleting[user.id] ? '删除中...' : (isSelf(user) ? '禁止操作自己' : '删除') }}
-      </AdminMicroButton>
-    </AdminEditorActions>
+  <AdminEditorBlock v-if="canManageUserStatus" class="admin-user-status-actions">
+    <div class="admin-user-status-row">
+      <p class="text-[11px] text-white/45">账号</p>
+      <AdminEditorActions class="admin-user-action-row">
+        <AdminMicroButton
+          v-if="canManageUserStatus && user.status === 'active'"
+          icon="pause"
+          :disabled="statusLoading[user.id] || isSelf(user)"
+          @click="emit('suspend-user', user)"
+        >
+          {{ isSelf(user) ? '禁止操作自己' : '暂停' }}
+        </AdminMicroButton>
+        <AdminMicroButton
+          v-if="canManageUserStatus && user.status === 'suspended'"
+          icon="play"
+          :disabled="statusLoading[user.id] || isSelf(user)"
+          @click="emit('activate-user', user)"
+        >
+          {{ statusLoading[user.id] ? '更新中...' : (isSelf(user) ? '禁止操作自己' : '恢复') }}
+        </AdminMicroButton>
+        <AdminMicroButton
+          v-if="canManageUserStatus"
+          icon="trash"
+          tone="danger"
+          :disabled="deleting[user.id] || user.status === 'deleted' || isSelf(user)"
+          @click="emit('delete-user', user)"
+        >
+          {{ deleting[user.id] ? '删除中...' : (isSelf(user) ? '禁止操作自己' : '删除') }}
+        </AdminMicroButton>
+      </AdminEditorActions>
+    </div>
   </AdminEditorBlock>
 </template>
 
@@ -68,3 +73,35 @@ const {
   }
 })
 </script>
+
+<style scoped>
+.admin-user-status-actions {
+  gap: 0;
+}
+
+.admin-user-status-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-user-status-row :deep(.admin-user-action-row) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-user-status-row :deep(.ui-micro-btn) {
+  width: 100%;
+  justify-content: center;
+}
+
+@media (max-width: 760px) {
+  .admin-user-status-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>

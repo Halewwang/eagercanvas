@@ -12,6 +12,7 @@ export const useAdminUsersDashboardSections = ({
 }) => useAdminDashboardSectionProps({
   activeServiceUsers: usersState.activeServiceUsers,
   adminAccountLabel: accessState.adminAccountLabel,
+  apiLogPagination: serviceOps.apiLogPagination,
   apiLogs: serviceOps.apiLogs,
   auditLogs: dashboardData.auditLogs,
   auth,

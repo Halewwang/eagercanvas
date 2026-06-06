@@ -16,12 +16,22 @@ const props = defineProps({
   compact: {
     type: Boolean,
     default: false
+  },
+  fit: {
+    type: Boolean,
+    default: false
+  },
+  grid: {
+    type: Boolean,
+    default: false
   }
 })
 
 const toolbarClasses = computed(() => ({
   'admin-filter-toolbar-end': props.align === 'end',
-  'admin-filter-toolbar-compact': props.compact
+  'admin-filter-toolbar-compact': props.compact,
+  'admin-filter-toolbar-fit': props.fit,
+  'admin-filter-toolbar-grid': props.grid
 }))
 </script>
 
@@ -44,12 +54,27 @@ const toolbarClasses = computed(() => ({
   gap: 10px;
 }
 
+.admin-filter-toolbar-fit {
+  width: fit-content;
+}
+
+.admin-filter-toolbar-grid {
+  display: grid;
+  grid-template-columns: var(--admin-filter-toolbar-columns, repeat(auto-fit, minmax(120px, max-content)));
+  align-items: end;
+}
+
 .admin-filter-toolbar :deep(.admin-filter-field) {
   flex: 1 1 160px;
 }
 
 .admin-filter-toolbar-compact :deep(.admin-filter-field) {
   flex: 0 1 150px;
+}
+
+.admin-filter-toolbar-grid :deep(.admin-filter-field) {
+  flex: none;
+  min-width: 0;
 }
 
 .admin-filter-toolbar :deep(.ui-number-input) {
@@ -59,6 +84,10 @@ const toolbarClasses = computed(() => ({
 
 .admin-filter-toolbar :deep(.ui-micro-btn) {
   flex: 0 0 auto;
+}
+
+.admin-filter-toolbar-grid :deep(.ui-micro-btn) {
+  align-self: end;
 }
 
 @media (max-width: 640px) {
@@ -73,6 +102,14 @@ const toolbarClasses = computed(() => ({
 
   .admin-filter-toolbar :deep(.ui-micro-btn) {
     width: 100%;
+  }
+
+  .admin-filter-toolbar-fit {
+    width: 100%;
+  }
+
+  .admin-filter-toolbar-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

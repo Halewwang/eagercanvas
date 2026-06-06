@@ -47,7 +47,7 @@
 
   <AdminDashboardSectionFrame
     ref="auditRef"
-    :show="auditLogSection.canReadAudit"
+    :show="auditLogSection.canReadAudit && activeRouteSection === 'audit'"
     frame-class="mb-8"
   >
     <AdminAuditLogSection
@@ -120,6 +120,7 @@ const emit = defineEmits([
 ])
 
 const props = defineProps({
+  activeRouteSection: { type: String, default: 'overview' },
   overviewSection: { type: Object, default: () => ({}) },
   userServiceSection: { type: Object, default: () => ({}) },
   serviceReconciliationSection: { type: Object, default: () => ({}) },
@@ -141,7 +142,7 @@ const serviceRef = ref(null)
 const auditRef = ref(null)
 const issuesRef = ref(null)
 
-const getFramedSectionEl = (sectionRef) => sectionRef.value?.getSectionEl?.() || sectionRef.value
+const getFramedSectionEl = (sectionRef) => sectionRef.value?.getSectionEl?.() || null
 
 const getSectionEl = (key) => {
   if (key === 'users') return getFramedSectionEl(usersRef)

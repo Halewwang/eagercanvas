@@ -1,5 +1,5 @@
 <template>
-  <AdminFilterToolbar>
+  <AdminFilterToolbar class="admin-audit-log-filters" compact fit grid>
     <AdminFilterField label="页码">
       <AdminControlField
         :value="logQuery.page"
@@ -14,12 +14,12 @@
         :value="logQuery.limit"
         type="number"
         min="1"
-        max="100"
+        max="20"
         variant="number"
         @input="updateLogQuery('limit', $event)"
       />
     </AdminFilterField>
-    <AdminMicroButton :disabled="loadingLogs" @click="emit('load-logs')">查询</AdminMicroButton>
+    <AdminMicroButton size="md" :disabled="loadingLogs" @click="emit('load-logs')">查询</AdminMicroButton>
   </AdminFilterToolbar>
 </template>
 
@@ -42,12 +42,37 @@ defineProps({
   }
 })
 
-const toNumberInput = (value) => {
+const clampPaginationValue = (key, value) => {
   const parsed = Number.parseFloat(value)
-  return Number.isNaN(parsed) ? value : parsed
+  if (Number.isNaN(parsed)) return value
+  if (key === 'limit') return Math.max(1, Math.min(20, parsed))
+  return Math.max(1, parsed)
 }
 
 const updateLogQuery = (key, event) => {
-  emit('update-log-query', key, toNumberInput(event.target.value))
+  emit('update-log-query', key, clampPaginationValue(key, event.target.value))
 }
 </script>
+
+<style scoped>
+.admin-audit-log-filters {
+  --admin-filter-toolbar-columns: 96px 96px auto;
+}
+
+.admin-audit-log-filters :deep(.ui-number-input) {
+  width: 96px;
+  max-width: 96px;
+}
+
+@media (max-width: 640px) {
+  .admin-audit-log-filters {
+    --admin-filter-toolbar-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .admin-audit-log-filters :deep(.ui-number-input) {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+</style>

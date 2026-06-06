@@ -7,10 +7,16 @@ import {
 import {
   getAdminSectionScrollCandidate,
   resolveAdminScrollTarget,
-  shouldAutoScrollAdminSection
+  shouldAutoScrollAdminSection,
+  shouldRouteOwnAdminActiveSection
 } from './adminSectionNavigationCore.js'
 
-export { getAdminSectionScrollCandidate, resolveAdminScrollTarget, shouldAutoScrollAdminSection }
+export {
+  getAdminSectionScrollCandidate,
+  resolveAdminScrollTarget,
+  shouldAutoScrollAdminSection,
+  shouldRouteOwnAdminActiveSection
+}
 
 export const useAdminSectionNavigation = ({
   canReadAudit,
@@ -34,6 +40,10 @@ export const useAdminSectionNavigation = ({
   }))
 
   const getSectionEl = (key) => dashboardSectionsRef.value?.getSectionEl(key) || null
+  const getPreferredRouteSection = (routeName = route.name) => {
+    const preferredSection = ADMIN_SECTION_BY_ROUTE_NAME[routeName] || 'overview'
+    return navItems.value.some((item) => item.key === preferredSection) ? preferredSection : ''
+  }
 
   const scrollToSection = (key, { updateRoute = true } = {}) => {
     activeSection.value = key
@@ -48,6 +58,11 @@ export const useAdminSectionNavigation = ({
   }
 
   const onMainScroll = () => {
+    const preferredSection = getPreferredRouteSection()
+    if (shouldRouteOwnAdminActiveSection({ routeName: route.name, sectionKey: preferredSection })) {
+      activeSection.value = preferredSection
+      return
+    }
     activeSection.value = getAdminSectionScrollCandidate(navItems.value, getSectionEl)
   }
 

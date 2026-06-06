@@ -12,6 +12,7 @@ const fn = () => 'ok'
 const createDeps = () => ({
   activeServiceUsers: ref(2),
   adminAccountLabel: ref('ops@example.test'),
+  apiLogPagination: ref({ page: 2, limit: 10, total: 32 }),
   apiLogs: ref([{ id: 'api-log-1' }]),
   auditLogs: ref([{ id: 'audit-1' }]),
   auth: {
@@ -121,6 +122,7 @@ test('admin dashboard section props composable groups section-facing props', () 
   assert.equal(serviceReconciliationSectionProps.value.balanceDisplay, '$12.50')
   assert.equal(serviceReconciliationSectionProps.value.showServiceSection, true)
   assert.deepEqual(serviceReconciliationSectionProps.value.apiLogs, [{ id: 'api-log-1' }])
+  assert.deepEqual(serviceReconciliationSectionProps.value.apiLogPagination, { page: 2, limit: 10, total: 32 })
 
   assert.equal(auditLogSectionProps.value.canReadAudit, true)
   assert.deepEqual(auditLogSectionProps.value.auditLogs, [{ id: 'audit-1' }])

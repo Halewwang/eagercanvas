@@ -1,5 +1,5 @@
 <template>
-  <td v-if="showUserActions" class="px-3 py-4">
+  <td v-if="showUserActions" class="admin-user-action-cell px-3 py-4">
     <AdminUserServiceActions
       :can-activate-service="canActivateService"
       :can-disable-service="canDisableService"

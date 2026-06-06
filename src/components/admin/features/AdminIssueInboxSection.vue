@@ -48,37 +48,43 @@
           <option value="ux">交互体验</option>
         </AdminControlField>
       </AdminFilterField>
-      <AdminMicroButton :disabled="loadingIssues" @click="emit('load-issues')">刷新</AdminMicroButton>
+      <AdminMicroButton size="md" :disabled="loadingIssues" @click="emit('load-issues')">刷新</AdminMicroButton>
     </AdminFilterToolbar>
 
     <div class="admin-issue-action-group">
-      <span v-if="canExportIssues" class="admin-issue-batch-summary">
-        已选 {{ selectedIssueCount }} 项 · 导出 {{ selectedExportGroupIds.length }} 组
-      </span>
-      <label v-if="canExportIssues && canUpdateIssues" class="admin-issue-auto-resolve">
-        <input
-          class="admin-issue-checkbox"
-          type="checkbox"
-          :checked="autoResolveExportedIssues"
-          @change="emit('update-auto-resolve-exported-issues', $event.target.checked)"
+      <div class="admin-issue-batch-group">
+        <span v-if="canExportIssues" class="admin-issue-batch-summary">
+          已选 {{ selectedIssueCount }} 项 · 导出 {{ selectedExportGroupIds.length }} 组
+        </span>
+        <label v-if="canExportIssues && canUpdateIssues" class="admin-issue-auto-resolve">
+          <input
+            class="admin-issue-checkbox"
+            type="checkbox"
+            :checked="autoResolveExportedIssues"
+            @change="emit('update-auto-resolve-exported-issues', $event.target.checked)"
+          >
+          <span>导出后标记已解决</span>
+        </label>
+      </div>
+      <div class="admin-issue-export-group">
+        <AdminMicroButton
+          v-if="canExportIssues"
+          size="md"
+          :disabled="selectedIssueCount <= 0 || issueActionLoading === 'export'"
+          @click="emit('export-issues', { selectedOnly: true })"
         >
-        <span>导出后标记已解决</span>
-      </label>
-      <AdminMicroButton
-        v-if="canExportIssues"
-        :disabled="selectedIssueCount <= 0 || issueActionLoading === 'export'"
-        @click="emit('export-issues', { selectedOnly: true })"
-      >
-        导出选中
-      </AdminMicroButton>
-      <AdminMicroButton
-        v-if="canExportIssues"
-        tone="primary"
-        :disabled="issueActionLoading === 'export'"
-        @click="emit('export-issues')"
-      >
-        导出当前筛选
-      </AdminMicroButton>
+          导出选中
+        </AdminMicroButton>
+        <AdminMicroButton
+          v-if="canExportIssues"
+          size="md"
+          tone="primary"
+          :disabled="issueActionLoading === 'export'"
+          @click="emit('export-issues')"
+        >
+          导出当前筛选
+        </AdminMicroButton>
+      </div>
     </div>
   </div>
 
@@ -164,23 +170,15 @@
         </template>
       </AdminTableShell>
 
-      <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-white/45">
-        <span>第 {{ issuePagination.page || issueQuery.page }} / {{ totalPages }} 页</span>
-        <div class="flex gap-2">
-          <AdminMicroButton
-            :disabled="(issuePagination.page || 1) <= 1"
-            @click="emit('update-issue-query', 'page', (issuePagination.page || 1) - 1); emit('load-issues')"
-          >
-            上一页
-          </AdminMicroButton>
-          <AdminMicroButton
-            :disabled="(issuePagination.page || 1) >= totalPages"
-            @click="emit('update-issue-query', 'page', (issuePagination.page || 1) + 1); emit('load-issues')"
-          >
-            下一页
-          </AdminMicroButton>
-        </div>
-      </div>
+      <AdminPaginationBar
+        v-if="issues.length > 0"
+        :page="issueListPage"
+        :limit="issueListLimit"
+        :total="issueListTotal"
+        :loading="loadingIssues"
+        item-label="组"
+        @set-page="setIssueListPage"
+      />
     </AdminPanelCard>
 
     <AdminPanelCard
@@ -242,7 +240,7 @@
           <div class="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">示例事件</div>
           <div class="space-y-2">
             <div
-              v-for="event in selectedIssue.events"
+              v-for="event in visibleIssueEvents"
               :key="event.id"
               class="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-white/65"
             >
@@ -253,6 +251,14 @@
               <div class="mt-2">{{ event.message_summary || event.path_template || event.route || '-' }}</div>
             </div>
           </div>
+          <AdminPaginationBar
+            v-if="selectedIssueEvents.length > ISSUE_EVENT_PAGE_SIZE"
+            :page="eventPage"
+            :limit="ISSUE_EVENT_PAGE_SIZE"
+            :total="selectedIssueEvents.length"
+            item-label="条事件"
+            @set-page="setIssueEventPage"
+          />
         </div>
 
         <div v-if="lastExport" class="break-all rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-white/55">
@@ -264,12 +270,13 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AdminControlField from '@/components/admin/AdminControlField.vue'
 import AdminEmptyState from '@/components/admin/AdminEmptyState.vue'
 import AdminFilterField from '@/components/admin/AdminFilterField.vue'
 import AdminFilterToolbar from '@/components/admin/AdminFilterToolbar.vue'
 import AdminMicroButton from '@/components/admin/AdminMicroButton.vue'
+import AdminPaginationBar from '@/components/admin/AdminPaginationBar.vue'
 import AdminPanelCard from '@/components/admin/AdminPanelCard.vue'
 import AdminSectionHeader from '@/components/admin/AdminSectionHeader.vue'
 import AdminStatusPill from '@/components/admin/AdminStatusPill.vue'
@@ -296,8 +303,8 @@ const props = defineProps({
   canUpdateIssues: { type: Boolean, default: false },
   formatDateTime: { type: Function, default: (value) => value || '-' },
   issueActionLoading: { type: String, default: '' },
-  issuePagination: { type: Object, default: () => ({ page: 1, limit: 20, total: 0 }) },
-  issueQuery: { type: Object, default: () => ({ status: 'open', severity: '', source_layer: '', page: 1, limit: 20 }) },
+  issuePagination: { type: Object, default: () => ({ page: 1, limit: 10, total: 0 }) },
+  issueQuery: { type: Object, default: () => ({ status: 'open', severity: '', source_layer: '', page: 1, limit: 10 }) },
   issues: { type: Array, default: () => [] },
   lastExport: { type: Object, default: null },
   loadingIssueDetail: { type: Boolean, default: false },
@@ -309,8 +316,38 @@ const props = defineProps({
   toPrettyJson: { type: Function, default: (value) => JSON.stringify(value || {}, null, 2) }
 })
 
+const ISSUE_EVENT_PAGE_SIZE = 4
 const statusOptions = ['open', 'investigating', 'resolved', 'ignored']
-const totalPages = computed(() => Math.max(1, Math.ceil(Number(props.issuePagination.total || 0) / Number(props.issuePagination.limit || 20))))
+const eventPage = ref(1)
+const issueListPage = computed(() => Number(props.issuePagination.page || props.issueQuery.page || 1))
+const issueListLimit = computed(() => Number(props.issuePagination.limit || props.issueQuery.limit || 10))
+const issueListTotal = computed(() => Number(props.issuePagination.total || props.issues.length || 0))
+const selectedIssueEvents = computed(() => (Array.isArray(props.selectedIssue?.events) ? props.selectedIssue.events : []))
+const issueEventTotalPages = computed(() => Math.max(1, Math.ceil(selectedIssueEvents.value.length / ISSUE_EVENT_PAGE_SIZE)))
+const visibleIssueEvents = computed(() => {
+  const start = (eventPage.value - 1) * ISSUE_EVENT_PAGE_SIZE
+  return selectedIssueEvents.value.slice(start, start + ISSUE_EVENT_PAGE_SIZE)
+})
+
+const setIssueListPage = (page) => {
+  emit('update-issue-query', 'page', page)
+  emit('load-issues')
+}
+
+const setIssueEventPage = (page) => {
+  const parsed = Number(page)
+  eventPage.value = Number.isFinite(parsed)
+    ? Math.max(1, Math.min(issueEventTotalPages.value, parsed))
+    : 1
+}
+
+watch(() => props.selectedIssue?.group?.id, () => {
+  eventPage.value = 1
+})
+
+watch(selectedIssueEvents, () => {
+  if (eventPage.value > issueEventTotalPages.value) eventPage.value = issueEventTotalPages.value
+})
 
 const STATUS_LABELS = {
   open: '待处理',
@@ -384,7 +421,8 @@ const statusClass = (status) => {
 }
 
 .admin-issue-filter-group :deep(.admin-filter-field) {
-  flex: 0 1 156px;
+  flex: 1 1 180px;
+  min-width: 150px;
 }
 
 .admin-issue-filter-group :deep(.ui-text-input),
@@ -399,9 +437,22 @@ const statusClass = (status) => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-issue-batch-group,
+.admin-issue-export-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.admin-issue-export-group {
+  justify-content: flex-end;
 }
 
 .admin-issue-batch-summary,
@@ -475,6 +526,12 @@ const statusClass = (status) => {
   }
 
   .admin-issue-action-group {
+    justify-content: flex-start;
+  }
+
+  .admin-issue-batch-group,
+  .admin-issue-export-group {
+    width: 100%;
     justify-content: flex-start;
   }
 }

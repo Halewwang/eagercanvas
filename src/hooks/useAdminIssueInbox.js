@@ -11,6 +11,8 @@ import { getErrorMessage } from '@/utils'
 const getWindowMessageApi = () => (typeof window === 'undefined' ? null : window.$message)
 const uniq = (values = []) => [...new Set(values.filter(Boolean))]
 const asArray = (value) => Array.isArray(value) ? value.filter(Boolean) : []
+const DEFAULT_ISSUE_PAGE_SIZE = 10
+const MAX_ISSUE_PAGE_SIZE = 20
 
 const downloadTextFile = ({ fileName, content, type = 'text/plain;charset=utf-8' } = {}) => {
   if (!fileName || !content || typeof window === 'undefined' || typeof document === 'undefined') return false
@@ -39,8 +41,8 @@ export const useAdminIssueInbox = ({
 }) => {
   const issues = ref([])
   const selectedIssue = ref(null)
-  const issuePagination = ref({ page: 1, limit: 20, total: 0 })
-  const issueQuery = ref({ status: 'open', severity: '', source_layer: '', page: 1, limit: 20 })
+  const issuePagination = ref({ page: 1, limit: DEFAULT_ISSUE_PAGE_SIZE, total: 0 })
+  const issueQuery = ref({ status: 'open', severity: '', source_layer: '', page: 1, limit: DEFAULT_ISSUE_PAGE_SIZE })
   const loadingIssues = ref(false)
   const loadingIssueDetail = ref(false)
   const issueActionLoading = ref('')
@@ -72,9 +74,12 @@ export const useAdminIssueInbox = ({
 
   const updateIssueQuery = (key, value) => {
     if (!['status', 'severity', 'source_layer', 'page', 'limit'].includes(key)) return
+    const nextValue = key === 'limit'
+      ? Math.max(1, Math.min(MAX_ISSUE_PAGE_SIZE, Number(value) || DEFAULT_ISSUE_PAGE_SIZE))
+      : value
     issueQuery.value = {
       ...issueQuery.value,
-      [key]: value,
+      [key]: nextValue,
       ...(key !== 'page' ? { page: 1 } : {})
     }
   }

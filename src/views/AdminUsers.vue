@@ -20,17 +20,12 @@
     <AdminPageHeader
       :display-name="displayName"
       :access-scope="accessScope"
-      :is-refreshing="isRefreshing"
-      :can-read-users="canReadUsers"
-      :show-service-section="showServiceSection"
-      @refresh="loadAll"
-      @open-users="scrollToSection('users')"
-      @open-service="scrollToSection('service')"
       @go-home="goHome"
     />
 
     <AdminDashboardSections
       ref="dashboardSectionsRef"
+      :active-route-section="activeRouteSection"
       :overview-section="overviewSectionProps"
       :user-service-section="userServiceSectionProps"
       :service-reconciliation-section="serviceReconciliationSectionProps"
@@ -87,31 +82,18 @@ import { useAdminUserActions } from '@/hooks/useAdminUserActions'
 import { useAdminServiceOps } from '@/hooks/useAdminServiceOps'
 import { useAdminUsersState } from '@/hooks/useAdminUsersState'
 import { useAuthStore } from '@/stores/auth'
+import { ADMIN_SECTION_BY_ROUTE_NAME } from '@/utils/adminDisplay'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const dashboardSectionsRef = ref(null)
+const activeRouteSection = computed(() => ADMIN_SECTION_BY_ROUTE_NAME[route.name] || 'overview')
 const accessState = useAdminAccessState({ auth })
 const {
-  accessScope,
-  adminAccountLabel,
-  canActivateService,
-  canDisableService,
-  canManageRoles,
-  canManageUserStatus,
-  canReadAudit,
-  canReadIssues,
-  canReadUsage,
-  canReadUsers,
-  canReconcileBilling,
-  canResetService,
-  canUpdateIssues,
-  canUpdateServiceLimits,
-  displayName,
-  isSelf,
-  showServiceSection,
-  showUserActions
+  accessScope, adminAccountLabel, canActivateService, canDisableService, canManageRoles, canManageUserStatus,
+  canReadAudit, canReadIssues, canReadUsage, canReadUsers, canReconcileBilling, canResetService,
+  canUpdateIssues, canUpdateServiceLimits, displayName, isSelf, showServiceSection, showUserActions
 } = accessState
 const usersState = useAdminUsersState({
   canReadUsers
@@ -215,7 +197,7 @@ const {
   toggleAllVisibleIssueSelection, toggleIssueSelection,
   updateIssueQuery
 } = issueInbox
-const { isRefreshing, loadAll } = useAdminDashboardRefresh({
+const { loadAll } = useAdminDashboardRefresh({
   auth,
   canReadAudit,
   canReadIssues,
@@ -263,20 +245,8 @@ const userActions = useAdminUserActions({
   selectedRoles
 })
 const {
-  activateService,
-  activateUser,
-  deleteUser,
-  deleting,
-  disableService,
-  reconcileBilling,
-  reconcilingBilling,
-  resetService,
-  saveRoles,
-  saving,
-  serviceLoading,
-  statusLoading,
-  suspendUser,
-  updateServiceLimits
+  activateService, activateUser, deleteUser, deleting, disableService, reconcileBilling, reconcilingBilling,
+  resetService, saveRoles, saving, serviceLoading, statusLoading, suspendUser, updateServiceLimits
 } = userActions
 const {
   auditLogSectionProps,

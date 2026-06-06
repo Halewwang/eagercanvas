@@ -1,12 +1,27 @@
 <template>
-  <AdminEditorActions v-if="user.service?.serviceStatus === 'active'">
-    <AdminMicroButton v-if="canDisableService" :disabled="serviceLoading[user.id]" @click="emit('disable-service', user)">
+  <AdminEditorActions v-if="user.service?.serviceStatus === 'active'" class="admin-user-action-row">
+    <AdminMicroButton
+      v-if="canDisableService"
+      icon="pause"
+      :disabled="serviceLoading[user.id]"
+      @click="emit('disable-service', user)"
+    >
       停用服务
     </AdminMicroButton>
-    <AdminMicroButton v-if="canResetService" :disabled="serviceLoading[user.id]" @click="emit('reset-service', user)">
+    <AdminMicroButton
+      v-if="canResetService"
+      icon="refresh"
+      :disabled="serviceLoading[user.id]"
+      @click="emit('reset-service', user)"
+    >
       重置凭证
     </AdminMicroButton>
-    <AdminMicroButton v-if="canUpdateServiceLimits" :disabled="serviceLoading[user.id]" @click="emit('update-service-limits', user)">
+    <AdminMicroButton
+      v-if="canUpdateServiceLimits"
+      icon="settings"
+      :disabled="serviceLoading[user.id]"
+      @click="emit('update-service-limits', user)"
+    >
       调整额度
     </AdminMicroButton>
   </AdminEditorActions>

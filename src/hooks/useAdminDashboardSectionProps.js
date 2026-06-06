@@ -6,6 +6,7 @@ const getAuthRoles = (auth) => unref(auth?.roles) || []
 export const useAdminDashboardSectionProps = ({
   activeServiceUsers,
   adminAccountLabel,
+  apiLogPagination,
   apiLogs,
   auditLogs,
   auth,
@@ -149,6 +150,7 @@ export const useAdminDashboardSectionProps = ({
   const serviceReconciliationSectionProps = computed(() => ({
     recordRequestId: unref(recordRequestId),
     activeServiceUsers: unref(activeServiceUsers),
+    apiLogPagination: unref(apiLogPagination),
     apiLogs: unref(apiLogs),
     balanceDisplay: unref(balanceDisplay),
     canReadUsage: unref(canReadUsage),

@@ -2,6 +2,7 @@
   <AdminMicroButton
     tone="primary"
     class="admin-editor-main"
+    :icon="icon"
     :disabled="disabled"
     @click="$emit('click')"
   >
@@ -18,6 +19,10 @@ defineProps({
   disabled: {
     type: Boolean,
     default: false
+  },
+  icon: {
+    type: [Object, Function, String],
+    default: ''
   }
 })
 </script>

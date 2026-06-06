@@ -1,10 +1,9 @@
 <template>
-  <AdminFilterToolbar>
+  <AdminFilterToolbar class="admin-service-log-filters" compact grid>
     <AdminFilterField label="开始时间">
       <AdminControlField
         :value="log302Query.start"
         type="datetime-local"
-        class="!w-[190px]"
         @input="updateLogQuery('start', $event)"
       />
     </AdminFilterField>
@@ -12,7 +11,6 @@
       <AdminControlField
         :value="log302Query.end"
         type="datetime-local"
-        class="!w-[190px]"
         @input="updateLogQuery('end', $event)"
       />
     </AdminFilterField>
@@ -30,12 +28,12 @@
         :value="log302Query.limit"
         type="number"
         min="1"
-        max="50"
+        max="20"
         variant="number"
         @input="updateNumericLogQuery('limit', $event)"
       />
     </AdminFilterField>
-    <AdminMicroButton :disabled="loadingApiLogs" @click="emit('load-api-logs')">查询</AdminMicroButton>
+    <AdminMicroButton size="md" :disabled="loadingApiLogs" @click="emit('load-api-logs')">查询</AdminMicroButton>
   </AdminFilterToolbar>
 </template>
 
@@ -62,8 +60,50 @@ const updateLogQuery = (key, event) => {
   emit('update-log-query', key, event.target.value)
 }
 
+const clampPaginationValue = (key, value) => {
+  const parsed = Number.parseFloat(value)
+  if (Number.isNaN(parsed)) return value
+  if (key === 'limit') return Math.max(1, Math.min(20, parsed))
+  return Math.max(1, parsed)
+}
+
 const updateNumericLogQuery = (key, event) => {
-  const value = event.target.value === '' ? '' : Number(event.target.value)
+  const value = event.target.value === '' ? '' : clampPaginationValue(key, event.target.value)
   emit('update-log-query', key, value)
 }
 </script>
+
+<style scoped>
+.admin-service-log-filters {
+  --admin-filter-toolbar-columns: minmax(180px, 1fr) minmax(180px, 1fr) 76px 76px auto;
+  width: 100%;
+}
+
+.admin-service-log-filters :deep(.admin-filter-field) {
+  min-width: 0;
+}
+
+.admin-service-log-filters :deep(.ui-number-input) {
+  width: 76px;
+  max-width: 76px;
+}
+
+.admin-service-log-filters :deep(.ui-micro-btn) {
+  min-width: 56px;
+}
+
+@media (max-width: 1180px) {
+  .admin-service-log-filters {
+    --admin-filter-toolbar-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .admin-service-log-filters :deep(.ui-number-input) {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .admin-service-log-filters :deep(.ui-micro-btn) {
+    width: 100%;
+  }
+}
+</style>

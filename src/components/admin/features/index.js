@@ -19,6 +19,7 @@ export { default as AdminServiceReconciliationHeader } from './AdminServiceRecon
 export { default as AdminServiceReconciliationSection } from './AdminServiceReconciliationSection.vue'
 export { default as AdminServiceReconciliationSummaryMetrics } from './AdminServiceReconciliationSummaryMetrics.vue'
 export { default as AdminUserAccountActionsCell } from './AdminUserAccountActionsCell.vue'
+export { default as AdminUserOperationsCell } from './AdminUserOperationsCell.vue'
 export { default as AdminUserServiceEmptyState } from './AdminUserServiceEmptyState.vue'
 export { default as AdminUserServiceFilterSummary } from './AdminUserServiceFilterSummary.vue'
 export { default as AdminUserServiceHeader } from './AdminUserServiceHeader.vue'

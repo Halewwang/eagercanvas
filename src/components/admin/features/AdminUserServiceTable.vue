@@ -1,5 +1,5 @@
 <template>
-  <AdminTableShell min-width-class="min-w-[1120px]">
+  <AdminTableShell min-width-class="min-w-[960px]">
     <template #header>
       <AdminUserServiceTableHeader
         :can-manage-roles="canManageRoles"
@@ -27,8 +27,6 @@
         :saving="saving"
         :selected-roles="selectedRoles"
         :service-loading="serviceLoading"
-        :service-status-class="serviceStatusClass"
-        :service-status-label="serviceStatusLabel"
         :show-user-actions="showUserActions"
         :status-class="statusClass"
         :status-label="statusLabel"

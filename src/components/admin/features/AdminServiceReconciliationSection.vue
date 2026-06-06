@@ -29,6 +29,7 @@
     />
 
     <AdminServiceApiLogsPanel
+      :api-log-pagination="apiLogPagination"
       :api-logs="apiLogs"
       :loading-api-logs="loadingApiLogs"
       :log302-query="log302Query"
@@ -64,6 +65,10 @@ defineProps({
     type: Number,
     default: 0
   },
+  apiLogPagination: {
+    type: Object,
+    default: () => ({ page: 1, limit: 10, total: 0 })
+  },
   apiLogs: {
     type: Array,
     default: () => []
@@ -98,7 +103,7 @@ defineProps({
   },
   log302Query: {
     type: Object,
-    default: () => ({ page: 1, limit: 20, start: '', end: '' })
+    default: () => ({ page: 1, limit: 10, start: '', end: '' })
   },
   recordData: {
     type: Object,

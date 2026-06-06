@@ -43,6 +43,25 @@ test('admin section scroll candidate falls back to overview when no section elem
   )
 })
 
+test('admin section scroll candidate skips hidden component refs without DOM geometry', () => {
+  assert.equal(typeof navigation.getAdminSectionScrollCandidate, 'function')
+
+  const sections = {
+    overview: makeSectionEl(24),
+    users: { getSectionEl: () => null },
+    service: makeSectionEl(118)
+  }
+
+  assert.equal(
+    navigation.getAdminSectionScrollCandidate([
+      { key: 'overview' },
+      { key: 'users' },
+      { key: 'service' }
+    ], (key) => sections[key]),
+    'service'
+  )
+})
+
 test('admin route entry keeps the dashboard overview at the top of the shell', () => {
   assert.equal(typeof navigation.shouldAutoScrollAdminSection, 'function')
 
@@ -58,6 +77,27 @@ test('admin route entry keeps the dashboard overview at the top of the shell', (
     routeName: 'AdminDashboard',
     sectionKey: 'users'
   }), true)
+})
+
+test('admin route-specific pages keep nav ownership instead of scroll ownership', () => {
+  assert.equal(typeof navigation.shouldRouteOwnAdminActiveSection, 'function')
+
+  assert.equal(navigation.shouldRouteOwnAdminActiveSection({
+    routeName: 'AdminDashboard',
+    sectionKey: 'overview'
+  }), false)
+  assert.equal(navigation.shouldRouteOwnAdminActiveSection({
+    routeName: 'AdminAudit',
+    sectionKey: 'audit'
+  }), true)
+  assert.equal(navigation.shouldRouteOwnAdminActiveSection({
+    routeName: '',
+    sectionKey: 'audit'
+  }), false)
+  assert.equal(navigation.shouldRouteOwnAdminActiveSection({
+    routeName: 'AdminAudit',
+    sectionKey: ''
+  }), false)
 })
 
 test('admin section navigation prefers the app scroll container over window', () => {
@@ -81,4 +121,5 @@ test('admin section navigation composable is exported for the admin page contain
   assert.match(navigationHookSource, /ADMIN_ROUTE_NAME_BY_SECTION/)
   assert.match(navigationHookSource, /ADMIN_SECTION_BY_ROUTE_NAME/)
   assert.match(navigationHookSource, /getAdminSectionScrollCandidate/)
+  assert.match(navigationHookSource, /shouldRouteOwnAdminActiveSection/)
 })

@@ -9,11 +9,6 @@
         </p>
       </div>
       <div class="admin-page-actions">
-        <AdminHeaderActionButton :disabled="isRefreshing" @click="$emit('refresh')">
-          {{ isRefreshing ? '刷新中...' : '刷新数据' }}
-        </AdminHeaderActionButton>
-        <AdminHeaderActionButton v-if="canReadUsers" @click="$emit('open-users')">用户服务</AdminHeaderActionButton>
-        <AdminHeaderActionButton v-if="showServiceSection" @click="$emit('open-service')">消耗对账</AdminHeaderActionButton>
         <AdminHeaderActionButton @click="$emit('go-home')">返回首页</AdminHeaderActionButton>
       </div>
     </div>
@@ -28,7 +23,7 @@
 import AdminHeaderActionButton from './AdminHeaderActionButton.vue'
 import AdminPermissionChip from './AdminPermissionChip.vue'
 
-defineEmits(['refresh', 'open-users', 'open-service', 'go-home'])
+defineEmits(['go-home'])
 
 defineProps({
   displayName: {
@@ -38,18 +33,6 @@ defineProps({
   accessScope: {
     type: Array,
     default: () => []
-  },
-  isRefreshing: {
-    type: Boolean,
-    default: false
-  },
-  canReadUsers: {
-    type: Boolean,
-    default: false
-  },
-  showServiceSection: {
-    type: Boolean,
-    default: false
   }
 })
 </script>

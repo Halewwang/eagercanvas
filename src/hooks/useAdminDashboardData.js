@@ -18,6 +18,8 @@ const createUsageSummary = () => ({
   totalUsers: 0
 })
 
+const DEFAULT_AUDIT_LOG_PAGE_SIZE = 10
+
 const getWindowMessageApi = () => (typeof window === 'undefined' ? null : window.$message)
 
 export const useAdminDashboardData = ({
@@ -33,8 +35,8 @@ export const useAdminDashboardData = ({
   const loadingUsage = ref(false)
   const auditLogs = ref([])
   const loadingLogs = ref(false)
-  const pagination = ref({ page: 1, limit: 20, total: 0 })
-  const logQuery = ref({ page: 1, limit: 20 })
+  const pagination = ref({ page: 1, limit: DEFAULT_AUDIT_LOG_PAGE_SIZE, total: 0 })
+  const logQuery = ref({ page: 1, limit: DEFAULT_AUDIT_LOG_PAGE_SIZE })
 
   const loadingOverview = computed(() => loadingUsage.value)
 

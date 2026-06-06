@@ -6,11 +6,6 @@
       :status-label="statusLabel"
       :user="user"
     />
-    <AdminUserServiceStatusCell
-      :service-status-class="serviceStatusClass"
-      :service-status-label="serviceStatusLabel"
-      :user="user"
-    />
     <AdminUserUsageCell
       :format-usd="formatUsd"
       :top-model-label="topModelLabel"
@@ -20,44 +15,39 @@
       :format-date-time="formatDateTime"
       :user="user"
     />
-    <AdminUserServiceActionsCell
+    <AdminUserOperationsCell
       :can-activate-service="canActivateService"
       :can-disable-service="canDisableService"
-      :can-reset-service="canResetService"
-      :can-update-service-limits="canUpdateServiceLimits"
-      :service-loading="serviceLoading"
-      :show-user-actions="showUserActions"
-      :user="user"
-      @activate-service="emit('activate-service', $event)"
-      @disable-service="emit('disable-service', $event)"
-      @reset-service="emit('reset-service', $event)"
-      @update-service-limits="emit('update-service-limits', $event)"
-    />
-    <AdminUserAccountActionsCell
       :can-manage-roles="canManageRoles"
       :can-manage-user-status="canManageUserStatus"
+      :can-reset-service="canResetService"
+      :can-update-service-limits="canUpdateServiceLimits"
       :deleting="deleting"
       :is-self="isSelf"
       :role-options="roleOptions"
       :saving="saving"
       :selected-roles="selectedRoles"
+      :service-loading="serviceLoading"
+      :show-user-actions="showUserActions"
       :status-loading="statusLoading"
       :user="user"
+      @activate-service="emit('activate-service', $event)"
       @activate-user="emit('activate-user', $event)"
       @delete-user="emit('delete-user', $event)"
+      @disable-service="emit('disable-service', $event)"
+      @reset-service="emit('reset-service', $event)"
       @save-roles="emit('save-roles', $event)"
       @suspend-user="emit('suspend-user', $event)"
       @update-role-selection="forwardRoleSelection"
+      @update-service-limits="emit('update-service-limits', $event)"
     />
   </tr>
 </template>
 
 <script setup>
-import AdminUserAccountActionsCell from './AdminUserAccountActionsCell.vue'
 import AdminUserIdentityCell from './AdminUserIdentityCell.vue'
+import AdminUserOperationsCell from './AdminUserOperationsCell.vue'
 import AdminUserReconciliationCell from './AdminUserReconciliationCell.vue'
-import AdminUserServiceActionsCell from './AdminUserServiceActionsCell.vue'
-import AdminUserServiceStatusCell from './AdminUserServiceStatusCell.vue'
 import AdminUserUsageCell from './AdminUserUsageCell.vue'
 
 const emit = defineEmits([
@@ -136,14 +126,6 @@ defineProps({
   serviceLoading: {
     type: Object,
     default: () => ({})
-  },
-  serviceStatusClass: {
-    type: Function,
-    required: true
-  },
-  serviceStatusLabel: {
-    type: Function,
-    required: true
   },
   showUserActions: {
     type: Boolean,

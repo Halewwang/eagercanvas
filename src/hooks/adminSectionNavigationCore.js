@@ -4,9 +4,22 @@ export const shouldAutoScrollAdminSection = ({ routeName = '', sectionKey = '' }
   return !(routeName === 'AdminDashboard' && sectionKey === 'overview')
 }
 
+export const shouldRouteOwnAdminActiveSection = ({ routeName = '', sectionKey = '' } = {}) => {
+  return Boolean(routeName && sectionKey && routeName !== 'AdminDashboard')
+}
+
 export const resolveAdminScrollTarget = ({ scrollTarget = null, windowTarget = null } = {}) => {
   if (scrollTarget) return scrollTarget
   return windowTarget?.document?.getElementById?.('app') || null
+}
+
+const resolveSectionElement = (section) => {
+  if (!section) return null
+  if (typeof section.getBoundingClientRect === 'function') return section
+
+  const exposedEl = section.getSectionEl?.() || section.getSurfaceEl?.() || section.$el
+  if (typeof exposedEl?.getBoundingClientRect === 'function') return exposedEl
+  return null
 }
 
 export const getAdminSectionScrollCandidate = (
@@ -15,7 +28,7 @@ export const getAdminSectionScrollCandidate = (
   headerOffset = SCROLL_HEADER_OFFSET
 ) => {
   const sections = navItems
-    .map((item) => ({ key: item.key, el: getSectionEl(item.key) }))
+    .map((item) => ({ key: item.key, el: resolveSectionElement(getSectionEl(item.key)) }))
     .filter((item) => !!item.el)
 
   let candidate = navItems[0]?.key || 'overview'
