@@ -99,9 +99,9 @@
       panel-class="admin-panel-card rounded-2xl p-4 md:p-5"
     >
       <AdminEmptyState v-if="!loadingIssues && issues.length === 0">暂无问题分组</AdminEmptyState>
-      <AdminTableShell v-else min-width-class="min-w-[880px]">
+      <AdminTableShell v-else min-width-class="min-w-[980px] table-fixed">
         <template #header>
-          <th class="w-10 px-3 py-3">
+          <th class="admin-issue-check-column px-3 py-3">
             <input
               class="admin-issue-checkbox"
               type="checkbox"
@@ -111,14 +111,14 @@
               @change="emit('toggle-all-issue-selection', $event.target.checked)"
             >
           </th>
-          <th class="px-3 py-3">级别</th>
-          <th class="px-3 py-3">层级</th>
-          <th class="px-3 py-3">标题</th>
-          <th class="px-3 py-3">次数</th>
-          <th class="px-3 py-3">同类</th>
-          <th class="px-3 py-3">最近</th>
-          <th class="px-3 py-3">状态</th>
-          <th class="px-3 py-3">操作</th>
+          <th class="admin-issue-severity-column px-3 py-3">级别</th>
+          <th class="admin-issue-layer-column px-3 py-3">层级</th>
+          <th class="admin-issue-title-column px-3 py-3">标题</th>
+          <th class="admin-issue-count-column px-3 py-3">次数</th>
+          <th class="admin-issue-merged-column px-3 py-3">同类</th>
+          <th class="admin-issue-date-column px-3 py-3">最近</th>
+          <th class="admin-issue-status-column px-3 py-3">状态</th>
+          <th class="admin-issue-actions-column px-3 py-3">操作</th>
         </template>
         <template #default="{ rowClass }">
           <tr
@@ -137,11 +137,18 @@
             </td>
             <td class="px-3 py-3 text-white/80">{{ String(issue.severity || '').toUpperCase() }}</td>
             <td class="px-3 py-3 text-white/70">{{ sourceLayerLabel(issue.source_layer) }}</td>
-            <td class="px-3 py-3">
-              <button class="admin-issue-title-button" type="button" @click="emit('open-issue', issue)">
+            <td class="admin-issue-title-cell px-3 py-3">
+              <button
+                class="admin-issue-title-button"
+                type="button"
+                :title="issue.title || issue.fingerprint"
+                @click="emit('open-issue', issue)"
+              >
                 {{ issue.title || issue.fingerprint }}
               </button>
-              <div class="mt-1 text-xs text-white/40">{{ issue.latest_request_id || issue.fingerprint }}</div>
+              <div class="admin-issue-request-id mt-1 text-xs text-white/40" :title="issue.latest_request_id || issue.fingerprint">
+                {{ issue.latest_request_id || issue.fingerprint }}
+              </div>
             </td>
             <td class="px-3 py-3 text-white/70">{{ issue.event_count || 0 }}</td>
             <td class="px-3 py-3 text-white/60">{{ issue.merged_group_count || 1 }}</td>
@@ -152,7 +159,7 @@
               </AdminStatusPill>
             </td>
             <td class="px-3 py-3">
-              <div class="flex flex-wrap gap-2">
+              <div class="admin-issue-row-actions">
                 <AdminMicroButton size="xs" @click="emit('open-issue', issue)">
                   详情
                 </AdminMicroButton>
@@ -397,12 +404,61 @@ const statusClass = (status) => {
 }
 
 .admin-issue-title-button {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
   color: rgb(255 255 255 / 86%);
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .admin-issue-title-button:hover {
   color: #fff;
+}
+
+.admin-issue-check-column {
+  width: 44px;
+}
+
+.admin-issue-severity-column,
+.admin-issue-count-column,
+.admin-issue-merged-column {
+  width: 64px;
+}
+
+.admin-issue-layer-column,
+.admin-issue-status-column {
+  width: 88px;
+}
+
+.admin-issue-date-column {
+  width: 150px;
+}
+
+.admin-issue-actions-column {
+  width: 168px;
+}
+
+.admin-issue-title-column,
+.admin-issue-title-cell {
+  width: 320px;
+  max-width: 320px;
+  min-width: 0;
+}
+
+.admin-issue-request-id {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-issue-row-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
 }
 
 .admin-issue-toolbar {
