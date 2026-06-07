@@ -89,6 +89,26 @@ test('admin users data helpers preserve top spender filtering and ordering', () 
   assert.deepEqual(adminUsersData.getAdminTopSpenders([{ id: 'zero', officialUsage: { totalCostAmount: 0 } }]), [])
 })
 
+test('admin users data helpers summarize 302 official usage from user rows', () => {
+  assert.equal(typeof adminUsersData.getAdminOfficialUsageSummary, 'function')
+
+  assert.deepEqual(adminUsersData.getAdminOfficialUsageSummary([
+    { officialUsage: { totalCalls: 2, totalCostAmount: 4.75, currency: 'PTC' } },
+    { officialUsage: { totalCalls: 3, totalCostAmount: '1.25', currency: 'PTC' } },
+    { officialUsage: { totalCalls: '', totalCostAmount: null, currency: 'USD' } }
+  ]), {
+    totalCalls: 5,
+    totalCostAmount: 6,
+    currency: 'PTC'
+  })
+
+  assert.deepEqual(adminUsersData.getAdminOfficialUsageSummary([]), {
+    totalCalls: 0,
+    totalCostAmount: 0,
+    currency: 'PTC'
+  })
+})
+
 test('admin users data helpers preserve filtering, cost sorting, and fallback date ordering', () => {
   assert.equal(typeof adminUsersData.getAdminFilteredUsers, 'function')
 

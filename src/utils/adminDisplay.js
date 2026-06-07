@@ -89,18 +89,36 @@ export const getAdminOverviewCards = ({
   canReadUsers = false,
   canReadUsage = false,
   canReadAudit = false,
+  officialUsageSummary = null,
   userStats = {},
   usageSummary = {},
   auditTotal = 0,
   activeServiceUsers = 0
-} = {}) => [
-  { label: '管理用户数', value: canReadUsers ? userStats.total : '--', note: canReadUsers ? '当前后台可见用户总数' : '缺少权限' },
-  { label: '已暂停', value: canReadUsers ? userStats.suspended : '--', note: canReadUsers ? '当前被暂停的账号数' : '缺少权限' },
-  { label: '总调用量', value: canReadUsage ? usageSummary.totalCalls || 0 : '--', note: canReadUsage ? '全局请求总次数' : '无用量权限' },
-  { label: '官方消耗 (USD)', value: canReadUsage ? formatAdminUsd(usageSummary.totalCostUsd) : '--', note: canReadUsage ? '累计官方消耗' : '无用量权限' },
-  { label: '审计条目', value: canReadAudit ? auditTotal : '--', note: canReadAudit ? '当前审计日志总条数' : '无审计权限' },
-  { label: '已开通服务', value: canReadUsers ? activeServiceUsers : '--', note: canReadUsers ? '当前可调用服务的用户数' : '缺少权限' }
-]
+} = {}) => {
+  const useOfficialUsage = canReadUsers && officialUsageSummary && typeof officialUsageSummary === 'object'
+  const usageCalls = useOfficialUsage ? officialUsageSummary.totalCalls : usageSummary.totalCalls
+  const costAmount = useOfficialUsage ? officialUsageSummary.totalCostAmount : usageSummary.totalCostUsd
+  const currency = useOfficialUsage
+    ? (officialUsageSummary.currency || 'PTC')
+    : (usageSummary.currency || 'USD')
+
+  return [
+    { label: '管理用户数', value: canReadUsers ? userStats.total : '--', note: canReadUsers ? '当前后台可见用户总数' : '缺少权限' },
+    { label: '已暂停', value: canReadUsers ? userStats.suspended : '--', note: canReadUsers ? '当前被暂停的账号数' : '缺少权限' },
+    {
+      label: useOfficialUsage ? '302.ai 调用量' : '总调用量',
+      value: canReadUsage ? usageCalls || 0 : '--',
+      note: canReadUsage ? (useOfficialUsage ? '来自用户 302.ai 调用数据' : '全局请求总次数') : '无用量权限'
+    },
+    {
+      label: useOfficialUsage ? `302.ai 消耗 (${currency})` : `官方消耗 (${currency})`,
+      value: canReadUsage ? formatAdminUsd(costAmount) : '--',
+      note: canReadUsage ? (useOfficialUsage ? '来自 302.ai usage-log' : '累计官方消耗') : '无用量权限'
+    },
+    { label: '审计条目', value: canReadAudit ? auditTotal : '--', note: canReadAudit ? '当前审计日志总条数' : '无审计权限' },
+    { label: '已开通服务', value: canReadUsers ? activeServiceUsers : '--', note: canReadUsers ? '当前可调用服务的用户数' : '缺少权限' }
+  ]
+}
 
 export const getUsageAdminOverviewMetrics = ({
   balance = '',

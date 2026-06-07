@@ -1,5 +1,11 @@
 const toUserList = (users) => (Array.isArray(users) ? users : [])
 
+const toFiniteNumber = (value) => {
+  if (value === undefined || value === null || String(value).trim() === '') return 0
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 export const getAdminUserStats = (users = []) => {
   return toUserList(users).reduce((acc, item) => {
     const status = String(item.status || 'active')
@@ -16,6 +22,29 @@ export const getAdminTopSpenders = (users = []) => {
     .filter((item) => Number(item?.officialUsage?.totalCostAmount || 0) > 0)
     .sort((a, b) => Number(b?.officialUsage?.totalCostAmount || 0) - Number(a?.officialUsage?.totalCostAmount || 0))
     .slice(0, 5)
+}
+
+export const getAdminOfficialUsageSummary = (users = []) => {
+  const currencies = new Set()
+  const summary = toUserList(users).reduce((acc, item) => {
+    const usage = item?.officialUsage || {}
+    const totalCalls = toFiniteNumber(usage.totalCalls)
+    const totalCostAmount = toFiniteNumber(usage.totalCostAmount)
+    const currency = String(usage.currency || '').trim()
+
+    acc.totalCalls += totalCalls
+    acc.totalCostAmount += totalCostAmount
+    if ((totalCalls > 0 || totalCostAmount > 0) && currency) currencies.add(currency)
+    return acc
+  }, {
+    totalCalls: 0,
+    totalCostAmount: 0
+  })
+
+  return {
+    ...summary,
+    currency: currencies.size === 1 ? [...currencies][0] : (currencies.size > 1 ? 'MIXED' : 'PTC')
+  }
 }
 
 export const getAdminNotEnabledActiveUsers = (users = []) => {

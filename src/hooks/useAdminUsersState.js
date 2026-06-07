@@ -5,6 +5,7 @@ import {
   getAdminActiveServiceUserCount,
   getAdminFilteredUsers,
   getAdminNotEnabledActiveUsers,
+  getAdminOfficialUsageSummary,
   getAdminPagedUsers,
   getAdminPendingBillingUserCount,
   getAdminServiceActivationRate,
@@ -37,6 +38,7 @@ export const useAdminUsersState = ({
 
   const userStats = computed(() => getAdminUserStats(users.value))
   const topSpenders = computed(() => getAdminTopSpenders(users.value))
+  const officialUsageSummary = computed(() => getAdminOfficialUsageSummary(users.value))
   const notEnabledActiveUsers = computed(() => getAdminNotEnabledActiveUsers(users.value))
   const pendingBillingUsers = computed(() => getAdminPendingBillingUserCount(users.value))
   const activeServiceUsers = computed(() => getAdminActiveServiceUserCount(users.value))
@@ -90,6 +92,7 @@ export const useAdminUsersState = ({
     loadUsers,
     loadingUsers,
     notEnabledActiveUsers,
+    officialUsageSummary,
     pagedUsers,
     pendingBillingUsers,
     selectedRoles,

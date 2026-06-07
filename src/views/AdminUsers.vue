@@ -43,8 +43,8 @@
       @open-issue="openIssue"
       @query-record="queryRecord"
       @reconcile-billing="reconcileBilling"
-      @refresh-overview="refreshOverview"
-      @refresh-service-data="load302All"
+      @refresh-overview="refreshDashboardOverview"
+      @refresh-service-data="refreshServiceData"
       @refresh-users="loadUsers"
       @reset-service="resetService"
       @save-roles="saveRoles"
@@ -104,6 +104,7 @@ const {
   loadUsers,
   loadingUsers,
   notEnabledActiveUsers,
+  officialUsageSummary,
   pagedUsers,
   pendingBillingUsers,
   selectedRoles,
@@ -145,6 +146,7 @@ const displayState = useAdminDisplayState({
   canReadAudit,
   canReadUsage,
   canReadUsers,
+  officialUsageSummary,
   pagination,
   usageSummary,
   userStats
@@ -186,6 +188,8 @@ const {
   serviceLoadNotice,
   updateLog302Query
 } = serviceOps
+const refreshDashboardOverview = () => Promise.all([refreshOverview(), loadUsers()])
+const refreshServiceData = () => Promise.all([load302All(), loadUsers()])
 const issueInbox = useAdminIssueInbox({ canReadIssues, canUpdateIssues })
 const {
   exportIssues,

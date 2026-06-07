@@ -19,6 +19,7 @@ export const useAdminDisplayState = ({
   canReadAudit,
   canReadUsage,
   canReadUsers,
+  officialUsageSummary,
   pagination,
   usageSummary,
   userStats
@@ -28,6 +29,7 @@ export const useAdminDisplayState = ({
     canReadUsers: canReadUsers.value,
     canReadUsage: canReadUsage.value,
     canReadAudit: canReadAudit.value,
+    officialUsageSummary: officialUsageSummary?.value,
     userStats: userStats.value,
     usageSummary: usageSummary.value,
     auditTotal: pagination.value.total,

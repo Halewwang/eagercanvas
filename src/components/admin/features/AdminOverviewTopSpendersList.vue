@@ -7,22 +7,28 @@
         <p class="text-sm text-white/88">{{ item.displayName || item.email || item.id }}</p>
         <p class="text-[11px] text-white/45">{{ item.service?.serviceIdentifier || '-' }}</p>
       </div>
-      <strong>{{ formatUsd(item.officialUsage?.totalCostAmount, 2) }}</strong>
+      <strong>{{ formatUsageAmount(item, 2) }}</strong>
     </div>
   </div>
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   formatUsd: {
     type: Function,
-    default: () => '$0.00'
+    default: () => '0.00'
   },
   topSpenders: {
     type: Array,
     default: () => []
   }
 })
+
+const formatUsageAmount = (item, digits = 2) => {
+  const amount = props.formatUsd(item?.officialUsage?.totalCostAmount, digits)
+  const currency = item?.officialUsage?.currency || 'PTC'
+  return `${amount} ${currency}`
+}
 </script>
 
 <style scoped>
