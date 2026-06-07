@@ -1,3 +1,4 @@
+import { waitUntil } from '@vercel/functions'
 import { HttpError } from '../utils/http.js'
 import { ZodError } from 'zod'
 import { queueDatabaseIssue, queueIssueEvent } from '../services/issue-events.service.js'
@@ -47,14 +48,14 @@ export const errorMiddleware = (err, req, res, _next) => {
     })
     req.issueErrorReported = true
     if (isDatabaseError(err)) {
-      queueDatabaseIssue(err, {
+      waitUntil(queueDatabaseIssue(err, {
         requestId: req.requestId,
         userId: req.user?.id,
         method: req.method,
         pathTemplate: req.path
-      }).catch(() => {})
+      }).catch(() => {}))
     } else {
-      queueIssueEvent(buildServerErrorIssuePayload(err, req, status, code)).catch(() => {})
+      waitUntil(queueIssueEvent(buildServerErrorIssuePayload(err, req, status, code)).catch(() => {}))
     }
   }
 

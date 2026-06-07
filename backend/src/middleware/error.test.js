@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { z } from 'zod'
 
 import { errorMiddleware } from './error.js'
+
+const source = readFileSync(new URL('./error.js', import.meta.url), 'utf8')
+
+test('error middleware registers async issue writes with serverless waitUntil', () => {
+  assert.match(source, /from '@vercel\/functions'/)
+  assert.match(source, /waitUntil\(queueDatabaseIssue\(err, \{[\s\S]*pathTemplate: req\.path[\s\S]*\}\)\.catch\(\(\) => \{\}\)\)/)
+  assert.match(source, /waitUntil\(queueIssueEvent\(buildServerErrorIssuePayload\(err, req, status, code\)\)\.catch\(\(\) => \{\}\)\)/)
+})
 
 test('error middleware reports Zod validation errors as bad requests', () => {
   const error = z.object({ email: z.string().email() }).safeParse({ email: 'bad-email' }).error

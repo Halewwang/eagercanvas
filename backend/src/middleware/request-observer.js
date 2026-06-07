@@ -1,3 +1,4 @@
+import { waitUntil } from '@vercel/functions'
 import { queueIssueEvent } from '../services/issue-events.service.js'
 
 const SLOW_REQUEST_MS = 3000
@@ -18,7 +19,7 @@ export const createRequestObserver = ({
     const pathTemplate = normalizePathTemplate(req)
 
     if (res.statusCode >= 500 && !req.issueErrorReported) {
-      recordIssue({
+      waitUntil(recordIssue({
         source_layer: 'backend',
         category: 'api_error',
         severity: 'p1',
@@ -30,11 +31,11 @@ export const createRequestObserver = ({
         duration_ms: durationMs,
         error_code: `HTTP_${res.statusCode}`,
         message_summary: `HTTP ${res.statusCode} response`
-      }).catch(() => {})
+      }).catch(() => {}))
     }
 
     if (durationMs >= slowRequestMs) {
-      recordIssue({
+      waitUntil(recordIssue({
         source_layer: 'performance',
         category: 'slow_request',
         severity: res.statusCode >= 500 ? 'p1' : 'p2',
@@ -45,7 +46,7 @@ export const createRequestObserver = ({
         status_code: res.statusCode,
         duration_ms: durationMs,
         message_summary: `Slow request: ${durationMs}ms`
-      }).catch(() => {})
+      }).catch(() => {}))
     }
   })
   next()

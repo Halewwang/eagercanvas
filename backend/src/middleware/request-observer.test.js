@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { createRequestObserver } from './request-observer.js'
+
+const source = readFileSync(new URL('./request-observer.js', import.meta.url), 'utf8')
+
+test('request observer registers async issue writes with serverless waitUntil', () => {
+  assert.match(source, /from '@vercel\/functions'/)
+  assert.match(source, /waitUntil\(recordIssue\(\{[\s\S]*HTTP_\$\{res\.statusCode\}[\s\S]*\}\)\.catch\(\(\) => \{\}\)\)/)
+  assert.match(source, /waitUntil\(recordIssue\(\{[\s\S]*category: 'slow_request'[\s\S]*\}\)\.catch\(\(\) => \{\}\)\)/)
+})
 
 test('request observer records slow requests after response finish', async () => {
   const events = []
