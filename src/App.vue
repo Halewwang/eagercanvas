@@ -5,6 +5,7 @@
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { NConfigProvider, darkTheme } from 'naive-ui'
 import { useRoute } from 'vue-router'
+import { SpeedInsights } from '@vercel/speed-insights/vue'
 import { BaseToastViewport, ErrorBoundary, NetworkBanner } from './components/ui'
 import UpdatePrompt from './components/UpdatePrompt.vue'
 import { startAppVersionWatcher, stopAppVersionWatcher } from './utils/appVersion'
@@ -62,6 +63,7 @@ onBeforeUnmount(() => {
 <template>
   <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides" :class="appRouteClass">
     <ErrorBoundary>
+      <SpeedInsights />
       <BaseToastViewport />
       <NetworkBanner :sync-offline-drafts="syncOfflineDrafts" />
       <UpdatePrompt />
