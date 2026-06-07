@@ -98,7 +98,7 @@ test('listUsersForAdmin assembles admin user usage view from focused data source
         JSON.stringify({
           code: 0,
           data: [
-            { api_name: 'active-key', current_cost: 999, currency: 'USD' }
+            { api_name: 'active-key', api_key: 'sk-runtime-user-key', current_cost: 999, currency: 'USD' }
           ]
         }),
         { status: 200 }
@@ -111,7 +111,6 @@ test('listUsersForAdmin assembles admin user usage view from focused data source
           code: 0,
           data: {
             api_name: 'active-key',
-            api_key: 'sk-runtime-user-key',
             current_cost: 999
           }
         }),

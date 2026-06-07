@@ -38,7 +38,12 @@ const unwrapDataObject = (payload = {}) =>
     ? payload.data
     : payload
 
-const readRuntimeApiKey = (item = {}) => String(item?.api_key || item?.apiKey || '').trim()
+const readRuntimeApiKey = (item = {}) => String(item?.api_key || item?.apiKey || item?.key || '').trim()
+
+const buildRuntimeApiKeyFallback = (item = {}) => {
+  const apiKey = readRuntimeApiKey(item)
+  return apiKey ? { api_key: apiKey } : {}
+}
 const DEFAULT_BILLING_INVENTORY_CONCURRENCY = 4
 
 const normalizeConcurrency = (value, fallback = DEFAULT_BILLING_INVENTORY_CONCURRENCY) => {
@@ -71,16 +76,20 @@ const loadBillingInventoryEntry = async ({
   getApiKey,
   getApiKeyUsage
 }) => {
-  if (!activeItems.has(apiName)) return null
-  let detail = { api_name: apiName }
+  const activeItem = activeItems.get(apiName)
+  if (!activeItem) return null
+  const runtimeKeyFallback = buildRuntimeApiKeyFallback(activeItem)
+  let detail = { api_name: apiName, ...runtimeKeyFallback }
 
   try {
+    const detailPayload = unwrapDataObject(await getApiKey(apiName))
     detail = {
-      api_name: apiName,
-      ...unwrapDataObject(await getApiKey(apiName))
+      ...detail,
+      ...detailPayload
     }
+    if (!readRuntimeApiKey(detail)) detail = { ...detail, ...runtimeKeyFallback }
   } catch {
-    return [apiName, detail]
+    // Keep the runtime key from the list response when detail lookup is unavailable.
   }
 
   const apiKey = readRuntimeApiKey(detail)

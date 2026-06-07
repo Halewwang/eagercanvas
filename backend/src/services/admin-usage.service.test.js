@@ -122,6 +122,48 @@ test('loadUserApiKeyBillingInventory enriches key details with usage-log cost', 
   assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')
 })
 
+test('loadUserApiKeyBillingInventory uses list runtime key when detail omits api key', async () => {
+  const usageCalls = []
+  const inventory = await loadUserApiKeyBillingInventory(
+    [{ provider_api_name: 'eager_user_one', status: 'active' }],
+    {
+      listApiKeys: async () => ({
+        data: [
+          {
+            api_name: 'eager_user_one',
+            api_key: 'sk-list-runtime-key',
+            current_cost: 4848
+          }
+        ]
+      }),
+      getApiKey: async (apiName) => ({
+        data: {
+          api_name: apiName,
+          current_cost: 12.34
+        }
+      }),
+      getApiKeyUsage: async (apiKey) => {
+        usageCalls.push(apiKey)
+        return {
+          data: {
+            total_cost: 7.25,
+            monthly_cost: 2.5,
+            daily_cost: 0.5,
+            currency: 'PTC'
+          }
+        }
+      }
+    }
+  )
+
+  assert.deepEqual(usageCalls, ['sk-list-runtime-key'])
+  assert.equal(inventory.get('eager_user_one').current_cost, 12.34)
+  assert.equal(inventory.get('eager_user_one').usage_total_cost, 7.25)
+  assert.equal(inventory.get('eager_user_one').usage_monthly_cost, 2.5)
+  assert.equal(inventory.get('eager_user_one').usage_daily_cost, 0.5)
+  assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')
+})
+
 test('loadUserApiKeyBillingInventory bounds concurrent key detail lookups', async () => {
   const detailCalls = []
   const detailResolvers = new Map()
