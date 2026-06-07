@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import * as canvasInteraction from './canvasInteraction.js'
 import {
   createCanvasContentSnapshot,
   getCanvasLibraryInsertPosition,
@@ -223,6 +224,43 @@ test('canvas node grid position keeps menu-created nodes in the existing stagger
     gapX: 88,
     gapY: 118
   }), { x: 0, y: 236 })
+})
+
+test('canvas auto placement snaps preferred positions to the grid when the slot is free', () => {
+  assert.equal(typeof canvasInteraction.getCanvasAutoPlacementPosition, 'function')
+  assert.deepEqual(canvasInteraction.getCanvasAutoPlacementPosition({
+    preferredPosition: { x: 103, y: 117 },
+    nodeType: 'image',
+    nodeData: { ratio: '1:1' },
+    existingNodes: []
+  }), { x: 100, y: 120 })
+})
+
+test('canvas auto placement skips occupied grid slots for existing and pending nodes', () => {
+  assert.equal(typeof canvasInteraction.getCanvasAutoPlacementPosition, 'function')
+  const existingNodes = [
+    { id: 'existing-text', type: 'text', position: { x: 0, y: 0 }, data: {} }
+  ]
+  const firstPosition = canvasInteraction.getCanvasAutoPlacementPosition({
+    preferredPosition: { x: 0, y: 0 },
+    nodeType: 'text',
+    nodeData: {},
+    existingNodes,
+    columns: 2
+  })
+  const secondPosition = canvasInteraction.getCanvasAutoPlacementPosition({
+    preferredPosition: { x: 0, y: 0 },
+    nodeType: 'text',
+    nodeData: {},
+    existingNodes: [
+      ...existingNodes,
+      { id: 'pending-text', type: 'text', position: firstPosition, data: {} }
+    ],
+    columns: 2
+  })
+
+  assert.deepEqual(firstPosition, { x: 420, y: 0 })
+  assert.deepEqual(secondPosition, { x: 0, y: 380 })
 })
 
 test('connect menu edge params preserve source and target handle direction', () => {

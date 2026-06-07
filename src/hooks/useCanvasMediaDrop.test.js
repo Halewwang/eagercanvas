@@ -6,9 +6,11 @@ const hookUrl = new URL('./useCanvasMediaDrop.js', import.meta.url)
 const vueUrl = import.meta.resolve('vue')
 const imageDimensionsUrl = new URL('../utils/imageDimensions.js', import.meta.url)
 const canvasMediaDropUrl = new URL('../utils/canvasMediaDrop.js', import.meta.url)
+const canvasInteractionUrl = new URL('../utils/canvasInteraction.js', import.meta.url)
 const hookSource = readFileSync(hookUrl, 'utf8')
   .replace("from 'vue'", `from '${vueUrl}'`)
   .replace("from '@/utils/imageDimensions.js'", `from '${imageDimensionsUrl.href}'`)
+  .replace("from '@/utils/canvasInteraction.js'", `from '${canvasInteractionUrl.href}'`)
   .replace("from '@/utils/canvasMediaDrop.js'", `from '${canvasMediaDropUrl.href}'`)
 const { useCanvasMediaDrop } = await import(`data:text/javascript;base64,${Buffer.from(hookSource).toString('base64')}`)
 
@@ -95,6 +97,52 @@ test('canvas media drop creates image and video nodes at the drop point, uploads
   assert.ok(calls.some((call) => call[0] === 'update-node' && call[1] === 'video-2' && call[2].url === 'https://cdn.example.com/clip.mp4'))
   assert.ok(calls.filter((call) => call[0] === 'flush-save').length >= 3)
   assert.deepEqual(calls.at(-1), ['success', '已从拖拽创建 2 个媒体节点'])
+})
+
+test('canvas media drop avoids existing and newly created media node slots', async () => {
+  const calls = []
+  const image = createFile({ name: 'scene.png', type: 'image/png' })
+  const video = createFile({ name: 'clip.mp4', type: 'video/mp4' })
+  const event = createEvent([image, video])
+  const nodes = [
+    {
+      id: 'existing-image',
+      type: 'image',
+      position: { x: 200, y: 120 },
+      data: { ratio: '16:9' }
+    }
+  ]
+
+  const { handleCanvasMediaDrop } = useCanvasMediaDrop({
+    addNode: (type, position, data) => {
+      const id = `${type}-${calls.filter((call) => call[0] === 'add-node').length + 1}`
+      calls.push(['add-node', id, type, position, data])
+      nodes.push({ id, type, position, data })
+      return id
+    },
+    createObjectURL: (file) => `blob:${file.name}`,
+    currentProjectId: () => 'project-1',
+    flushSave: async () => true,
+    getImageDimensions: async () => ({ width: 1920, height: 1080 }),
+    nextTickFn: async () => {},
+    notify: {
+      success: () => {},
+      warning: () => {}
+    },
+    revokeObjectURL: () => {},
+    updateNode: () => {},
+    updateNodeInternals: () => {},
+    uploadMediaFile: async (file) => `https://cdn.example.com/${file.name}`,
+    viewport: () => ({ x: -100, y: -60, zoom: 2 }),
+    nodes: () => nodes
+  })
+
+  await handleCanvasMediaDrop(event)
+
+  assert.deepEqual(calls.filter((call) => call[0] === 'add-node').map((call) => [call[2], call[3]]), [
+    ['image', { x: 680, y: 120 }],
+    ['video', { x: 360, y: 500 }]
+  ])
 })
 
 test('canvas media dragover prevents browser navigation for local file drags', () => {

@@ -5,11 +5,13 @@ import { ref } from 'vue'
 
 const enhanceResultsUrl = new URL('./useVideoNodeEnhanceResults.js', import.meta.url)
 const vueUrl = import.meta.resolve('vue')
+const canvasInteractionUrl = new URL('../../../utils/canvasInteraction.js', import.meta.url)
 
 const loadEnhanceResults = async () => {
   assert.ok(existsSync(enhanceResultsUrl), 'useVideoNodeEnhanceResults.js should exist')
   const source = readFileSync(enhanceResultsUrl, 'utf8')
     .replace("from 'vue'", `from '${vueUrl}'`)
+    .replace("from '@/utils/canvasInteraction'", `from '${canvasInteractionUrl.href}'`)
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
 }
 

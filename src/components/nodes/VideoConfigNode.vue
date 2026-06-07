@@ -107,7 +107,7 @@ const props = defineProps({
 const { updateNodeInternals } = useVueFlow()
 const canvasStore = useCanvasStore(pinia)
 const { currentProjectId, edges, nodes } = storeToRefs(canvasStore)
-const { updateNode, removeNode, duplicateNode, addNode, addEdge, saveProject } = canvasStore
+const { updateNode, removeNode, duplicateNode, addNode, addEdge, getAutoPlacementPosition, saveProject } = canvasStore
 
 // API config hook | API 配置 hook
 const { isConfigured } = useApiConfig()
@@ -401,14 +401,15 @@ const handleGenerate = async () => {
   const nodeX = currentNode?.position?.x || 0
   const nodeY = currentNode?.position?.y || 0
 
-  // Create video node with loading state | 创建带加载状态的视频节点
-  const videoNodeId = addNode('video', { x: nodeX + 350, y: nodeY }, {
+  const videoNodeData = {
     url: '',
     previewUrl: '',
     loading: true,
     label: 'Generating video...',
     sourceConfigId: props.id
-  })
+  }
+  const videoNodePosition = getAutoPlacementPosition('video', { x: nodeX + 350, y: nodeY }, videoNodeData)
+  const videoNodeId = addNode('video', videoNodePosition, videoNodeData)
   createdVideoNodeId.value = videoNodeId
 
   // Auto-connect videoConfig → video | 自动连接 视频配置 → 视频

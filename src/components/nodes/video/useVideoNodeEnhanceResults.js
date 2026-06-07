@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { getCanvasAutoPlacementPosition } from '@/utils/canvasInteraction'
 
 const readReactiveValue = (source) => {
   if (typeof source === 'function') return source()
@@ -36,17 +37,24 @@ export const useVideoNodeEnhanceResults = ({
   const createLinkedVideoNode = (payload = {}) => {
     const resolvedNodeId = readReactiveValue(nodeId)
     const currentNode = (readReactiveValue(nodes) || []).find((node) => node.id === resolvedNodeId)
-    const position = {
+    const preferredPosition = {
       x: (currentNode?.position?.x || 0) + 360,
       y: currentNode?.position?.y || 0
     }
-
-    const linkedNodeId = addNode('video', position, {
+    const createData = {
       url: '',
       loading: true,
       label: 'Enhanced video',
       ...payload
+    }
+    const position = getCanvasAutoPlacementPosition({
+      preferredPosition,
+      nodeType: 'video',
+      nodeData: createData,
+      existingNodes: readReactiveValue(nodes) || []
     })
+
+    const linkedNodeId = addNode('video', position, createData)
 
     addEdge(edgeStrategy.resolve({
       source: resolvedNodeId,

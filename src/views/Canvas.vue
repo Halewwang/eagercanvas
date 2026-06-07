@@ -233,6 +233,7 @@ const {
 const {
   addEdge,
   addNode,
+  getAutoPlacementPosition,
   beginCanvasZoomInteraction,
   beginNodeDragInteraction,
   canRedo,
@@ -382,6 +383,7 @@ const {
   currentProjectId: currentCanvasProjectId,
   flushSave,
   notify: notifier,
+  nodes,
   updateNode,
   updateNodeInternals,
   uploadMediaFile: uploadImageFile,
@@ -609,10 +611,10 @@ const addNewNode = async (type) => {
     const createdNodeIds = []
 
     for (let index = 0; index < nodeCreateCount.value; index += 1) {
-      const newNodeId = addNode(type, getCanvasNodeGridPosition({
+      const newNodeId = addNode(type, getAutoPlacementPosition(type, getCanvasNodeGridPosition({
         origin: context.flowPosition,
         index
-      }))
+      })))
       createdNodeIds.push(newNodeId)
 
       const params = getConnectMenuEdgeParams(context, newNodeId)
@@ -633,10 +635,10 @@ const addNewNode = async (type) => {
     const createdNodeIds = []
 
     for (let index = 0; index < nodeCreateCount.value; index += 1) {
-      const newNodeId = addNode(type, getCanvasNodeGridPosition({
+      const newNodeId = addNode(type, getAutoPlacementPosition(type, getCanvasNodeGridPosition({
         origin: pendingPaneCreatePosition.value,
         index
-      }))
+      })))
       createdNodeIds.push(newNodeId)
     }
 
@@ -708,11 +710,8 @@ const handleLocalImageInject = async (event) => {
       readImageDimensions(file)
     ])
 
-    const nodeId = addNode(
-      'image',
-      getLocalImageInjectPosition({ nodeCount: nodes.value.length }),
-      createLocalImageNodeData({ dataUrl, file, dimensions })
-    )
+    const nodeData = createLocalImageNodeData({ dataUrl, file, dimensions })
+    const nodeId = addNode('image', getAutoPlacementPosition('image', getLocalImageInjectPosition({ nodeCount: nodes.value.length }), nodeData), nodeData)
 
     await nextTick()
     updateNodeInternals(nodeId)
@@ -748,18 +747,16 @@ const handleInsertLibraryAsset = async (asset = {}) => {
   if (!safeUrl) return
 
   const position = getLibraryInsertPosition()
-  let nodeId = ''
-
-  if (kind === 'video') {
-    nodeId = addNode('video', position, {
+  const type = kind === 'video' ? 'video' : 'image'
+  const nodeData = type === 'video'
+    ? {
       url: safeUrl,
       label: 'Video',
       fileName: asset.fileName || 'Video Asset',
       fileType: asset.fileType || 'video/mp4',
       error: ''
-    })
-  } else {
-    nodeId = addNode('image', position, {
+    }
+    : {
       url: safeUrl,
       previewUrl: '',
       fileName: asset.fileName || 'Image Asset',
@@ -768,8 +765,8 @@ const handleInsertLibraryAsset = async (asset = {}) => {
       persistStatus: 'saved',
       persistError: '',
       error: ''
-    })
-  }
+    }
+  const nodeId = addNode(type, getAutoPlacementPosition(type, position, nodeData), nodeData)
 
   await nextTick()
   if (nodeId) {

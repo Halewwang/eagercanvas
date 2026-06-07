@@ -1,3 +1,5 @@
+import { getCanvasAutoPlacementPosition } from '@/utils/canvasInteraction'
+
 const noop = () => {}
 
 const readOption = (source) => {
@@ -53,10 +55,17 @@ export const useImageNodeLinkedNodes = ({
     })
     if (!nextPosition) return null
 
-    const newNodeId = addNode('image', nextPosition, buildCreateData({
+    const createData = buildCreateData({
       payload,
       defaults: readDefaults()
-    }))
+    })
+    const placedPosition = getCanvasAutoPlacementPosition({
+      preferredPosition: nextPosition,
+      nodeType: 'image',
+      nodeData: createData,
+      existingNodes: readNodes()
+    })
+    const newNodeId = addNode('image', placedPosition, createData)
 
     addEdge(resolveEdge({
       source: sourceNodeId,

@@ -5,6 +5,7 @@ import {
   getGroupMergeCandidate,
   getGroupOutputImageDropPosition,
   getGroupOutputImagePosition,
+  getCanvasAutoPlacementPosition,
   getNodeViewportRect,
   shouldAcceptGroupDragMove
 } from '@/utils/canvasInteraction'
@@ -92,9 +93,16 @@ export const useCanvasGroupOutputs = ({
 
     if (!group?.id || !position) return
 
-    const nodeId = addNode('image', position, {
+    const nodeData = {
       label: '图片输出'
-    }, { saveHistory: false })
+    }
+    const nodePosition = getCanvasAutoPlacementPosition({
+      preferredPosition: position,
+      nodeType: 'image',
+      nodeData,
+      existingNodes: nodes?.value || []
+    })
+    const nodeId = addNode('image', nodePosition, nodeData, { saveHistory: false })
     const linkId = addGroupOutputLink(group.id, nodeId, { saveHistory: true })
     if (!linkId) {
       removeNodesByIds([nodeId], false)

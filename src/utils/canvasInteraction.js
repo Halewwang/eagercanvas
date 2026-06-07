@@ -479,6 +479,86 @@ export const getNodePosition = (node) => {
   }
 }
 
+export const snapCanvasPointToGrid = (point = {}, gridSize = 20) => {
+  const safeGridSize = Math.max(Math.trunc(Number(gridSize) || 20), 1)
+  return {
+    x: Math.round((Number(point?.x) || 0) / safeGridSize) * safeGridSize,
+    y: Math.round((Number(point?.y) || 0) / safeGridSize) * safeGridSize
+  }
+}
+
+const getNodeCanvasRect = (node) => {
+  if (!node) return null
+  const position = getNodePosition(node)
+  const size = getNodeSize(node)
+  if (size.width <= 0 || size.height <= 0) return null
+  return {
+    left: position.x,
+    top: position.y,
+    right: position.x + size.width,
+    bottom: position.y + size.height
+  }
+}
+
+const canvasRectsOverlap = (a = null, b = null, padding = 0) => {
+  if (!a || !b) return false
+  const safePadding = Math.max(Number(padding) || 0, 0)
+  return a.left < b.right + safePadding &&
+    a.right + safePadding > b.left &&
+    a.top < b.bottom + safePadding &&
+    a.bottom + safePadding > b.top
+}
+
+const getGridStep = (value, gridSize) => {
+  const safeGridSize = Math.max(Math.trunc(Number(gridSize) || 20), 1)
+  return Math.max(safeGridSize, Math.ceil((Number(value) || safeGridSize) / safeGridSize) * safeGridSize)
+}
+
+export const getCanvasAutoPlacementPosition = ({
+  preferredPosition = {},
+  nodeType = '',
+  nodeData = {},
+  existingNodes = [],
+  gridSize = 20,
+  padding = 40,
+  columns = 2,
+  maxAttempts = 160
+} = {}) => {
+  const safeGridSize = Math.max(Math.trunc(Number(gridSize) || 20), 1)
+  const safePadding = Math.max(Number(padding) || 0, 0)
+  const safeColumns = Math.max(Math.trunc(Number(columns) || 2), 1)
+  const safeMaxAttempts = Math.max(Math.trunc(Number(maxAttempts) || 160), 1)
+  const origin = snapCanvasPointToGrid(preferredPosition, safeGridSize)
+  const candidateTemplate = {
+    type: nodeType,
+    position: origin,
+    data: nodeData || {}
+  }
+  const candidateSize = getNodeSize(candidateTemplate)
+  const stepX = getGridStep(candidateSize.width + safePadding, safeGridSize)
+  const stepY = getGridStep(candidateSize.height + safePadding, safeGridSize)
+  const occupiedRects = (Array.isArray(existingNodes) ? existingNodes : [])
+    .map(getNodeCanvasRect)
+    .filter(Boolean)
+
+  for (let attempt = 0; attempt < safeMaxAttempts; attempt += 1) {
+    const column = attempt % safeColumns
+    const row = Math.floor(attempt / safeColumns)
+    const position = snapCanvasPointToGrid({
+      x: origin.x + column * stepX,
+      y: origin.y + row * stepY
+    }, safeGridSize)
+    const candidateRect = getNodeCanvasRect({
+      ...candidateTemplate,
+      position
+    })
+    const hasCollision = occupiedRects.some((rect) => canvasRectsOverlap(candidateRect, rect, safePadding))
+    if (!hasCollision) return position
+  }
+
+  return origin
+}
+
 export const getNodeViewportRect = (node, viewport = {}) => {
   if (!node) return null
   const zoom = Math.max(Number(viewport?.zoom) || 1, 0.01)

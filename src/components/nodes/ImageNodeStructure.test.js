@@ -540,6 +540,10 @@ test('image node delegates linked image node orchestration to a focused composab
   assert.doesNotMatch(imageNodeSource, /setTimeout\(\(\) => \{\s*updateNodeInternals\(props\.id\)/s)
 
   assert.match(linkedNodesSource, /export const useImageNodeLinkedNodes = \(/)
+  assert.match(linkedNodesSource, /getCanvasAutoPlacementPosition/)
+  assert.match(linkedNodesSource, /const createData = buildCreateData\(\{/)
+  assert.match(linkedNodesSource, /const placedPosition = getCanvasAutoPlacementPosition\(\{/)
+  assert.match(linkedNodesSource, /existingNodes: readNodes\(\)/)
   assert.match(linkedNodesSource, /const createLinkedImageNode = \(payload = \{\}\) =>/)
   assert.match(linkedNodesSource, /const updateLinkedImageNode = async \(linkedNodeId, payload = \{\}\) =>/)
   assert.match(linkedNodesSource, /addEdge\(resolveEdge\(\{/)

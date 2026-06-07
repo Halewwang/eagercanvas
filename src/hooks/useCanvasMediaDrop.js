@@ -1,5 +1,6 @@
 import { nextTick } from 'vue'
 import { getImageDimensionsFromFile } from '@/utils/imageDimensions.js'
+import { getCanvasAutoPlacementPosition } from '@/utils/canvasInteraction.js'
 import {
   createCanvasDroppedImageNodeData,
   createCanvasDroppedImageSaveFeedbackPatch,
@@ -53,6 +54,7 @@ export const useCanvasMediaDrop = ({
   getImageDimensions = getImageDimensionsFromFile,
   getNow = () => Date.now(),
   nextTickFn = nextTick,
+  nodes = [],
   notify = null,
   revokeObjectURL = (url) => getDefaultUrlApi()?.revokeObjectURL?.(url),
   updateNode = () => {},
@@ -77,16 +79,25 @@ export const useCanvasMediaDrop = ({
     }
   }
 
+  const getDroppedNodePosition = ({ origin, index, type, data }) =>
+    getCanvasAutoPlacementPosition({
+      preferredPosition: getCanvasMediaDropPosition({ origin, index }),
+      nodeType: type,
+      nodeData: data,
+      existingNodes: readReactiveValue(nodes) || []
+    })
+
   const createDroppedNode = async ({ entry, origin, index }) => {
     const previewUrl = createPreviewUrl(entry.file)
-    const position = getCanvasMediaDropPosition({ origin, index })
 
     if (entry.kind === 'video') {
-      const nodeId = addNode('video', position, createCanvasDroppedVideoNodeData({
+      const data = createCanvasDroppedVideoNodeData({
         file: entry.file,
         previewUrl,
         now: getNow()
-      }))
+      })
+      const position = getDroppedNodePosition({ origin, index, type: 'video', data })
+      const nodeId = addNode('video', position, data)
       return { ...entry, nodeId, previewUrl }
     }
 
@@ -97,12 +108,14 @@ export const useCanvasMediaDrop = ({
       dimensions = { width: 0, height: 0 }
     }
 
-    const nodeId = addNode('image', position, createCanvasDroppedImageNodeData({
+    const data = createCanvasDroppedImageNodeData({
       file: entry.file,
       previewUrl,
       dimensions,
       now: getNow()
-    }))
+    })
+    const position = getDroppedNodePosition({ origin, index, type: 'image', data })
+    const nodeId = addNode('image', position, data)
     return { ...entry, nodeId, previewUrl }
   }
 

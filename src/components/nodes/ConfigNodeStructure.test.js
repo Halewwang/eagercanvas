@@ -173,6 +173,20 @@ test('image config node delegates provider size semantics to a pure helper', () 
   assert.match(sizeOptionsSource, /export const resolveImageConfigSizeSelection = \(/)
 })
 
+test('config result nodes use grid collision placement for automatic output creation', () => {
+  for (const source of [imageConfigSource, videoConfigSource]) {
+    assert.match(source, /getAutoPlacementPosition/)
+  }
+
+  assert.match(imageConfigSource, /const imageNodeData = \{\s*url: '',\s*loading: true,\s*label: 'Image Result'\s*\}/s)
+  assert.match(imageConfigSource, /const imageNodePosition = getAutoPlacementPosition\('image', \{ x: nodeX \+ 400, y: nodeY \+ yOffset \}, imageNodeData\)/)
+  assert.match(imageConfigSource, /imageNodeId = addNode\('image', imageNodePosition, imageNodeData\)/)
+
+  assert.match(videoConfigSource, /const videoNodeData = \{\s*url: '',\s*previewUrl: '',\s*loading: true,\s*label: 'Generating video\.\.\.',\s*sourceConfigId: props\.id\s*\}/s)
+  assert.match(videoConfigSource, /const videoNodePosition = getAutoPlacementPosition\('video', \{ x: nodeX \+ 350, y: nodeY \}, videoNodeData\)/)
+  assert.match(videoConfigSource, /const videoNodeId = addNode\('video', videoNodePosition, videoNodeData\)/)
+})
+
 test('image and video config nodes delegate error display to a shared component', () => {
   const errorMessageSource = readConfigComponentSource('ConfigNodeErrorMessage')
 

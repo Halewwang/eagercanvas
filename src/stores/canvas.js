@@ -33,6 +33,7 @@ import { notifier } from '@/utils/notifier'
 import { isLocalPreviewEnabled } from '@/utils/localPreview'
 import {
   createCanvasContentSnapshot,
+  getCanvasAutoPlacementPosition,
   recordCanvasPerf,
   shouldTriggerCanvasRemoteSync,
   translateNodePositions
@@ -163,6 +164,14 @@ const addNode = (type, position = { x: 100, y: 100 }, data = {}, options = {}) =
   if (options.saveHistory !== false) saveToHistory() // Save after adding node | 添加节点后保存
   return id
 }
+
+const getAutoPlacementPosition = (type, preferredPosition, data = {}) =>
+  getCanvasAutoPlacementPosition({
+    preferredPosition,
+    nodeType: type,
+    nodeData: data,
+    existingNodes: nodes.value
+  })
 
 const cloneNodes = (items) => cloneCanvasData(items)
 const cloneEdges = (items) => cloneCanvasData(items)
@@ -1184,6 +1193,7 @@ return {
   projectSaveState,
   refreshCanvasCollectionRefs,
   addNode,
+  getAutoPlacementPosition,
   createGroup,
   addNodesToGroup,
   addGroupOutputLink,

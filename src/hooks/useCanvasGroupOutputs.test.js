@@ -11,6 +11,10 @@ const hookSource = readFileSync(hookUrl, 'utf8')
   .replace("from '@/utils/canvasInteraction'", `from '${canvasInteractionUrl.href}'`)
 const { useCanvasGroupOutputs } = await import(`data:text/javascript;base64,${Buffer.from(hookSource).toString('base64')}`)
 
+test('canvas group outputs use the shared auto placement helper', () => {
+  assert.match(hookSource, /getCanvasAutoPlacementPosition/)
+})
+
 const createEventTarget = () => {
   const listeners = new Map()
 
@@ -132,7 +136,7 @@ test('canvas group outputs drag a pending group line and create an image output 
   assert.equal(eventTarget.has('pointermove'), false)
   assert.equal(outputs.pendingGroupOutputLine.value, null)
   assert.deepEqual(calls, [
-    ['add-node', 'image', { x: 380, y: 110 }, { label: '图片输出' }, { saveHistory: false }],
+    ['add-node', 'image', { x: 760, y: 120 }, { label: '图片输出' }, { saveHistory: false }],
     ['add-link', 'group-1', 'image-1', { saveHistory: true }],
     ['update-internals', 'image-1'],
     ['schedule', { force: true }],
@@ -154,7 +158,7 @@ test('canvas group outputs keep click creation as a default placement without op
   await nextTick()
 
   assert.deepEqual(calls, [
-    ['add-node', 'image', { x: 290, y: 30 }, { label: '图片输出' }, { saveHistory: false }],
+    ['add-node', 'image', { x: 680, y: 40 }, { label: '图片输出' }, { saveHistory: false }],
     ['add-link', 'group-1', 'image-1', { saveHistory: true }],
     ['update-internals', 'image-1'],
     ['schedule', { force: true }],

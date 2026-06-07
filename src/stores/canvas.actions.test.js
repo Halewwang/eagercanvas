@@ -132,10 +132,14 @@ test('canvas store delegates node actions to pure canvas action helpers', () => 
   const canvasSource = readFileSync(new URL('./canvas.js', import.meta.url), 'utf8')
 
   assert.match(canvasSource, /from '\.\/canvasActionsCore\.js'/)
+  assert.match(canvasSource, /getCanvasAutoPlacementPosition/)
+  assert.match(canvasSource, /const getAutoPlacementPosition = \(type, preferredPosition, data = \{\}\) =>/)
+  assert.match(canvasSource, /existingNodes: nodes\.value/)
   assert.match(canvasSource, /createCanvasNode\(\{/)
   assert.match(canvasSource, /updateCanvasNodeData\(nodes\.value, id, data\)/)
   assert.match(canvasSource, /removeCanvasNodeGraph\(\{/)
   assert.match(canvasSource, /duplicateCanvasNode\(\{/)
+  assert.match(canvasSource, /getAutoPlacementPosition,/)
 })
 
 test('canvas store can update runtime node state without scheduling autosave', () => {

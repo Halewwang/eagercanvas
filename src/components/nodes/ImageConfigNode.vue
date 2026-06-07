@@ -134,7 +134,7 @@ const props = defineProps({
 const { updateNodeInternals } = useVueFlow()
 const canvasStore = useCanvasStore(pinia)
 const { currentProjectId, edges, nodes, projectSaveState } = storeToRefs(canvasStore)
-const { updateNode, addNode, addEdge, duplicateNode, removeNode, saveProject } = canvasStore
+const { updateNode, addNode, addEdge, duplicateNode, getAutoPlacementPosition, removeNode, saveProject } = canvasStore
 
 // API config hook | API 配置 hook
 const { isConfigured } = useApiConfig()
@@ -568,12 +568,13 @@ const handleGenerate = async (mode = 'auto') => {
       yOffset = outputEdges.length * 280 // Stack below existing outputs | 在现有输出下方堆叠
     }
 
-    // Create image node with loading state | 创建带加载状态的图片节点
-    imageNodeId = addNode('image', { x: nodeX + 400, y: nodeY + yOffset }, {
+    const imageNodeData = {
       url: '',
       loading: true,
       label: 'Image Result'
-    })
+    }
+    const imageNodePosition = getAutoPlacementPosition('image', { x: nodeX + 400, y: nodeY + yOffset }, imageNodeData)
+    imageNodeId = addNode('image', imageNodePosition, imageNodeData)
 
     // Auto-connect imageConfig → image | 自动连接 生图配置 → 图片
     addEdge(edgeStrategy.resolve({

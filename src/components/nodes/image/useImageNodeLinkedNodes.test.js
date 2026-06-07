@@ -6,10 +6,12 @@ import { ref } from 'vue'
 
 const linkedNodesUrl = new URL('./useImageNodeLinkedNodes.js', import.meta.url)
 const linkedNodesPath = fileURLToPath(linkedNodesUrl)
+const canvasInteractionUrl = new URL('../../../utils/canvasInteraction.js', import.meta.url)
 
 const loadLinkedNodes = async () => {
   assert.ok(existsSync(linkedNodesPath), 'useImageNodeLinkedNodes.js should exist')
   const linkedNodesSource = readFileSync(linkedNodesUrl, 'utf8')
+    .replace("from '@/utils/canvasInteraction'", `from '${canvasInteractionUrl.href}'`)
   return import(`data:text/javascript;base64,${Buffer.from(linkedNodesSource).toString('base64')}`)
 }
 

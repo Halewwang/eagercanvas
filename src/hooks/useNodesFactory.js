@@ -13,7 +13,7 @@ import { edgeStrategy } from '@/services/edgeStrategy'
 export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
   const canvasStore = useCanvasStore(pinia)
   const { nodes } = storeToRefs(canvasStore)
-  const { addNode, addEdge, updateNode } = canvasStore
+  const { addNode, addEdge, getAutoPlacementPosition, updateNode } = canvasStore
   
   /**
    * Calculate viewport center position
@@ -87,14 +87,17 @@ export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
    * 创建手动提示词链
    */
   const createPromptChain = async (content, position) => {
-    const textNodeId = addNode('text', position, { 
+    const textNodeData = {
       content: content, 
       label: 'Prompt' 
-    })
+    }
+    const textPosition = getAutoPlacementPosition('text', position, textNodeData)
+    const textNodeId = addNode('text', textPosition, textNodeData)
     
-    const imageNodeId = addNode('image', { x: position.x + 400, y: position.y }, {
+    const imageNodeData = {
       label: 'Image Result'
-    })
+    }
+    const imageNodeId = addNode('image', getAutoPlacementPosition('image', { x: textPosition.x + 400, y: textPosition.y }, imageNodeData), imageNodeData)
     
     addEdge(edgeStrategy.resolve({
       source: textNodeId,
@@ -114,7 +117,8 @@ export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
     const center = getViewportCenter()
     
     // Add node at viewport center | 在视口中心添加节点
-    const nodeId = addNode(type, { x: center.x - 100 + (offset?.x || 0), y: center.y - 100 + (offset?.y || 0) })
+    const position = getAutoPlacementPosition(type, { x: center.x - 100 + (offset?.x || 0), y: center.y - 100 + (offset?.y || 0) })
+    const nodeId = addNode(type, position)
     
     // Set highest z-index | 设置最高层级
     const maxZIndex = Math.max(0, ...nodes.value.map(n => n.zIndex || 0))

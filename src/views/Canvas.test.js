@@ -552,6 +552,21 @@ test('canvas view delegates node creation menu to a focused component', () => {
   assert.match(nodeMenuQuantitySource, /\.node-menu-stepper-value\s*\{/)
 })
 
+test('canvas automatic node creation uses grid collision placement without changing drag behavior', () => {
+  const nodesFactorySource = readHookSource('useNodesFactory')
+  const nodeDragInteractionSource = readHookSource('useCanvasNodeDragInteraction')
+
+  assert.match(canvasSource, /getAutoPlacementPosition,/)
+  assert.match(canvasSource, /addNode\(type, getAutoPlacementPosition\(type, getCanvasNodeGridPosition\(\{/)
+  assert.match(canvasSource, /nodes,\s*updateNode,/)
+
+  assert.match(nodesFactorySource, /getAutoPlacementPosition/)
+  assert.match(nodesFactorySource, /const position = getAutoPlacementPosition\(type, \{ x: center\.x - 100 \+ \(offset\?\.x \|\| 0\), y: center\.y - 100 \+ \(offset\?\.y \|\| 0\) \}\)/)
+
+  assert.doesNotMatch(nodeDragInteractionSource, /getCanvasAutoPlacementPosition/)
+  assert.doesNotMatch(nodeDragInteractionSource, /collision|overlap|autoPlacement/i)
+})
+
 test('canvas view delegates sync resolution modals to a focused component', () => {
   const syncModalsSource = readComponentSource('CanvasSyncModals')
   const syncConflictModalSource = readComponentSource('CanvasSyncConflictModal')

@@ -299,6 +299,10 @@ test('video node delegates enhance result orchestration to a focused composable'
 
   assert.match(enhanceResultsSource, /import \{ ref \} from 'vue'/)
   assert.match(enhanceResultsSource, /export const useVideoNodeEnhanceResults = \(/)
+  assert.match(enhanceResultsSource, /getCanvasAutoPlacementPosition/)
+  assert.match(enhanceResultsSource, /const createData = \{\s*url: '',\s*loading: true,\s*label: 'Enhanced video',\s*\.\.\.payload\s*\}/s)
+  assert.match(enhanceResultsSource, /const position = getCanvasAutoPlacementPosition\(\{/)
+  assert.match(enhanceResultsSource, /existingNodes: readReactiveValue\(nodes\) \|\| \[\]/)
   assert.match(enhanceResultsSource, /const createLinkedVideoNode = \(/)
   assert.match(enhanceResultsSource, /const updateLinkedVideoNode = async/)
   assert.match(enhanceResultsSource, /const resolveVideoPersistence = async/)
