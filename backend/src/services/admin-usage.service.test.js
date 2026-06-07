@@ -228,6 +228,60 @@ test('loadUserApiKeyBillingInventory bounds concurrent key detail lookups', asyn
   }
 })
 
+test('loadUserApiKeyBillingInventory reuses short-lived billing inventory cache when enabled', async () => {
+  let listCalls = 0
+  let detailCalls = 0
+  let usageCalls = 0
+  const options = {
+    cacheTtlMs: 1000,
+    listApiKeys: async () => {
+      listCalls += 1
+      return {
+        data: [
+          {
+            api_name: 'eager_user_cached',
+            api_key: 'sk-cached'
+          }
+        ]
+      }
+    },
+    getApiKey: async (apiName) => {
+      detailCalls += 1
+      return {
+        data: {
+          api_name: apiName,
+          api_key: 'sk-cached'
+        }
+      }
+    },
+    getApiKeyUsage: async () => {
+      usageCalls += 1
+      return {
+        data: {
+          total_cost: 9.5,
+          currency: 'PTC'
+        }
+      }
+    }
+  }
+
+  const first = await loadUserApiKeyBillingInventory(
+    [{ provider_api_name: 'eager_user_cached', status: 'active' }],
+    options
+  )
+  const second = await loadUserApiKeyBillingInventory(
+    [{ provider_api_name: 'eager_user_cached', status: 'active' }],
+    options
+  )
+
+  assert.equal(first.get('eager_user_cached').usage_total_cost, 9.5)
+  assert.equal(second.get('eager_user_cached').usage_total_cost, 9.5)
+  assert.notEqual(first, second)
+  assert.equal(listCalls, 1)
+  assert.equal(detailCalls, 1)
+  assert.equal(usageCalls, 1)
+})
+
 test('loadUserApiKeyBillingInventory does not use list cost when detail lookup fails', async () => {
   const inventory = await loadUserApiKeyBillingInventory(
     [{ provider_api_name: 'eager_user_one', status: 'active' }],

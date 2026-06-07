@@ -118,16 +118,17 @@ instance.interceptors.response.use(
     const silentNetwork = !!error?.config?.silentNetworkErrorToast
     const isTimeout = error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''))
     const durationMs = getRequestDuration(error?.config)
-
-    if (!isObservabilityRequest(error?.config)) {
-      reportApiIssue({
-        category: 'api_error',
-        severity: Number(response?.status || 0) >= 500 ? 'p1' : 'p2',
-        error,
-        response,
-        config: error?.config,
-        durationMs
-      })
+    const reportRequestIssue = () => {
+      if (!isObservabilityRequest(error?.config)) {
+        reportApiIssue({
+          category: 'api_error',
+          severity: Number(response?.status || 0) >= 500 ? 'p1' : 'p2',
+          error,
+          response,
+          config: error?.config,
+          durationMs
+        })
+      }
     }
 
     if (response) {
@@ -168,6 +169,7 @@ instance.interceptors.response.use(
             flushQueue(refreshError, '')
             if (!silent) notifier.error('登录已过期，请重新登录')
             error.__handled = true
+            reportRequestIssue()
             return Promise.reject(refreshError)
           } finally {
             isRefreshing = false
@@ -185,6 +187,8 @@ instance.interceptors.response.use(
         error.__handled = true
       }
 
+      reportRequestIssue()
+
       if (import.meta.env.DEV) {
         console.error('[request:error]', {
           url: error.config?.url,
@@ -198,6 +202,7 @@ instance.interceptors.response.use(
       }
       if (!silent && !silentNetwork) notifier.error(error.message || '网络错误')
       error.__handled = true
+      reportRequestIssue()
     }
     
     return Promise.reject(error)

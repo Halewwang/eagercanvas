@@ -10,6 +10,7 @@ import {
   hasCanvasContent,
   mapProjectFromApi,
   mapProjectToApi,
+  mergeProjectMutationResponse,
   mergeCachedProjectSummaries,
   resolveProjectThumbnail,
   sortProjectsByActivity,
@@ -123,6 +124,53 @@ test('project data helpers preserve canvas cloning, summary, content, and versio
     serverUpdatedAt: '2026-05-02T00:00:00.000Z'
   })
 })
+
+test('project mutation responses preserve local canvas when backend returns lightweight rows', () => {
+  const localProject = {
+    id: 'project-1',
+    name: 'Local Project',
+    thumbnail: 'local-thumb',
+    lastOpenedAt: '2026-06-07T08:00:00.000Z',
+    canvasData: {
+      nodes: [{ id: 'node-1' }],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    }
+  }
+  const lightweightResponse = mapProjectFromApi({
+    id: 'project-1',
+    name: 'Remote Saved',
+    thumbnail_url: '',
+    created_at: '2026-06-07T07:00:00.000Z',
+    updated_at: '2026-06-07T09:00:00.000Z'
+  })
+
+  const merged = mergeProjectMutationResponse(lightweightResponse, localProject)
+
+  assert.equal(merged.name, 'Remote Saved')
+  assert.equal(merged.thumbnail, 'local-thumb')
+  assert.equal(merged.lastOpenedAt, '2026-06-07T08:00:00.000Z')
+  assert.deepEqual(merged.canvasData, localProject.canvasData)
+})
+
+test('project mutation responses keep backend canvas when it is explicitly returned', () => {
+  const localProject = {
+    id: 'project-1',
+    canvasData: { nodes: [{ id: 'local-node' }] }
+  }
+  const fullResponse = mapProjectFromApi({
+    id: 'project-1',
+    name: 'Remote Saved',
+    created_at: '2026-06-07T07:00:00.000Z',
+    updated_at: '2026-06-07T09:00:00.000Z',
+    canvas_json: { nodes: [{ id: 'remote-node' }], edges: [] }
+  })
+
+  const merged = mergeProjectMutationResponse(fullResponse, localProject)
+
+  assert.deepEqual(merged.canvasData, { nodes: [{ id: 'remote-node' }], edges: [] })
+})
+
 
 test('project thumbnail resolution keeps image priority and ignores transient media', () => {
   const imageUrl = persistedUrl('image-new.png')

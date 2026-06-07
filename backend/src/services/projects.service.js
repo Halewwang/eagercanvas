@@ -32,6 +32,8 @@ const updateSchema = z.object({
   currentUpdatedAt: z.string().optional().nullable()
 })
 
+const PROJECT_MUTATION_RESPONSE_COLUMNS = 'id, user_id, workspace_id, access_mode, name, thumbnail_url, created_at, updated_at'
+
 const editRequestSchema = z.object({
   message: z.string().trim().max(500).optional().default('')
 })
@@ -502,7 +504,7 @@ export const updateProject = async (userId, id, input) => {
     query = query.eq('updated_at', baseRevision)
   }
 
-  const { data, error } = await query.select('*').maybeSingle()
+  const { data, error } = await query.select(PROJECT_MUTATION_RESPONSE_COLUMNS).maybeSingle()
 
   if (error) throw new HttpError(500, error.message, 'PROJECT_UPDATE_FAILED')
 
@@ -519,8 +521,7 @@ export const updateProject = async (userId, id, input) => {
   return mapProjectForRead(data, {
     permission,
     accessSource: resolveProjectAccessSource(data, userId, { permission }),
-    ownerProfile: ownerProfiles.get(data.user_id),
-    includeCanvas: true
+    ownerProfile: ownerProfiles.get(data.user_id)
   })
 }
 

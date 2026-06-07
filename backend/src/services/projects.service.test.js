@@ -114,3 +114,12 @@ test('project listing uses batched access resolution instead of per-row permissi
   assert.match(listProjectsSource, /resolveProjectListAccessMap\(userId, rows, \{ directSharedIds \}\)/)
   assert.doesNotMatch(listProjectsSource, /await resolveProjectAccess\(userId, row\)/)
 })
+
+test('project update returns a lightweight project row without full canvas payload', () => {
+  const start = projectsServiceSource.indexOf('export const updateProject = async')
+  const end = projectsServiceSource.indexOf('export const removeProject = async')
+  const updateProjectSource = projectsServiceSource.slice(start, end)
+
+  assert.match(updateProjectSource, /\.select\(PROJECT_MUTATION_RESPONSE_COLUMNS\)\.maybeSingle\(\)/)
+  assert.doesNotMatch(updateProjectSource, /\.select\('\*'\)\.maybeSingle\(\)/)
+})

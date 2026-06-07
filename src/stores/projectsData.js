@@ -44,6 +44,15 @@ export const mapProjectToApi = (project = {}) => ({
     : null
 })
 
+export const mergeProjectMutationResponse = (responseProject = {}, localProject = {}) => ({
+  ...responseProject,
+  thumbnail: responseProject.thumbnail || localProject.thumbnail || '',
+  lastOpenedAt: localProject.lastOpenedAt || responseProject.lastOpenedAt || null,
+  canvasData: responseProject.canvasData !== undefined
+    ? responseProject.canvasData
+    : localProject.canvasData
+})
+
 const getNodeMediaUrl = (node) => {
   const url = String(node?.data?.url || '').trim()
   // Blob URLs are session-scoped and cannot survive refresh.

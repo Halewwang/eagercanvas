@@ -6,6 +6,7 @@ import {
   countWorkspaceMembersByWorkspaceId,
   ensurePersonalWorkspace,
   ensurePublicWorkspace,
+  getActiveWorkspace,
   mapWorkspace
 } from './workspace-membership.service.js'
 
@@ -112,6 +113,89 @@ const createWorkspaceMemberCountClient = ({ members = [] } = {}) => {
   }
 }
 
+const createExistingWorkspaceClient = () => {
+  const calls = []
+  const workspaces = new Map([
+    ['shared-workspace', {
+      id: 'public-workspace',
+      slug: 'shared-workspace',
+      name: 'Community',
+      kind: 'public',
+      is_default: true
+    }],
+    ['personal-user-1', {
+      id: 'personal-workspace',
+      slug: 'personal-user-1',
+      name: 'User Space',
+      kind: 'personal',
+      is_default: false,
+      created_by: 'user-1'
+    }]
+  ])
+
+  return {
+    calls,
+    from(table) {
+      const query = {
+        filters: {},
+        row: null,
+        select(columns) {
+          calls.push(['select', table, columns])
+          return this
+        },
+        eq(column, value) {
+          this.filters[column] = value
+          return this
+        },
+        upsert(row) {
+          this.row = row
+          calls.push(['upsert', table, row])
+          return this
+        },
+        maybeSingle: async () => {
+          calls.push(['maybeSingle', table, { ...query.filters }])
+          if (table === 'workspaces') {
+            if (query.filters.slug) return { data: workspaces.get(query.filters.slug) || null, error: null }
+            if (query.filters.id === 'personal-workspace') return { data: workspaces.get('personal-user-1'), error: null }
+            return { data: null, error: null }
+          }
+          if (table === 'workspace_members') {
+            if (query.filters.workspace_id === 'personal-workspace' && query.filters.user_id === 'user-1') {
+              return { data: { workspace_id: 'personal-workspace', user_id: 'user-1', role: 'owner' }, error: null }
+            }
+            return { data: null, error: null }
+          }
+          if (table === 'user_workspace_preferences') {
+            return { data: { active_workspace_id: 'personal-workspace' }, error: null }
+          }
+          if (table === 'users') {
+            return { data: { id: query.filters.id, email: 'hale@example.com' }, error: null }
+          }
+          if (table === 'user_profiles') {
+            return { data: { user_id: query.filters.user_id, display_name: 'Hale', avatar_url: '' }, error: null }
+          }
+          return { data: null, error: null }
+        },
+        single: async () => {
+          calls.push(['single', table])
+          if (table === 'workspaces') {
+            return { data: { id: `${query.row.slug}-created`, ...query.row }, error: null }
+          }
+          return { data: query.row, error: null }
+        },
+        then(resolve, reject) {
+          calls.push(['then', table, { ...query.filters }])
+          if (table === 'workspace_members') {
+            return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+          }
+          return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+        }
+      }
+      return query
+    }
+  }
+}
+
 test('mapWorkspace infers public and personal kinds from legacy workspace rows', () => {
   const publicWorkspace = mapWorkspace({ id: 'public-1', slug: 'shared-workspace', name: 'Shared Workspace', is_default: true })
   const personalWorkspace = mapWorkspace({ id: 'personal-1', slug: 'personal-user-1', name: 'Personal Workspace', is_default: false })
@@ -165,6 +249,34 @@ test('ensurePublicWorkspace falls back to legacy workspace columns when kind is 
   assert.equal(upserts.length, 2)
   assert.equal(upserts[0].row.kind, 'public')
   assert.equal(Object.prototype.hasOwnProperty.call(upserts[1].row, 'kind'), false)
+})
+
+test('ensurePublicWorkspace reuses existing public workspace without writing on read paths', async () => {
+  const supabaseClient = createExistingWorkspaceClient()
+
+  const workspace = await ensurePublicWorkspace({ supabaseClient })
+
+  assert.equal(workspace.id, 'public-workspace')
+  assert.equal(workspace.slug, 'shared-workspace')
+  assert.deepEqual(
+    supabaseClient.calls.filter((call) => call[0] === 'upsert'),
+    []
+  )
+})
+
+test('getActiveWorkspace reuses existing personal workspace and membership without workspace upserts', async () => {
+  const supabaseClient = createExistingWorkspaceClient()
+
+  const workspace = await getActiveWorkspace('user-1', { supabaseClient })
+
+  assert.equal(workspace.id, 'personal-workspace')
+  assert.equal(workspace.kind, 'personal')
+  assert.deepEqual(
+    supabaseClient.calls.filter((call) => call[0] === 'upsert'),
+    []
+  )
+  assert.equal(supabaseClient.calls.some((call) => call[1] === 'users'), false)
+  assert.equal(supabaseClient.calls.some((call) => call[1] === 'user_profiles'), false)
 })
 
 test('ensurePersonalWorkspace falls back to legacy profile and workspace columns', async () => {

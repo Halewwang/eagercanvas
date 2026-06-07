@@ -31,6 +31,7 @@ import {
   mapProjectFromApi,
   mapProjectToApi,
   mergeCachedProjectSummaries,
+  mergeProjectMutationResponse,
   resolveProjectThumbnail,
   sortProjectsByActivity,
   toProjectSummary
@@ -554,11 +555,7 @@ export const updateProject = async (id, data) => {
 
   try {
     const response = await apiPatchProject(id, mapProjectToApi(nextProject))
-    const normalized = mapProjectFromApi(response.data)
-    const mergedNormalized = {
-      ...normalized,
-      lastOpenedAt: currentProject?.lastOpenedAt || normalized?.lastOpenedAt || null
-    }
+    const mergedNormalized = mergeProjectMutationResponse(mapProjectFromApi(response.data), nextProject)
     if (mergedNormalized?.canvasData) {
       await saveProjectCanvasDraft(id, mergedNormalized.canvasData, {
         draftUpdatedAt: mergedNormalized.updatedAt || new Date().toISOString(),
@@ -689,10 +686,12 @@ export const updateProjectCanvas = async (id, canvasData, currentVersion = null,
     })
     
     const response = await apiPatchProject(id, payload)
-    const updatedProject = {
-      ...mapProjectFromApi(response.data),
+    const updatedProject = mergeProjectMutationResponse(mapProjectFromApi(response.data), {
+      ...next,
+      canvasData: nextRemoteCanvasData,
+      thumbnail: resolveProjectThumbnail(nextRemoteCanvasData, next.thumbnail),
       lastOpenedAt: project?.lastOpenedAt || null
-    }
+    })
     let remoteDraftSaved = false
     if (updatedProject?.canvasData) {
       remoteDraftSaved = await saveProjectCanvasDraft(id, updatedProject.canvasData, {

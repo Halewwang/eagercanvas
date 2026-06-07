@@ -154,6 +154,60 @@ const countWorkspaceMembers = async (workspaceId, { supabaseClient = supabase } 
   return count || 0
 }
 
+const getWorkspaceBySlug = async (slug, { supabaseClient = supabase } = {}) => {
+  const safeSlug = String(slug || '').trim()
+  if (!safeSlug) return null
+  const { data, error } = await supabaseClient
+    .from('workspaces')
+    .select('*')
+    .eq('slug', safeSlug)
+    .maybeSingle()
+
+  if (error) throw new HttpError(500, error.message, 'WORKSPACE_QUERY_FAILED')
+  return data || null
+}
+
+const getWorkspaceMembershipRecord = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
+  if (!userId || !workspaceId) return null
+  const { data, error } = await supabaseClient
+    .from('workspace_members')
+    .select('workspace_id, user_id, role')
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) throw new HttpError(500, error.message, 'WORKSPACE_MEMBERSHIP_QUERY_FAILED')
+  return data || null
+}
+
+const ensureWorkspaceMembershipRecord = async ({
+  workspaceId,
+  userId,
+  role = 'member',
+  checkExisting = true,
+  supabaseClient = supabase
+} = {}) => {
+  if (!workspaceId || !userId) return null
+  if (checkExisting) {
+    const existing = await getWorkspaceMembershipRecord(userId, workspaceId, { supabaseClient })
+    if (existing) return existing
+  }
+
+  const { error } = await supabaseClient
+    .from('workspace_members')
+    .upsert(
+      {
+        workspace_id: workspaceId,
+        user_id: userId,
+        role
+      },
+      { onConflict: 'workspace_id,user_id' }
+    )
+
+  if (error) throw new HttpError(500, error.message, 'PERSONAL_WORKSPACE_MEMBER_FAILED')
+  return { workspace_id: workspaceId, user_id: userId, role }
+}
+
 export const countWorkspaceMembersByWorkspaceId = async (workspaceIds = [], { supabaseClient = supabase } = {}) => {
   const ids = Array.from(new Set((workspaceIds || []).filter(Boolean)))
   const counts = new Map(ids.map((id) => [id, 0]))
@@ -173,6 +227,9 @@ export const countWorkspaceMembersByWorkspaceId = async (workspaceIds = [], { su
 }
 
 export const ensurePublicWorkspace = async ({ supabaseClient = supabase } = {}) => {
+  const existing = await getWorkspaceBySlug(PUBLIC_WORKSPACE_SLUG, { supabaseClient })
+  if (existing) return existing
+
   return upsertWorkspaceWithLegacyFallback({
     row: {
       slug: PUBLIC_WORKSPACE_SLUG,
@@ -191,8 +248,19 @@ export const ensurePublicWorkspace = async ({ supabaseClient = supabase } = {}) 
 }
 
 export const ensurePersonalWorkspace = async (userId, { supabaseClient = supabase } = {}) => {
-  const identity = await getUserIdentity(userId, { supabaseClient })
   const slug = `personal-${userId}`
+  const existing = await getWorkspaceBySlug(slug, { supabaseClient })
+  if (existing) {
+    await ensureWorkspaceMembershipRecord({
+      workspaceId: existing.id,
+      userId,
+      role: 'owner',
+      supabaseClient
+    })
+    return existing
+  }
+
+  const identity = await getUserIdentity(userId, { supabaseClient })
   const name = getPersonalWorkspaceName(identity, userId)
 
   const workspace = await upsertWorkspaceWithLegacyFallback({
@@ -213,32 +281,18 @@ export const ensurePersonalWorkspace = async (userId, { supabaseClient = supabas
     supabaseClient
   })
 
-  const { error: memberError } = await supabaseClient
-    .from('workspace_members')
-    .upsert(
-      {
-        workspace_id: workspace.id,
-        user_id: userId,
-        role: 'owner'
-      },
-      { onConflict: 'workspace_id,user_id' }
-    )
-
-  if (memberError) throw new HttpError(500, memberError.message, 'PERSONAL_WORKSPACE_MEMBER_FAILED')
+  await ensureWorkspaceMembershipRecord({
+    workspaceId: workspace.id,
+    userId,
+    role: 'owner',
+    checkExisting: false,
+    supabaseClient
+  })
   return workspace
 }
 
 export const getWorkspaceMembership = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
-  if (!userId || !workspaceId) return null
-  const { data, error } = await supabaseClient
-    .from('workspace_members')
-    .select('workspace_id, user_id, role')
-    .eq('workspace_id', workspaceId)
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  if (error) throw new HttpError(500, error.message, 'WORKSPACE_MEMBERSHIP_QUERY_FAILED')
-  return data || null
+  return getWorkspaceMembershipRecord(userId, workspaceId, { supabaseClient })
 }
 
 export const getWorkspaceById = async (workspaceId, { supabaseClient = supabase } = {}) => {

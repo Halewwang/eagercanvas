@@ -45,6 +45,8 @@ const buildRuntimeApiKeyFallback = (item = {}) => {
   return apiKey ? { api_key: apiKey } : {}
 }
 const DEFAULT_BILLING_INVENTORY_CONCURRENCY = 4
+const DEFAULT_BILLING_INVENTORY_CACHE_TTL_MS = 30 * 1000
+const billingInventoryCache = new Map()
 
 const normalizeConcurrency = (value, fallback = DEFAULT_BILLING_INVENTORY_CONCURRENCY) => {
   const parsed = Number(value)
@@ -68,6 +70,32 @@ const mapWithConcurrency = async (items = [], worker, concurrency = DEFAULT_BILL
   }))
 
   return results
+}
+
+const getBillingInventoryCacheKey = (requestedNames = []) => {
+  const names = Array.isArray(requestedNames) ? requestedNames : []
+  return names.length ? names.join('\n') : '*'
+}
+
+const readBillingInventoryCache = (cacheKey, { ttlMs = 0, now = Date.now } = {}) => {
+  const safeTtlMs = Number(ttlMs)
+  if (!cacheKey || !Number.isFinite(safeTtlMs) || safeTtlMs <= 0) return null
+  const cached = billingInventoryCache.get(cacheKey)
+  if (!cached) return null
+  if (cached.expiresAt <= now()) {
+    billingInventoryCache.delete(cacheKey)
+    return null
+  }
+  return new Map(cached.inventory)
+}
+
+const writeBillingInventoryCache = (cacheKey, inventory, { ttlMs = 0, now = Date.now } = {}) => {
+  const safeTtlMs = Number(ttlMs)
+  if (!cacheKey || !Number.isFinite(safeTtlMs) || safeTtlMs <= 0 || !(inventory instanceof Map)) return
+  billingInventoryCache.set(cacheKey, {
+    expiresAt: now() + safeTtlMs,
+    inventory: new Map(inventory)
+  })
 }
 
 const loadBillingInventoryEntry = async ({
@@ -141,13 +169,34 @@ export const loadActiveApiKeyInventory = async () => {
 
 export const loadUserApiKeyBillingInventory = async (
   credentials = [],
-  {
+  options = {}
+) => {
+  const {
     listApiKeys = get302ApiKeys,
     getApiKey = get302ApiKey,
     getApiKeyUsage = get302ApiKeyUsageByKey,
-    concurrency = DEFAULT_BILLING_INVENTORY_CONCURRENCY
-  } = {}
-) => {
+    concurrency = DEFAULT_BILLING_INVENTORY_CONCURRENCY,
+    cacheTtlMs = null,
+    now = Date.now
+  } = options
+  const effectiveCacheTtlMs = Number.isFinite(Number(cacheTtlMs))
+    ? Number(cacheTtlMs)
+    : (
+        options.listApiKeys || options.getApiKey || options.getApiKeyUsage
+          ? 0
+          : DEFAULT_BILLING_INVENTORY_CACHE_TTL_MS
+      )
+  const requestedNames = [
+    ...new Set(
+      (credentials || [])
+        .map(readProviderApiName)
+        .filter(Boolean)
+    )
+  ]
+  const cacheKey = getBillingInventoryCacheKey(requestedNames)
+  const cached = readBillingInventoryCache(cacheKey, { ttlMs: effectiveCacheTtlMs, now })
+  if (cached) return cached
+
   try {
     const list = normalize302ApiKeyList(await listApiKeys())
     const activeItems = new Map(
@@ -155,13 +204,6 @@ export const loadUserApiKeyBillingInventory = async (
         .map((item) => [readApiName(item), item])
         .filter(([apiName]) => !!apiName)
     )
-    const requestedNames = [
-      ...new Set(
-        (credentials || [])
-          .map(readProviderApiName)
-          .filter(Boolean)
-      )
-    ]
     const names = requestedNames.length ? requestedNames : [...activeItems.keys()]
     const inventory = new Map()
 
@@ -179,6 +221,7 @@ export const loadUserApiKeyBillingInventory = async (
       if (entry) inventory.set(entry[0], entry[1])
     }
 
+    writeBillingInventoryCache(cacheKey, inventory, { ttlMs: effectiveCacheTtlMs, now })
     return inventory
   } catch {
     return null
