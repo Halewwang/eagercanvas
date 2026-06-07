@@ -11,6 +11,9 @@ import {
 } from '@/utils/canvasInteraction'
 
 const defaultRequestAnimationFrame = (callback) => globalThis.requestAnimationFrame?.(callback) ?? setTimeout(callback, 0)
+const GROUP_OUTPUT_TARGET_HANDLE_X_OFFSET = 14
+const GROUP_OUTPUT_SELECTED_TARGET_HANDLE_X_OFFSET = 13
+const GROUP_OUTPUT_TARGET_HANDLE_Y_OFFSET = 9
 const defaultCancelAnimationFrame = (id) => {
   if (globalThis.cancelAnimationFrame) {
     globalThis.cancelAnimationFrame(id)
@@ -55,6 +58,37 @@ export const useCanvasOverlayRects = ({
       }))
       .filter((group) => group.rect)
   )
+
+  const groupOutputLines = computed(() => {
+    const nodeById = getNodeLookup()
+    const zoom = Math.max(Number(viewport?.value?.zoom) || 1, 0.01)
+    return renderedGroups.value.flatMap((group) => {
+      const sourceRect = group.rect
+      return (Array.isArray(group.outputLinks) ? group.outputLinks : [])
+        .map((link) => {
+          const targetNode = nodeById.get(link?.targetNodeId)
+          const targetRect = getNodeViewportRect(targetNode, viewport?.value)
+          if (!targetRect) return null
+          const targetHandleOffset = (targetNode?.selected || targetNode?.data?.selected)
+            ? GROUP_OUTPUT_SELECTED_TARGET_HANDLE_X_OFFSET
+            : GROUP_OUTPUT_TARGET_HANDLE_X_OFFSET
+          return {
+            id: link.id,
+            groupId: group.id,
+            targetNodeId: link.targetNodeId,
+            source: {
+              x: sourceRect.left + sourceRect.width,
+              y: sourceRect.top + sourceRect.height / 2
+            },
+            target: {
+              x: targetRect.left - targetHandleOffset * zoom,
+              y: targetRect.top + (targetRect.bottom - targetRect.top) / 2 + GROUP_OUTPUT_TARGET_HANDLE_Y_OFFSET * zoom
+            }
+          }
+        })
+        .filter(Boolean)
+    })
+  })
 
   const selectedGroupMenuRect = computed(() =>
     selectedGroupId?.value ? groupRects.value[selectedGroupId.value] || null : null
@@ -164,6 +198,7 @@ export const useCanvasOverlayRects = ({
 
   return {
     groupBodyHitRectsById,
+    groupOutputLines,
     groupRects,
     multiSelectMenuRect,
     multiSelectRect,

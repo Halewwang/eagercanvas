@@ -24,6 +24,7 @@ const createHarness = (overrides = {}) => {
     { id: 'group-1', nodeIds: ['node-1', 'node-3'] }
   ])
   const selectedGroupId = ref(overrides.selectedGroupId ?? 'group-1')
+  const selectedGroupOutputLinkId = ref(overrides.selectedGroupOutputLinkId ?? '')
   const showNodeMenu = ref(overrides.showNodeMenu ?? true)
   const suppressPaneClickUntil = ref(overrides.suppressPaneClickUntil ?? 0)
 
@@ -32,12 +33,17 @@ const createHarness = (overrides = {}) => {
     edges,
     groups,
     selectedGroupId,
+    selectedGroupOutputLinkId,
     showNodeMenu,
     suppressPaneClickUntil,
     clearNodeMenuContext: () => calls.push(['clear-node-menu']),
     handleDeleteSelectedGroup: () => calls.push(['delete-group']),
     manualSaveHistory: () => calls.push(['manual-save-history']),
     removeNodesByIds: (ids, saveHistory) => calls.push(['remove-nodes', ids, saveHistory]),
+    removeGroupOutputLinkById: (id, options) => {
+      calls.push(['remove-group-output-link', id, options])
+      return overrides.removeGroupOutputLinkResult ?? true
+    },
     nowFn: () => overrides.now ?? 1000
   })
 
@@ -47,6 +53,7 @@ const createHarness = (overrides = {}) => {
     groups,
     nodes,
     selectedGroupId,
+    selectedGroupOutputLinkId,
     selection,
     showNodeMenu,
     suppressPaneClickUntil
@@ -98,14 +105,17 @@ test('canvas selection interaction syncs VueFlow selection flags and suppresses 
 })
 
 test('canvas selection interaction owns pane click and delete/backspace behavior', () => {
-  const { calls, edges, nodes, selectedGroupId, selection, showNodeMenu } = createHarness()
+  const { calls, edges, nodes, selectedGroupId, selectedGroupOutputLinkId, selection, showNodeMenu } = createHarness()
 
   selection.onNodeClick()
   assert.equal(selectedGroupId.value, null)
+  assert.equal(selectedGroupOutputLinkId.value, '')
   assert.equal(showNodeMenu.value, false)
   assert.deepEqual(calls.splice(0), [['clear-node-menu']])
 
+  selectedGroupOutputLinkId.value = 'group-output-1'
   selection.onPaneClick()
+  assert.equal(selectedGroupOutputLinkId.value, '')
   assert.equal(showNodeMenu.value, false)
   assert.equal(nodes.value.every((node) => !node.selected && !node.data.selected && node.data.openPortMenu === null), true)
   assert.deepEqual(calls.splice(0), [['clear-node-menu']])
@@ -132,6 +142,43 @@ test('canvas selection interaction owns pane click and delete/backspace behavior
   })
   assert.equal(prevented, true)
   assert.deepEqual(calls.splice(0), [['delete-group']])
+})
+
+test('canvas selection interaction deletes a selected group output link without touching nodes or edges', () => {
+  const { calls, edges, nodes, selectedGroupId, selectedGroupOutputLinkId, selection } = createHarness({
+    selectedGroupId: '',
+    selectedGroupOutputLinkId: 'group-output-1'
+  })
+
+  let prevented = false
+  selection.handleGlobalKeydown({
+    key: 'Delete',
+    preventDefault: () => {
+      prevented = true
+    },
+    target: { tagName: 'div' }
+  })
+
+  assert.equal(prevented, true)
+  assert.equal(selectedGroupOutputLinkId.value, '')
+  assert.equal(selectedGroupId.value, '')
+  assert.deepEqual(calls.splice(0), [
+    ['remove-group-output-link', 'group-output-1', { saveHistory: true }]
+  ])
+  assert.deepEqual(edges.value.map((edge) => edge.id), ['edge-1', 'edge-2'])
+  assert.deepEqual(nodes.value.map((node) => node.id), ['node-1', 'node-2', 'node-3'])
+})
+
+test('canvas selection interaction keeps group output line selected through the pane click follow-up', () => {
+  const { calls, selectedGroupOutputLinkId, selection, suppressPaneClickUntil } = createHarness()
+
+  selection.selectGroupOutputLink('group-output-1')
+  assert.equal(selectedGroupOutputLinkId.value, 'group-output-1')
+  assert.equal(suppressPaneClickUntil.value, 1250)
+
+  selection.onPaneClick()
+  assert.equal(selectedGroupOutputLinkId.value, 'group-output-1')
+  assert.deepEqual(calls.splice(0), [['clear-node-menu']])
 })
 
 test('canvas selection interaction ignores pane suppression and typing targets', () => {

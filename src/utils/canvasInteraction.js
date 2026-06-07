@@ -79,6 +79,42 @@ const getRectBounds = (rect = {}) => {
   return { left, top, right, bottom }
 }
 
+export const getRectOverlapRatio = (subjectRect = null, containerRect = null) => {
+  const subject = getRectBounds(subjectRect)
+  const container = getRectBounds(containerRect)
+  if (!subject || !container) return 0
+
+  const overlapLeft = Math.max(subject.left, container.left)
+  const overlapTop = Math.max(subject.top, container.top)
+  const overlapRight = Math.min(subject.right, container.right)
+  const overlapBottom = Math.min(subject.bottom, container.bottom)
+  if (overlapRight <= overlapLeft || overlapBottom <= overlapTop) return 0
+
+  const subjectArea = (subject.right - subject.left) * (subject.bottom - subject.top)
+  if (subjectArea <= 0) return 0
+  const overlapArea = (overlapRight - overlapLeft) * (overlapBottom - overlapTop)
+  return overlapArea / subjectArea
+}
+
+export const getGroupMergeCandidate = ({
+  nodeRect = null,
+  groups = [],
+  threshold = 0.5
+} = {}) => {
+  const safeThreshold = Math.max(Number(threshold) || 0, 0)
+  let candidate = null
+  let bestRatio = 0
+
+  ;(Array.isArray(groups) ? groups : []).forEach((group) => {
+    const ratio = getRectOverlapRatio(nodeRect, group?.rect)
+    if (ratio < safeThreshold || ratio <= bestRatio) return
+    candidate = group
+    bestRatio = ratio
+  })
+
+  return candidate
+}
+
 const subtractYInterval = (intervals, blocker) => intervals.flatMap((interval) => {
   const top = Math.max(interval.top, blocker.top)
   const bottom = Math.min(interval.bottom, blocker.bottom)
@@ -259,6 +295,33 @@ export const getLocalImageInjectPosition = ({ nodeCount = 0 } = {}) =>
     gapX: 120,
     gapY: 60
   })
+
+export const getGroupOutputImagePosition = ({
+  groupRect = null,
+  viewport = {},
+  offsetX = 180,
+  centerOffsetY = 120
+} = {}) => {
+  const rect = getRectBounds(groupRect)
+  if (!rect) return getCanvasNodeGridPosition()
+
+  return getFlowPointFromScreenPoint({
+    x: rect.right + (Number(offsetX) || 0),
+    y: rect.top + ((rect.bottom - rect.top) / 2) - (Number(centerOffsetY) || 0)
+  }, viewport)
+}
+
+export const getGroupOutputImageDropPosition = ({
+  point = null,
+  viewport = {},
+  centerOffsetY = 120
+} = {}) => {
+  const flowPoint = getFlowPointFromScreenPoint(point || {}, viewport)
+  return {
+    x: flowPoint.x,
+    y: flowPoint.y - (Number(centerOffsetY) || 0)
+  }
+}
 
 export const createLocalImageNodeData = ({
   dataUrl = '',

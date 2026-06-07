@@ -145,3 +145,16 @@ test('canvas store can update runtime node state without scheduling autosave', (
   assert.match(canvasSource, /if \(options\.persist === false\) return/)
   assert.match(canvasSource, /markCanvasDirty\(options\.changeType\)/)
 })
+
+test('canvas store keeps group output links scoped inside groups and cleans them with node removal', () => {
+  const canvasSource = readFileSync(new URL('./canvas.js', import.meta.url), 'utf8')
+
+  assert.match(canvasSource, /const addNodesToGroup = \(groupIdToUpdate, nodeIdsToAdd, options = \{\}\) => \{/)
+  assert.match(canvasSource, /const addGroupOutputLink = \(groupIdToUpdate, targetNodeId, options = \{\}\) => \{/)
+  assert.match(canvasSource, /const removeGroupOutputLinkById = \(outputLinkId, options = \{\}\) => \{/)
+  assert.match(canvasSource, /const removeGroupOutputLinksForNodes = \(nodeIdsToRemove\) => \{/)
+  assert.match(canvasSource, /addNodesToGroup,/)
+  assert.match(canvasSource, /addGroupOutputLink,/)
+  assert.match(canvasSource, /removeGroupOutputLinkById,/)
+  assert.doesNotMatch(canvasSource, /const groupLinks = shallowRef/)
+})

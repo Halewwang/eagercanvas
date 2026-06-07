@@ -30,6 +30,9 @@ const createHarness = (overrides = {}) => {
     endNodeDragInteraction: (options) => calls.push(['end-drag', options]),
     refreshCanvasCollectionRefs: (collections) => calls.push(['refresh-refs', collections]),
     translateNodesByIds: (ids, delta, saveHistory) => calls.push(['translate', ids, delta, saveHistory]),
+    getGroupMergeCandidateForNode: (nodeId) => overrides.mergeCandidateByNodeId?.[nodeId] || null,
+    setGroupMergeCandidateId: (groupId) => calls.push(['set-merge-candidate', groupId]),
+    addNodesToGroup: (groupId, nodeIds, options) => calls.push(['add-nodes-to-group', groupId, nodeIds, options]),
     syncNodeSelectedState: () => calls.push(['sync-selection']),
     clearGroupSelection: () => calls.push(['clear-group-selection']),
     scheduleOverlayRectUpdate: (options) => calls.push(['schedule', options])
@@ -45,7 +48,83 @@ const createHarness = (overrides = {}) => {
   }
 }
 
-test('canvas node drag interaction moves grouped siblings by anchor delta and saves history on drag stop', async () => {
+test('canvas node drag interaction highlights and commits external node group merge candidate', async () => {
+  const { calls, interaction } = createHarness({
+    groups: [{ id: 'group-1', nodeIds: ['node-a', 'node-b'] }],
+    nodes: [
+      { id: 'node-a', position: { x: 10, y: 20 } },
+      { id: 'node-b', position: { x: 80, y: 120 } },
+      { id: 'node-c', position: { x: 240, y: 120 } }
+    ],
+    mergeCandidateByNodeId: {
+      'node-c': { id: 'group-1' }
+    }
+  })
+
+  interaction.onNodeDragStart(null, { id: 'node-c' })
+  assert.deepEqual(calls.splice(0), [
+    ['set-merge-candidate', null],
+    ['begin-drag']
+  ])
+
+  interaction.onNodesChange([
+    { type: 'position', id: 'node-c', position: { x: 120, y: 120 } }
+  ])
+  await nextTick()
+  assert.deepEqual(calls.splice(0), [
+    ['refresh-refs', { nodes: true }],
+    ['set-merge-candidate', 'group-1'],
+    ['schedule', undefined]
+  ])
+
+  interaction.onNodeDragStop()
+  assert.deepEqual(calls.splice(0), [
+    ['add-nodes-to-group', 'group-1', ['node-c'], { saveHistory: false }],
+    ['set-merge-candidate', null],
+    ['end-drag', { saveHistory: true, changeType: 'content' }],
+    ['schedule', { force: true }]
+  ])
+})
+
+test('canvas node drag interaction infers dragged node id from position changes when drag start payload is narrow', async () => {
+  const { calls, interaction } = createHarness({
+    groups: [{ id: 'group-1', nodeIds: ['node-a', 'node-b'] }],
+    nodes: [
+      { id: 'node-a', position: { x: 10, y: 20 } },
+      { id: 'node-b', position: { x: 80, y: 120 } },
+      { id: 'node-c', position: { x: 240, y: 120 } }
+    ],
+    mergeCandidateByNodeId: {
+      'node-c': { id: 'group-1' }
+    }
+  })
+
+  interaction.onNodeDragStart({ event: 'pointerdown' })
+  assert.deepEqual(calls.splice(0), [
+    ['set-merge-candidate', null],
+    ['begin-drag']
+  ])
+
+  interaction.onNodesChange([
+    { type: 'position', id: 'node-c', position: { x: 120, y: 120 } }
+  ])
+  await nextTick()
+  assert.deepEqual(calls.splice(0), [
+    ['refresh-refs', { nodes: true }],
+    ['set-merge-candidate', 'group-1'],
+    ['schedule', undefined]
+  ])
+
+  interaction.onNodeDragStop()
+  assert.deepEqual(calls.splice(0), [
+    ['add-nodes-to-group', 'group-1', ['node-c'], { saveHistory: false }],
+    ['set-merge-candidate', null],
+    ['end-drag', { saveHistory: true, changeType: 'content' }],
+    ['schedule', { force: true }]
+  ])
+})
+
+test('canvas node drag interaction keeps grouped node drag local and saves history on drag stop', async () => {
   const { calls, interaction } = createHarness()
 
   interaction.onNodeDragStart(null, { id: 'node-a' })
@@ -57,7 +136,6 @@ test('canvas node drag interaction moves grouped siblings by anchor delta and sa
   await nextTick()
   assert.deepEqual(calls.splice(0), [
     ['refresh-refs', { nodes: true }],
-    ['translate', ['node-b', 'missing-node'], { x: 15, y: 25 }, false],
     ['schedule', undefined]
   ])
 
@@ -67,18 +145,17 @@ test('canvas node drag interaction moves grouped siblings by anchor delta and sa
   await nextTick()
   assert.deepEqual(calls.splice(0), [
     ['refresh-refs', { nodes: true }],
-    ['translate', ['node-b', 'missing-node'], { x: 10, y: 5 }, false],
     ['schedule', undefined]
   ])
 
   interaction.onNodeDragStop()
   assert.deepEqual(calls.splice(0), [
-    ['end-drag', { saveHistory: true }],
+    ['end-drag', { saveHistory: true, changeType: 'node-position' }],
     ['schedule', { force: true }]
   ])
 })
 
-test('canvas node drag interaction skips sibling translation when Vue Flow already moved the group', async () => {
+test('canvas node drag interaction keeps grouped node drag local when Vue Flow reports sibling position changes', async () => {
   const { calls, interaction } = createHarness()
 
   interaction.onNodeDragStart(null, { id: 'node-a' })
@@ -95,7 +172,7 @@ test('canvas node drag interaction skips sibling translation when Vue Flow alrea
   ])
   interaction.onNodeDragStop()
   assert.deepEqual(calls.splice(0), [
-    ['end-drag', { saveHistory: true }],
+    ['end-drag', { saveHistory: true, changeType: 'node-position' }],
     ['schedule', { force: true }]
   ])
 })
@@ -122,7 +199,7 @@ test('canvas node drag interaction syncs selection on non-position changes and a
 
   interaction.onNodeDragStop()
   assert.deepEqual(calls.splice(0), [
-    ['end-drag', { saveHistory: false }],
+    ['end-drag', { saveHistory: false, changeType: 'node-position' }],
     ['schedule', { force: true }]
   ])
 })

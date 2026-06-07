@@ -4,6 +4,7 @@ const defaultInputLabels = {
   prompt: 'Prompt',
   reference: 'Reference Picture'
 }
+const defaultGroupContextLabel = 'Group Context'
 
 export const getImageNodeSourceRefImages = (...groups) => {
   const seen = new Set()
@@ -44,10 +45,18 @@ export const getImageNodeInputStatusList = ({
   labels = defaultInputLabels
 } = {}) => {
   const activeSet = activeKeys instanceof Set ? activeKeys : new Set(activeKeys)
-  return [
+  const items = [
     { key: 'prompt', label: labels.prompt || defaultInputLabels.prompt, active: activeSet.has('prompt') },
     { key: 'reference', label: labels.reference || defaultInputLabels.reference, active: activeSet.has('reference') }
   ]
+  if (activeSet.has('groupContext') || Object.prototype.hasOwnProperty.call(labels, 'groupContext')) {
+    items.push({
+      key: 'groupContext',
+      label: labels.groupContext || defaultGroupContextLabel,
+      active: activeSet.has('groupContext')
+    })
+  }
+  return items
 }
 
 export const getImageNodePersistencePatch = (

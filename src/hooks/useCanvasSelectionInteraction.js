@@ -1,18 +1,21 @@
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 export const useCanvasSelectionInteraction = ({
   nodes,
   edges,
   groups,
   selectedGroupId,
+  selectedGroupOutputLinkId = null,
   showNodeMenu,
   suppressPaneClickUntil,
   clearNodeMenuContext = () => {},
   handleDeleteSelectedGroup = () => {},
   manualSaveHistory = () => {},
   removeNodesByIds = () => {},
+  removeGroupOutputLinkById = () => false,
   nowFn = () => Date.now()
 } = {}) => {
+  const groupOutputLinkSelection = selectedGroupOutputLinkId || ref('')
   const selectedNodeIds = computed(() =>
     (nodes?.value || []).filter((node) => node.selected || node.data?.selected).map((node) => node.id)
   )
@@ -36,6 +39,32 @@ export const useCanvasSelectionInteraction = ({
 
   const clearGroupSelection = () => {
     selectedGroupId.value = null
+  }
+
+  const clearGroupOutputSelection = () => {
+    groupOutputLinkSelection.value = ''
+  }
+
+  const hasGroupOutputLink = (linkId) => (
+    !!linkId &&
+    (groups?.value || []).some((group) =>
+      (Array.isArray(group.outputLinks) ? group.outputLinks : []).some((link) => link?.id === linkId)
+    )
+  )
+
+  const clearStaleGroupOutputSelection = () => {
+    if (!hasGroupOutputLink(groupOutputLinkSelection.value)) clearGroupOutputSelection()
+  }
+
+  const selectGroupOutputLink = (linkId) => {
+    const nextLinkId = String(linkId || '').trim()
+    if (!nextLinkId) return
+    if (suppressPaneClickUntil) suppressPaneClickUntil.value = nowFn() + 250
+    groupOutputLinkSelection.value = nextLinkId
+    clearGroupSelection()
+    clearNodeSelection()
+    if (showNodeMenu) showNodeMenu.value = false
+    clearNodeMenuContext()
   }
 
   const syncNodeSelectedState = () => {
@@ -70,6 +99,7 @@ export const useCanvasSelectionInteraction = ({
 
   const onNodeClick = () => {
     clearGroupSelection()
+    clearGroupOutputSelection()
     if (showNodeMenu) showNodeMenu.value = false
     clearNodeMenuContext()
   }
@@ -79,6 +109,7 @@ export const useCanvasSelectionInteraction = ({
       return
     }
     clearGroupSelection()
+    clearGroupOutputSelection()
     if (showNodeMenu) showNodeMenu.value = false
     clearNodeMenuContext()
     clearNodeSelection()
@@ -106,6 +137,12 @@ export const useCanvasSelectionInteraction = ({
   const handleGlobalKeydown = (event) => {
     if (isTypingElement(event.target)) return
     if (event.key !== 'Delete' && event.key !== 'Backspace') return
+    if (groupOutputLinkSelection.value) {
+      event.preventDefault?.()
+      const removed = removeGroupOutputLinkById(groupOutputLinkSelection.value, { saveHistory: true })
+      if (removed) clearGroupOutputSelection()
+      return
+    }
     if (selectedGroupId.value) {
       event.preventDefault?.()
       handleDeleteSelectedGroup()
@@ -117,6 +154,8 @@ export const useCanvasSelectionInteraction = ({
   return {
     selectedGroup,
     selectedNodeIds,
+    clearGroupOutputSelection,
+    clearStaleGroupOutputSelection,
     clearGroupSelection,
     clearNodeSelection,
     handleGlobalKeydown,
@@ -124,6 +163,8 @@ export const useCanvasSelectionInteraction = ({
     onNodeClick,
     onPaneClick,
     removeSelectedElements,
+    selectedGroupOutputLinkId: groupOutputLinkSelection,
+    selectGroupOutputLink,
     syncNodeSelectedState
   }
 }

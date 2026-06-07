@@ -527,6 +527,16 @@ const imageInputStatusMap = {
   reference: 'Reference Picture'
 }
 
+const formatCountLabel = (count, singular, plural) => `${count} ${count === 1 ? singular : plural}`
+
+const resolvedImageInputs = computed(() => resolveNodeInputs(props.id))
+const groupContextSummaryLabel = computed(() => {
+  const contexts = resolvedImageInputs.value.groupContexts || []
+  const promptCount = contexts.reduce((total, context) => total + Number(context.promptCount || 0), 0)
+  const referenceCount = contexts.reduce((total, context) => total + Number(context.referenceCount || 0), 0)
+  return `Group Context · ${formatCountLabel(promptCount, 'prompt', 'prompts')} · ${formatCountLabel(referenceCount, 'reference', 'references')}`
+})
+
 watch(
   () => [props.data?.error, props.data?.suppressErrorModal],
   ([newVal, suppressErrorModal]) => {
@@ -650,21 +660,27 @@ onUnmounted(() => {
 })
 
 function getConnectedInputs() {
-  const resolved = resolveNodeInputs(props.id)
+  const resolved = resolvedImageInputs.value
   return {
     prompt: resolved.prompt,
     refImages: resolved.refImages
   }
 }
 
-const activeImageInputSet = computed(() => getImageNodeActiveInputKeys({
-  edges: edges.value,
-  nodes: nodes.value,
-  targetNodeId: props.id
-}))
+const activeImageInputSet = computed(() => {
+  const activeKeys = getImageNodeActiveInputKeys({
+    edges: edges.value,
+    nodes: nodes.value,
+    targetNodeId: props.id
+  })
+  if ((resolvedImageInputs.value.groupContexts || []).length) activeKeys.add('groupContext')
+  return activeKeys
+})
 const imageInputStatusList = computed(() => getImageNodeInputStatusList({
   activeKeys: activeImageInputSet.value,
-  labels: imageInputStatusMap
+  labels: activeImageInputSet.value.has('groupContext')
+    ? { ...imageInputStatusMap, groupContext: groupContextSummaryLabel.value }
+    : imageInputStatusMap
 }))
 
 const handleDelete = () => {

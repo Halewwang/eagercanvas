@@ -1,106 +1,68 @@
 import { nextTick } from 'vue'
 
 export const useCanvasNodeDragInteraction = ({
-  nodes,
   groups,
   selectedNodeIds,
   isNodeDragging,
   beginNodeDragInteraction = () => {},
   endNodeDragInteraction = () => {},
   refreshCanvasCollectionRefs = () => {},
-  translateNodesByIds = () => {},
+  getGroupMergeCandidateForNode = () => null,
+  setGroupMergeCandidateId = () => {},
+  addNodesToGroup = () => false,
   syncNodeSelectedState = () => {},
   clearGroupSelection = () => {},
   scheduleOverlayRectUpdate = () => {}
 } = {}) => {
   let nodeDragMoved = false
-  let groupedNodeDragState = null
+  let draggedNodeId = ''
+  let draggedNodeGroupId = ''
+  let groupMergeCandidateId = null
+
+  const getNodeIdFromDragArgs = (...args) => {
+    for (const arg of args) {
+      const nodeId = arg?.id || arg?.node?.id || arg?.item?.id
+      if (nodeId) return nodeId
+    }
+    return ''
+  }
 
   const findGroupByNodeId = (nodeId) => {
     if (!nodeId) return null
     return groups?.value?.find((group) => (group.nodeIds || []).includes(nodeId)) || null
   }
 
-  const startGroupedNodeDrag = (nodeId) => {
-    const group = findGroupByNodeId(nodeId)
-    if (!group) {
-      groupedNodeDragState = null
-      return
-    }
-
-    const groupNodeIds = Array.from(new Set(group.nodeIds || []))
-    if (groupNodeIds.length < 2) {
-      groupedNodeDragState = null
-      return
-    }
-
-    const startPositions = new Map()
-    groupNodeIds.forEach((id) => {
-      const node = nodes?.value?.find((item) => item.id === id)
-      if (!node) return
-      startPositions.set(id, {
-        x: Number(node.position?.x) || 0,
-        y: Number(node.position?.y) || 0
-      })
-    })
-
-    if (!startPositions.has(nodeId)) {
-      groupedNodeDragState = null
-      return
-    }
-
-    groupedNodeDragState = {
-      groupId: group.id,
-      anchorId: nodeId,
-      nodeIds: groupNodeIds,
-      startPositions,
-      appliedDeltaX: 0,
-      appliedDeltaY: 0
-    }
+  const updateDraggedNodeGroup = (nodeId) => {
+    draggedNodeGroupId = findGroupByNodeId(nodeId)?.id || ''
   }
 
-  const applyGroupedNodeDragDelta = (changes = []) => {
-    const state = groupedNodeDragState
-    if (!state) return
-    const positionChanges = (Array.isArray(changes) ? changes : [])
-      .filter((change) => change?.type === 'position' && change?.id && change?.position)
-    if (!positionChanges.length) return
-
-    const movedNodeIds = new Set(positionChanges.map((change) => change.id))
-    const siblingMovedByVueFlow = state.nodeIds.some(
-      (id) => id !== state.anchorId && movedNodeIds.has(id)
-    )
-    if (siblingMovedByVueFlow) return
-
-    const anchorChange = positionChanges.find((change) => change.id === state.anchorId)
-    if (!anchorChange) return
-    const startPosition = state.startPositions.get(state.anchorId)
-    if (!startPosition) return
-
-    const totalDeltaX = (Number(anchorChange.position?.x) || 0) - startPosition.x
-    const totalDeltaY = (Number(anchorChange.position?.y) || 0) - startPosition.y
-    const moveX = totalDeltaX - state.appliedDeltaX
-    const moveY = totalDeltaY - state.appliedDeltaY
-    if (!moveX && !moveY) return
-
-    const followerNodeIds = state.nodeIds.filter((id) => id !== state.anchorId)
-    if (!followerNodeIds.length) return
-
-    state.appliedDeltaX = totalDeltaX
-    state.appliedDeltaY = totalDeltaY
-    translateNodesByIds(followerNodeIds, { x: moveX, y: moveY }, false)
-  }
-
-  const onNodeDragStart = (_, node) => {
+  const onNodeDragStart = (...args) => {
+    const nodeId = getNodeIdFromDragArgs(...args)
     nodeDragMoved = false
-    startGroupedNodeDrag(node?.id)
+    draggedNodeId = nodeId
+    updateDraggedNodeGroup(nodeId)
+    groupMergeCandidateId = null
+    if (!draggedNodeGroupId) {
+      setGroupMergeCandidateId(null)
+    }
     beginNodeDragInteraction()
   }
 
   const onNodeDragStop = () => {
-    endNodeDragInteraction({ saveHistory: nodeDragMoved })
+    const didMerge = !draggedNodeGroupId && groupMergeCandidateId && draggedNodeId
+      ? !!addNodesToGroup(groupMergeCandidateId, [draggedNodeId], { saveHistory: false })
+      : false
+    if (groupMergeCandidateId) {
+      setGroupMergeCandidateId(null)
+    }
+    endNodeDragInteraction({
+      saveHistory: nodeDragMoved || didMerge,
+      changeType: didMerge ? 'content' : 'node-position'
+    })
     nodeDragMoved = false
-    groupedNodeDragState = null
+    draggedNodeId = ''
+    draggedNodeGroupId = ''
+    groupMergeCandidateId = null
     scheduleOverlayRectUpdate({ force: true })
   }
 
@@ -120,8 +82,20 @@ export const useCanvasNodeDragInteraction = ({
       Array.isArray(changes) &&
       changes.some((change) => change?.type === 'position')
     ) {
+      const activePositionChange = changes.find((change) => change?.type === 'position' && change?.id)
+      if (!draggedNodeId && activePositionChange?.id) {
+        draggedNodeId = activePositionChange.id
+        updateDraggedNodeGroup(draggedNodeId)
+      }
       nodeDragMoved = true
-      applyGroupedNodeDragDelta(changes)
+      if (!draggedNodeGroupId && draggedNodeId) {
+        const candidate = getGroupMergeCandidateForNode(draggedNodeId)
+        const nextCandidateId = candidate?.id || null
+        if (nextCandidateId !== groupMergeCandidateId) {
+          groupMergeCandidateId = nextCandidateId
+          setGroupMergeCandidateId(nextCandidateId)
+        }
+      }
     }
 
     nextTick(() => {

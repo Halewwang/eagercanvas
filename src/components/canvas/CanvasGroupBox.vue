@@ -1,7 +1,7 @@
 <template>
   <div
     class="canvas-group-box"
-    :class="{ 'is-selected': selected }"
+    :class="{ 'is-selected': selected, 'is-merge-candidate': mergeCandidate }"
     :style="{
       left: `${group.rect.left}px`,
       top: `${group.rect.top}px`,
@@ -42,6 +42,15 @@
       @group-grip-pointer-down="$emit('groupGripPointerDown', $event)"
       @select-group="$emit('selectGroup', group.id)"
     />
+    <button
+      v-if="selected"
+      type="button"
+      class="canvas-group-output-grip node-handle-plus node-handle-plus-right node-handle-plus-visible"
+      aria-label="Create group output image"
+      @pointerdown.stop="$emit('groupOutputPointerDown', $event)"
+      @mousedown.stop="$emit('groupOutputPointerDown', $event)"
+      @click.stop.prevent
+    ></button>
   </div>
 </template>
 
@@ -59,6 +68,10 @@ defineProps({
     type: Boolean,
     default: false
   },
+  mergeCandidate: {
+    type: Boolean,
+    default: false
+  },
   hitRects: {
     type: Array,
     default: () => []
@@ -69,7 +82,7 @@ defineProps({
   }
 })
 
-defineEmits(['groupGripPointerDown', 'selectGroup'])
+defineEmits(['groupGripPointerDown', 'selectGroup', 'groupOutputPointerDown'])
 </script>
 
 <style scoped>
@@ -87,6 +100,14 @@ defineEmits(['groupGripPointerDown', 'selectGroup'])
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.03),
     0 0 0 1px rgba(165, 129, 99, 0.18);
+}
+
+.canvas-group-box.is-merge-candidate {
+  border-color: rgba(235, 226, 216, 0.98);
+  box-shadow:
+    inset 0 0 0 1px rgba(235, 226, 216, 0.34),
+    0 0 0 2px rgba(235, 226, 216, 0.18),
+    0 0 26px rgba(235, 226, 216, 0.22);
 }
 
 .canvas-group-title {
@@ -124,6 +145,21 @@ defineEmits(['groupGripPointerDown', 'selectGroup'])
 .canvas-group-title.is-selected {
   border-color: rgba(255, 255, 255, 0.38);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.canvas-group-output-grip {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: auto;
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+  appearance: none;
+}
+
+.canvas-group-output-grip.node-handle-plus-right {
+  right: -42px !important;
 }
 
 </style>

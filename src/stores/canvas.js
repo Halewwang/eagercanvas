@@ -148,7 +148,7 @@ const saveToHistory = (options = {}) => {
 }
 
 // Add a new node | 添加新节点
-const addNode = (type, position = { x: 100, y: 100 }, data = {}) => {
+const addNode = (type, position = { x: 100, y: 100 }, data = {}, options = {}) => {
   const id = getNodeId()
   const now = Date.now()
   const newNode = createCanvasNode({
@@ -160,7 +160,7 @@ const addNode = (type, position = { x: 100, y: 100 }, data = {}) => {
     now
   })
   nodes.value = [...nodes.value, newNode]
-  saveToHistory() // Save after adding node | 添加节点后保存
+  if (options.saveHistory !== false) saveToHistory() // Save after adding node | 添加节点后保存
   return id
 }
 
@@ -216,14 +216,41 @@ const normalizeGroups = (inputGroups = groups.value, inputNodes = nodes.value) =
     if (memberIds.length < 2) return
 
     memberIds.forEach((nodeId) => seenNodeIds.add(nodeId))
-    nextGroups.push({
+    const outputLinks = sanitizeGroupOutputLinks(group, nodeIds)
+    const nextGroup = {
       ...group,
       nodeIds: memberIds,
       name: group.name || getNextGroupName()
-    })
+    }
+    if (outputLinks.length) {
+      nextGroup.outputLinks = outputLinks
+    } else {
+      delete nextGroup.outputLinks
+    }
+    nextGroups.push(nextGroup)
   })
 
   return nextGroups
+}
+
+const sanitizeGroupOutputLinks = (group = {}, nodeIdSet = new Set()) => {
+  const seenTargetNodeIds = new Set()
+  return (Array.isArray(group.outputLinks) ? group.outputLinks : [])
+    .filter((link) => {
+      const id = String(link?.id || '').trim()
+      const targetNodeId = String(link?.targetNodeId || '').trim()
+      if (!id || !targetNodeId || !nodeIdSet.has(targetNodeId)) return false
+      if (link?.kind && link.kind !== 'image-output') return false
+      if (seenTargetNodeIds.has(targetNodeId)) return false
+      seenTargetNodeIds.add(targetNodeId)
+      return true
+    })
+    .map((link) => ({
+      id: String(link.id),
+      targetNodeId: String(link.targetNodeId),
+      kind: 'image-output',
+      createdAt: link.createdAt || Date.now()
+    }))
 }
 
 const commitGroups = (nextGroups, shouldSaveHistory = true) => {
@@ -253,6 +280,114 @@ const createGroup = (nodeIds, name = '') => {
 
   commitGroups([...nextGroups, newGroup], true)
   return newGroup.id
+}
+
+const addNodesToGroup = (groupIdToUpdate, nodeIdsToAdd, options = {}) => {
+  const targetGroup = groups.value.find((group) => group.id === groupIdToUpdate)
+  if (!targetGroup) return false
+
+  const nodeIdsToMerge = Array.from(new Set(Array.isArray(nodeIdsToAdd) ? nodeIdsToAdd : [nodeIdsToAdd]))
+    .filter((nodeIdToMerge) => nodes.value.some((node) => node.id === nodeIdToMerge))
+  if (!nodeIdsToMerge.length) return false
+
+  let changed = false
+  const now = Date.now()
+  const nextGroups = groups.value.map((group) => {
+    const currentNodeIds = Array.isArray(group.nodeIds) ? group.nodeIds : []
+    const keptNodeIds = currentNodeIds.filter((nodeIdToKeep) => !nodeIdsToMerge.includes(nodeIdToKeep))
+    if (keptNodeIds.length !== currentNodeIds.length) changed = true
+    if (group.id !== groupIdToUpdate) {
+      return {
+        ...group,
+        nodeIds: keptNodeIds
+      }
+    }
+
+    const nextNodeIds = Array.from(new Set([...keptNodeIds, ...nodeIdsToMerge]))
+    if (nextNodeIds.length !== currentNodeIds.length || nextNodeIds.some((nodeIdToKeep, index) => nodeIdToKeep !== currentNodeIds[index])) {
+      changed = true
+    }
+    return {
+      ...group,
+      nodeIds: nextNodeIds,
+      updatedAt: now
+    }
+  })
+
+  if (!changed) return false
+  commitGroups(nextGroups, options.saveHistory !== false)
+  return true
+}
+
+const addGroupOutputLink = (groupIdToUpdate, targetNodeId, options = {}) => {
+  const targetNodeIdToLink = String(targetNodeId || '').trim()
+  if (!targetNodeIdToLink || !nodes.value.some((node) => node.id === targetNodeIdToLink)) return ''
+
+  let outputLinkId = ''
+  let changed = false
+  const now = Date.now()
+  const nextGroups = groups.value.map((group) => {
+    if (group.id !== groupIdToUpdate) return group
+
+    const existingLinks = Array.isArray(group.outputLinks) ? group.outputLinks : []
+    const existingLink = existingLinks.find((link) =>
+      link?.targetNodeId === targetNodeIdToLink &&
+      (!link.kind || link.kind === 'image-output')
+    )
+    if (existingLink?.id) {
+      outputLinkId = existingLink.id
+      return group
+    }
+
+    outputLinkId = `group_output_${groupIdToUpdate}_${targetNodeIdToLink}_${now}`
+    changed = true
+    return {
+      ...group,
+      outputLinks: [
+        ...existingLinks,
+        {
+          id: outputLinkId,
+          targetNodeId: targetNodeIdToLink,
+          kind: 'image-output',
+          createdAt: now
+        }
+      ],
+      updatedAt: now
+    }
+  })
+
+  if (!changed) return outputLinkId
+  commitGroups(nextGroups, options.saveHistory !== false)
+  return outputLinkId
+}
+
+const removeGroupOutputLinkById = (outputLinkId, options = {}) => {
+  const outputLinkIdToRemove = String(outputLinkId || '').trim()
+  if (!outputLinkIdToRemove) return false
+
+  let changed = false
+  const now = Date.now()
+  const nextGroups = groups.value.map((group) => {
+    const outputLinks = Array.isArray(group.outputLinks) ? group.outputLinks : []
+    if (!outputLinks.some((link) => link?.id === outputLinkIdToRemove)) return group
+
+    changed = true
+    const nextOutputLinks = outputLinks.filter((link) => link?.id !== outputLinkIdToRemove)
+    const nextGroup = {
+      ...group,
+      updatedAt: now
+    }
+    if (nextOutputLinks.length) {
+      nextGroup.outputLinks = nextOutputLinks
+    } else {
+      delete nextGroup.outputLinks
+    }
+    return nextGroup
+  })
+
+  if (!changed) return false
+  commitGroups(nextGroups, options.saveHistory !== false)
+  return true
 }
 
 const renameGroup = (groupIdToRename, name) => {
@@ -285,12 +420,37 @@ const ungroup = (groupIdToRemove) => {
 const removeNodesFromGroups = (nodeIds) => {
   const nodeIdSet = new Set(nodeIds)
   groups.value = normalizeGroups(
-    groups.value.map((group) => ({
+    removeGroupOutputLinksForNodes(nodeIds).map((group) => ({
       ...group,
       nodeIds: (group.nodeIds || []).filter((nodeId) => !nodeIdSet.has(nodeId))
     })),
     nodes.value
   )
+}
+
+const removeGroupOutputLinksForNodes = (nodeIdsToRemove) => {
+  const nodeIdSet = new Set(nodeIdsToRemove)
+  if (!nodeIdSet.size) return groups.value
+
+  const now = Date.now()
+  return groups.value.map((group) => {
+    const outputLinks = Array.isArray(group.outputLinks) ? group.outputLinks : []
+    if (!outputLinks.length) return group
+
+    const nextOutputLinks = outputLinks.filter((link) => !nodeIdSet.has(link?.targetNodeId))
+    if (nextOutputLinks.length === outputLinks.length) return group
+
+    const nextGroup = {
+      ...group,
+      updatedAt: now
+    }
+    if (nextOutputLinks.length) {
+      nextGroup.outputLinks = nextOutputLinks
+    } else {
+      delete nextGroup.outputLinks
+    }
+    return nextGroup
+  })
 }
 
 const deleteGroupWithNodes = (groupIdToDelete) => {
@@ -300,7 +460,10 @@ const deleteGroupWithNodes = (groupIdToDelete) => {
   const targetIds = new Set(targetGroup.nodeIds || [])
   nodes.value = nodes.value.filter((node) => !targetIds.has(node.id))
   edges.value = edges.value.filter((edge) => !targetIds.has(edge.source) && !targetIds.has(edge.target))
-  groups.value = groups.value.filter((group) => group.id !== groupIdToDelete)
+  groups.value = normalizeGroups(
+    removeGroupOutputLinksForNodes([...targetIds]).filter((group) => group.id !== groupIdToDelete),
+    nodes.value
+  )
   saveToHistory()
   return true
 }
@@ -873,9 +1036,9 @@ const beginNodeDragInteraction = () => {
   isNodeDragging.value = true
 }
 
-const endNodeDragInteraction = ({ saveHistory = false } = {}) => {
+const endNodeDragInteraction = ({ saveHistory = false, changeType = 'node-position' } = {}) => {
   isNodeDragging.value = false
-  if (saveHistory) saveToHistory({ changeType: 'node-position' })
+  if (saveHistory) saveToHistory({ changeType })
   flushDeferredInteractionSave()
 }
 
@@ -1022,6 +1185,9 @@ return {
   refreshCanvasCollectionRefs,
   addNode,
   createGroup,
+  addNodesToGroup,
+  addGroupOutputLink,
+  removeGroupOutputLinkById,
   renameGroup,
   ungroup,
   deleteGroupWithNodes,

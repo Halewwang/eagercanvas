@@ -61,11 +61,12 @@ test('image node active input keys follow incoming text and image node data', ()
 
   assert.deepEqual(getImageNodeActiveInputKeys({ edges, nodes, targetNodeId: 'target' }), new Set(['prompt', 'reference']))
   assert.deepEqual(getImageNodeInputStatusList({
-    activeKeys: new Set(['reference']),
-    labels: { prompt: 'Prompt', reference: 'Reference Picture' }
+    activeKeys: new Set(['reference', 'groupContext']),
+    labels: { prompt: 'Prompt', reference: 'Reference Picture', groupContext: 'Group Context · 2 prompts · 1 reference' }
   }), [
     { key: 'prompt', label: 'Prompt', active: false },
-    { key: 'reference', label: 'Reference Picture', active: true }
+    { key: 'reference', label: 'Reference Picture', active: true },
+    { key: 'groupContext', label: 'Group Context · 2 prompts · 1 reference', active: true }
   ])
 })
 

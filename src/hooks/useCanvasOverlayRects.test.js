@@ -85,6 +85,27 @@ test('canvas overlay rects derive group, selected group, body hit, and multisele
   assert.deepEqual(overlay.groupBodyHitRectsById.value, {})
 })
 
+test('canvas overlay rects derive group output lines from group output links', () => {
+  const { overlay } = createHarness({
+    groups: [{
+      id: 'group-1',
+      name: 'Group One',
+      nodeIds: ['node-a', 'node-b'],
+      outputLinks: [{ id: 'group-link-1', targetNodeId: 'node-c', kind: 'image-output' }]
+    }]
+  })
+
+  overlay.updateOverlayRects()
+
+  assert.deepEqual(overlay.groupOutputLines.value, [{
+    id: 'group-link-1',
+    groupId: 'group-1',
+    targetNodeId: 'node-c',
+    source: { x: 806, y: 175 },
+    target: { x: 887, y: 214 }
+  }])
+})
+
 test('canvas overlay rects schedule measurement, skip while dragging, and cleanup pending work', () => {
   let dragging = true
   const { calls, overlay, rafCallbacks } = createHarness({

@@ -8,6 +8,7 @@ import {
   getConnectMenuEdgeParams,
   getLocalImageInjectPosition,
   getGroupBodyHitRects,
+  getGroupMergeCandidate,
   findGroupBodyDragTarget,
   getFlowPointFromScreenPoint,
   getGroupDragListenerNames,
@@ -18,6 +19,7 @@ import {
   getNodeCapsuleScale,
   getNodeSize,
   getNodeViewportRect,
+  getRectOverlapRatio,
   getOverlayScheduleMode,
   getSelectedGroupGripPointerAction,
   mergeViewportRects,
@@ -77,6 +79,19 @@ test('immutable group drag position updates replace only moved node objects', ()
   assert.deepEqual(untouched.position, { x: 0, y: 0 })
   assert.deepEqual(moved.position, { x: 10, y: 20 })
   assert.deepEqual(result.items[1].position, { x: 15, y: 16 })
+})
+
+test('group merge candidate uses dragged node area and requires 50 percent overlap', () => {
+  const nodeRect = { left: 0, top: 0, right: 100, bottom: 100 }
+  const groups = [
+    { id: 'group-low', rect: { left: 60, top: 0, width: 100, height: 100 } },
+    { id: 'group-hit', rect: { left: 49, top: 0, width: 100, height: 100 } }
+  ]
+
+  assert.equal(getRectOverlapRatio(nodeRect, groups[0].rect), 0.4)
+  assert.equal(getRectOverlapRatio(nodeRect, groups[1].rect), 0.51)
+  assert.equal(getGroupMergeCandidate({ nodeRect, groups })?.id, 'group-hit')
+  assert.equal(getGroupMergeCandidate({ nodeRect, groups, threshold: 0.52 }), null)
 })
 
 test('group drag overlay translation preserves the original frame size', () => {

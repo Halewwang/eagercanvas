@@ -23,7 +23,6 @@
         @share="openShareDialog"
         @request-edit="requestCanvasEditAccess"
       />
-
       <CanvasReadOnlyBanner
         v-if="isReadOnlyProject"
         :owner-name="currentProject?.ownerDisplayName || ''"
@@ -52,18 +51,25 @@
         @viewport-change="handleViewportChange"
         @edges-change="onEdgesChange"
       />
-
       <CanvasGroupOverlay
         :multi-select-menu-rect="multiSelectMenuRect"
         :rendered-groups="renderedGroups"
         :selected-group-id="selectedGroupId"
         :selected-group-menu-rect="selectedGroupMenuRect"
         :group-body-hit-rects-by-id="groupBodyHitRectsById"
+        :group-output-lines="groupOutputLines"
+        :pending-group-output-line="pendingGroupOutputLine"
+        :selected-group-output-link-id="selectedGroupOutputLinkId"
+        :viewport="viewport"
+        :viewport-zoom="viewport.zoom"
+        :group-merge-candidate-id="groupMergeCandidateId"
         :group-box-pointer-events="getGroupBoxPointerEvents()"
         :read-only="isReadOnlyProject"
         @create-group="handleCreateGroup"
+        @select-group-output-line="selectGroupOutputLink"
+        @group-output-pointer-down="handleGroupOutputPointerDown"
         @group-grip-pointer-down="handleGroupGripPointerDown"
-        @select-group="selectGroup"
+        @select-group="(groupId) => { clearGroupOutputSelection(); selectGroup(groupId) }"
         @rename-group="openRenameGroupModal"
         @duplicate-selected-group="handleDuplicateSelectedGroup"
         @ungroup-selected-group="handleUngroupSelectedGroup"
@@ -174,6 +180,7 @@ import { useAvatarUpload } from '@/hooks/useAvatarUpload'
 import { useCanvasConnectionInteraction } from '@/hooks/useCanvasConnectionInteraction.js'
 import { useCanvasGroupActions } from '@/hooks/useCanvasGroupActions.js'
 import { useCanvasGroupDrag } from '@/hooks/useCanvasGroupDrag.js'
+import { useCanvasGroupOutputs } from '@/hooks/useCanvasGroupOutputs.js'
 import { useCanvasMediaDrop } from '@/hooks/useCanvasMediaDrop.js'
 import { useCanvasNodeDragInteraction } from '@/hooks/useCanvasNodeDragInteraction.js'
 import { useCanvasNodeMenuState } from '@/hooks/useCanvasNodeMenuState.js'
@@ -189,15 +196,7 @@ import { notifier } from '@/utils/notifier'
 import { duplicateProject, getProjectCanvas, initProjectsStore, loadCachedProjects, projects, refreshProjectById, requestProjectEditAccess } from '@/stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
-import {
-  getCanvasLibraryInsertPosition,
-  getCanvasNodeGridPosition,
-  getConnectMenuEdgeParams,
-  getFlowPointFromScreenPoint,
-  getGroupBoxPointerEvents,
-  getLocalImageInjectPosition,
-  createLocalImageNodeData
-} from '@/utils/canvasInteraction'
+import { getCanvasLibraryInsertPosition, getCanvasNodeGridPosition, getConnectMenuEdgeParams, getFlowPointFromScreenPoint, getGroupBoxPointerEvents, getLocalImageInjectPosition, createLocalImageNodeData } from '@/utils/canvasInteraction'
 import { isExpiredRemoteUrl, uploadImageFile } from '@/utils/media'
 import { isLocalPreviewEnabled } from '@/utils/localPreview'
 
@@ -250,6 +249,7 @@ const {
   redo,
   refreshCanvasCollectionRefs,
   removeNodesByIds,
+  addNodesToGroup, addGroupOutputLink, removeGroupOutputLinkById,
   renameGroup,
   resetCanvasSession,
   translateNodesByIds,
@@ -372,9 +372,7 @@ const {
   notify: notifier
 })
 
-const screenPointToFlowPoint = (point) => {
-  return getFlowPointFromScreenPoint(point, viewport.value)
-}
+const screenPointToFlowPoint = (point) => getFlowPointFromScreenPoint(point, viewport.value)
 
 const {
   handleCanvasMediaDragOver,
@@ -436,12 +434,13 @@ selectionInteraction = useCanvasSelectionInteraction({
   clearNodeMenuContext,
   handleDeleteSelectedGroup: () => handleDeleteSelectedGroup(),
   manualSaveHistory,
-  removeNodesByIds
+  removeNodesByIds,
+  removeGroupOutputLinkById
 })
-
 const {
-  selectedGroup,
   selectedNodeIds,
+  selectedGroupOutputLinkId, selectGroupOutputLink,
+  clearGroupOutputSelection, clearStaleGroupOutputSelection,
   clearGroupSelection,
   clearNodeSelection,
   handleGlobalKeydown,
@@ -452,6 +451,7 @@ const {
 
 const {
   groupBodyHitRectsById,
+  groupOutputLines,
   groupRects,
   multiSelectMenuRect,
   renderedGroups,
@@ -470,6 +470,27 @@ const {
   viewport
 })
 const isCanvasInteracting = computed(() => isNodeDragging.value || isCanvasZooming.value)
+
+const {
+  groupMergeCandidateId,
+  pendingGroupOutputLine,
+  getGroupMergeCandidateForNode,
+  setGroupMergeCandidateId,
+  handleGroupOutputPointerDown
+} = useCanvasGroupOutputs({
+  addGroupOutputLink,
+  addNode,
+  groupRects,
+  isReadOnlyProject,
+  nodes,
+  notify: notifier,
+  renderedGroups,
+  removeNodesByIds,
+  scheduleOverlayRectUpdate,
+  updateNodeInternals,
+  viewport,
+  warnReadOnly
+})
 
 const {
   canvasFlowStyle,
@@ -517,7 +538,7 @@ const groupDrag = useCanvasGroupDrag({
   groupRects,
   selectedGroupId,
   viewport,
-  selectGroup,
+  selectGroup: (groupId) => { clearGroupOutputSelection(); selectGroup(groupId) },
   beginNodeDragInteraction,
   endNodeDragInteraction,
   refreshCanvasCollectionRefs,
@@ -542,7 +563,10 @@ const {
   isNodeDragging,
   beginNodeDragInteraction,
   endNodeDragInteraction,
-  translateNodesByIds,
+  refreshCanvasCollectionRefs,
+  getGroupMergeCandidateForNode,
+  setGroupMergeCandidateId,
+  addNodesToGroup,
   syncNodeSelectedState,
   clearGroupSelection,
   scheduleOverlayRectUpdate
@@ -759,9 +783,7 @@ const goWorkspace = () => {
   router.push('/workspace')
 }
 
-watch([nodes, groups], () => {
-  scheduleOverlayRectUpdate()
-}, { deep: true })
+watch([nodes, groups], () => { clearStaleGroupOutputSelection(); scheduleOverlayRectUpdate() }, { deep: true })
 
 watch(selectedGroupId, (groupId) => {
   if (groupId && !groups.value.some((group) => group.id === groupId)) {

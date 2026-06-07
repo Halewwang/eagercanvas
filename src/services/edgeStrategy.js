@@ -6,9 +6,10 @@ import { storeToRefs } from 'pinia'
 import { getVideoConnectionProfile } from '@/config/models'
 import { useCanvasStore } from '@/stores/canvas'
 import { pinia } from '@/stores/pinia'
+import { resolveGroupOutputContexts } from '@/utils/groupContextInputs'
 
 const canvasStore = useCanvasStore(pinia)
-const { nodes, edges } = storeToRefs(canvasStore)
+const { nodes, edges, groups } = storeToRefs(canvasStore)
 
 const IMAGE_TARGET_TYPES = new Set(['image', 'imageConfig'])
 const VIDEO_TARGET_TYPES = new Set(['video', 'videoConfig'])
@@ -200,6 +201,29 @@ export const resolveNodeInputs = (targetNodeId) => {
     imageReferenceEntries.push(entry)
   })
 
+  const groupInputContext = isImageTarget(targetNode?.type)
+    ? resolveGroupOutputContexts({
+        targetNodeId,
+        nodes: nodes.value,
+        groups: groups.value
+      })
+    : { prompts: [], references: [], groupContexts: [] }
+
+  groupInputContext.prompts.forEach((entry, index) => {
+    promptEntries.push({
+      ...entry,
+      order: promptEntries.length + 1,
+      index: incomingEdges.length + index
+    })
+  })
+  groupInputContext.references.forEach((entry, index) => {
+    imageReferenceEntries.push({
+      ...entry,
+      order: imageReferenceEntries.length + 1,
+      index: incomingEdges.length + groupInputContext.prompts.length + index
+    })
+  })
+
   sortByOrder(promptEntries)
   sortByOrder(imageReferenceEntries)
 
@@ -214,6 +238,7 @@ export const resolveNodeInputs = (targetNodeId) => {
     first_frame_image: firstFrame?.value || '',
     last_frame_image: lastFrame?.value || '',
     images: imageReferenceEntries.map((item) => item.value),
+    groupContexts: groupInputContext.groupContexts,
     referenceVideos: videoReferenceEntries,
     videos: videoReferenceEntries.map((item) => item.value)
   }
