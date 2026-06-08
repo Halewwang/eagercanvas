@@ -14,6 +14,28 @@ const toNumber = (value) => {
 const RAW_USAGE_MAX_BYTES = 32 * 1024
 const RAW_USAGE_STRING_MAX_CHARS = 2048
 const INLINE_DATA_URL_RE = /^data:[^;,]+;base64,/i
+const USAGE_EVENT_RETURN_COLUMNS = [
+  'id',
+  'user_id',
+  'run_id',
+  'model',
+  'event_type',
+  'input_tokens',
+  'output_tokens',
+  'image_count',
+  'video_seconds',
+  'cost_usd',
+  'estimated_cost_usd',
+  'billed_cost_usd',
+  'billing_status',
+  'latency_ms',
+  'api_name',
+  'provider_request_id',
+  'service_credential_id',
+  'upstream_task_id',
+  'client_request_id',
+  'created_at'
+].join(',')
 
 const jsonByteLength = (value) => Buffer.byteLength(JSON.stringify(value), 'utf8')
 
@@ -219,6 +241,19 @@ export const sanitizeRawUsageForStorage = (rawUsage = null) => {
   return buildRawUsageSummary(rawUsage, originalBytes)
 }
 
+export const buildUsageEventUpdatePatch = (patch = {}) => {
+  const next = { ...patch }
+
+  if (Object.prototype.hasOwnProperty.call(next, 'rawUsage')) {
+    next.raw_usage = sanitizeRawUsageForStorage(next.rawUsage)
+    delete next.rawUsage
+  } else if (Object.prototype.hasOwnProperty.call(next, 'raw_usage')) {
+    next.raw_usage = sanitizeRawUsageForStorage(next.raw_usage)
+  }
+
+  return next
+}
+
 export const rebuildUsageDailyAggregateForUserDate = async (userId, dateValue) => {
   const date = toIsoDate(dateValue)
   const start = `${date}T00:00:00.000Z`
@@ -270,7 +305,7 @@ export const insertUsageEvent = async (payload = {}) => {
   const { data, error } = await supabase
     .from('usage_events')
     .insert(record)
-    .select('*')
+    .select(USAGE_EVENT_RETURN_COLUMNS)
     .single()
 
   if (error) {
@@ -288,7 +323,7 @@ export const updateUsageEventByRunId = async (runId, patch = {}) => {
 
   const { data: current, error: readError } = await supabase
     .from('usage_events')
-    .select('*')
+    .select('id,user_id,created_at')
     .eq('run_id', safeRunId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -299,15 +334,13 @@ export const updateUsageEventByRunId = async (runId, patch = {}) => {
     return null
   }
 
-  const next = {
-    ...patch
-  }
+  const next = buildUsageEventUpdatePatch(patch)
 
   const { data, error } = await supabase
     .from('usage_events')
     .update(next)
     .eq('id', current.id)
-    .select('*')
+    .select(USAGE_EVENT_RETURN_COLUMNS)
     .single()
 
   if (error) {

@@ -203,8 +203,8 @@
           </div>
 
           <div class="home-image-panel">
-            <img :src="imagePanelLeft" alt="Image module result" class="home-image-panel-left" />
-            <img :src="imagePanelRight" alt="Image module variations" class="home-image-panel-right" />
+            <img :src="imagePanelLeft" alt="Image module result" class="home-image-panel-left" loading="lazy" decoding="async" />
+            <img :src="imagePanelRight" alt="Image module variations" class="home-image-panel-right" loading="lazy" decoding="async" />
             <div class="home-image-panel-caption">
               Each module has its own model stack, so fast ideation and richer output can live in the same system
               without leaving the canvas.
@@ -214,10 +214,10 @@
 
         <section class="home-module home-module-video">
           <div class="home-video-panel">
-            <img :src="videoLarge" alt="Video module key frame" class="home-video-large" />
-            <img :src="videoTopRight" alt="Video module still frame" class="home-video-top-right" />
-            <img :src="videoBottomLeft" alt="Video module motion study" class="home-video-bottom-left" />
-            <img :src="videoBottomRight" alt="Video module final shot" class="home-video-bottom-right" />
+            <img :src="videoLarge" alt="Video module key frame" class="home-video-large" loading="lazy" decoding="async" />
+            <img :src="videoTopRight" alt="Video module still frame" class="home-video-top-right" loading="lazy" decoding="async" />
+            <img :src="videoBottomLeft" alt="Video module motion study" class="home-video-bottom-left" loading="lazy" decoding="async" />
+            <img :src="videoBottomRight" alt="Video module final shot" class="home-video-bottom-right" loading="lazy" decoding="async" />
           </div>
 
           <div class="home-module-copy-panel home-module-copy-panel-right">
@@ -267,8 +267,8 @@
           </div>
 
           <div class="home-3d-panel">
-            <img :src="module3dLeft" alt="3D generated asset preview" class="home-3d-left" />
-            <img :src="module3dRight" alt="3D abstract asset preview" class="home-3d-right" />
+            <img :src="module3dLeft" alt="3D generated asset preview" class="home-3d-left" loading="lazy" decoding="async" />
+            <img :src="module3dRight" alt="3D abstract asset preview" class="home-3d-right" loading="lazy" decoding="async" />
           </div>
         </section>
 
@@ -400,9 +400,9 @@ const scrollToTop = () => {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-onMounted(async () => {
-  await bootstrapAuth()
+onMounted(() => {
   openAuthByQuery()
+  void bootstrapAuth()
 })
 
 watch(

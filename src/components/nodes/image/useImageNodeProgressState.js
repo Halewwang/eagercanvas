@@ -14,6 +14,7 @@ export const useImageNodeProgressState = ({
   clearTimeoutFn = (timer) => getDefaultWindow()?.clearTimeout(timer),
   error = () => '',
   loading = () => false,
+  nowFn = () => Date.now(),
   setIntervalFn = (callback, delay) => getDefaultWindow()?.setInterval(callback, delay),
   setTimeoutFn = (callback, delay) => getDefaultWindow()?.setTimeout(callback, delay)
 } = {}) => {
@@ -24,13 +25,29 @@ export const useImageNodeProgressState = ({
   const showProgress = ref(false)
   const progressTimer = ref(null)
   const progressFinishTimer = ref(null)
+  const progressStartedAt = ref(null)
+  const progressElapsedSeconds = ref(0)
 
   const progressPercent = computed(() => getImageNodeProgressPercent(progressValue.value))
   const progressBarStyle = computed(() => getImageNodeProgressBarStyle(progressValue.value))
+  const progressPhaseLabel = computed(() => {
+    if (progressValue.value < 12) return 'Submitting request'
+    if (progressValue.value < 88) return 'Generating image'
+    if (progressValue.value < 98) return 'Fetching result'
+    return 'Saving result'
+  })
   const uploadProgressStyle = computed(() => getImageNodeUploadProgressStyle({
     progress: uploadProgress.value,
     stage: uploadStage.value
   }))
+
+  const updateProgressElapsed = () => {
+    if (progressStartedAt.value === null) {
+      progressElapsedSeconds.value = 0
+      return
+    }
+    progressElapsedSeconds.value = Math.max(0, Math.floor((nowFn() - progressStartedAt.value) / 1000))
+  }
 
   const clearProgressTimers = () => {
     if (progressTimer.value) {
@@ -47,13 +64,18 @@ export const useImageNodeProgressState = ({
     clearProgressTimers()
     showProgress.value = false
     progressValue.value = 0
+    progressStartedAt.value = null
+    progressElapsedSeconds.value = 0
   }
 
   const startProgress = () => {
     clearProgressTimers()
     progressValue.value = 0
+    progressStartedAt.value = nowFn()
+    progressElapsedSeconds.value = 0
     showProgress.value = true
     progressTimer.value = setIntervalFn(() => {
+      updateProgressElapsed()
       progressValue.value = getImageNodeProgressNextValue(progressValue.value)
     }, 120)
   }
@@ -61,12 +83,15 @@ export const useImageNodeProgressState = ({
   const finishProgress = () => {
     clearProgressTimers()
     progressTimer.value = setIntervalFn(() => {
+      updateProgressElapsed()
       progressValue.value = getImageNodeFinishProgressNextValue(progressValue.value)
       if (progressValue.value >= 100) {
         clearProgressTimers()
         progressFinishTimer.value = setTimeoutFn(() => {
           showProgress.value = false
           progressValue.value = 0
+          progressStartedAt.value = null
+          progressElapsedSeconds.value = 0
         }, 120)
       }
     }, 16)
@@ -91,6 +116,8 @@ export const useImageNodeProgressState = ({
   return {
     clearProgressTimers,
     progressBarStyle,
+    progressElapsedSeconds,
+    progressPhaseLabel,
     progressPercent,
     progressValue,
     resetProgress,

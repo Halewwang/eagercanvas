@@ -506,6 +506,97 @@ const resolveImageSaveFeedback = (savedOk) => {
   }
 }
 
+const getImageNodeDisplayUrl = (imageNodeId) => {
+  const imageNode = nodes.value.find((node) => node.id === imageNodeId)
+  return String(imageNode?.data?.previewUrl || imageNode?.data?.url || imageNode?.data?.base64 || '').trim()
+}
+
+const persistGeneratedImageResultInBackground = async ({
+  imageNodeId,
+  rawUrl,
+  sourcePrompt,
+  sourceRefImages
+}) => {
+  try {
+    const persistence = await resolveImagePersistence(
+      rawUrl,
+      `generated-${Date.now()}.png`,
+      'Generated image persistence failed. Please retry.',
+      imageNodeId
+    )
+
+    if (getImageNodeDisplayUrl(imageNodeId) !== rawUrl) {
+      return
+    }
+
+    updateNode(imageNodeId, {
+      url: persistence.persistedUrl,
+      previewUrl: persistence.persisted ? '' : persistence.displayUrl,
+      base64: '',
+      loading: false,
+      label: 'Text to Image',
+      model: localModel.value,
+      size: localSize.value,
+      quality: localQuality.value,
+      background: localBackground.value,
+      output_format: localOutputFormat.value,
+      ratio: localRatio.value || ratioFromSizeKey(localSize.value),
+      resolution: localResolution.value || resolutionFromSizeKey(localSize.value),
+      sourceConfigId: props.id,
+      sourcePrompt,
+      sourceRefImages,
+      persistStatus: persistence.persisted ? 'saving' : 'pending',
+      persistError: persistence.persisted ? '' : 'Image uses a temporary address until it is fully saved.',
+      updatedAt: Date.now()
+    })
+
+    if (!persistence.persisted) {
+      window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
+      return
+    }
+
+    const savedOk = await saveProject()
+    const saveFeedback = resolveImageSaveFeedback(savedOk)
+    updateNode(imageNodeId, {
+      persistStatus: saveFeedback.persistStatus,
+      persistError: saveFeedback.persistError,
+      updatedAt: Date.now()
+    })
+    if (saveFeedback.mode === 'temporary') {
+      window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
+      return
+    }
+    if (saveFeedback.mode === 'failed') {
+      window.$message?.warning('Image generated, but project save failed. Please retry save.')
+      return
+    }
+    if (saveFeedback.mode === 'local-only') {
+      window.$message?.success('Image generated and saved in the current project')
+      return
+    }
+    if (!savedOk) {
+      const saveState = projectSaveState.value || {}
+      if (saveState.hasTransientMedia) {
+        window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
+      } else {
+        window.$message?.warning('Image generated, but project save failed. Please retry save.')
+      }
+    }
+  } catch (error) {
+    if (getImageNodeDisplayUrl(imageNodeId) !== rawUrl) {
+      return
+    }
+    console.warn('Image config background persistence failed, keeping preview only:', error)
+    updateNode(imageNodeId, {
+      loading: false,
+      persistStatus: 'error',
+      persistError: error?.message || 'Generated image persistence failed. Please retry.',
+      updatedAt: Date.now()
+    })
+    window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
+  }
+}
+
 // Handle generate action | 处理生成操作
 // mode: 'auto' = 自动判断, 'replace' = Replace现有, 'new' = 新建节点
 const handleGenerate = async (mode = 'auto') => {
@@ -639,16 +730,9 @@ const handleGenerate = async (mode = 'auto') => {
         throw new Error('No image output')
       }
 
-      const persistence = await resolveImagePersistence(
-        rawUrl,
-        `generated-${Date.now()}.png`,
-        'Generated image persistence failed. Please retry.',
-        imageNodeId
-      )
-
       updateNode(imageNodeId, {
-        url: persistence.persistedUrl,
-        previewUrl: persistence.persisted ? '' : persistence.displayUrl,
+        url: '',
+        previewUrl: rawUrl,
         base64: '',
         loading: false,
         label: 'Text to Image',
@@ -662,45 +746,19 @@ const handleGenerate = async (mode = 'auto') => {
         sourceConfigId: props.id,
         sourcePrompt,
         sourceRefImages,
-        persistStatus: persistence.persisted ? 'saving' : 'pending',
-        persistError: persistence.persisted ? '' : 'Image uses a temporary address until it is fully saved.',
+        persistStatus: 'pending',
+        persistError: 'Image is being saved in the background.',
         updatedAt: Date.now()
       })
       
       // Mark this config node as executed | 标记配置节点已执行
       updateNode(props.id, { status: 'completed', executed: true, outputNodeId: imageNodeId, error: '' })
-      if (!persistence.persisted) {
-        window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
-        return
-      }
-      const savedOk = await saveProject()
-      const saveFeedback = resolveImageSaveFeedback(savedOk)
-      updateNode(imageNodeId, {
-        persistStatus: saveFeedback.persistStatus,
-        persistError: saveFeedback.persistError,
-        updatedAt: Date.now()
+      void persistGeneratedImageResultInBackground({
+        imageNodeId,
+        rawUrl,
+        sourcePrompt,
+        sourceRefImages
       })
-      if (saveFeedback.mode === 'temporary') {
-        window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
-        return
-      }
-      if (saveFeedback.mode === 'failed') {
-        window.$message?.warning('Image generated, but project save failed. Please retry save.')
-        return
-      }
-      if (saveFeedback.mode === 'local-only') {
-        window.$message?.success('Image generated and saved in the current project')
-        return
-      }
-      if (!savedOk) {
-        const saveState = projectSaveState.value || {}
-        if (saveState.hasTransientMedia) {
-          window.$message?.warning('Image generated, but the result is still temporary. Refresh may lose it.')
-        } else {
-          window.$message?.warning('Image generated, but project save failed. Please retry save.')
-        }
-        return
-      }
     }
     window.$message?.success('Image generated')
   } catch (err) {

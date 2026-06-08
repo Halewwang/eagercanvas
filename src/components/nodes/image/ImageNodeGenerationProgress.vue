@@ -2,7 +2,7 @@
   <div class="module-progress-shell">
     <div class="module-progress-track"></div>
     <div class="module-progress-bar" :style="barStyle"></div>
-    <div class="module-progress-label">Generating image... {{ percent }}%</div>
+    <div class="module-progress-label">{{ label }} - {{ percent }}% - {{ elapsedSeconds }}s</div>
   </div>
 </template>
 
@@ -13,6 +13,14 @@ defineProps({
     default: () => ({})
   },
   percent: {
+    type: Number,
+    default: 0
+  },
+  label: {
+    type: String,
+    default: 'Generating image'
+  },
+  elapsedSeconds: {
     type: Number,
     default: 0
   }
@@ -45,9 +53,13 @@ defineProps({
 .module-progress-label {
   position: absolute;
   left: 12px;
+  right: 12px;
   bottom: 10px;
   color: rgba(247, 249, 252, 0.9);
   font-size: 12px;
   line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

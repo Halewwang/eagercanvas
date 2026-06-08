@@ -48,6 +48,11 @@
         </button>
       </div>
 
+      <div v-if="workspaceSwitching" class="workspace-switching-status" role="status" aria-live="polite">
+        <span class="workspace-switching-status-dot" aria-hidden="true" />
+        Refreshing workspace
+      </div>
+
       <WorkspaceCardsGrid
         :active-section="activeSection"
         :items="sectionItems"
@@ -233,6 +238,8 @@ const profileDisplayName = ref('')
 const profileSaving = ref(false)
 const usageSummary = ref(null)
 const usageSummaryLoading = ref(false)
+const workspaceSwitching = ref(false)
+let workspaceSwitchRefreshId = 0
 
 const navItems = computed(() => [
   {
@@ -539,13 +546,22 @@ const refreshWorkspaceData = async () => {
 }
 
 const runWorkspaceRefreshInBackground = () => {
-  void refreshWorkspaceProjectsFirst().catch((error) => {
-    notifier.error(getErrorMessage(error, 'Failed to refresh workspace data'))
-  })
+  const refreshId = ++workspaceSwitchRefreshId
+  workspaceSwitching.value = true
+  void refreshWorkspaceProjectsFirst()
+    .catch((error) => {
+      notifier.error(getErrorMessage(error, 'Failed to refresh workspace data'))
+    })
+    .finally(() => {
+      if (refreshId === workspaceSwitchRefreshId) {
+        workspaceSwitching.value = false
+      }
+    })
 }
 
 const handleSelectWorkspace = async (workspaceId) => {
   if (!workspaceId || workspaceId === currentWorkspace.value?.id) return
+  workspaceSwitching.value = true
   try {
     const selection = selectWorkspace(workspaceId)
     resetTemplateScopeForCurrentWorkspace()
@@ -554,6 +570,7 @@ const handleSelectWorkspace = async (workspaceId) => {
     resetTemplateScopeForCurrentWorkspace()
     runWorkspaceRefreshInBackground()
   } catch (error) {
+    workspaceSwitching.value = false
     notifier.error(getErrorMessage(error, 'Failed to switch workspace'))
   }
 }
@@ -947,6 +964,29 @@ onMounted(async () => {
   color: #fff;
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.18);
+}
+
+.workspace-switching-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  margin: -6px 0 16px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(236, 238, 244, 0.78);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.workspace-switching-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #cfd4dd;
+  box-shadow: 0 0 0 3px rgba(207, 212, 221, 0.12);
 }
 
 @media (max-width: 900px) {

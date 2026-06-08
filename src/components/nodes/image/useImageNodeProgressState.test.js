@@ -49,7 +49,7 @@ const createScheduler = () => {
   }
 }
 
-const createProgressHarness = () => {
+const createProgressHarness = (overrides = {}) => {
   const loading = ref(false)
   const error = ref('')
   const scheduler = createScheduler()
@@ -58,6 +58,7 @@ const createProgressHarness = () => {
     clearTimeoutFn: scheduler.clearTimeoutFn,
     error: () => error.value,
     loading: () => loading.value,
+    nowFn: overrides.nowFn,
     setIntervalFn: scheduler.setIntervalFn,
     setTimeoutFn: scheduler.setTimeoutFn
   })
@@ -110,6 +111,34 @@ test('image node progress state clears generation progress when loading ends wit
   assert.equal(progress.showProgress.value, false)
   assert.equal(progress.progressValue.value, 0)
   assert.equal(scheduler.intervals.size, 0)
+})
+
+test('image node progress state exposes phase labels and elapsed wait time', async () => {
+  let now = 0
+  const { loading, progress, scheduler } = createProgressHarness({
+    nowFn: () => now
+  })
+
+  loading.value = true
+  await nextTick()
+
+  assert.equal(progress.progressPhaseLabel.value, 'Submitting request')
+  assert.equal(progress.progressElapsedSeconds.value, 0)
+
+  now = 32_000
+  progress.progressValue.value = 42
+  scheduler.runIntervals()
+
+  assert.equal(progress.progressPhaseLabel.value, 'Generating image')
+  assert.equal(progress.progressElapsedSeconds.value, 32)
+
+  progress.progressValue.value = 90
+  scheduler.runIntervals()
+  assert.equal(progress.progressPhaseLabel.value, 'Fetching result')
+
+  progress.progressValue.value = 98
+  scheduler.runIntervals()
+  assert.equal(progress.progressPhaseLabel.value, 'Saving result')
 })
 
 test('image node progress state exposes resetProgress for stop handling', async () => {

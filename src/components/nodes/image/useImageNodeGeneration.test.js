@@ -12,11 +12,17 @@ const loadGeneration = async () => {
   return import(`data:text/javascript;base64,${Buffer.from(generationSource).toString('base64')}`)
 }
 
+const flushBackgroundTasks = async () => {
+  await Promise.resolve()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 const createHarness = async (overrides = {}) => {
   const { useImageNodeGeneration } = await loadGeneration()
   const calls = []
   const messages = []
   const imageActionLoading = { value: '' }
+  const displayImageUrl = { value: overrides.selfImage || '' }
   const generation = useImageNodeGeneration({
     buildImagePersistencePatch: (persistence, extra) => ({ kind: 'persistence-patch', persistence, extra }),
     buildSourceRefImages: (...groups) => {
@@ -24,7 +30,7 @@ const createHarness = async (overrides = {}) => {
       return groups.flat()
     },
     currentProjectId: { value: 'project-1' },
-    displayImageUrl: { value: overrides.selfImage || '' },
+    displayImageUrl,
     getConnectedInputs: () => overrides.inputs || {
       prompt: 'A product photo',
       refImages: ['https://cdn.example.com/ref.png']
@@ -76,11 +82,20 @@ const createHarness = async (overrides = {}) => {
       calls.push(['save-project'])
       return overrides.savedOk ?? true
     },
-    updateNode: (...args) => calls.push(['update-node', ...args])
+    updateNode: (...args) => {
+      const patch = args[1]
+      if (patch?.kind === 'persistence-patch') {
+        displayImageUrl.value = patch.persistence?.persisted
+          ? patch.persistence?.persistedUrl || ''
+          : patch.persistence?.displayUrl || ''
+      }
+      calls.push(['update-node', ...args])
+    }
   })
 
   return {
     calls,
+    displayImageUrl,
     generation,
     imageActionLoading,
     messages
@@ -114,6 +129,7 @@ test('image node generation creates a persisted image with merged references and
   })
 
   await generation.runImageGeneration('regenerate')
+  await flushBackgroundTasks()
 
   assert.equal(imageActionLoading.value, '')
   assert.deepEqual(calls[0], ['update-node', 'image-node-1', { kind: 'action-pending' }, { persist: false }])
@@ -166,11 +182,80 @@ test('image node generation displays provider output before persistence complete
 
   resolvePersistence()
   await runPromise
+  await flushBackgroundTasks()
 
   assert.deepEqual(calls.filter((call) => call[0] === 'save-project'), [['save-project']])
   const persistedCalls = calls.filter((call) => call[0] === 'update-node' && call[2]?.kind === 'persistence-patch')
   assert.equal(persistedCalls.at(-1)?.[2]?.persistence?.persistedUrl, 'https://cdn.example.com/generated.png')
   assert.deepEqual(persistedCalls.at(-1)?.[3], { changeType: 'node-generated' })
+})
+
+test('image node generation returns and clears loading before background persistence completes', async () => {
+  let resolvePersistence
+  const persistenceDone = new Promise((resolve) => {
+    resolvePersistence = resolve
+  })
+  const { calls, generation, imageActionLoading } = await createHarness({
+    resolveImagePersistence: async (...args) => {
+      calls.push(['resolve-persistence', ...args])
+      await persistenceDone
+      return {
+        persistedUrl: 'https://cdn.example.com/generated.png',
+        displayUrl: 'https://cdn.example.com/generated.png',
+        persisted: true,
+        persistError: ''
+      }
+    }
+  })
+
+  const runPromise = generation.runImageGeneration('create')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  let completedBeforePersistence = false
+  runPromise.then(() => {
+    completedBeforePersistence = true
+  })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.equal(completedBeforePersistence, true)
+  assert.equal(imageActionLoading.value, '')
+  assert.equal(calls.some((call) => call[0] === 'save-project'), false)
+
+  resolvePersistence()
+  await runPromise
+  await flushBackgroundTasks()
+
+  assert.deepEqual(calls.filter((call) => call[0] === 'save-project'), [['save-project']])
+})
+
+test('image node generation ignores stale background persistence after a newer preview appears', async () => {
+  let resolvePersistence
+  const persistenceDone = new Promise((resolve) => {
+    resolvePersistence = resolve
+  })
+  const { calls, displayImageUrl, generation } = await createHarness({
+    resolveImagePersistence: async (...args) => {
+      calls.push(['resolve-persistence', ...args])
+      await persistenceDone
+      return {
+        persistedUrl: 'https://cdn.example.com/old-generated.png',
+        displayUrl: 'https://cdn.example.com/old-generated.png',
+        persisted: true,
+        persistError: ''
+      }
+    }
+  })
+
+  await generation.runImageGeneration('create')
+  displayImageUrl.value = 'https://tmp.example.com/newer-generated.png'
+
+  resolvePersistence()
+  await flushBackgroundTasks()
+
+  assert.equal(calls.some((call) => call[0] === 'save-project'), false)
+  const persistedCalls = calls.filter((call) => call[0] === 'update-node' && call[2]?.kind === 'persistence-patch')
+  assert.equal(persistedCalls.length, 1)
+  assert.equal(persistedCalls[0]?.[2]?.persistence?.displayUrl, 'https://tmp.example.com/generated.png')
 })
 
 test('image node generation keeps temporary output without saving the project', async () => {
@@ -184,6 +269,7 @@ test('image node generation keeps temporary output without saving the project', 
   })
 
   await generation.runImageGeneration('create')
+  await flushBackgroundTasks()
 
   assert.equal(calls.some((call) => call[0] === 'save-project'), false)
   assert.deepEqual(messages, [[
@@ -203,6 +289,7 @@ test('image node generation persists transient inline provider output after disp
   })
 
   await generation.runImageGeneration('create')
+  await flushBackgroundTasks()
 
   assert.deepEqual(calls.find((call) => call[0] === 'resolve-persistence')?.slice(0, 2), [
     'resolve-persistence',

@@ -46,7 +46,13 @@
       :style="moduleStyle"
     >
       <div class="module-stage" :style="stageStyle">
-        <ImageNodeGenerationProgress v-if="showProgress" :bar-style="progressBarStyle" :percent="progressPercent" />
+        <ImageNodeGenerationProgress
+          v-if="showProgress"
+          :bar-style="progressBarStyle"
+          :percent="progressPercent"
+          :label="progressPhaseLabel"
+          :elapsed-seconds="progressElapsedSeconds"
+        />
 
         <ImageNodeDisplayFrame
           v-else-if="hasDisplayImage"
@@ -334,6 +340,8 @@ const DEFAULT_ENHANCE_PROMPT = 'Enhance this image to 4K while preserving compos
 const isLocalPreviewMode = computed(() => isLocalPreviewEnabled())
 const {
   progressBarStyle,
+  progressElapsedSeconds,
+  progressPhaseLabel,
   progressPercent,
   resetProgress,
   showProgress,

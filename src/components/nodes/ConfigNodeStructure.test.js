@@ -187,6 +187,20 @@ test('config result nodes use grid collision placement for automatic output crea
   assert.match(videoConfigSource, /const videoNodeId = addNode\('video', videoNodePosition, videoNodeData\)/)
 })
 
+test('image config generation shows provider output before background persistence', () => {
+  assert.match(imageConfigSource, /const getImageNodeDisplayUrl = \(imageNodeId\) => \{/)
+  assert.match(imageConfigSource, /const persistGeneratedImageResultInBackground = async \(/)
+  assert.match(imageConfigSource, /if \(getImageNodeDisplayUrl\(imageNodeId\) !== rawUrl\) \{\s*return\s*\}/)
+  assert.match(imageConfigSource, /previewUrl:\s*rawUrl/)
+  assert.match(imageConfigSource, /persistStatus:\s*'pending'/)
+  assert.match(imageConfigSource, /void persistGeneratedImageResultInBackground\(\{/)
+
+  const handleGenerateStart = imageConfigSource.indexOf('const handleGenerate = async')
+  const backgroundStart = imageConfigSource.indexOf('const persistGeneratedImageResultInBackground = async')
+  assert.ok(backgroundStart > 0 && handleGenerateStart > 0)
+  assert.doesNotMatch(imageConfigSource.slice(handleGenerateStart, backgroundStart), /await resolveImagePersistence\(/)
+})
+
 test('image and video config nodes delegate error display to a shared component', () => {
   const errorMessageSource = readConfigComponentSource('ConfigNodeErrorMessage')
 

@@ -52,6 +52,68 @@ export const useImageNodeGeneration = ({
   saveProject,
   updateNode
 } = {}) => {
+  const isStillDisplayingGeneratedImage = (url) => (
+    String(readReactiveValue(displayImageUrl) || '').trim() === String(url || '').trim()
+  )
+
+  const persistGeneratedImageInBackground = async ({
+    firstResult,
+    resultMetadata,
+    mode
+  }) => {
+    try {
+      const persistence = await resolveImagePersistence(
+        firstResult.url,
+        generatedImageFileName(),
+        'Generated image persistence failed. Please retry.'
+      )
+
+      if (!isStillDisplayingGeneratedImage(firstResult.url)) {
+        return
+      }
+
+      updateNode(
+        readReactiveValue(nodeId),
+        buildImagePersistencePatch(persistence, resultMetadata),
+        persistence.persisted ? { changeType: 'node-generated' } : { persist: false }
+      )
+
+      if (!persistence.persisted) {
+        dispatchMessage(messageApi, {
+          type: 'warning',
+          text: 'Image generated, but the result is still temporary. Refresh may lose it.'
+        })
+        return
+      }
+
+      const savedOk = await saveProject()
+      const saveState = readReactiveValue(projectSaveState) || {}
+      const saveFeedback = resolveImageSaveFeedback(savedOk)
+      updateNode(readReactiveValue(nodeId), getImageNodeSaveFeedbackPatch({ saveFeedback }), { persist: false })
+      dispatchMessage(messageApi, getImageNodeGenerationSaveMessage({
+        saveFeedback,
+        saveState,
+        savedOk,
+        mode
+      }))
+    } catch (err) {
+      const message = getErrorMessage(err, 'Generated image persistence failed')
+      if (!isStillDisplayingGeneratedImage(firstResult.url)) {
+        return
+      }
+      updateNode(readReactiveValue(nodeId), getImageNodeSaveFeedbackPatch({
+        saveFeedback: {
+          persistStatus: 'error',
+          persistError: message
+        }
+      }), { persist: false })
+      dispatchMessage(messageApi, {
+        type: 'warning',
+        text: 'Image generated, but the result is still temporary. Refresh may lose it.'
+      })
+    }
+  }
+
   const runImageGeneration = async (mode = 'create') => {
     if (!readReactiveValue(isConfigured)) {
       dispatchMessage(messageApi, { type: 'warning', text: 'Please sign in first' })
@@ -121,36 +183,11 @@ export const useImageNodeGeneration = ({
 
       updateNode(readReactiveValue(nodeId), buildImagePersistencePatch(previewPersistence, resultMetadata), { persist: false })
 
-      const persistence = await resolveImagePersistence(
-        firstResult.url,
-        generatedImageFileName(),
-        'Generated image persistence failed. Please retry.'
-      )
-
-      updateNode(
-        readReactiveValue(nodeId),
-        buildImagePersistencePatch(persistence, resultMetadata),
-        persistence.persisted ? { changeType: 'node-generated' } : { persist: false }
-      )
-
-      if (!persistence.persisted) {
-        dispatchMessage(messageApi, {
-          type: 'warning',
-          text: 'Image generated, but the result is still temporary. Refresh may lose it.'
-        })
-        return
-      }
-
-      const savedOk = await saveProject()
-      const saveState = readReactiveValue(projectSaveState) || {}
-      const saveFeedback = resolveImageSaveFeedback(savedOk)
-      updateNode(readReactiveValue(nodeId), getImageNodeSaveFeedbackPatch({ saveFeedback }), { persist: false })
-      dispatchMessage(messageApi, getImageNodeGenerationSaveMessage({
-        saveFeedback,
-        saveState,
-        savedOk,
+      void persistGeneratedImageInBackground({
+        firstResult,
+        resultMetadata,
         mode
-      }))
+      })
     } catch (err) {
       const message = getErrorMessage(err, 'Image generation failed')
       updateNode(readReactiveValue(nodeId), getImageNodeActionErrorPatch({ message }), { persist: false })

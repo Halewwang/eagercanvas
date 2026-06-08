@@ -5,6 +5,7 @@ import { test } from 'node:test'
 import { gzipSync } from 'node:zlib'
 
 const homeSource = readFileSync(new URL('./Home.vue', import.meta.url), 'utf8')
+const routerSource = readFileSync(new URL('../router/index.js', import.meta.url), 'utf8')
 const homeStyleUrl = new URL('./Home.css', import.meta.url)
 const homeStylePath = fileURLToPath(homeStyleUrl)
 
@@ -72,4 +73,29 @@ test('home page delegates scoped presentation styles to a focused stylesheet', (
   assert.doesNotMatch(homeSource, /@keyframes home-logo-marquee/)
   assert.match(homeStyleSource, /\.home-shell\s*\{/)
   assert.match(homeStyleSource, /@keyframes home-logo-marquee/)
+})
+
+test('public home first paint does not wait for auth bootstrap', () => {
+  assert.match(routerSource, /const requiresBootstrap = /)
+  assert.match(routerSource, /if \(!requiresBootstrap\) \{\s*return true\s*\}/)
+  assert.doesNotMatch(homeSource, /onMounted\(async \(\) => \{\s*await bootstrapAuth\(\)/)
+  assert.match(homeSource, /void bootstrapAuth\(\)/)
+})
+
+test('home page defers non-critical module image downloads', () => {
+  const imageClasses = [
+    'home-image-panel-left',
+    'home-image-panel-right',
+    'home-video-large',
+    'home-video-top-right',
+    'home-video-bottom-left',
+    'home-video-bottom-right',
+    'home-3d-left',
+    'home-3d-right'
+  ]
+
+  imageClasses.forEach((className) => {
+    const pattern = new RegExp(`class="${className}"[\\s\\S]*loading="lazy"[\\s\\S]*decoding="async"|loading="lazy"[\\s\\S]*decoding="async"[\\s\\S]*class="${className}"`)
+    assert.match(homeSource, pattern)
+  })
 })

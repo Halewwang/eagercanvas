@@ -87,6 +87,14 @@ router.beforeEach(async (to) => {
     return true
   }
 
+  const protectedPaths = ['/canvas', '/workspace', '/usage', '/admin']
+  const isUsageAdmin = to.path.startsWith('/usage-admin')
+  const requiresAuth = !isUsageAdmin && protectedPaths.some((path) => to.path.startsWith(path))
+  const requiresBootstrap = to.path === '/login' || requiresAuth
+  if (!requiresBootstrap) {
+    return true
+  }
+
   const auth = useAuthStore()
   await auth.bootstrapAuth()
 
@@ -101,12 +109,9 @@ router.beforeEach(async (to) => {
     }
   }
 
-  const protectedPaths = ['/canvas', '/workspace', '/usage', '/admin']
-  const isUsageAdmin = to.path.startsWith('/usage-admin')
   if (isUsageAdmin) {
     return true
   }
-  const requiresAuth = protectedPaths.some((path) => to.path.startsWith(path))
 
   if (requiresAuth && !auth.isAuthenticated.value) {
     return {
