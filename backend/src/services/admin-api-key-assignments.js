@@ -44,6 +44,55 @@ const buildRuntimeApiKeyFallback = (item = {}) => {
   const apiKey = readRuntimeApiKey(item)
   return apiKey ? { api_key: apiKey } : {}
 }
+
+const readFiniteNumber = (...values) => {
+  for (const value of values) {
+    if (value === undefined || value === null || String(value).trim() === '') continue
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+const readDirectKeyCurrency = (item = {}) => {
+  const currency = item?.usage_currency ||
+    item?.usageCurrency ||
+    item?.currency ||
+    item?.cost_currency ||
+    item?.costCurrency ||
+    'PTC'
+  return String(currency).trim() || 'PTC'
+}
+
+const applyDirectKeyCostFallback = (detail = {}) => {
+  if (readFiniteNumber(detail?.usage_total_cost, detail?.usageTotalCost) !== null) return detail
+
+  const totalCost = readFiniteNumber(
+    detail?.current_cost,
+    detail?.currentCost,
+    detail?.total_cost,
+    detail?.totalCost,
+    detail?.cost,
+    detail?.amount
+  )
+  if (totalCost === null) return detail
+
+  const dailyCost = readFiniteNumber(
+    detail?.current_date_cost,
+    detail?.currentDateCost,
+    detail?.daily_cost,
+    detail?.dailyCost
+  )
+  const currency = readDirectKeyCurrency(detail)
+  return {
+    ...detail,
+    usage_total_cost: totalCost,
+    ...(dailyCost !== null ? { usage_daily_cost: dailyCost } : {}),
+    usage_currency: currency,
+    currency
+  }
+}
+
 const DEFAULT_BILLING_INVENTORY_CONCURRENCY = 4
 const DEFAULT_BILLING_INVENTORY_CACHE_TTL_MS = 30 * 1000
 const billingInventoryCache = new Map()
@@ -106,7 +155,7 @@ const loadBillingInventoryEntry = async ({
 }) => {
   const activeItem = activeItems.get(apiName)
   const runtimeKeyFallback = buildRuntimeApiKeyFallback(activeItem)
-  let detail = { api_name: apiName, ...runtimeKeyFallback }
+  let detail = { api_name: apiName, ...(activeItem || {}), ...runtimeKeyFallback }
   let detailLoaded = false
 
   try {
@@ -127,17 +176,19 @@ const loadBillingInventoryEntry = async ({
   if (apiKey) {
     try {
       const usage = normalize302ApiKeyUsage(await getApiKeyUsage(apiKey))
-      detail = {
-        ...detail,
-        usage_total_cost: usage.totalCost,
-        usage_monthly_cost: usage.monthlyCost,
-        usage_daily_cost: usage.dailyCost,
+      const usageFields = {
+        ...(usage.totalCost !== null ? { usage_total_cost: usage.totalCost } : {}),
+        ...(usage.monthlyCost !== null ? { usage_monthly_cost: usage.monthlyCost } : {}),
+        ...(usage.dailyCost !== null ? { usage_daily_cost: usage.dailyCost } : {}),
         usage_currency: usage.currency,
         currency: usage.currency
       }
+      detail = applyDirectKeyCostFallback({ ...detail, ...usageFields })
     } catch {
-      // Keep the key details, but do not fall back to list current_cost as billed usage.
+      detail = applyDirectKeyCostFallback(detail)
     }
+  } else {
+    detail = applyDirectKeyCostFallback(detail)
   }
 
   return [apiName, detail]

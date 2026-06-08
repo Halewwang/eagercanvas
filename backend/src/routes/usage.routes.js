@@ -5,7 +5,7 @@ import { asyncHandler } from '../utils/http.js'
 import { getUsageSummary, getUsageTimeseries } from '../services/usage.service.js'
 import {
   get302ApiKeys,
-  get302ApiRecordsForActiveApiKeys,
+  get302ApiRecords,
   get302Balance,
   get302RecordByRequestId,
   normalize302ApiRecordList
@@ -36,7 +36,7 @@ usageRouter.get('/302/record/:requestId', requirePermission(['admin.usage.read_a
 }))
 
 usageRouter.get('/302/api-record', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
-  const result = await get302ApiRecordsForActiveApiKeys({
+  const result = await get302ApiRecords({
     page: req.query.page,
     limit: req.query.limit,
     start_time: req.query.start_time,

@@ -164,6 +164,44 @@ test('loadUserApiKeyBillingInventory uses list runtime key when detail omits api
   assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')
 })
 
+test('loadUserApiKeyBillingInventory uses matched 302 key cost when usage-log is unavailable', async () => {
+  const usageCalls = []
+  const inventory = await loadUserApiKeyBillingInventory(
+    [{ provider_api_name: 'eager_user_one', status: 'active' }],
+    {
+      listApiKeys: async () => ({
+        data: [
+          {
+            api_name: 'eager_user_one',
+            api_key: 'sk-list-runtime-key',
+            current_cost: 1.25,
+            current_date_cost: 0.1
+          }
+        ]
+      }),
+      getApiKey: async (apiName) => ({
+        data: {
+          api_name: apiName,
+          api_key: 'sk-detail-runtime-key',
+          current_cost: 3.5,
+          current_date_cost: 0.75,
+          currency: 'PTC'
+        }
+      }),
+      getApiKeyUsage: async (apiKey) => {
+        usageCalls.push(apiKey)
+        throw new Error('usage-log timeout')
+      }
+    }
+  )
+
+  assert.deepEqual(usageCalls, ['sk-detail-runtime-key'])
+  assert.equal(inventory.get('eager_user_one').current_cost, 3.5)
+  assert.equal(inventory.get('eager_user_one').usage_total_cost, 3.5)
+  assert.equal(inventory.get('eager_user_one').usage_daily_cost, 0.75)
+  assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')
+})
+
 test('loadUserApiKeyBillingInventory fetches requested credential detail when api key list omits it', async () => {
   const usageCalls = []
   const inventory = await loadUserApiKeyBillingInventory(
@@ -318,12 +356,12 @@ test('loadUserApiKeyBillingInventory reuses short-lived billing inventory cache 
   assert.equal(usageCalls, 1)
 })
 
-test('loadUserApiKeyBillingInventory does not use list cost when detail lookup fails', async () => {
+test('loadUserApiKeyBillingInventory uses matched list key cost when detail lookup fails', async () => {
   const inventory = await loadUserApiKeyBillingInventory(
     [{ provider_api_name: 'eager_user_one', status: 'active' }],
     {
       listApiKeys: async () => ({
-        data: [{ api_name: 'eager_user_one', current_cost: 4848 }]
+        data: [{ api_name: 'eager_user_one', current_cost: 4.848, current_date_cost: 0.125 }]
       }),
       getApiKey: async () => {
         throw new Error('detail unavailable')
@@ -332,5 +370,8 @@ test('loadUserApiKeyBillingInventory does not use list cost when detail lookup f
   )
 
   assert.equal(inventory.get('eager_user_one').api_name, 'eager_user_one')
-  assert.equal(Object.hasOwn(inventory.get('eager_user_one'), 'current_cost'), false)
+  assert.equal(inventory.get('eager_user_one').current_cost, 4.848)
+  assert.equal(inventory.get('eager_user_one').usage_total_cost, 4.848)
+  assert.equal(inventory.get('eager_user_one').usage_daily_cost, 0.125)
+  assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')
 })
