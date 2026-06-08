@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { buildAdminUserUsageView, loadUserApiKeyBillingInventory } from './admin-usage.service.js'
 
-test('buildAdminUserUsageView uses 302 usage-log cost as the only key cost source', () => {
+test('buildAdminUserUsageView uses normalized 302 key cost as the official cost source', () => {
   const [user] = buildAdminUserUsageView({
     users: [{ id: 'user-1', email: 'user@example.com', created_at: '2026-05-01T00:00:00.000Z', status: 'active' }],
     profiles: [{ user_id: 'user-1', display_name: 'Ada', registered_at: '2026-05-01T00:00:00.000Z' }],
@@ -52,7 +52,7 @@ test('buildAdminUserUsageView uses 302 usage-log cost as the only key cost sourc
   assert.equal(user.reconciliation.diffAmount, 0)
 })
 
-test('buildAdminUserUsageView ignores key current_cost when usage-log cost is unavailable', () => {
+test('buildAdminUserUsageView ignores raw key current_cost when normalized key cost is unavailable', () => {
   const [user] = buildAdminUserUsageView({
     users: [{ id: 'user-1', email: 'user@example.com', created_at: '2026-05-01T00:00:00.000Z', status: 'active' }],
     profiles: [{ user_id: 'user-1', display_name: 'Ada', registered_at: '2026-05-01T00:00:00.000Z' }],
@@ -74,9 +74,8 @@ test('buildAdminUserUsageView ignores key current_cost when usage-log cost is un
   assert.equal(user.officialUsage.currency, 'USD')
 })
 
-test('loadUserApiKeyBillingInventory enriches key details with usage-log cost', async () => {
+test('loadUserApiKeyBillingInventory enriches key details with normalized 302 key cost', async () => {
   const detailCalls = []
-  const usageCalls = []
   const inventory = await loadUserApiKeyBillingInventory(
     [{ provider_api_name: 'eager_user_one', status: 'active' }],
     {
@@ -94,18 +93,9 @@ test('loadUserApiKeyBillingInventory enriches key details with usage-log cost', 
           data: {
             api_name: apiName,
             api_key: 'sk-runtime-user-key',
-            current_cost: 12.34,
-            current_date_cost: 0.56
-          }
-        }
-      },
-      getApiKeyUsage: async (apiKey) => {
-        usageCalls.push(apiKey)
-        return {
-          data: {
-            total_cost: 4.848,
-            monthly_cost: 1.23,
-            daily_cost: 0.45
+            current_cost: 6767,
+            current_month_cost: 6767,
+            current_date_cost: 1862
           }
         }
       }
@@ -113,17 +103,15 @@ test('loadUserApiKeyBillingInventory enriches key details with usage-log cost', 
   )
 
   assert.deepEqual(detailCalls, ['eager_user_one'])
-  assert.deepEqual(usageCalls, ['sk-runtime-user-key'])
-  assert.equal(inventory.get('eager_user_one').current_cost, 12.34)
-  assert.equal(inventory.get('eager_user_one').current_date_cost, 0.56)
-  assert.equal(inventory.get('eager_user_one').usage_total_cost, 4.848)
-  assert.equal(inventory.get('eager_user_one').usage_monthly_cost, 1.23)
-  assert.equal(inventory.get('eager_user_one').usage_daily_cost, 0.45)
+  assert.equal(inventory.get('eager_user_one').current_cost, 6767)
+  assert.equal(inventory.get('eager_user_one').current_date_cost, 1862)
+  assert.equal(inventory.get('eager_user_one').usage_total_cost, 6.767)
+  assert.equal(inventory.get('eager_user_one').usage_monthly_cost, 6.767)
+  assert.equal(inventory.get('eager_user_one').usage_daily_cost, 1.862)
   assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')
 })
 
 test('loadUserApiKeyBillingInventory uses list runtime key when detail omits api key', async () => {
-  const usageCalls = []
   const inventory = await loadUserApiKeyBillingInventory(
     [{ provider_api_name: 'eager_user_one', status: 'active' }],
     {
@@ -139,32 +127,21 @@ test('loadUserApiKeyBillingInventory uses list runtime key when detail omits api
       getApiKey: async (apiName) => ({
         data: {
           api_name: apiName,
-          current_cost: 12.34
+          current_cost: 7250,
+          current_date_cost: 500
         }
-      }),
-      getApiKeyUsage: async (apiKey) => {
-        usageCalls.push(apiKey)
-        return {
-          data: {
-            total_cost: 7.25,
-            monthly_cost: 2.5,
-            daily_cost: 0.5,
-            currency: 'PTC'
-          }
-        }
-      }
+      })
     }
   )
 
-  assert.deepEqual(usageCalls, ['sk-list-runtime-key'])
-  assert.equal(inventory.get('eager_user_one').current_cost, 12.34)
+  assert.equal(inventory.get('eager_user_one').api_key, 'sk-list-runtime-key')
+  assert.equal(inventory.get('eager_user_one').current_cost, 7250)
   assert.equal(inventory.get('eager_user_one').usage_total_cost, 7.25)
-  assert.equal(inventory.get('eager_user_one').usage_monthly_cost, 2.5)
   assert.equal(inventory.get('eager_user_one').usage_daily_cost, 0.5)
   assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')
 })
 
-test('loadUserApiKeyBillingInventory uses matched 302 key cost when usage-log is unavailable', async () => {
+test('loadUserApiKeyBillingInventory uses matched 302 key cost without calling usage-log', async () => {
   const usageCalls = []
   const inventory = await loadUserApiKeyBillingInventory(
     [{ provider_api_name: 'eager_user_one', status: 'active' }],
@@ -174,8 +151,8 @@ test('loadUserApiKeyBillingInventory uses matched 302 key cost when usage-log is
           {
             api_name: 'eager_user_one',
             api_key: 'sk-list-runtime-key',
-            current_cost: 1.25,
-            current_date_cost: 0.1
+            current_cost: 1250,
+            current_date_cost: 100
           }
         ]
       }),
@@ -183,8 +160,8 @@ test('loadUserApiKeyBillingInventory uses matched 302 key cost when usage-log is
         data: {
           api_name: apiName,
           api_key: 'sk-detail-runtime-key',
-          current_cost: 3.5,
-          current_date_cost: 0.75,
+          current_cost: 3500,
+          current_date_cost: 750,
           currency: 'PTC'
         }
       }),
@@ -195,15 +172,14 @@ test('loadUserApiKeyBillingInventory uses matched 302 key cost when usage-log is
     }
   )
 
-  assert.deepEqual(usageCalls, ['sk-detail-runtime-key'])
-  assert.equal(inventory.get('eager_user_one').current_cost, 3.5)
+  assert.deepEqual(usageCalls, [])
+  assert.equal(inventory.get('eager_user_one').current_cost, 3500)
   assert.equal(inventory.get('eager_user_one').usage_total_cost, 3.5)
   assert.equal(inventory.get('eager_user_one').usage_daily_cost, 0.75)
   assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')
 })
 
 test('loadUserApiKeyBillingInventory fetches requested credential detail when api key list omits it', async () => {
-  const usageCalls = []
   const inventory = await loadUserApiKeyBillingInventory(
     [{ provider_api_name: 'eager_user_missing_from_list', status: 'active' }],
     {
@@ -218,22 +194,13 @@ test('loadUserApiKeyBillingInventory fetches requested credential detail when ap
       getApiKey: async (apiName) => ({
         data: {
           api_name: apiName,
-          api_key: 'sk-detail-runtime-key'
+          api_key: 'sk-detail-runtime-key',
+          current_cost: 8750
         }
-      }),
-      getApiKeyUsage: async (apiKey) => {
-        usageCalls.push(apiKey)
-        return {
-          data: {
-            total_cost: 8.75,
-            currency: 'PTC'
-          }
-        }
-      }
+      })
     }
   )
 
-  assert.deepEqual(usageCalls, ['sk-detail-runtime-key'])
   assert.equal(inventory.get('eager_user_missing_from_list').usage_total_cost, 8.75)
   assert.equal(inventory.get('eager_user_missing_from_list').usage_currency, 'PTC')
 })
@@ -242,10 +209,12 @@ test('loadUserApiKeyBillingInventory bounds concurrent key detail lookups', asyn
   const detailCalls = []
   const detailResolvers = new Map()
   const detailRelease = (apiName) => {
+    const suffixCost = apiName.endsWith('one') ? 1000 : apiName.endsWith('two') ? 2000 : 3000
     detailResolvers.get(apiName)?.({
       data: {
         api_name: apiName,
-        api_key: `sk-${apiName}`
+        api_key: `sk-${apiName}`,
+        current_cost: suffixCost
       }
     })
   }
@@ -271,12 +240,7 @@ test('loadUserApiKeyBillingInventory bounds concurrent key detail lookups', asyn
         return new Promise((resolve) => {
           detailResolvers.set(apiName, resolve)
         })
-      },
-      getApiKeyUsage: async (apiKey) => ({
-        data: {
-          total_cost: apiKey.endsWith('one') ? 1 : apiKey.endsWith('two') ? 2 : 3
-        }
-      })
+      }
     }
   )
 
@@ -305,7 +269,6 @@ test('loadUserApiKeyBillingInventory bounds concurrent key detail lookups', asyn
 test('loadUserApiKeyBillingInventory reuses short-lived billing inventory cache when enabled', async () => {
   let listCalls = 0
   let detailCalls = 0
-  let usageCalls = 0
   const options = {
     cacheTtlMs: 1000,
     listApiKeys: async () => {
@@ -324,16 +287,8 @@ test('loadUserApiKeyBillingInventory reuses short-lived billing inventory cache 
       return {
         data: {
           api_name: apiName,
-          api_key: 'sk-cached'
-        }
-      }
-    },
-    getApiKeyUsage: async () => {
-      usageCalls += 1
-      return {
-        data: {
-          total_cost: 9.5,
-          currency: 'PTC'
+          api_key: 'sk-cached',
+          current_cost: 9500
         }
       }
     }
@@ -353,7 +308,6 @@ test('loadUserApiKeyBillingInventory reuses short-lived billing inventory cache 
   assert.notEqual(first, second)
   assert.equal(listCalls, 1)
   assert.equal(detailCalls, 1)
-  assert.equal(usageCalls, 1)
 })
 
 test('loadUserApiKeyBillingInventory uses matched list key cost when detail lookup fails', async () => {
@@ -361,7 +315,7 @@ test('loadUserApiKeyBillingInventory uses matched list key cost when detail look
     [{ provider_api_name: 'eager_user_one', status: 'active' }],
     {
       listApiKeys: async () => ({
-        data: [{ api_name: 'eager_user_one', current_cost: 4.848, current_date_cost: 0.125 }]
+        data: [{ api_name: 'eager_user_one', current_cost: 4848, current_date_cost: 125 }]
       }),
       getApiKey: async () => {
         throw new Error('detail unavailable')
@@ -370,7 +324,7 @@ test('loadUserApiKeyBillingInventory uses matched list key cost when detail look
   )
 
   assert.equal(inventory.get('eager_user_one').api_name, 'eager_user_one')
-  assert.equal(inventory.get('eager_user_one').current_cost, 4.848)
+  assert.equal(inventory.get('eager_user_one').current_cost, 4848)
   assert.equal(inventory.get('eager_user_one').usage_total_cost, 4.848)
   assert.equal(inventory.get('eager_user_one').usage_daily_cost, 0.125)
   assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')

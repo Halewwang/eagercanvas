@@ -4,7 +4,7 @@ import {
   resetAdminServiceCredentialForm
 } from './adminServiceCredentialCore.js'
 
-export const ADMIN_LOG_302_QUERY_KEYS = ['start', 'end', 'page', 'limit']
+export const ADMIN_LOG_302_QUERY_KEYS = ['apiName', 'start', 'end', 'page', 'limit']
 
 export const createAdminServiceKeyForm = createAdminServiceCredentialForm
 
@@ -29,6 +29,7 @@ export const createAdminServiceLogQuery = ({ now = new Date(), pageSize = 10 } =
   const dayStart = new Date(current)
   dayStart.setHours(0, 0, 0, 0)
   return {
+    apiName: '',
     page: 1,
     limit: pageSize,
     start: formatAdminServiceLocalDateTime(dayStart),

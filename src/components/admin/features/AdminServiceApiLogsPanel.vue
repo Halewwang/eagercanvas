@@ -1,7 +1,7 @@
 <template>
   <AdminPanelCard
     title="服务调用日志查询"
-    caption="按时间范围和分页条件查询官方调用日志。"
+    caption="按 API 名称、时间范围和分页条件查询对应服务调用日志。"
     title-class="text-sm font-medium text-white"
     header-class="mb-3"
     panel-class="admin-panel-card rounded-2xl p-4"
@@ -68,7 +68,7 @@ const props = defineProps({
   },
   log302Query: {
     type: Object,
-    default: () => ({ page: 1, limit: 10, start: '', end: '' })
+    default: () => ({ apiName: '', page: 1, limit: 10, start: '', end: '' })
   }
 })
 

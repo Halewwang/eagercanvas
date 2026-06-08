@@ -383,6 +383,14 @@ export const get302RecordByRequestId = (requestId) => {
 
 export const get302ApiRecords = (query = {}) => call302Dashboard('/dashboard/api-record', { params: query })
 
+const get302ApiRecordsForRuntimeKey = (apiKey, query = {}) => {
+  const { authHeader } = get302ApiKeyAuthHeader(apiKey)
+  return call302Dashboard('/dashboard/api-record', {
+    params: query,
+    authHeaders: [authHeader]
+  })
+}
+
 export const get302ApiKeys = () => call302Dashboard('/dashboard/api_keys')
 
 export const get302ApiKey = (apiName) => {
@@ -444,6 +452,18 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
     expiresAt: Date.now() + RUNTIME_API_KEY_TTL_MS
   })
   return apiKey
+}
+
+export const get302ApiRecordsForApiName = async (apiName, query = {}) => {
+  const safeName = String(apiName || '').trim()
+  if (!safeName) throw new HttpError(400, 'apiName is required', 'INVALID_API_NAME')
+
+  const apiKey = await get302RuntimeApiKeyByName(safeName)
+  if (!apiKey) {
+    throw new HttpError(404, '302 API key was not found for apiName', 'DASHBOARD_302_API_KEY_NOT_FOUND')
+  }
+
+  return get302ApiRecordsForRuntimeKey(apiKey, query)
 }
 
 export const create302ApiKey = (payload = {}) =>

@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { buildAdminUserUsageView } from './admin-usage-view.js'
 
-test('buildAdminUserUsageView filters deleted api assignments and uses usage-log inventory costs', () => {
+test('buildAdminUserUsageView filters deleted api assignments and uses official key inventory costs', () => {
   const [user] = buildAdminUserUsageView({
     users: [
       {

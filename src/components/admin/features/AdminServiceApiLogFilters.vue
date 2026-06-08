@@ -1,5 +1,12 @@
 <template>
   <AdminFilterToolbar class="admin-service-log-filters" compact grid>
+    <AdminFilterField label="API 名称">
+      <AdminControlField
+        :value="log302Query.apiName"
+        placeholder="eager_user_..."
+        @input="updateLogQuery('apiName', $event)"
+      />
+    </AdminFilterField>
     <AdminFilterField label="开始时间">
       <AdminControlField
         :value="log302Query.start"
@@ -52,7 +59,7 @@ defineProps({
   },
   log302Query: {
     type: Object,
-    default: () => ({ page: 1, limit: 20, start: '', end: '' })
+    default: () => ({ apiName: '', page: 1, limit: 20, start: '', end: '' })
   }
 })
 
@@ -75,7 +82,7 @@ const updateNumericLogQuery = (key, event) => {
 
 <style scoped>
 .admin-service-log-filters {
-  --admin-filter-toolbar-columns: minmax(180px, 1fr) minmax(180px, 1fr) 76px 76px auto;
+  --admin-filter-toolbar-columns: minmax(240px, 1.2fr) minmax(180px, 1fr) minmax(180px, 1fr) 76px 76px auto;
   width: 100%;
 }
 

@@ -3,14 +3,16 @@ import { test } from 'node:test'
 import * as serviceOpsCore from './useAdminServiceOpsCore.js'
 
 test('admin service log query update preserves the existing allowed fields', () => {
-  const query = { page: 1, limit: 20, start: '', end: '' }
+  const query = { apiName: '', page: 1, limit: 20, start: '', end: '' }
 
+  assert.equal(serviceOpsCore.updateAdminLog302Query(query, 'apiName', 'eager_user_one'), true)
   assert.equal(serviceOpsCore.updateAdminLog302Query(query, 'page', 3), true)
   assert.equal(serviceOpsCore.updateAdminLog302Query(query, 'limit', 50), true)
   assert.equal(serviceOpsCore.updateAdminLog302Query(query, 'start', '2026-05-01'), true)
   assert.equal(serviceOpsCore.updateAdminLog302Query(query, 'end', '2026-05-30'), true)
 
   assert.deepEqual(query, {
+    apiName: 'eager_user_one',
     page: 3,
     limit: 50,
     start: '2026-05-01',
@@ -19,12 +21,12 @@ test('admin service log query update preserves the existing allowed fields', () 
 })
 
 test('admin service log query update ignores unsupported keys', () => {
-  const query = { page: 1, limit: 20, start: '', end: '' }
+  const query = { apiName: '', page: 1, limit: 20, start: '', end: '' }
 
   assert.equal(serviceOpsCore.updateAdminLog302Query(query, 'requestId', 'abc'), false)
   assert.equal(serviceOpsCore.updateAdminLog302Query(query, '', 'abc'), false)
 
-  assert.deepEqual(query, { page: 1, limit: 20, start: '', end: '' })
+  assert.deepEqual(query, { apiName: '', page: 1, limit: 20, start: '', end: '' })
 })
 
 test('admin service log query defaults to the current day range for visible time filters', () => {
@@ -37,6 +39,7 @@ test('admin service log query defaults to the current day range for visible time
   })
 
   assert.deepEqual(query, {
+    apiName: '',
     page: 1,
     limit: 10,
     start: '2026-06-06T00:00',

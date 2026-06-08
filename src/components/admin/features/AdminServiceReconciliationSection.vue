@@ -103,7 +103,7 @@ defineProps({
   },
   log302Query: {
     type: Object,
-    default: () => ({ page: 1, limit: 10, start: '', end: '' })
+    default: () => ({ apiName: '', page: 1, limit: 10, start: '', end: '' })
   },
   recordData: {
     type: Object,

@@ -10,6 +10,7 @@ import {
   get302ApiKey,
   get302ApiKeys,
   get302ApiRecords,
+  get302ApiRecordsForApiName,
   get302Balance,
   get302RecordByRequestId,
   normalize302ApiKeyList,
@@ -74,12 +75,16 @@ usageAdminRouter.get('/302/record/:requestId', adminUsageRequired, asyncHandler(
 }))
 
 usageAdminRouter.get('/302/api-record', adminUsageRequired, asyncHandler(async (req, res) => {
-  const result = await get302ApiRecords({
+  const query = {
     page: req.query.page,
     limit: req.query.limit,
     start_time: req.query.start_time,
     end_time: req.query.end_time
-  })
+  }
+  const apiName = req.query.api_name || req.query.apiName
+  const result = apiName
+    ? await get302ApiRecordsForApiName(apiName, query)
+    : await get302ApiRecords(query)
   const normalized = normalize302ApiRecordList(result)
 
   res.json({

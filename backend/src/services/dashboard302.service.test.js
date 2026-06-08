@@ -5,6 +5,7 @@ import {
   resolveDashboard302BaseUrl,
   assert302DashboardSuccess,
   buildDashboard302AuthHeaders,
+  get302ApiRecordsForApiName,
   get302ApiKeyUsageByKey,
   get302Balance,
   shouldRetry302DashboardWithNextKey,
@@ -311,6 +312,67 @@ test('normalizes 302 api-record list when upstream wraps rows in data.items', ()
 
   assert.deepEqual(result.items, [{ request_id: 'req-1', cost: 0.12 }])
   assert.deepEqual(result.pagination, { page: 1, total: 1 })
+})
+
+test('queries api-record logs with the matched runtime key for an api name', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const attempts = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302.ai'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url)
+    attempts.push({
+      url: requestUrl,
+      auth: options.headers?.Authorization
+    })
+
+    if (/\/dashboard\/api_key\/eager_user_one$/.test(requestUrl)) {
+      return new Response(JSON.stringify({
+        code: 0,
+        data: {
+          api_name: 'eager_user_one',
+          api_key: 'sk-runtime-one'
+        }
+      }), { status: 200 })
+    }
+
+    if (/\/dashboard\/api-record\?page=1&limit=20/.test(requestUrl)) {
+      return new Response(JSON.stringify({
+        items: [{ request_id: 'req-one', cost: 1.5, created_at: '2026-06-08T10:00:00.000Z' }],
+        pagination: { total_page: 1, cur_page: 1, limit: 20 }
+      }), { status: 200 })
+    }
+
+    assert.fail(`Unexpected 302 mock request: ${requestUrl}`)
+  }
+
+  try {
+    const result = await get302ApiRecordsForApiName('eager_user_one', { page: 1, limit: 20 })
+    const normalized = normalize302ApiRecordList(result)
+    assert.deepEqual(normalized.items.map((item) => item.request_id), ['req-one'])
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(attempts, [
+    { url: 'https://api.302.ai/dashboard/api_key/eager_user_one', auth: 'Bearer sk-dashboard' },
+    { url: 'https://api.302.ai/dashboard/api-record?page=1&limit=20', auth: 'Bearer sk-runtime-one' }
+  ])
 })
 
 test('normalizes dashboard record amount aliases used by 302 records', () => {

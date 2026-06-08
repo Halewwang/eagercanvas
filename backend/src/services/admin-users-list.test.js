@@ -98,7 +98,7 @@ test('listUsersForAdmin assembles admin user usage view from focused data source
         JSON.stringify({
           code: 0,
           data: [
-            { api_name: 'active-key', api_key: 'sk-runtime-user-key', current_cost: 999, currency: 'USD' }
+            { api_name: 'active-key', api_key: 'sk-runtime-user-key', current_cost: 4750, currency: 'PTC' }
           ]
         }),
         { status: 200 }
@@ -111,31 +111,7 @@ test('listUsersForAdmin assembles admin user usage view from focused data source
           code: 0,
           data: {
             api_name: 'active-key',
-            current_cost: 999
-          }
-        }),
-        { status: 200 }
-      )
-    }
-
-    if (/\/gpt\/api\/token_id/.test(requestUrl)) {
-      return new Response(
-        JSON.stringify({
-          code: 0,
-          data: { token_id: 'token-active-key' }
-        }),
-        { status: 200 }
-      )
-    }
-
-    if (/\/gpt\/api\/token\/usage\/token-active-key$/.test(requestUrl)) {
-      return new Response(
-        JSON.stringify({
-          code: 0,
-          data: {
-            total_cost: 4.75,
-            monthly_cost: 4.75,
-            daily_cost: 0.25
+            current_cost: 4750
           }
         }),
         { status: 200 }

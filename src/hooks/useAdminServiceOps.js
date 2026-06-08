@@ -101,9 +101,17 @@ export const useAdminServiceOps = ({
 
   const loadApiLogs = async ({ silent = false } = {}) => {
     if (!canReadUsage.value) return
+    const apiName = String(log302Query.apiName || '').trim()
+    if (!apiName) {
+      apiLogs.value = []
+      apiLogPagination.value = { page: log302Query.page, limit: log302Query.limit, total: 0 }
+      if (!silent) notifier.warning('请先输入 API 名称')
+      return { ok: true, skipped: true }
+    }
     loadingApiLogs.value = true
     try {
       const rsp = await fetchApiRecord({
+        api_name: apiName,
         page: log302Query.page,
         limit: log302Query.limit,
         start_time: toAdminServiceUnixSeconds(log302Query.start),
@@ -136,6 +144,9 @@ export const useAdminServiceOps = ({
       const rsp = await fetchApiKeys()
       const list = Array.isArray(rsp?.data) ? rsp.data : []
       apiKeys.value = list
+      if (!String(log302Query.apiName || '').trim()) {
+        log302Query.apiName = String(list.find((item) => item?.api_name)?.api_name || '')
+      }
       const drafts = {}
       for (const item of list) drafts[item.api_name] = buildAdminServiceKeyDraft(item)
       keyDrafts.value = drafts
@@ -207,12 +218,15 @@ export const useAdminServiceOps = ({
     serviceLoadNotice.value = ''
     const tasks = []
     if (canReadUsage.value) {
-      tasks.push(load302Balance({ silent: true }), loadApiLogs({ silent: true }))
+      tasks.push(load302Balance({ silent: true }))
     }
     if (canManageApiKeys.value || canAssignApiKeys.value) {
       tasks.push(loadApiKeys({ silent: true }))
     }
     const results = await Promise.all(tasks)
+    if (canReadUsage.value && String(log302Query.apiName || '').trim()) {
+      results.push(await loadApiLogs({ silent: true }))
+    }
     const failures = results.filter((item) => item && item.ok === false)
     if (failures.length > 0) {
       serviceLoadNotice.value = failures[0].message || '服务数据加载失败'

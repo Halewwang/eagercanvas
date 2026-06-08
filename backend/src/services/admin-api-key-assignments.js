@@ -3,10 +3,8 @@ import { HttpError } from '../utils/http.js'
 import {
   get302ApiKey,
   get302ApiKeys,
-  get302ApiKeyUsageByKey,
   get302RuntimeApiKeyByName,
-  normalize302ApiKeyList,
-  normalize302ApiKeyUsage
+  normalize302ApiKeyList
 } from './dashboard302.service.js'
 import { createAdminLog } from './admin-operation-logs.js'
 
@@ -64,20 +62,28 @@ const readDirectKeyCurrency = (item = {}) => {
   return String(currency).trim() || 'PTC'
 }
 
-const applyDirectKeyCostFallback = (detail = {}) => {
+const normalize302KeyCostAmount = (...values) => {
+  const value = readFiniteNumber(...values)
+  if (value === null) return null
+  return Number((value / 1000).toFixed(6))
+}
+
+const applyDirectKeyCost = (detail = {}) => {
   if (readFiniteNumber(detail?.usage_total_cost, detail?.usageTotalCost) !== null) return detail
 
-  const totalCost = readFiniteNumber(
+  const totalCost = normalize302KeyCostAmount(
     detail?.current_cost,
-    detail?.currentCost,
-    detail?.total_cost,
-    detail?.totalCost,
-    detail?.cost,
-    detail?.amount
+    detail?.currentCost
   )
   if (totalCost === null) return detail
 
-  const dailyCost = readFiniteNumber(
+  const monthlyCost = normalize302KeyCostAmount(
+    detail?.current_month_cost,
+    detail?.currentMonthCost,
+    detail?.monthly_cost,
+    detail?.monthlyCost
+  )
+  const dailyCost = normalize302KeyCostAmount(
     detail?.current_date_cost,
     detail?.currentDateCost,
     detail?.daily_cost,
@@ -87,6 +93,7 @@ const applyDirectKeyCostFallback = (detail = {}) => {
   return {
     ...detail,
     usage_total_cost: totalCost,
+    ...(monthlyCost !== null ? { usage_monthly_cost: monthlyCost } : {}),
     ...(dailyCost !== null ? { usage_daily_cost: dailyCost } : {}),
     usage_currency: currency,
     currency
@@ -150,8 +157,7 @@ const writeBillingInventoryCache = (cacheKey, inventory, { ttlMs = 0, now = Date
 const loadBillingInventoryEntry = async ({
   activeItems,
   apiName,
-  getApiKey,
-  getApiKeyUsage
+  getApiKey
 }) => {
   const activeItem = activeItems.get(apiName)
   const runtimeKeyFallback = buildRuntimeApiKeyFallback(activeItem)
@@ -172,26 +178,7 @@ const loadBillingInventoryEntry = async ({
 
   if (!activeItem && !detailLoaded) return null
 
-  const apiKey = readRuntimeApiKey(detail)
-  if (apiKey) {
-    try {
-      const usage = normalize302ApiKeyUsage(await getApiKeyUsage(apiKey))
-      const usageFields = {
-        ...(usage.totalCost !== null ? { usage_total_cost: usage.totalCost } : {}),
-        ...(usage.monthlyCost !== null ? { usage_monthly_cost: usage.monthlyCost } : {}),
-        ...(usage.dailyCost !== null ? { usage_daily_cost: usage.dailyCost } : {}),
-        usage_currency: usage.currency,
-        currency: usage.currency
-      }
-      detail = applyDirectKeyCostFallback({ ...detail, ...usageFields })
-    } catch {
-      detail = applyDirectKeyCostFallback(detail)
-    }
-  } else {
-    detail = applyDirectKeyCostFallback(detail)
-  }
-
-  return [apiName, detail]
+  return [apiName, applyDirectKeyCost(detail)]
 }
 
 export const loadApiKeyAssignments = async () => {
@@ -228,7 +215,6 @@ export const loadUserApiKeyBillingInventory = async (
   const {
     listApiKeys = get302ApiKeys,
     getApiKey = get302ApiKey,
-    getApiKeyUsage = get302ApiKeyUsageByKey,
     concurrency = DEFAULT_BILLING_INVENTORY_CONCURRENCY,
     cacheTtlMs = null,
     now = Date.now
@@ -236,7 +222,7 @@ export const loadUserApiKeyBillingInventory = async (
   const effectiveCacheTtlMs = Number.isFinite(Number(cacheTtlMs))
     ? Number(cacheTtlMs)
     : (
-        options.listApiKeys || options.getApiKey || options.getApiKeyUsage
+        options.listApiKeys || options.getApiKey
           ? 0
           : DEFAULT_BILLING_INVENTORY_CACHE_TTL_MS
       )
@@ -266,8 +252,7 @@ export const loadUserApiKeyBillingInventory = async (
       (apiName) => loadBillingInventoryEntry({
         activeItems,
         apiName,
-        getApiKey,
-        getApiKeyUsage
+        getApiKey
       }),
       concurrency
     )
