@@ -316,7 +316,17 @@ export const pollGptImage2TaskStatus = async (taskId, requestOptions = {}) => {
   const err = String(current?.err || current?.error || current?.message || '').trim()
   const isPending = isGptImage2PendingResult(current)
   if ((err && !isPending) || (statusCode && statusCode >= 400 && !isPending)) {
-    throw new HttpError(502, err || 'GPT Image 2 generation failed', 'IMAGE_GENERATION_FAILED')
+    const message = err || 'GPT Image 2 generation failed'
+    return {
+      task_id: safeTaskId,
+      status: 'failed',
+      message,
+      error: {
+        code: 'IMAGE_GENERATION_FAILED',
+        message
+      },
+      raw: current
+    }
   }
 
   const normalized = normalizeImageResponse(current)
