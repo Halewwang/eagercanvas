@@ -5,6 +5,7 @@ import {
   resolveDashboard302BaseUrl,
   assert302DashboardSuccess,
   buildDashboard302AuthHeaders,
+  get302ApiKeyUsageByKey,
   get302Balance,
   shouldRetry302DashboardWithNextKey,
   normalize302ApiKeyList,
@@ -75,6 +76,53 @@ test('dashboard management requests retry provider base url fallbacks after netw
   assert.deepEqual(requests, [
     'https://api.302ai.cn/dashboard/balance',
     'https://api.302.ai/dashboard/balance'
+  ])
+})
+
+test('usage-log requests retry provider base url fallbacks after route-missing responses', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const requests = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302ai.cn'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = 'https://api.302ai.cn'
+  env.providerApiBaseUrls = 'https://api.302ai.cn,https://api.302.ai'
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url) => {
+    const requestUrl = String(url)
+    requests.push(requestUrl)
+    if (requestUrl.startsWith('https://api.302ai.cn')) {
+      return new Response(JSON.stringify({ error: { message: 'not found' } }), { status: 404 })
+    }
+    if (/\/gpt\/api\/token_id/.test(requestUrl)) {
+      return new Response(JSON.stringify({ code: 0, data: { token_id: 'token-1' } }), { status: 200 })
+    }
+    return new Response(JSON.stringify({ code: 0, data: { total_cost: 6.5, currency: 'PTC' } }), { status: 200 })
+  }
+
+  try {
+    const result = await get302ApiKeyUsageByKey('sk-runtime-key')
+    assert.deepEqual(result, { code: 0, data: { total_cost: 6.5, currency: 'PTC' } })
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(requests, [
+    'https://api.302ai.cn/gpt/api/token_id?api_key=sk-runtime-key',
+    'https://api.302.ai/gpt/api/token_id?api_key=sk-runtime-key',
+    'https://api.302ai.cn/gpt/api/token/usage/token-1',
+    'https://api.302.ai/gpt/api/token/usage/token-1'
   ])
 })
 

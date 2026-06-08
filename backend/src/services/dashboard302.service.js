@@ -96,7 +96,7 @@ const parseResponse = async (response) => {
 
 const isRetryableDashboardRequestError = (error) => {
   const status = Number(error?.status || 0)
-  return error?.name === 'AbortError' || !status || status === 429 || status >= 500
+  return error?.name === 'AbortError' || !status || status === 404 || status === 405 || status === 429 || status >= 500
 }
 
 const toNullableNumber = (...values) => {
