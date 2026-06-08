@@ -72,6 +72,15 @@ export const shouldRetry302DashboardWithNextKey = (data = {}) => {
   return code === -1 && /key|密钥|禁用|不存在|invalid|disabled/.test(message)
 }
 
+const getDashboardErrorMessage = (error = {}) =>
+  String(error?.message || error?.msg || error?.error?.message || '').toLowerCase()
+
+const isRetryableDashboardAuthError = (error = {}) => {
+  const status = Number(error?.status || 0)
+  const message = getDashboardErrorMessage(error)
+  return [400, 401, 403].includes(status) && /key|api key|密钥|权限|不存在|invalid|disabled|permission|unauthorized|forbidden/.test(message)
+}
+
 const getAuthHeaders = () => {
   const headers = buildDashboard302AuthHeaders(env.dashboard302ApiKey, env.providerApiKey)
   if (!headers.length) {
@@ -96,7 +105,13 @@ const parseResponse = async (response) => {
 
 const isRetryableDashboardRequestError = (error) => {
   const status = Number(error?.status || 0)
-  return error?.name === 'AbortError' || !status || status === 404 || status === 405 || status === 429 || status >= 500
+  return error?.name === 'AbortError' ||
+    !status ||
+    status === 404 ||
+    status === 405 ||
+    status === 429 ||
+    status >= 500 ||
+    isRetryableDashboardAuthError(error)
 }
 
 const toNullableNumber = (...values) => {
@@ -239,9 +254,21 @@ const request302DashboardWithBase = async (baseUrl, path, options = {}) => {
   }
 }
 
+const normalizeDashboardAuthHeaders = (authHeaders = []) =>
+  [...new Set((authHeaders || []).map((item) => toBearerHeader(item)).filter(Boolean))]
+
 const call302Dashboard = async (path, options = {}) => {
-  const { method = 'GET', params = null, body } = options
-  const authHeaders = getAuthHeaders()
+  const { method = 'GET', params = null, body, authHeaders: explicitAuthHeaders = null } = options
+  const authHeaders = explicitAuthHeaders
+    ? normalizeDashboardAuthHeaders(explicitAuthHeaders)
+    : getAuthHeaders()
+  if (!authHeaders.length) {
+    throw new HttpError(
+      500,
+      'DASHBOARD_302_API_KEY (or PROVIDER_API_KEY) is not configured',
+      'DASHBOARD_302_NOT_CONFIGURED'
+    )
+  }
   const baseUrls = getDashboardBaseUrls()
   let lastBusinessError = null
   let lastError = null
@@ -258,15 +285,17 @@ const call302Dashboard = async (path, options = {}) => {
 
         if (shouldRetry302DashboardWithNextKey(data) && authHeader !== authHeaders[authHeaders.length - 1]) {
           lastBusinessError = data
+          if (baseUrl !== baseUrls[baseUrls.length - 1]) continue
           break
         }
 
         return assert302DashboardSuccess(data)
       } catch (error) {
         lastError = error
-        if (!isRetryableDashboardRequestError(error) || baseUrl === baseUrls[baseUrls.length - 1]) {
-          throw error
-        }
+        if (!isRetryableDashboardRequestError(error)) throw error
+        if (baseUrl !== baseUrls[baseUrls.length - 1]) continue
+        if (isRetryableDashboardAuthError(error) && authHeader !== authHeaders[authHeaders.length - 1]) break
+        throw error
       }
     }
   }
@@ -353,6 +382,111 @@ export const get302RecordByRequestId = (requestId) => {
 }
 
 export const get302ApiRecords = (query = {}) => call302Dashboard('/dashboard/api-record', { params: query })
+
+const readApiName = (item = {}) => String(item?.api_name || item?.apiName || '').trim()
+const readRuntimeApiKey = (item = {}) => String(item?.api_key || item?.apiKey || item?.key || '').trim()
+
+const getRecordCreatedTime = (record = {}) => {
+  const raw = record?.created_at || record?.createdAt || record?.created_time || record?.createdTime || record?.time
+  if (!raw) return 0
+  const parsed = new Date(raw)
+  if (!Number.isNaN(parsed.getTime())) return parsed.getTime()
+  const numeric = Number(raw)
+  if (!Number.isFinite(numeric)) return 0
+  return numeric > 10_000_000_000 ? numeric : numeric * 1000
+}
+
+const readPaginationTotalPages = (pagination = {}, currentPage = 1) => {
+  const value = Number(
+    pagination?.total_page ||
+    pagination?.total_pages ||
+    pagination?.totalPages ||
+    pagination?.last_page ||
+    pagination?.lastPage ||
+    0
+  )
+  if (Number.isFinite(value) && value > 0) return value
+  const nextPage = Number(pagination?.next_page || pagination?.nextPage || 0)
+  if (Number.isFinite(nextPage) && nextPage > currentPage) return nextPage
+  return currentPage
+}
+
+export const get302ApiRecordsForApiKey = (apiKey, query = {}) => {
+  const { authHeader } = get302ApiKeyAuthHeader(apiKey)
+  return call302Dashboard('/dashboard/api-record', {
+    params: query,
+    authHeaders: [authHeader]
+  })
+}
+
+export const get302ApiRecordsForActiveApiKeys = async (query = {}, deps = {}) => {
+  const listApiKeys = deps.listApiKeys || get302ApiKeys
+  const fetchRecordsForApiKey = deps.fetchRecordsForApiKey || get302ApiRecordsForApiKey
+  const fallbackFetchRecords = deps.fallbackFetchRecords || get302ApiRecords
+  let apiKeyItems = []
+
+  try {
+    apiKeyItems = normalize302ApiKeyList(await listApiKeys())
+  } catch {
+    const fallback = await fallbackFetchRecords(query)
+    const normalized = normalize302ApiRecordList(fallback)
+    return {
+      items: normalized.items,
+      pagination: normalized.pagination || null
+    }
+  }
+
+  const runtimeItems = apiKeyItems
+    .map((item) => ({
+      apiName: readApiName(item),
+      apiKey: readRuntimeApiKey(item)
+    }))
+    .filter((item) => item.apiName && item.apiKey)
+
+  if (!runtimeItems.length) {
+    const fallback = await fallbackFetchRecords(query)
+    const normalized = normalize302ApiRecordList(fallback)
+    return {
+      items: normalized.items,
+      pagination: normalized.pagination || null
+    }
+  }
+
+  const page = Math.max(1, Number(query?.page || 1))
+  const items = []
+  let totalPages = page
+  const errors = []
+
+  for (const item of runtimeItems) {
+    try {
+      const response = await fetchRecordsForApiKey(item.apiKey, query)
+      const normalized = normalize302ApiRecordList(response)
+      totalPages = Math.max(totalPages, readPaginationTotalPages(normalized.pagination, page))
+      items.push(...normalized.items.map((record) => ({
+        ...record,
+        api_name: readApiName(record) || item.apiName
+      })))
+    } catch (error) {
+      errors.push(error)
+    }
+  }
+
+  if (!items.length && errors.length === runtimeItems.length) throw errors[0]
+
+  items.sort((a, b) => getRecordCreatedTime(b) - getRecordCreatedTime(a))
+
+  return {
+    items,
+    pagination: {
+      page,
+      cur_page: page,
+      limit: Number(query?.limit || 0) || items.length,
+      total: items.length,
+      total_page: totalPages,
+      next_page: totalPages > page ? page + 1 : null
+    }
+  }
+}
 
 export const get302ApiKeys = () => call302Dashboard('/dashboard/api_keys')
 

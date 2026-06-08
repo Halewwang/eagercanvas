@@ -1,7 +1,7 @@
 import { supabase } from '../config/supabase.js'
 import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
-import { get302ApiRecords, normalize302ApiRecordList } from './dashboard302.service.js'
+import { get302ApiRecordsForActiveApiKeys, normalize302ApiRecordList } from './dashboard302.service.js'
 
 const toNumber = (...values) => {
   for (const value of values) {
@@ -201,6 +201,7 @@ const shouldFetchNextRecordPage = (pagination, page) => {
   if (!pagination || typeof pagination !== 'object') return false
   const totalPages = Number(
     pagination.total_pages ||
+    pagination.total_page ||
     pagination.totalPages ||
     pagination.last_page ||
     pagination.lastPage ||
@@ -214,7 +215,7 @@ const shouldFetchNextRecordPage = (pagination, page) => {
 
 export const syncProviderBillingRecords = async ({ startTime, endTime, pageSize = 100 } = {}, deps = {}) => {
   const client = deps.supabaseClient || supabase
-  const fetchRecords = deps.fetchRecords || get302ApiRecords
+  const fetchRecords = deps.fetchRecords || get302ApiRecordsForActiveApiKeys
   const end = endTime ? new Date(endTime) : new Date()
   const start = startTime ? new Date(startTime) : new Date(end.getTime() - 15 * 60 * 1000)
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {

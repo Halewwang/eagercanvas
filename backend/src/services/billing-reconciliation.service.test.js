@@ -218,3 +218,70 @@ test('syncProviderBillingRecords fetches all dashboard record pages', async () =
   assert.equal(result.fetched, 2)
   assert.equal(inserted.length, 2)
 })
+
+test('syncProviderBillingRecords follows documented total_page pagination fields', async () => {
+  const fetchPages = []
+  const fakeSupabase = {
+    from(table) {
+      return {
+        select() {
+          return this
+        },
+        in() {
+          if (table === 'user_service_credentials') {
+            return Promise.resolve({ data: [], error: null })
+          }
+          return Promise.resolve({ data: [], error: null })
+        },
+        upsert(payloads) {
+          return {
+            select: async () => ({
+              data: payloads.map((payload, index) => ({
+                id: `billing-${index + 1}`,
+                usage_event_id: payload.usage_event_id,
+                cost_amount: payload.cost_amount,
+                reconciliation_status: payload.reconciliation_status
+              })),
+              error: null
+            })
+          }
+        },
+        insert(payloads) {
+          return {
+            select: async () => ({
+              data: payloads.map((payload, index) => ({
+                id: `billing-insert-${index + 1}`,
+                usage_event_id: payload.usage_event_id,
+                cost_amount: payload.cost_amount,
+                reconciliation_status: payload.reconciliation_status
+              })),
+              error: null
+            })
+          }
+        },
+        update() {
+          return {
+            eq: async () => ({ data: null, error: null })
+          }
+        }
+      }
+    }
+  }
+
+  const result = await syncProviderBillingRecords(
+    { startTime: '2026-04-29T00:00:00.000Z', endTime: '2026-04-29T00:15:00.000Z', pageSize: 1 },
+    {
+      supabaseClient: fakeSupabase,
+      fetchRecords: async ({ page }) => {
+        fetchPages.push(page)
+        return {
+          items: [{ request_id: `req-doc-${page}`, api_name: `eager_user_doc_${page}`, cost: page }],
+          pagination: { cur_page: page, total_page: 2 }
+        }
+      }
+    }
+  )
+
+  assert.deepEqual(fetchPages, [1, 2])
+  assert.equal(result.fetched, 2)
+})

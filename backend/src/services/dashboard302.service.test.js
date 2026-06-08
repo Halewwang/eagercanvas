@@ -5,6 +5,7 @@ import {
   resolveDashboard302BaseUrl,
   assert302DashboardSuccess,
   buildDashboard302AuthHeaders,
+  get302ApiRecordsForActiveApiKeys,
   get302ApiKeyUsageByKey,
   get302Balance,
   shouldRetry302DashboardWithNextKey,
@@ -79,6 +80,93 @@ test('dashboard management requests retry provider base url fallbacks after netw
   ])
 })
 
+test('dashboard management requests retry provider auth after http auth failures', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const attempts = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302.ai'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = 'sk-provider'
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url, options = {}) => {
+    attempts.push({
+      url: String(url),
+      auth: options.headers?.Authorization
+    })
+    if (options.headers?.Authorization === 'Bearer sk-dashboard') {
+      return new Response(JSON.stringify({ message: 'Invalid API Key' }), { status: 401 })
+    }
+    return new Response(JSON.stringify({ code: 0, data: { balance: 42 } }), { status: 200 })
+  }
+
+  try {
+    const result = await get302Balance()
+    assert.deepEqual(result, { code: 0, data: { balance: 42 } })
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(attempts, [
+    { url: 'https://api.302.ai/dashboard/balance', auth: 'Bearer sk-dashboard' },
+    { url: 'https://api.302ai.cn/dashboard/balance', auth: 'Bearer sk-dashboard' },
+    { url: 'https://api.302.ai/dashboard/balance', auth: 'Bearer sk-provider' }
+  ])
+})
+
+test('dashboard management requests retry provider base url after key business errors', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const requests = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302ai.cn'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = 'https://api.302ai.cn'
+  env.providerApiBaseUrls = 'https://api.302ai.cn,https://api.302.ai'
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url) => {
+    const requestUrl = String(url)
+    requests.push(requestUrl)
+    if (requestUrl.startsWith('https://api.302ai.cn')) {
+      return new Response(JSON.stringify({ code: -1, msg: '此 Key 不存在' }), { status: 200 })
+    }
+    return new Response(JSON.stringify({ code: 0, data: { balance: 18 } }), { status: 200 })
+  }
+
+  try {
+    const result = await get302Balance()
+    assert.deepEqual(result, { code: 0, data: { balance: 18 } })
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(requests, [
+    'https://api.302ai.cn/dashboard/balance',
+    'https://api.302.ai/dashboard/balance'
+  ])
+})
+
 test('usage-log requests retry provider base url fallbacks after route-missing responses', async () => {
   const originalFetch = global.fetch
   const originalEnv = {
@@ -123,6 +211,53 @@ test('usage-log requests retry provider base url fallbacks after route-missing r
     'https://api.302.ai/gpt/api/token_id?api_key=sk-runtime-key',
     'https://api.302ai.cn/gpt/api/token/usage/token-1',
     'https://api.302.ai/gpt/api/token/usage/token-1'
+  ])
+})
+
+test('usage-log requests retry provider base url fallbacks after auth-like responses', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const requests = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302ai.cn'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = 'https://api.302ai.cn'
+  env.providerApiBaseUrls = 'https://api.302ai.cn,https://api.302.ai'
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url) => {
+    const requestUrl = String(url)
+    requests.push(requestUrl)
+    if (requestUrl.startsWith('https://api.302ai.cn')) {
+      return new Response(JSON.stringify({ message: 'Invalid API Key' }), { status: 401 })
+    }
+    if (/\/gpt\/api\/token_id/.test(requestUrl)) {
+      return new Response(JSON.stringify({ code: 0, data: { token_id: 'token-auth-fallback' } }), { status: 200 })
+    }
+    return new Response(JSON.stringify({ code: 0, data: { total_cost: 3.25, currency: 'PTC' } }), { status: 200 })
+  }
+
+  try {
+    const result = await get302ApiKeyUsageByKey('sk-runtime-key')
+    assert.deepEqual(result, { code: 0, data: { total_cost: 3.25, currency: 'PTC' } })
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(requests, [
+    'https://api.302ai.cn/gpt/api/token_id?api_key=sk-runtime-key',
+    'https://api.302.ai/gpt/api/token_id?api_key=sk-runtime-key',
+    'https://api.302ai.cn/gpt/api/token/usage/token-auth-fallback',
+    'https://api.302.ai/gpt/api/token/usage/token-auth-fallback'
   ])
 })
 
@@ -177,6 +312,79 @@ test('normalizes 302 api-record list when upstream wraps rows in data.items', ()
 
   assert.deepEqual(result.items, [{ request_id: 'req-1', cost: 0.12 }])
   assert.deepEqual(result.pagination, { page: 1, total: 1 })
+})
+
+test('fetches api-record logs with active runtime api keys and annotates api names', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const attempts = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302.ai'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url)
+    attempts.push({
+      url: requestUrl,
+      auth: options.headers?.Authorization
+    })
+
+    if (/\/dashboard\/api_keys$/.test(requestUrl)) {
+      return new Response(JSON.stringify({
+        code: 0,
+        data: [
+          { api_name: 'eager_user_one', api_key: 'sk-runtime-one' },
+          { api_name: 'eager_user_two', api_key: 'sk-runtime-two' }
+        ]
+      }), { status: 200 })
+    }
+
+    if (options.headers?.Authorization === 'Bearer sk-runtime-one') {
+      return new Response(JSON.stringify({
+        items: [{ request_id: 'req-one', cost: 1.5, created_at: '2026-06-08T10:00:00.000Z' }],
+        pagination: { total_page: 1, cur_page: 1, limit: 20 }
+      }), { status: 200 })
+    }
+
+    if (options.headers?.Authorization === 'Bearer sk-runtime-two') {
+      return new Response(JSON.stringify({
+        items: [{ request_id: 'req-two', cost: 2.5, created_at: '2026-06-08T11:00:00.000Z', api_name: 'custom-name' }],
+        pagination: { total_page: 1, cur_page: 1, limit: 20 }
+      }), { status: 200 })
+    }
+
+    assert.fail(`Unexpected 302 mock request: ${requestUrl}`)
+  }
+
+  try {
+    const result = await get302ApiRecordsForActiveApiKeys({ page: 1, limit: 20 })
+    assert.deepEqual(result.items.map((item) => [item.request_id, item.api_name]), [
+      ['req-two', 'custom-name'],
+      ['req-one', 'eager_user_one']
+    ])
+    assert.equal(result.pagination.total, 2)
+    assert.equal(result.pagination.total_page, 1)
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(attempts, [
+    { url: 'https://api.302.ai/dashboard/api_keys', auth: 'Bearer sk-dashboard' },
+    { url: 'https://api.302.ai/dashboard/api-record?page=1&limit=20', auth: 'Bearer sk-runtime-one' },
+    { url: 'https://api.302.ai/dashboard/api-record?page=1&limit=20', auth: 'Bearer sk-runtime-two' }
+  ])
 })
 
 test('normalizes dashboard record amount aliases used by 302 records', () => {

@@ -164,6 +164,42 @@ test('loadUserApiKeyBillingInventory uses list runtime key when detail omits api
   assert.equal(inventory.get('eager_user_one').usage_currency, 'PTC')
 })
 
+test('loadUserApiKeyBillingInventory fetches requested credential detail when api key list omits it', async () => {
+  const usageCalls = []
+  const inventory = await loadUserApiKeyBillingInventory(
+    [{ provider_api_name: 'eager_user_missing_from_list', status: 'active' }],
+    {
+      listApiKeys: async () => ({
+        data: [
+          {
+            api_name: 'other_key',
+            api_key: 'sk-other-runtime-key'
+          }
+        ]
+      }),
+      getApiKey: async (apiName) => ({
+        data: {
+          api_name: apiName,
+          api_key: 'sk-detail-runtime-key'
+        }
+      }),
+      getApiKeyUsage: async (apiKey) => {
+        usageCalls.push(apiKey)
+        return {
+          data: {
+            total_cost: 8.75,
+            currency: 'PTC'
+          }
+        }
+      }
+    }
+  )
+
+  assert.deepEqual(usageCalls, ['sk-detail-runtime-key'])
+  assert.equal(inventory.get('eager_user_missing_from_list').usage_total_cost, 8.75)
+  assert.equal(inventory.get('eager_user_missing_from_list').usage_currency, 'PTC')
+})
+
 test('loadUserApiKeyBillingInventory bounds concurrent key detail lookups', async () => {
   const detailCalls = []
   const detailResolvers = new Map()

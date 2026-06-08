@@ -3,7 +3,13 @@ import { authRequired } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/authz.js'
 import { asyncHandler } from '../utils/http.js'
 import { getUsageSummary, getUsageTimeseries } from '../services/usage.service.js'
-import { get302ApiKeys, get302ApiRecords, get302Balance, get302RecordByRequestId } from '../services/dashboard302.service.js'
+import {
+  get302ApiKeys,
+  get302ApiRecordsForActiveApiKeys,
+  get302Balance,
+  get302RecordByRequestId,
+  normalize302ApiRecordList
+} from '../services/dashboard302.service.js'
 
 export const usageRouter = Router()
 usageRouter.use(authRequired)
@@ -30,17 +36,18 @@ usageRouter.get('/302/record/:requestId', requirePermission(['admin.usage.read_a
 }))
 
 usageRouter.get('/302/api-record', requirePermission(['admin.usage.read_all']), asyncHandler(async (req, res) => {
-  const result = await get302ApiRecords({
+  const result = await get302ApiRecordsForActiveApiKeys({
     page: req.query.page,
     limit: req.query.limit,
     start_time: req.query.start_time,
     end_time: req.query.end_time
   })
+  const normalized = normalize302ApiRecordList(result)
 
   res.json({
     data: {
-      items: Array.isArray(result?.items) ? result.items : [],
-      pagination: result?.pagination || null
+      items: normalized.items,
+      pagination: normalized.pagination
     }
   })
 }))

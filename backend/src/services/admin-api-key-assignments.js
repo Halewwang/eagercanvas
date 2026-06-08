@@ -105,9 +105,9 @@ const loadBillingInventoryEntry = async ({
   getApiKeyUsage
 }) => {
   const activeItem = activeItems.get(apiName)
-  if (!activeItem) return null
   const runtimeKeyFallback = buildRuntimeApiKeyFallback(activeItem)
   let detail = { api_name: apiName, ...runtimeKeyFallback }
+  let detailLoaded = false
 
   try {
     const detailPayload = unwrapDataObject(await getApiKey(apiName))
@@ -115,10 +115,13 @@ const loadBillingInventoryEntry = async ({
       ...detail,
       ...detailPayload
     }
+    detailLoaded = true
     if (!readRuntimeApiKey(detail)) detail = { ...detail, ...runtimeKeyFallback }
   } catch {
     // Keep the runtime key from the list response when detail lookup is unavailable.
   }
+
+  if (!activeItem && !detailLoaded) return null
 
   const apiKey = readRuntimeApiKey(detail)
   if (apiKey) {
