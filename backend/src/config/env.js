@@ -43,6 +43,7 @@ export const env = {
 
   resendApiKey: process.env.RESEND_API_KEY || '',
   resendFromEmail: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+  resendAuthCodeTemplateId: process.env.RESEND_AUTH_CODE_TEMPLATE_ID || '',
   issueAlertEnabled: parseBoolean(process.env.ISSUE_ALERT_ENABLED, false),
   issueAlertEmails: process.env.ISSUE_ALERT_EMAILS || '',
   issueAlertMinSeverity: process.env.ISSUE_ALERT_MIN_SEVERITY || 'p1',

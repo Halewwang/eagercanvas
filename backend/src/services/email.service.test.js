@@ -44,3 +44,44 @@ test('throws a clear error when Resend rejects the verification email', async ()
     else process.env.RESEND_FROM_EMAIL = originalFromEmail
   }
 })
+
+test('builds a Resend template payload for verification code emails', async () => {
+  const { buildVerificationCodeEmailPayload } = await import('./email.service.js')
+
+  const payload = buildVerificationCodeEmailPayload({
+    email: 'user@example.com',
+    code: '123456',
+    purpose: 'login',
+    from: 'Eager Canvas <login@example.com>',
+    templateId: 'email-verification-template'
+  })
+
+  assert.deepEqual(payload, {
+    from: 'Eager Canvas <login@example.com>',
+    to: 'user@example.com',
+    subject: 'Your Eager Canvas login code',
+    template: {
+      id: 'email-verification-template',
+      variables: {
+        verification_code: '123456'
+      }
+    }
+  })
+})
+
+test('builds the existing inline verification email when no template id is configured', async () => {
+  const { buildVerificationCodeEmailPayload } = await import('./email.service.js')
+
+  const payload = buildVerificationCodeEmailPayload({
+    email: 'user@example.com',
+    code: '654321',
+    purpose: 'login',
+    from: 'login@example.com'
+  })
+
+  assert.equal(payload.from, 'login@example.com')
+  assert.equal(payload.to, 'user@example.com')
+  assert.equal(payload.subject, 'Your Eager Canvas login code')
+  assert.equal(payload.template, undefined)
+  assert.match(payload.html, /Your login verification code is <strong>654321<\/strong>/)
+})

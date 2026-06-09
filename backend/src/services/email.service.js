@@ -12,8 +12,41 @@ const getResendErrorMessage = (error) => {
   return error.message || error.name || ''
 }
 
-export const sendVerificationCodeEmail = async ({ email, code, purpose = 'login' }) => {
+export const buildVerificationCodeEmailPayload = ({
+  email,
+  code,
+  purpose = 'login',
+  from,
+  templateId = ''
+}) => {
   const subject = purpose === 'register' ? 'Your Eager Canvas registration code' : 'Your Eager Canvas login code'
+  const title = purpose === 'register' ? 'registration' : 'login'
+  const trimmedTemplateId = String(templateId || '').trim()
+  const payload = {
+    from,
+    to: email,
+    subject
+  }
+
+  if (trimmedTemplateId) {
+    return {
+      ...payload,
+      template: {
+        id: trimmedTemplateId,
+        variables: {
+          verification_code: code
+        }
+      }
+    }
+  }
+
+  return {
+    ...payload,
+    html: `<p>Your ${title} verification code is <strong>${code}</strong>. It expires in 10 minutes.</p>`
+  }
+}
+
+export const sendVerificationCodeEmail = async ({ email, code, purpose = 'login' }) => {
   const title = purpose === 'register' ? 'registration' : 'login'
 
   if (!resend) {
@@ -25,12 +58,15 @@ export const sendVerificationCodeEmail = async ({ email, code, purpose = 'login'
   }
 
   try {
-    const result = await resend.emails.send({
-      from: env.resendFromEmail,
-      to: email,
-      subject,
-      html: `<p>Your ${title} verification code is <strong>${code}</strong>. It expires in 10 minutes.</p>`
-    })
+    const result = await resend.emails.send(
+      buildVerificationCodeEmailPayload({
+        email,
+        code,
+        purpose,
+        from: env.resendFromEmail,
+        templateId: env.resendAuthCodeTemplateId
+      })
+    )
 
     if (result?.error) {
       throw new HttpError(
