@@ -19,7 +19,7 @@ export const buildVerificationCodeEmailPayload = ({
   from,
   templateId = ''
 }) => {
-  const subject = purpose === 'register' ? 'Your Eager Canvas registration code' : 'Your Eager Canvas login code'
+  const subject = purpose === 'register' ? 'Your Eager Canvas registration code' : 'Your aioncraft login code'
   const title = purpose === 'register' ? 'registration' : 'login'
   const trimmedTemplateId = String(templateId || '').trim()
   const payload = {

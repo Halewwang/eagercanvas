@@ -59,7 +59,7 @@ test('builds a Resend template payload for verification code emails', async () =
   assert.deepEqual(payload, {
     from: 'Eager Canvas <login@example.com>',
     to: 'user@example.com',
-    subject: 'Your Eager Canvas login code',
+    subject: 'Your aioncraft login code',
     template: {
       id: 'email-verification-template',
       variables: {
@@ -81,7 +81,7 @@ test('builds the existing inline verification email when no template id is confi
 
   assert.equal(payload.from, 'login@example.com')
   assert.equal(payload.to, 'user@example.com')
-  assert.equal(payload.subject, 'Your Eager Canvas login code')
+  assert.equal(payload.subject, 'Your aioncraft login code')
   assert.equal(payload.template, undefined)
   assert.match(payload.html, /Your login verification code is <strong>654321<\/strong>/)
 })
