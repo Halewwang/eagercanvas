@@ -3,6 +3,7 @@ import {
   installIssueFlushLifecycle,
   issueObservability
 } from './issueObservabilityClient.js'
+import { recoverRouteAssetLoadFailure } from './routeLoadRecovery.js'
 
 const getErrorMessage = (error) => error?.message || String(error || 'Unknown error')
 
@@ -106,6 +107,7 @@ const installRouteErrorHandler = (router) => {
       message_summary: getErrorMessage(error),
       stack_summary: error?.stack || ''
     })
+    recoverRouteAssetLoadFailure({ error })
   })
 }
 

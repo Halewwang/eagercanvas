@@ -38,6 +38,12 @@ export const bindImageTaskOwnership = async ({ userId, runId, taskId, model = ''
   }
 }
 
+const mapImageTaskContext = (metadata = {}) => ({
+  runId: metadata?.run_id ? String(metadata.run_id) : '',
+  model: metadata?.model ? String(metadata.model) : '',
+  sourceNodeId: metadata?.source_node_id ? String(metadata.source_node_id) : ''
+})
+
 export const assertImageTaskOwnership = async ({ userId, taskId }) => {
   const { data, error } = await supabase
     .from('audit_logs')
@@ -54,6 +60,27 @@ export const assertImageTaskOwnership = async ({ userId, taskId }) => {
   if (!Array.isArray(data) || data.length === 0) {
     throw new HttpError(404, 'Image task not found', 'IMAGE_TASK_NOT_FOUND')
   }
+}
+
+export const resolveImageTaskContextByTask = async ({ userId, taskId }) => {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('metadata')
+    .eq('user_id', userId)
+    .eq('action', 'image.task.created')
+    .contains('metadata', { task_id: String(taskId) })
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error) {
+    throw new HttpError(500, error.message, 'TASK_OWNERSHIP_CHECK_FAILED')
+  }
+
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new HttpError(404, 'Image task not found', 'IMAGE_TASK_NOT_FOUND')
+  }
+
+  return mapImageTaskContext(data[0]?.metadata || {})
 }
 
 export const assertVideoTaskOwnership = async ({ userId, taskId }) => {
@@ -94,11 +121,7 @@ export const findImageRunContextByTask = async ({ userId, taskId }) => {
   }
 
   const metadata = data?.[0]?.metadata || {}
-  return {
-    runId: metadata?.run_id ? String(metadata.run_id) : '',
-    model: metadata?.model ? String(metadata.model) : '',
-    sourceNodeId: metadata?.source_node_id ? String(metadata.source_node_id) : ''
-  }
+  return mapImageTaskContext(metadata)
 }
 
 export const findVideoRunContextByTask = async ({ userId, taskId }) => {

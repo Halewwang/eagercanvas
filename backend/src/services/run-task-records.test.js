@@ -6,6 +6,7 @@ import {
   assertImageTaskOwnership,
   bindImageTaskOwnership,
   findImageRunContextByTask,
+  resolveImageTaskContextByTask,
   syncRunStatusFromImageTask,
   syncRunStatusFromVideoTask
 } from './run-task-records.js'
@@ -123,6 +124,58 @@ test('findImageRunContextByTask returns run id and model from task metadata', as
       model: 'gpt-image-2',
       sourceNodeId: 'image-node-1'
     })
+  } finally {
+    restore.mock.restore()
+  }
+})
+
+test('resolveImageTaskContextByTask verifies ownership and returns task metadata with one audit log lookup', async () => {
+  const selects = []
+  const restore = mockSupabaseFrom((table) => {
+    assert.equal(table, 'audit_logs')
+    return {
+      select(columns) {
+        selects.push(columns)
+        return this
+      },
+      eq() {
+        return this
+      },
+      contains() {
+        return this
+      },
+      order() {
+        return this
+      },
+      limit() {
+        return Promise.resolve({
+          data: [
+            {
+              metadata: {
+                run_id: 'run_image_123',
+                model: 'gpt-image-2',
+                source_node_id: 'image-node-1'
+              }
+            }
+          ],
+          error: null
+        })
+      }
+    }
+  })
+
+  try {
+    const context = await resolveImageTaskContextByTask({
+      userId: 'user_123',
+      taskId: 'task_image_123'
+    })
+
+    assert.deepEqual(context, {
+      runId: 'run_image_123',
+      model: 'gpt-image-2',
+      sourceNodeId: 'image-node-1'
+    })
+    assert.deepEqual(selects, ['metadata'])
   } finally {
     restore.mock.restore()
   }

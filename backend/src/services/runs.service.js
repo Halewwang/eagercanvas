@@ -24,12 +24,11 @@ import {
   shouldPersistImageResultAssetsBeforeResponse
 } from './run-assets.js'
 import {
-  assertImageTaskOwnership,
   assertVideoTaskOwnership,
   bindImageTaskOwnership,
   bindVideoTaskOwnership,
-  findImageRunContextByTask,
   findVideoRunContextByTask,
+  resolveImageTaskContextByTask,
   syncRunStatusFromImageTask,
   syncRunStatusFromVideoTask
 } from './run-task-records.js'
@@ -951,14 +950,13 @@ export const getVideoTask = async (_userId, taskId) => {
 }
 
 export const getImageTask = async (_userId, taskId) => {
-  await assertImageTaskOwnership({ userId: _userId, taskId })
+  const imageRunContext = await resolveImageTaskContextByTask({ userId: _userId, taskId })
   if (isLocalImageRunTaskId(taskId)) {
     const runId = parseLocalImageRunTaskId(taskId)
     return getLocalImageRunTaskResult({ userId: _userId, taskId, runId })
   }
 
   const providerAccess = await resolveActiveUserServiceCredential(_userId)
-  const imageRunContext = await findImageRunContextByTask({ userId: _userId, taskId })
   const runId = imageRunContext.runId
   const run = runId ? await getRunById(_userId, runId).catch(() => null) : null
   const providerRequestOptions = {
