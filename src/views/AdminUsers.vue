@@ -48,12 +48,12 @@
       @refresh-users="loadUsers"
       @reset-service="resetService"
       @save-roles="saveRoles"
+      @send-issue-digest-email="sendIssueDigestEmail"
       @set-user-page="setUserPage"
       @suspend-user="suspendUser"
       @update-audit-log-query="updateAuditLogQuery"
       @toggle-all-issue-selection="toggleAllVisibleIssueSelection"
       @toggle-issue-selection="toggleIssueSelection"
-      @update-auto-resolve-exported-issues="setAutoResolveExportedIssues"
       @update-issue-query="updateIssueQuery"
       @update-issue-status="setIssueStatus"
       @update-log-query="updateLog302Query"
@@ -197,7 +197,8 @@ const {
   loadingIssues,
   notifyIssue,
   openIssue,
-  setAutoResolveExportedIssues, setIssueStatus,
+  sendIssueDigestEmail,
+  setIssueStatus,
   toggleAllVisibleIssueSelection, toggleIssueSelection,
   updateIssueQuery
 } = issueInbox

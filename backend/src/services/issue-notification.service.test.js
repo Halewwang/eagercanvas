@@ -4,7 +4,8 @@ import test from 'node:test'
 import {
   buildIssueAlertDecision,
   isIssueSeverityEligible,
-  queueIssueAlertForGroup
+  queueIssueAlertForGroup,
+  sendIssueDigestEmail
 } from './issue-notification.service.js'
 
 test('isIssueSeverityEligible treats min severity as a ceiling', () => {
@@ -111,4 +112,43 @@ test('queueIssueAlertForGroup inserts one outbox row per recipient without throw
   assert.equal(result.ok, true)
   assert.ok(calls.some((call) => call.table === 'issue_notifications' && call.op === 'insert'))
   assert.ok(calls.some((call) => call.table === 'issue_notifications' && call.op === 'update' && call.payload.status === 'skipped'))
+})
+
+test('sendIssueDigestEmail sends the current export package to the requested recipient', async () => {
+  const calls = []
+  const result = await sendIssueDigestEmail({
+    to: 'ops@example.com',
+    filters: { status: 'open', severity: 'p1', limit: 25 },
+    exportIssues: async (options) => {
+      calls.push(['export', options])
+      return {
+        generatedAt: '2026-06-11T08:00:00.000Z',
+        issueCount: 2,
+        jsonFileName: 'issue-inbox.json',
+        jsonContent: '{"issue_count":2}',
+        markdownFileName: 'issue-inbox.md',
+        markdownContent: '# Codex Issue Inbox\n\nIssues: 2\n'
+      }
+    },
+    sendEmail: async (payload) => {
+      calls.push(['email', payload])
+      return { ok: true, status: 'sent', id: 'msg-1' }
+    }
+  })
+
+  assert.deepEqual(calls.find((call) => call[0] === 'export')[1], {
+    writeFiles: false,
+    filters: { status: 'open', severity: 'p1', limit: 25 }
+  })
+  const emailPayload = calls.find((call) => call[0] === 'email')[1]
+  assert.equal(emailPayload.to, 'ops@example.com')
+  assert.match(emailPayload.subject, /2 issues/)
+  assert.match(emailPayload.text, /# Codex Issue Inbox/)
+  assert.deepEqual(emailPayload.attachments.map((attachment) => attachment.filename), [
+    'issue-inbox.json',
+    'issue-inbox.md'
+  ])
+  assert.equal(result.ok, true)
+  assert.equal(result.issueCount, 2)
+  assert.equal(result.recipient, 'ops@example.com')
 })

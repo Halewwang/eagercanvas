@@ -2,7 +2,7 @@ import { supabase } from '../config/supabase.js'
 import { env } from '../config/env.js'
 import { sendIssueAlertEmail } from './email.service.js'
 import { getIssueGroupForAdmin } from './admin-issues.service.js'
-import { createCodexIssueTable, renderCodexIssueMarkdown } from './issue-codex-export.service.js'
+import { createCodexIssueTable, exportCodexIssues, renderCodexIssueMarkdown } from './issue-codex-export.service.js'
 
 const SEVERITY_RANK = { p0: 0, p1: 1, p2: 2, p3: 3 }
 
@@ -13,6 +13,13 @@ const parseEmails = (value) => String(value || '')
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean)
+
+const escapeHtml = (value = '') => String(value)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;')
 
 export const getIssueAlertRecipients = () => {
   return parseEmails(env.issueAlertEmails)
@@ -237,6 +244,61 @@ export const queueIssueAlertForGroup = async (group, {
 export const sendIssueAlertForGroup = async (issueGroupId, options = {}) => {
   const { group } = await getIssueGroupForAdmin(issueGroupId)
   return queueIssueAlertForGroup(group, { ...options, force: true, autoSend: true })
+}
+
+export const sendIssueDigestEmail = async ({
+  to,
+  filters = {},
+  exportIssues = exportCodexIssues,
+  sendEmail = sendIssueAlertEmail
+} = {}) => {
+  const recipient = String(to || '').trim()
+  if (!recipient) {
+    return { ok: false, status: 'skipped', reason: 'missing_recipient' }
+  }
+
+  const result = await exportIssues({
+    writeFiles: false,
+    filters
+  })
+  const issueCount = Number(result.issueCount || 0)
+  const subject = `[Eager Canvas Issue Digest] ${issueCount} issues`
+  const text = result.markdownContent || ''
+  const html = [
+    '<h1>Eager Canvas Issue Digest</h1>',
+    `<p><strong>Issues:</strong> ${issueCount}</p>`,
+    `<p><strong>Generated at:</strong> ${escapeHtml(result.generatedAt || '')}</p>`,
+    '<pre style="white-space:pre-wrap;background:#111;color:#f8f8f8;padding:16px;border-radius:8px;">',
+    escapeHtml(text),
+    '</pre>'
+  ].join('')
+  const attachments = [
+    result.jsonFileName && result.jsonContent
+      ? { filename: result.jsonFileName, content: result.jsonContent }
+      : null,
+    result.markdownFileName && result.markdownContent
+      ? { filename: result.markdownFileName, content: result.markdownContent }
+      : null
+  ].filter(Boolean)
+  const emailResult = await sendEmail({
+    to: recipient,
+    subject,
+    html,
+    text,
+    attachments
+  })
+
+  return {
+    ok: emailResult?.ok !== false,
+    status: emailResult?.status || 'sent',
+    id: emailResult?.id || null,
+    recipient,
+    issueCount,
+    generatedAt: result.generatedAt,
+    jsonFileName: result.jsonFileName,
+    markdownFileName: result.markdownFileName,
+    email: emailResult
+  }
 }
 
 export const processQueuedIssueNotifications = async ({

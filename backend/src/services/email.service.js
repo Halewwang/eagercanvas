@@ -85,19 +85,36 @@ export const sendVerificationCodeEmail = async ({ email, code, purpose = 'login'
   }
 }
 
-export const sendIssueAlertEmail = async ({ to, subject, html, text = '' }) => {
+export const buildIssueAlertEmailPayload = ({
+  to,
+  from,
+  subject,
+  html,
+  text = '',
+  attachments = []
+}) => ({
+  from,
+  to,
+  subject,
+  html,
+  text,
+  ...(Array.isArray(attachments) && attachments.length ? { attachments } : {})
+})
+
+export const sendIssueAlertEmail = async ({ to, subject, html, text = '', attachments = [] }) => {
   if (!resend || !env.resendFromEmail) {
     return { ok: true, status: 'skipped', reason: 'EMAIL_NOT_CONFIGURED' }
   }
 
   try {
-    const result = await resend.emails.send({
+    const result = await resend.emails.send(buildIssueAlertEmailPayload({
       from: env.resendFromEmail,
       to,
       subject,
       html,
-      text
-    })
+      text,
+      attachments
+    }))
 
     if (result?.error) {
       return {

@@ -40,7 +40,7 @@ import {
   updateIssueGroupStatus
 } from '../services/admin-issues.service.js'
 import { exportCodexIssues } from '../services/issue-codex-export.service.js'
-import { sendIssueAlertForGroup } from '../services/issue-notification.service.js'
+import { sendIssueAlertForGroup, sendIssueDigestEmail } from '../services/issue-notification.service.js'
 
 export const adminRouter = Router()
 adminRouter.use(authRequired)
@@ -97,6 +97,10 @@ const exportIssuesSchema = z.object({
   issueGroupIds: z.array(z.string().min(1)).max(100).optional(),
   issue_group_ids: z.array(z.string().min(1)).max(100).optional(),
   limit: z.number().int().min(1).max(100).optional()
+})
+
+const sendIssueDigestSchema = exportIssuesSchema.extend({
+  to: z.string().trim().email()
 })
 
 adminRouter.get('/session', requirePermission(['admin.dashboard.read']), asyncHandler(async (req, res) => {
@@ -285,6 +289,26 @@ adminRouter.post('/issues/export', requirePermission(['admin.issue.export']), as
     }
   })
 }))
+
+adminRouter.post(
+  '/issues/send-email',
+  requirePermission(['admin.issue.export']),
+  requirePermission(['admin.issue.notify']),
+  asyncHandler(async (req, res) => {
+    const payload = sendIssueDigestSchema.parse(req.body || {})
+    const result = await sendIssueDigestEmail({
+      to: payload.to,
+      filters: {
+        status: payload.status,
+        severity: payload.severity,
+        sourceLayer: payload.sourceLayer || payload.source_layer,
+        issueGroupIds: payload.issueGroupIds || payload.issue_group_ids || [],
+        limit: payload.limit
+      }
+    })
+    res.json({ data: result })
+  })
+)
 
 adminRouter.post('/issues/:issueGroupId/notify', requirePermission(['admin.issue.notify']), asyncHandler(async (req, res) => {
   const result = await sendIssueAlertForGroup(req.params.issueGroupId)

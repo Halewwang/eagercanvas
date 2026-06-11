@@ -34,7 +34,6 @@ export const useAdminDashboardSectionProps = ({
   formatUsd,
   isSelf,
   allVisibleIssuesSelected,
-  autoResolveExportedIssues,
   issueActionLoading,
   issuePagination,
   issueQuery,
@@ -62,6 +61,7 @@ export const useAdminDashboardSectionProps = ({
   roleOptions,
   saving,
   selectedRoles,
+  selectedExportGroupCount,
   selectedExportGroupIds,
   selectedIssue,
   selectedIssueCount,
@@ -178,7 +178,6 @@ export const useAdminDashboardSectionProps = ({
 
   const issueInboxSectionProps = computed(() => ({
     allVisibleIssuesSelected: unref(allVisibleIssuesSelected),
-    autoResolveExportedIssues: unref(autoResolveExportedIssues),
     canExportIssues: unref(canExportIssues),
     canNotifyIssues: unref(canNotifyIssues),
     canReadIssues: unref(canReadIssues),
@@ -191,6 +190,7 @@ export const useAdminDashboardSectionProps = ({
     lastExport: unref(lastExport),
     loadingIssueDetail: unref(loadingIssueDetail),
     loadingIssues: unref(loadingIssues),
+    selectedExportGroupCount: unref(selectedExportGroupCount),
     selectedExportGroupIds: unref(selectedExportGroupIds),
     selectedIssue: unref(selectedIssue),
     selectedIssueCount: unref(selectedIssueCount),

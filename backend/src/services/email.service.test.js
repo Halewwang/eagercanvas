@@ -85,3 +85,25 @@ test('builds the existing inline verification email when no template id is confi
   assert.equal(payload.template, undefined)
   assert.match(payload.html, /Your login verification code is <strong>654321<\/strong>/)
 })
+
+test('builds issue alert email payload with attachments', async () => {
+  const { buildIssueAlertEmailPayload } = await import('./email.service.js')
+
+  const payload = buildIssueAlertEmailPayload({
+    to: 'ops@example.com',
+    from: 'alerts@example.com',
+    subject: 'Issue digest',
+    html: '<p>Issue digest</p>',
+    text: 'Issue digest',
+    attachments: [{ filename: 'issue-inbox.md', content: '# Issues' }]
+  })
+
+  assert.deepEqual(payload, {
+    from: 'alerts@example.com',
+    to: 'ops@example.com',
+    subject: 'Issue digest',
+    html: '<p>Issue digest</p>',
+    text: 'Issue digest',
+    attachments: [{ filename: 'issue-inbox.md', content: '# Issues' }]
+  })
+})

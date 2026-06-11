@@ -4,15 +4,21 @@ import {
   getAdminIssue,
   getAdminIssues,
   notifyAdminIssue,
+  sendAdminIssueDigest,
   updateAdminIssueStatus
 } from '@/api/admin'
 import { getErrorMessage } from '@/utils'
 
 const getWindowMessageApi = () => (typeof window === 'undefined' ? null : window.$message)
+const getWindowEmailRecipient = () => {
+  if (typeof window === 'undefined' || typeof window.prompt !== 'function') return ''
+  return window.prompt('请输入接收问题列表的邮箱') || ''
+}
 const uniq = (values = []) => [...new Set(values.filter(Boolean))]
 const asArray = (value) => Array.isArray(value) ? value.filter(Boolean) : []
 const DEFAULT_ISSUE_PAGE_SIZE = 10
 const MAX_ISSUE_PAGE_SIZE = 20
+const MAX_EXPORT_ISSUE_LIMIT = 100
 
 const downloadTextFile = ({ fileName, content, type = 'text/plain;charset=utf-8' } = {}) => {
   if (!fileName || !content || typeof window === 'undefined' || typeof document === 'undefined') return false
@@ -30,13 +36,14 @@ const downloadTextFile = ({ fileName, content, type = 'text/plain;charset=utf-8'
 
 export const useAdminIssueInbox = ({
   canReadIssues,
-  canUpdateIssues = ref(false),
   fetchIssues = getAdminIssues,
   fetchIssue = getAdminIssue,
   patchIssueStatus = updateAdminIssueStatus,
   exportIssuesRequest = exportAdminIssues,
   notifyIssueRequest = notifyAdminIssue,
+  sendIssueDigestRequest = sendAdminIssueDigest,
   getMessageApi = getWindowMessageApi,
+  getEmailRecipient = getWindowEmailRecipient,
   downloadFile = downloadTextFile
 }) => {
   const issues = ref([])
@@ -48,10 +55,12 @@ export const useAdminIssueInbox = ({
   const issueActionLoading = ref('')
   const lastExport = ref(null)
   const selectedIssueIds = ref([])
-  const autoResolveExportedIssues = ref(true)
+  const allFilteredIssuesSelected = ref(false)
+  const downloadNameCounts = new Map()
 
   const getIssueId = (issueOrId) => (typeof issueOrId === 'object' ? issueOrId?.id : issueOrId)
   const getVisibleIssueIds = () => issues.value.map((issue) => issue.id).filter(Boolean)
+  const getFilteredIssueTotal = () => Math.max(0, Number(issuePagination.value?.total || issues.value.length || 0))
   const getIssueExportGroupIds = (issue) => {
     if (!issue?.id) return []
     return asArray(issue.merged_group_ids).length ? asArray(issue.merged_group_ids) : [issue.id]
@@ -60,20 +69,31 @@ export const useAdminIssueInbox = ({
     const selected = new Set(selectedIssueIds.value)
     return issues.value.filter((issue) => selected.has(issue.id))
   })
-  const selectedIssueCount = computed(() => selectedIssueIds.value.length)
+  const selectedIssueCount = computed(() => (
+    allFilteredIssuesSelected.value ? getFilteredIssueTotal() : selectedIssueIds.value.length
+  ))
   const selectedExportGroupIds = computed(() => uniq(selectedIssueRows.value.flatMap(getIssueExportGroupIds)))
+  const selectedExportGroupCount = computed(() => (
+    allFilteredIssuesSelected.value ? getFilteredIssueTotal() : selectedExportGroupIds.value.length
+  ))
   const allVisibleIssuesSelected = computed(() => {
+    if (allFilteredIssuesSelected.value) return getVisibleIssueIds().length > 0
     const visibleIssueIds = getVisibleIssueIds()
     return visibleIssueIds.length > 0 && visibleIssueIds.every((id) => selectedIssueIds.value.includes(id))
   })
 
   const pruneSelectedIssues = () => {
+    if (allFilteredIssuesSelected.value) {
+      selectedIssueIds.value = getVisibleIssueIds()
+      return
+    }
     const visible = new Set(getVisibleIssueIds())
     selectedIssueIds.value = selectedIssueIds.value.filter((id) => visible.has(id))
   }
 
   const updateIssueQuery = (key, value) => {
     if (!['status', 'severity', 'source_layer', 'page', 'limit'].includes(key)) return
+    if (key !== 'page') clearIssueSelection()
     const nextValue = key === 'limit'
       ? Math.max(1, Math.min(MAX_ISSUE_PAGE_SIZE, Number(value) || DEFAULT_ISSUE_PAGE_SIZE))
       : value
@@ -106,6 +126,14 @@ export const useAdminIssueInbox = ({
   const toggleIssueSelection = (issueOrId, selected) => {
     const issueId = getIssueId(issueOrId)
     if (!issueId) return
+    if (allFilteredIssuesSelected.value) {
+      allFilteredIssuesSelected.value = false
+      const visible = new Set(getVisibleIssueIds())
+      if (selected) visible.add(issueId)
+      else visible.delete(issueId)
+      selectedIssueIds.value = getVisibleIssueIds().filter((id) => visible.has(id))
+      return
+    }
     const current = new Set(selectedIssueIds.value)
     if (selected) current.add(issueId)
     else current.delete(issueId)
@@ -113,15 +141,13 @@ export const useAdminIssueInbox = ({
   }
 
   const toggleAllVisibleIssueSelection = (selected) => {
+    allFilteredIssuesSelected.value = Boolean(selected)
     selectedIssueIds.value = selected ? getVisibleIssueIds() : []
   }
 
   const clearIssueSelection = () => {
+    allFilteredIssuesSelected.value = false
     selectedIssueIds.value = []
-  }
-
-  const setAutoResolveExportedIssues = (value) => {
-    autoResolveExportedIssues.value = Boolean(value)
   }
 
   const openIssue = async (issueOrId) => {
@@ -153,58 +179,85 @@ export const useAdminIssueInbox = ({
     }
   }
 
-  const markIssueGroupsResolved = async (issueGroupIds = []) => {
-    const ids = uniq(issueGroupIds)
-    if (!ids.length) return []
-    issueActionLoading.value = 'resolve:selected'
-    const results = await Promise.all(ids.map((id) => patchIssueStatus(id, 'resolved')))
-    clearIssueSelection()
-    await loadIssues()
-    if (selectedIssue.value?.group?.id && ids.includes(selectedIssue.value.group.id)) {
-      selectedIssue.value = null
-    }
-    return results
+  const getCurrentFilterExportLimit = () => {
+    const total = Number(issuePagination.value?.total || 0)
+    const fallback = Number(issueQuery.value.limit || DEFAULT_ISSUE_PAGE_SIZE)
+    return Math.max(1, Math.min(MAX_EXPORT_ISSUE_LIMIT, total || fallback || DEFAULT_ISSUE_PAGE_SIZE))
   }
 
-  const exportIssues = async ({ selectedOnly = false } = {}) => {
-    const exportGroupIds = selectedOnly ? selectedExportGroupIds.value : []
-    if (selectedOnly && !exportGroupIds.length) {
+  const buildIssueExportRequestPayload = ({ selectedOnly = false } = {}) => {
+    const exportCurrentFilter = selectedOnly && allFilteredIssuesSelected.value
+    const exportGroupIds = selectedOnly && !exportCurrentFilter ? selectedExportGroupIds.value : []
+    if (selectedOnly && !exportCurrentFilter && !exportGroupIds.length) {
       getMessageApi()?.error?.('请先选择需要导出的线上问题')
       return null
     }
+    return {
+      status: issueQuery.value.status,
+      severity: issueQuery.value.severity,
+      source_layer: issueQuery.value.source_layer,
+      limit: selectedOnly && !exportCurrentFilter ? undefined : getCurrentFilterExportLimit(),
+      ...(exportGroupIds.length ? { issueGroupIds: exportGroupIds } : {})
+    }
+  }
+
+  const getUniqueDownloadFileName = (fileName = '') => {
+    if (!fileName) return fileName
+    const count = Number(downloadNameCounts.get(fileName) || 0) + 1
+    downloadNameCounts.set(fileName, count)
+    if (count === 1) return fileName
+    const dotIndex = fileName.lastIndexOf('.')
+    if (dotIndex <= 0) return `${fileName}-${count}`
+    return `${fileName.slice(0, dotIndex)}-${count}${fileName.slice(dotIndex)}`
+  }
+
+  const exportIssues = async ({ selectedOnly = false } = {}) => {
+    const payload = buildIssueExportRequestPayload({ selectedOnly })
+    if (!payload) return null
+    const exportGroupIds = asArray(payload.issueGroupIds)
     issueActionLoading.value = 'export'
     try {
-      const rsp = await exportIssuesRequest({
-        status: issueQuery.value.status,
-        severity: issueQuery.value.severity,
-        source_layer: issueQuery.value.source_layer,
-        limit: issueQuery.value.limit,
-        ...(exportGroupIds.length ? { issueGroupIds: exportGroupIds } : {})
-      })
+      const rsp = await exportIssuesRequest(payload)
       lastExport.value = rsp?.data || null
       if (lastExport.value?.jsonContent) {
         downloadFile({
-          fileName: lastExport.value.jsonFileName || 'codex-issue-inbox.json',
+          fileName: getUniqueDownloadFileName(lastExport.value.jsonFileName || 'codex-issue-inbox.json'),
           content: lastExport.value.jsonContent,
           type: 'application/json;charset=utf-8'
         })
       }
       if (lastExport.value?.markdownContent) {
         downloadFile({
-          fileName: lastExport.value.markdownFileName || 'codex-issue-inbox.md',
+          fileName: getUniqueDownloadFileName(lastExport.value.markdownFileName || 'codex-issue-inbox.md'),
           content: lastExport.value.markdownContent,
           type: 'text/markdown;charset=utf-8'
         })
       }
-      if (exportGroupIds.length && autoResolveExportedIssues.value && canUpdateIssues.value) {
-        await markIssueGroupsResolved(exportGroupIds)
-        getMessageApi()?.success?.('Codex 问题已导出，选中问题已标记已解决')
-      } else {
-        getMessageApi()?.success?.('Codex 问题收件箱已生成并下载')
-      }
+      getMessageApi()?.success?.(exportGroupIds.length ? 'Codex 问题已导出' : 'Codex 问题收件箱已生成并下载')
       return lastExport.value
     } catch (error) {
       if (!error?.__handled) getMessageApi()?.error(getErrorMessage(error, '导出问题收件箱失败'))
+      return null
+    } finally {
+      issueActionLoading.value = ''
+    }
+  }
+
+  const sendIssueDigestEmail = async ({ selectedOnly = false, email = '' } = {}) => {
+    const payload = buildIssueExportRequestPayload({ selectedOnly })
+    if (!payload) return null
+    const recipient = String(email || getEmailRecipient() || '').trim()
+    if (!recipient) return null
+    issueActionLoading.value = 'send-email'
+    try {
+      const rsp = await sendIssueDigestRequest({
+        to: recipient,
+        ...payload
+      })
+      getMessageApi()?.success?.(`问题列表已发送到 ${recipient}`)
+      return rsp?.data || null
+    } catch (error) {
+      if (!error?.__handled) getMessageApi()?.error(getErrorMessage(error, '发送问题列表邮件失败'))
       return null
     } finally {
       issueActionLoading.value = ''
@@ -228,7 +281,6 @@ export const useAdminIssueInbox = ({
 
   return {
     allVisibleIssuesSelected,
-    autoResolveExportedIssues,
     clearIssueSelection,
     exportIssues,
     issueActionLoading,
@@ -241,12 +293,13 @@ export const useAdminIssueInbox = ({
     loadingIssues,
     notifyIssue,
     openIssue,
+    sendIssueDigestEmail,
     selectedExportGroupIds,
+    selectedExportGroupCount,
     selectedIssueCount,
     selectedIssueIds,
     selectedIssue,
     setIssueStatus,
-    setAutoResolveExportedIssues,
     toggleAllVisibleIssueSelection,
     toggleIssueSelection,
     updateIssueQuery

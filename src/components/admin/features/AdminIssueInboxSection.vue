@@ -54,19 +54,18 @@
     <div class="admin-issue-action-group">
       <div class="admin-issue-batch-group">
         <span v-if="canExportIssues" class="admin-issue-batch-summary">
-          已选 {{ selectedIssueCount }} 项 · 导出 {{ selectedExportGroupIds.length }} 组
+          已选 {{ selectedIssueCount }} 项 · 导出 {{ selectedExportGroupCount }} 组
         </span>
-        <label v-if="canExportIssues && canUpdateIssues" class="admin-issue-auto-resolve">
-          <input
-            class="admin-issue-checkbox"
-            type="checkbox"
-            :checked="autoResolveExportedIssues"
-            @change="emit('update-auto-resolve-exported-issues', $event.target.checked)"
-          >
-          <span>导出后标记已解决</span>
-        </label>
       </div>
       <div class="admin-issue-export-group">
+        <AdminMicroButton
+          v-if="canExportIssues && canNotifyIssues"
+          size="md"
+          :disabled="issueActionLoading === 'send-email' || issueActionLoading === 'export'"
+          @click="emit('send-issue-digest-email')"
+        >
+          发送当前筛选到邮箱
+        </AdminMicroButton>
         <AdminMicroButton
           v-if="canExportIssues"
           size="md"
@@ -105,7 +104,7 @@
             <input
               class="admin-issue-checkbox"
               type="checkbox"
-              aria-label="选择本页所有问题"
+              aria-label="选择当前筛选所有问题"
               :checked="allVisibleIssuesSelected"
               :disabled="loadingIssues || issues.length === 0"
               @change="emit('toggle-all-issue-selection', $event.target.checked)"
@@ -294,16 +293,15 @@ const emit = defineEmits([
   'load-issues',
   'notify-issue',
   'open-issue',
+  'send-issue-digest-email',
   'toggle-all-issue-selection',
   'toggle-issue-selection',
-  'update-auto-resolve-exported-issues',
   'update-issue-query',
   'update-issue-status'
 ])
 
 const props = defineProps({
   allVisibleIssuesSelected: { type: Boolean, default: false },
-  autoResolveExportedIssues: { type: Boolean, default: true },
   canExportIssues: { type: Boolean, default: false },
   canNotifyIssues: { type: Boolean, default: false },
   canReadIssues: { type: Boolean, default: false },
@@ -317,6 +315,7 @@ const props = defineProps({
   loadingIssueDetail: { type: Boolean, default: false },
   loadingIssues: { type: Boolean, default: false },
   selectedIssue: { type: Object, default: null },
+  selectedExportGroupCount: { type: Number, default: 0 },
   selectedExportGroupIds: { type: Array, default: () => [] },
   selectedIssueCount: { type: Number, default: 0 },
   selectedIssueIds: { type: Array, default: () => [] },
@@ -484,8 +483,7 @@ const statusClass = (status) => {
 .admin-issue-filter-group :deep(.ui-text-input),
 .admin-issue-filter-group :deep(.ui-micro-btn),
 .admin-issue-action-group :deep(.ui-micro-btn),
-.admin-issue-batch-summary,
-.admin-issue-auto-resolve {
+.admin-issue-batch-summary {
   min-height: 38px;
 }
 
@@ -511,8 +509,7 @@ const statusClass = (status) => {
   justify-content: flex-end;
 }
 
-.admin-issue-batch-summary,
-.admin-issue-auto-resolve {
+.admin-issue-batch-summary {
   display: inline-flex;
   align-items: center;
   gap: 8px;

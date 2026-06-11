@@ -116,6 +116,13 @@ export const exportAdminIssues = (payload = {}) =>
     data: payload
   })
 
+export const sendAdminIssueDigest = (payload = {}) =>
+  apiRequest({
+    url: '/admin/issues/send-email',
+    method: 'post',
+    data: payload
+  })
+
 export const notifyAdminIssue = (issueGroupId) =>
   apiRequest({
     url: `/admin/issues/${encodeURIComponent(issueGroupId)}/notify`,

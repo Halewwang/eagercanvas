@@ -69,6 +69,8 @@ const createDeps = () => ({
   roleOptions: ref([{ value: 'admin' }]),
   saving: ref({ 'user-1': false }),
   selectedRoles: ref({ 'user-1': 'admin' }),
+  selectedExportGroupCount: ref(1),
+  selectedExportGroupIds: ref(['issue-1']),
   selectedIssue: ref({ group: { id: 'issue-1' }, events: [] }),
   serviceActivationRate: ref(50),
   serviceLoadNotice: ref(''),

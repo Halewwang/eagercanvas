@@ -67,9 +67,9 @@
       @load-issues="emit('load-issues')"
       @notify-issue="emit('notify-issue', $event)"
       @open-issue="emit('open-issue', $event)"
+      @send-issue-digest-email="emit('send-issue-digest-email')"
       @toggle-all-issue-selection="emit('toggle-all-issue-selection', $event)"
       @toggle-issue-selection="emit('toggle-issue-selection', ...$event)"
-      @update-auto-resolve-exported-issues="emit('update-auto-resolve-exported-issues', $event)"
       @update-issue-query="(key, value) => emit('update-issue-query', key, value)"
       @update-issue-status="emit('update-issue-status', $event)"
     />
@@ -103,12 +103,12 @@ const emit = defineEmits([
   'refresh-users',
   'reset-service',
   'save-roles',
+  'send-issue-digest-email',
   'set-user-page',
   'suspend-user',
   'toggle-all-issue-selection',
   'toggle-issue-selection',
   'update-audit-log-query',
-  'update-auto-resolve-exported-issues',
   'update-issue-query',
   'update-issue-status',
   'update-log-query',
