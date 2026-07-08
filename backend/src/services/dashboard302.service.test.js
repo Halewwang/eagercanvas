@@ -32,6 +32,13 @@ test('derives dashboard management fallback hosts from provider api origins', ()
   )
 })
 
+test('ignores nullish dashboard base url env values', () => {
+  assert.deepEqual(
+    resolveDashboard302BaseUrls('null', 'undefined', 'null, https://api.302ai.cn/v1'),
+    ['https://api.302ai.cn', 'https://api.302.ai']
+  )
+})
+
 test('allows explicit dashboard management base url override', () => {
   assert.equal(resolveDashboard302BaseUrl('https://proxy.example.com/v1', 'https://api.302ai.cn'), 'https://proxy.example.com')
 })

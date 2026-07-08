@@ -20,7 +20,7 @@ const splitBaseUrls = (value = '') =>
   String(value || '')
     .split(',')
     .map((item) => item.trim())
-    .filter(Boolean)
+    .filter((item) => item && !['null', 'undefined'].includes(item.toLowerCase()))
 
 export const resolveDashboard302BaseUrls = (
   dashboardBaseUrl = '',
