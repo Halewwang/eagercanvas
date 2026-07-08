@@ -14,3 +14,9 @@ test('request interceptor delays 401 issue reporting until refresh cannot recove
   assert.ok(firstIssueReport > unauthorizedBranch)
   assert.match(requestSource, /return instance\(originalRequest\)/)
 })
+
+test('request interceptor normalizes backend business error copy before toast', () => {
+  assert.match(requestSource, /import \{ getErrorMessage \} from '\.\/error\.js'/)
+  assert.match(requestSource, /const rawMessage = data\?\.message \|\| data\?\.error\?\.message \|\| error\.message/)
+  assert.match(requestSource, /const message = getErrorMessage\(\{[\s\S]+response,[\s\S]+message: rawMessage[\s\S]+\}, rawMessage \|\| '请求失败'\)/)
+})

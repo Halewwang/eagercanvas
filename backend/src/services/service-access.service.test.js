@@ -9,6 +9,7 @@ import {
   getUserServiceStatus,
   resolveActiveUserServiceCredential
 } from './service-access.service.js'
+import { env } from '../config/env.js'
 
 test('buildProviderApiName creates a stable non-email service identifier', () => {
   assert.equal(
@@ -503,6 +504,28 @@ test('createManualUserServiceCredential stores a local runtime key for service a
   assert.equal(result.serviceCredential.apiKeyLast4, 'abcd')
   assert.equal(JSON.stringify(result), JSON.stringify(result).replace('sk-manual-runtime-abcd', ''))
   assert.ok(inserts.some((item) => item.table === 'admin_operation_logs' && item.payload.action === 'admin.service_access.manual_bind'))
+})
+
+test('createManualUserServiceCredential rejects configured management provider keys', async () => {
+  const previousDashboardKey = env.dashboard302ApiKey
+  const previousProviderKey = env.providerApiKey
+  env.dashboard302ApiKey = 'sk-dashboard-management'
+  env.providerApiKey = 'sk-global-provider'
+
+  try {
+    await assert.rejects(
+      createManualUserServiceCredential({
+        userId: 'user-1',
+        operatorUserId: 'admin-1',
+        apiName: 'manual_user_key',
+        apiKey: 'Bearer sk-dashboard-management'
+      }),
+      (error) => error.status === 400 && error.code === 'SERVICE_API_KEY_RESERVED'
+    )
+  } finally {
+    env.dashboard302ApiKey = previousDashboardKey
+    env.providerApiKey = previousProviderKey
+  }
 })
 
 test('resolveActiveUserServiceCredential uses a manually stored runtime key without dashboard lookup', async () => {

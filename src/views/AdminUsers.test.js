@@ -849,6 +849,9 @@ test('admin manual service binding event reaches page action composable', () => 
   assert.match(userManualServiceKeyModalSource, /type="password"/)
   assert.match(userManualServiceKeyModalSource, /绑定服务 Key/)
   assert.match(userManualServiceKeyModalSource, /请输入完整 302 API Key/)
+  assert.match(userManualServiceKeyModalSource, /用户运行时模型调用 Key/)
+  assert.match(userManualServiceKeyModalSource, /不要填写 DASHBOARD_302_API_KEY/)
+  assert.match(userManualServiceKeyModalSource, /不能使用系统管理 Key/)
   assert.doesNotMatch(userManualServiceKeyModalSource, /window\.prompt|prompt\(/)
 })
 

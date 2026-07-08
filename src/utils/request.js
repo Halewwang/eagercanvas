@@ -5,6 +5,7 @@
 
 import axios from 'axios'
 import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from './constants'
+import { getErrorMessage } from './error.js'
 import { notifier } from './notifier.js'
 import { getStoredValue, removeStoredValue, setStoredValue } from './storage.js'
 import { OBSERVABILITY_SLOW_API_MS, reportApiIssue } from '@/observability'
@@ -133,7 +134,12 @@ instance.interceptors.response.use(
 
     if (response) {
       const { status, data } = response
-      const message = data?.message || data?.error?.message || error.message
+      const rawMessage = data?.message || data?.error?.message || error.message
+      const message = getErrorMessage({
+        ...error,
+        response,
+        message: rawMessage
+      }, rawMessage || '请求失败')
       if (message) error.message = message
       
       if (status === 401) {

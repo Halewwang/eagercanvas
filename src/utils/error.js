@@ -6,6 +6,9 @@ export const getErrorMessage = (error, fallback = 'Request failed') => {
   if (typeof error === 'string') return error
   const message = String(error?.message || '').trim()
   const code = String(error?.response?.data?.code || error?.data?.code || error?.code || '').trim()
+  if (code === 'SERVICE_API_KEY_RESERVED') {
+    return '不能绑定系统管理 Key。请在 302.ai 为该用户单独创建普通运行时 API Key 后再粘贴。'
+  }
   if (code === 'DEROUTER_TIMEOUT') {
     return 'GPT Image lite 生成超时，请稍后重试。'
   }

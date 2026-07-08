@@ -16,3 +16,13 @@ test('error message normalizes raw abort errors for UI display', () => {
     'GPT Image lite 生成超时，请稍后重试。'
   )
 })
+
+test('error message explains reserved service credential keys for admins', () => {
+  assert.equal(
+    getErrorMessage({
+      message: 'Management provider keys cannot be assigned to a user service credential.',
+      response: { data: { code: 'SERVICE_API_KEY_RESERVED' } }
+    }, '手动绑定服务 Key 失败'),
+    '不能绑定系统管理 Key。请在 302.ai 为该用户单独创建普通运行时 API Key 后再粘贴。'
+  )
+})

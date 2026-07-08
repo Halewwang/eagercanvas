@@ -2,7 +2,7 @@
   <BaseModal
     :show="show"
     title="绑定服务 Key"
-    description="保存后该用户将使用绑定的 302 API Key 调用模型。"
+    description="保存后该用户将使用绑定的用户运行时模型调用 Key 调用模型。不要填写 DASHBOARD_302_API_KEY 或 PROVIDER_API_KEY。"
     size="sm"
     :close-on-overlay="!loading"
     :close-on-escape="!loading"
@@ -26,6 +26,9 @@
         autocomplete="off"
         spellcheck="false"
       />
+      <p class="admin-manual-key-help">
+        不能使用系统管理 Key；请粘贴在 302.ai 为该用户单独创建的普通运行时 API Key。
+      </p>
       <p v-if="errorMessage" class="admin-manual-key-error">{{ errorMessage }}</p>
     </form>
 
@@ -139,5 +142,12 @@ watch(
   color: rgba(255, 205, 215, 0.82);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.admin-manual-key-help {
+  margin: -8px 0 0;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 12px;
+  line-height: 1.5;
 }
 </style>
