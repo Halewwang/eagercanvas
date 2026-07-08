@@ -91,7 +91,8 @@ const normalizeProviderAttempts = (attempts = []) => {
     baseHost: String(attempt.baseHost || '').trim(),
     status: Number(attempt.status || 0) || 0,
     message: String(attempt.message || '').slice(0, 160),
-    authSource: String(attempt.authSource || '').trim()
+    authSource: String(attempt.authSource || '').trim(),
+    authFingerprint: String(attempt.authFingerprint || '').trim()
   }))
 }
 

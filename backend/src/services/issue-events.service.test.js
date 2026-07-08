@@ -129,7 +129,8 @@ test('recordIssueEvent carries safe provider diagnostics into codex handoff', as
             baseHost: 'api.302.ai',
             status: 400,
             message: 'Not Found',
-            authSource: 'dashboard'
+            authSource: 'dashboard',
+            authFingerprint: 'sha256:abc123def456'
           }
         ]
       }
@@ -152,7 +153,9 @@ test('recordIssueEvent carries safe provider diagnostics into codex handoff', as
       baseHost: 'api.302.ai',
       status: 400,
       message: 'Not Found',
-      authSource: 'dashboard'
+      authSource: 'dashboard',
+      authFingerprint: 'sha256:abc123def456'
     }
   ])
+  assert.doesNotMatch(JSON.stringify(groupInsert.payload.codex_handoff.diagnostics), /sk-/)
 })

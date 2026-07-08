@@ -1,38 +1,65 @@
+import { createHash } from 'node:crypto'
 import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 
+const DEFAULT_DASHBOARD_BASE_URL = 'https://api.302.ai'
+const FALLBACK_DASHBOARD_BASE_URLS = [DEFAULT_DASHBOARD_BASE_URL, 'https://api.302ai.cn']
+const NULLISH_CONFIG_VALUES = new Set(['null', 'undefined', 'none', 'nan'])
+
+const stripWrappingQuotes = (value = '') => {
+  const raw = String(value ?? '').trim()
+  if (raw.length >= 2) {
+    const first = raw[0]
+    const last = raw[raw.length - 1]
+    if ((first === '"' && last === '"') || (first === '\'' && last === '\'')) {
+      return raw.slice(1, -1).trim()
+    }
+  }
+  return raw
+}
+
+const isNullishConfigValue = (value = '') => {
+  const raw = stripWrappingQuotes(value).trim()
+  return !raw || NULLISH_CONFIG_VALUES.has(raw.toLowerCase())
+}
+
 const normalizeBaseUrl = (input = '', options = {}) => {
-  const raw = String(input || '').trim()
-  if (!raw) return 'https://api.302.ai'
-  const noTrail = raw.replace(/\/+$/, '')
+  const raw = stripWrappingQuotes(input)
+  if (isNullishConfigValue(raw)) return ''
+  const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
+  const noTrail = withProtocol.replace(/\/+$/, '')
   const normalized = noTrail
     .replace(/\/v1beta$/i, '')
     .replace(/\/v1$/i, '')
-  if (!options.originOnly) return normalized
   try {
-    return new URL(normalized).origin
+    const url = new URL(normalized)
+    if (!['http:', 'https:'].includes(url.protocol)) return ''
+    return options.originOnly ? url.origin : normalized
   } catch {
-    return normalized
+    return ''
   }
 }
 
 const splitBaseUrls = (value = '') =>
-  String(value || '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter((item) => item && !['null', 'undefined'].includes(item.toLowerCase()))
+  String(value ?? '')
+    .split(/[,\n\r]+/)
+    .map(stripWrappingQuotes)
+    .filter((item) => !isNullishConfigValue(item))
 
 export const resolveDashboard302BaseUrls = (
   dashboardBaseUrl = '',
   providerBaseUrl = '',
   providerBaseUrls = ''
 ) => {
-  const candidates = [
-    ...splitBaseUrls(dashboardBaseUrl),
+  const explicitDashboardBaseUrls = splitBaseUrls(dashboardBaseUrl)
+  const providerDerivedBaseUrls = [
     ...splitBaseUrls(providerBaseUrls).map((item) => normalizeBaseUrl(item, { originOnly: true })),
-    ...splitBaseUrls(providerBaseUrl).map((item) => normalizeBaseUrl(item, { originOnly: true })),
-    'https://api.302ai.cn',
-    'https://api.302.ai'
+    ...splitBaseUrls(providerBaseUrl).map((item) => normalizeBaseUrl(item, { originOnly: true }))
+  ]
+  const candidates = [
+    ...explicitDashboardBaseUrls,
+    ...FALLBACK_DASHBOARD_BASE_URLS,
+    ...providerDerivedBaseUrls
   ]
 
   const normalized = candidates.map((item) => normalizeBaseUrl(item)).filter(Boolean)
@@ -59,9 +86,15 @@ export const assert302DashboardSuccess = (data = {}) => {
 }
 
 const toBearerHeader = (value = '') => {
-  const raw = String(value || '').trim()
+  const raw = stripWrappingQuotes(value)
   if (!raw) return ''
   return raw.toLowerCase().startsWith('bearer ') ? raw : `Bearer ${raw}`
+}
+
+const getAuthFingerprint = (authHeader = '') => {
+  const raw = stripWrappingQuotes(String(authHeader || '').replace(/^Bearer\s+/i, ''))
+  if (!raw) return ''
+  return `sha256:${createHash('sha256').update(raw).digest('hex').slice(0, 12)}`
 }
 
 export const buildDashboard302AuthHeaders = (dashboardApiKey = '', providerApiKey = '') => {
@@ -301,13 +334,14 @@ const getAuthSource = (authHeader = '', isExplicitAuth = false, index = 0) => {
   return isExplicitAuth ? `explicit_${index + 1}` : 'unknown'
 }
 
-const buildDashboardAttempt = ({ method = 'GET', path = '', baseUrl = '', error = {}, authSource = '' } = {}) => ({
+const buildDashboardAttempt = ({ method = 'GET', path = '', baseUrl = '', error = {}, authSource = '', authHeader = '' } = {}) => ({
   method: String(method || 'GET').toUpperCase(),
   path: String(path || ''),
   baseHost: getBaseHost(baseUrl),
   status: Number(error?.status || 0) || 0,
   message: getDashboardRawErrorMessage(error).slice(0, 160),
-  authSource: String(authSource || 'unknown')
+  authSource: String(authSource || 'unknown'),
+  authFingerprint: getAuthFingerprint(authHeader)
 })
 
 const attachDashboardAttempts = (error, attempts = []) => {
@@ -373,7 +407,8 @@ const call302Dashboard = async (path, options = {}) => {
           path,
           baseUrl,
           error,
-          authSource: getAuthSource(authHeader, isExplicitAuth, authIndex)
+          authSource: getAuthSource(authHeader, isExplicitAuth, authIndex),
+          authHeader
         }))
         lastError = error
         if (!isRetryableDashboardRequestError(error)) throw attachDashboardAttempts(error, attempts)

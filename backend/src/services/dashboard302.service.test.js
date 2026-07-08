@@ -21,21 +21,21 @@ import {
 import { env } from '../config/env.js'
 import { attachProviderResponseMetadata } from './provider-response-metadata.js'
 
-test('inherits provider host for dashboard management requests by default', () => {
-  assert.equal(resolveDashboard302BaseUrl('', 'https://api.302ai.cn'), 'https://api.302ai.cn')
+test('uses the official dashboard host before provider runtime hosts by default', () => {
+  assert.equal(resolveDashboard302BaseUrl('', 'https://api.302ai.cn'), 'https://api.302.ai')
 })
 
 test('derives dashboard management fallback hosts from provider api origins', () => {
   assert.deepEqual(
     resolveDashboard302BaseUrls('', 'https://api.302ai.cn/v1/chat/completions', ''),
-    ['https://api.302ai.cn', 'https://api.302.ai']
+    ['https://api.302.ai', 'https://api.302ai.cn']
   )
 })
 
-test('ignores nullish dashboard base url env values', () => {
+test('ignores nullish and quoted-null dashboard base url env values', () => {
   assert.deepEqual(
-    resolveDashboard302BaseUrls('null', 'undefined', 'null, https://api.302ai.cn/v1'),
-    ['https://api.302ai.cn', 'https://api.302.ai']
+    resolveDashboard302BaseUrls('null', 'undefined', 'null, "null", https://api.302ai.cn/v1'),
+    ['https://api.302.ai', 'https://api.302ai.cn']
   )
 })
 
@@ -51,7 +51,7 @@ test('throws on 302 dashboard business errors even when http status is 200', () 
 })
 
 test('builds dashboard auth candidates with provider key fallback', () => {
-  assert.deepEqual(buildDashboard302AuthHeaders('sk-dashboard', 'sk-provider'), [
+  assert.deepEqual(buildDashboard302AuthHeaders('"sk-dashboard"', "'sk-provider'"), [
     'Bearer sk-dashboard',
     'Bearer sk-provider'
   ])
@@ -181,7 +181,8 @@ test('dashboard management errors expose safe request attempt diagnostics withou
             baseHost: 'api.302ai.cn',
             status: 400,
             message: 'Not Found',
-            authSource: 'dashboard'
+            authSource: 'dashboard',
+            authFingerprint: error.dashboard302Attempts[0].authFingerprint
           },
           {
             method: 'GET',
@@ -189,9 +190,11 @@ test('dashboard management errors expose safe request attempt diagnostics withou
             baseHost: 'api.302.ai',
             status: 403,
             message: 'permission denied',
-            authSource: 'dashboard'
+            authSource: 'dashboard',
+            authFingerprint: error.dashboard302Attempts[1].authFingerprint
           }
         ])
+        assert.match(error.dashboard302Attempts[0].authFingerprint, /^sha256:[a-f0-9]{12}$/)
         assert.doesNotMatch(JSON.stringify(error.dashboard302Attempts), /sk-dashboard-secret/)
         return true
       }
@@ -817,6 +820,7 @@ test('runtime key lookup can throw with safe diagnostics when requested', async 
       () => get302RuntimeApiKeyByName('missing-key', { throwOnMissing: true }),
       (error) => {
         assert.equal(error.code, 'DASHBOARD_302_API_KEY_NOT_FOUND')
+        assert.match(error.dashboard302Attempts[0].authFingerprint, /^sha256:[a-f0-9]{12}$/)
         assert.deepEqual(error.dashboard302Attempts, [
           {
             method: 'GET',
@@ -824,7 +828,8 @@ test('runtime key lookup can throw with safe diagnostics when requested', async 
             baseHost: 'api.302.ai',
             status: 404,
             message: 'Not Found',
-            authSource: 'dashboard'
+            authSource: 'dashboard',
+            authFingerprint: error.dashboard302Attempts[0].authFingerprint
           },
           {
             method: 'GET',
@@ -832,7 +837,8 @@ test('runtime key lookup can throw with safe diagnostics when requested', async 
             baseHost: 'api.302ai.cn',
             status: 404,
             message: 'Not Found',
-            authSource: 'dashboard'
+            authSource: 'dashboard',
+            authFingerprint: error.dashboard302Attempts[1].authFingerprint
           }
         ])
         assert.doesNotMatch(JSON.stringify(error.dashboard302Attempts), /sk-dashboard-secret/)
