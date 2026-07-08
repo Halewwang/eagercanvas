@@ -54,7 +54,19 @@ const details = [{
     upstream_status: 200,
     error_code: 'COMPLETED_WITHOUT_ASSET',
     message_summary: 'completed without asset',
-    fingerprint: 'sha256:abc'
+    fingerprint: 'sha256:abc',
+    metadata: {
+      details: {
+        providerAttempts: [{
+          method: 'POST',
+          path: '/dashboard/api_key',
+          baseHost: 'api.302.ai',
+          status: 400,
+          message: 'Not Found',
+          authSource: 'dashboard'
+        }]
+      }
+    }
   }]
 }]
 
@@ -69,6 +81,14 @@ test('createCodexIssueTable organizes issue data for cross-layer Codex diagnosis
   assert.equal(table.issues[0].primary_scope.provider.models[0], 'gpt-image-2')
   assert.equal(table.issues[0].primary_scope.backend.api_paths[0], '/runs/image')
   assert.equal(table.issues[0].codex_diagnosis_inputs.latest_request_id, 'req-1')
+  assert.deepEqual(table.issues[0].codex_diagnosis_inputs.sample_events[0].metadata.details.providerAttempts[0], {
+    method: 'POST',
+    path: '/dashboard/api_key',
+    baseHost: 'api.302.ai',
+    status: 400,
+    message: 'Not Found',
+    authSource: 'dashboard'
+  })
   assert.match(table.issues[0].suggested_investigation.join(' '), /provider adapter/)
 })
 
@@ -79,6 +99,7 @@ test('renderCodexIssueMarkdown includes table and sample event evidence', () => 
   assert.match(markdown, /codex_issue_table\/v1/)
   assert.match(markdown, /COMPLETED_WITHOUT_ASSET/)
   assert.match(markdown, /req-1/)
+  assert.match(markdown, /providerAttempts/)
 })
 
 test('writeCodexIssueExport writes json and markdown files with deterministic names', async () => {

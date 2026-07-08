@@ -144,3 +144,26 @@ test('getAdminUsageTimeseries merges duplicate daily aggregate rows by date', as
     restore.mock.restore()
   }
 })
+
+test('getAdminUsageTimeseries bounds unfiltered admin dashboard queries by default', async () => {
+  const calls = []
+  const restore = mock.method(supabase, 'from', (table) => {
+    assert.equal(table, 'usage_daily_agg')
+    return createAwaitableQuery({
+      data: [],
+      onCall: (call) => calls.push(call)
+    })
+  })
+
+  try {
+    await getAdminUsageTimeseries({
+      now: () => new Date('2026-07-08T12:00:00.000Z')
+    })
+
+    assert.deepEqual(calls.filter((call) => call[0] === 'gte'), [
+      ['gte', 'date', '2026-03-10']
+    ])
+  } finally {
+    restore.mock.restore()
+  }
+})

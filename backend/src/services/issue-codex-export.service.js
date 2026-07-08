@@ -27,6 +27,21 @@ const pickFromEvents = (events, key) => uniq(events.map((event) => event?.[key])
 
 const normalizeIssuePathForOutput = (value = '') => String(value || '').replace(/^\/api\/v1(?=\/)/, '') || value
 
+const pickEventMetadataDiagnostics = (metadata = {}) => {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null
+  const details = metadata.details && typeof metadata.details === 'object' && !Array.isArray(metadata.details)
+    ? metadata.details
+    : null
+  const diagnostics = metadata.diagnostics && typeof metadata.diagnostics === 'object' && !Array.isArray(metadata.diagnostics)
+    ? metadata.diagnostics
+    : null
+
+  const output = {}
+  if (details && Object.keys(details).length) output.details = details
+  if (diagnostics && Object.keys(diagnostics).length) output.diagnostics = diagnostics
+  return Object.keys(output).length ? output : null
+}
+
 const buildRepoInfo = ({
   env = process.env,
   root = repoRoot
@@ -234,24 +249,28 @@ export const createCodexIssueTable = ({
       ...pickFromEvents(eventList, 'request_id')
     ])
 
-    const sampleEvents = eventList.slice(0, 10).map((event) => ({
-      event_id: event.id,
-      created_at: event.created_at,
-      request_id: event.request_id || null,
-      route: event.route_name || event.route || null,
-      api_path: event.path_template || null,
-      status_code: event.status_code || null,
-      duration_ms: event.duration_ms || null,
-      provider: event.provider || null,
-      model: event.model || null,
-      upstream_status: event.upstream_status || null,
-      db_table: event.db_table || null,
-      db_operation: event.db_operation || null,
-      db_code: event.db_code || null,
-      error_code: event.error_code || null,
-      message_summary: event.message_summary || null,
-      stack_summary: event.stack_summary || null
-    }))
+    const sampleEvents = eventList.slice(0, 10).map((event) => {
+      const metadata = pickEventMetadataDiagnostics(event.metadata)
+      return {
+        event_id: event.id,
+        created_at: event.created_at,
+        request_id: event.request_id || null,
+        route: event.route_name || event.route || null,
+        api_path: event.path_template || null,
+        status_code: event.status_code || null,
+        duration_ms: event.duration_ms || null,
+        provider: event.provider || null,
+        model: event.model || null,
+        upstream_status: event.upstream_status || null,
+        db_table: event.db_table || null,
+        db_operation: event.db_operation || null,
+        db_code: event.db_code || null,
+        error_code: event.error_code || null,
+        message_summary: event.message_summary || null,
+        stack_summary: event.stack_summary || null,
+        ...(metadata ? { metadata } : {})
+      }
+    })
 
     const issue = {
       id: `ISS-${String(generatedAt).slice(0, 10).replace(/-/g, '')}-${String(index + 1).padStart(3, '0')}`,

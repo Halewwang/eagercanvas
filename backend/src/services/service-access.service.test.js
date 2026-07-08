@@ -329,6 +329,7 @@ test('createUserServiceCredential treats dashboard system permission failure as 
 
 test('createUserServiceCredential stores active key last4 from resolved runtime key when create response omits it', async () => {
   const inserts = []
+  let createPayload = null
   const fakeSupabase = {
     from(table) {
       return {
@@ -360,11 +361,14 @@ test('createUserServiceCredential stores active key last4 from resolved runtime 
     operatorUserId: 'admin-1'
   }, {
     supabaseClient: fakeSupabase,
-    createProviderApiKey: async () => ({
-      code: 0,
-      msg: 'success',
-      data: {}
-    }),
+    createProviderApiKey: async (payload) => {
+      createPayload = payload
+      return {
+        code: 0,
+        msg: 'success',
+        data: {}
+      }
+    },
     getRuntimeApiKeyByName: async (apiName, options = {}) => {
       assert.equal(apiName, 'eager_user_user1')
       assert.equal(options.throwOnMissing, true)
@@ -375,6 +379,9 @@ test('createUserServiceCredential stores active key last4 from resolved runtime 
   const credentialInsert = inserts.find((item) => item.table === 'user_service_credentials')
   assert.equal(credentialInsert.payload.status, 'active')
   assert.equal(credentialInsert.payload.api_key_last4, 'abcd')
+  assert.equal(createPayload.allow_save_logs, false)
+  assert.equal(createPayload.allow_manage_key, false)
+  assert.equal(createPayload.allow_custom_model, false)
   assert.equal(result.serviceCredential.apiKeyLast4, 'abcd')
 })
 

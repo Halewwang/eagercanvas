@@ -311,7 +311,7 @@ export const createUserServiceCredential = async ({
   let attemptedProviderApiName = providerApiName
   const payload = {
     api_name: providerApiName,
-    allow_save_logs: true,
+    allow_save_logs: false,
     allow_custom_model: false,
     allow_manage_key: false,
     limit_cost: Number(limitCost || 0),
@@ -473,7 +473,7 @@ export const disableUserServiceCredential = async ({ userId, operatorUserId, rea
       limit_cost: 0,
       limit_daily_cost: 0,
       expired_on: 1,
-      allow_save_logs: true,
+      allow_save_logs: false,
       allow_custom_model: false,
       allow_manage_key: false
     })
@@ -516,7 +516,7 @@ export const updateUserServiceLimits = async ({ userId, operatorUserId, limitCos
     limit_cost: Number(limitCost || 0),
     limit_daily_cost: Number(limitDailyCost || 0),
     expired_on: Number(expiredOn || 0),
-    allow_save_logs: true,
+    allow_save_logs: false,
     allow_custom_model: false,
     allow_manage_key: false
   })

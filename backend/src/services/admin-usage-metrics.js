@@ -16,6 +16,23 @@ const toIsoDateEnd = (value) => {
   return val ? `${val}T23:59:59.999Z` : ''
 }
 
+const DEFAULT_TIMESERIES_LOOKBACK_DAYS = 120
+
+const toDateOnly = (value) => {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString().slice(0, 10)
+}
+
+const getDefaultTimeseriesFromDate = (now = () => new Date()) => {
+  const value = typeof now === 'function' ? now() : now
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  date.setUTCHours(0, 0, 0, 0)
+  date.setUTCDate(date.getUTCDate() - DEFAULT_TIMESERIES_LOOKBACK_DAYS)
+  return toDateOnly(date)
+}
+
 export const getAdminUsageSummary = async ({ from, to, userId } = {}) => {
   const query = supabase
     .from('provider_billing_records')
@@ -58,14 +75,15 @@ export const getAdminUsageSummary = async ({ from, to, userId } = {}) => {
   }
 }
 
-export const getAdminUsageTimeseries = async ({ from, to, userId } = {}) => {
+export const getAdminUsageTimeseries = async ({ from, to, userId, now } = {}) => {
+  const effectiveFrom = String(from || '').trim() || getDefaultTimeseriesFromDate(now)
   const query = supabase
     .from('usage_daily_agg')
     .select('date,user_id,total_calls,total_tokens,total_images,total_video_seconds,total_cost_usd')
     .order('date', { ascending: true })
 
   if (userId) query.eq('user_id', String(userId))
-  if (from) query.gte('date', String(from))
+  if (effectiveFrom) query.gte('date', effectiveFrom)
   if (to) query.lte('date', String(to))
 
   const { data, error } = await query
