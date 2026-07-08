@@ -9,6 +9,7 @@ import {
   get302ApiKeys,
   get302ApiKeyUsageByKey,
   get302Balance,
+  get302RuntimeApiKeyByName,
   shouldRetry302DashboardWithNextKey,
   normalize302ApiKeyList,
   normalize302ApiKeyUsage,
@@ -124,6 +125,65 @@ test('dashboard management requests retry official base url after route-missing 
     'https://api.302ai.cn/dashboard/api_keys',
     'https://api.302.ai/dashboard/api_keys'
   ])
+})
+
+test('dashboard management errors expose safe request attempt diagnostics without secrets', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+
+  env.dashboard302ApiBaseUrl = 'https://api.302ai.cn'
+  env.dashboard302ApiKey = 'sk-dashboard-secret'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url) => {
+    const requestUrl = String(url)
+    if (requestUrl.startsWith('https://api.302ai.cn')) {
+      return new Response(JSON.stringify({ msg: 'Not Found' }), { status: 400 })
+    }
+    return new Response(JSON.stringify({ message: 'permission denied' }), { status: 403 })
+  }
+
+  try {
+    await assert.rejects(
+      () => get302ApiKeys(),
+      (error) => {
+        assert.equal(error.code, 'DASHBOARD_302_ERROR')
+        assert.deepEqual(error.dashboard302Attempts, [
+          {
+            method: 'GET',
+            path: '/dashboard/api_keys',
+            baseHost: 'api.302ai.cn',
+            status: 400,
+            message: 'Not Found',
+            authSource: 'dashboard'
+          },
+          {
+            method: 'GET',
+            path: '/dashboard/api_keys',
+            baseHost: 'api.302.ai',
+            status: 403,
+            message: 'permission denied',
+            authSource: 'dashboard'
+          }
+        ])
+        assert.doesNotMatch(JSON.stringify(error.dashboard302Attempts), /sk-dashboard-secret/)
+        return true
+      }
+    )
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
 })
 
 test('dashboard management requests retry provider auth after http auth failures', async () => {
@@ -492,6 +552,68 @@ test('uses camelCase runtime key returned by dashboard detail for an api name', 
     { url: 'https://api.302.ai/dashboard/api_key/eager_user_camel', auth: 'Bearer sk-dashboard' },
     { url: 'https://api.302.ai/dashboard/api-record?page=1&limit=20', auth: 'Bearer sk-runtime-camel' }
   ])
+})
+
+test('runtime key lookup can throw with safe diagnostics when requested', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+
+  env.dashboard302ApiBaseUrl = 'https://api.302.ai'
+  env.dashboard302ApiKey = 'sk-dashboard-secret'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url) => {
+    const requestUrl = String(url)
+    if (/\/dashboard\/api_key\/missing-key$/.test(requestUrl)) {
+      return new Response(JSON.stringify({ msg: 'Not Found' }), { status: 404 })
+    }
+    if (/\/dashboard\/api_keys$/.test(requestUrl)) {
+      return new Response(JSON.stringify({ code: 0, data: [] }), { status: 200 })
+    }
+    assert.fail(`Unexpected 302 mock request: ${requestUrl}`)
+  }
+
+  try {
+    await assert.rejects(
+      () => get302RuntimeApiKeyByName('missing-key', { throwOnMissing: true }),
+      (error) => {
+        assert.equal(error.code, 'DASHBOARD_302_API_KEY_NOT_FOUND')
+        assert.deepEqual(error.dashboard302Attempts, [
+          {
+            method: 'GET',
+            path: '/dashboard/api_key/missing-key',
+            baseHost: 'api.302.ai',
+            status: 404,
+            message: 'Not Found',
+            authSource: 'dashboard'
+          },
+          {
+            method: 'GET',
+            path: '/dashboard/api_key/missing-key',
+            baseHost: 'api.302ai.cn',
+            status: 404,
+            message: 'Not Found',
+            authSource: 'dashboard'
+          }
+        ])
+        assert.doesNotMatch(JSON.stringify(error.dashboard302Attempts), /sk-dashboard-secret/)
+        return true
+      }
+    )
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
 })
 
 test('normalizes dashboard record amount aliases used by 302 records', () => {

@@ -75,6 +75,9 @@ export const shouldRetry302DashboardWithNextKey = (data = {}) => {
 const getDashboardErrorMessage = (error = {}) =>
   String(error?.message || error?.msg || error?.error?.message || '').toLowerCase()
 
+const getDashboardRawErrorMessage = (error = {}) =>
+  String(error?.message || error?.msg || error?.error?.message || '').trim()
+
 const isRetryableDashboardAuthError = (error = {}) => {
   const status = Number(error?.status || 0)
   const message = getDashboardErrorMessage(error)
@@ -262,8 +265,44 @@ const request302DashboardWithBase = async (baseUrl, path, options = {}) => {
 const normalizeDashboardAuthHeaders = (authHeaders = []) =>
   [...new Set((authHeaders || []).map((item) => toBearerHeader(item)).filter(Boolean))]
 
+const getBaseHost = (baseUrl = '') => {
+  try {
+    return new URL(baseUrl).host
+  } catch {
+    return String(baseUrl || '').trim()
+  }
+}
+
+const getAuthSource = (authHeader = '', isExplicitAuth = false, index = 0) => {
+  const dashboardAuth = toBearerHeader(env.dashboard302ApiKey)
+  const providerAuth = toBearerHeader(env.providerApiKey)
+  if (dashboardAuth && authHeader === dashboardAuth) return 'dashboard'
+  if (providerAuth && authHeader === providerAuth) return 'provider'
+  return isExplicitAuth ? `explicit_${index + 1}` : 'unknown'
+}
+
+const buildDashboardAttempt = ({ method = 'GET', path = '', baseUrl = '', error = {}, authSource = '' } = {}) => ({
+  method: String(method || 'GET').toUpperCase(),
+  path: String(path || ''),
+  baseHost: getBaseHost(baseUrl),
+  status: Number(error?.status || 0) || 0,
+  message: getDashboardRawErrorMessage(error).slice(0, 160),
+  authSource: String(authSource || 'unknown')
+})
+
+const attachDashboardAttempts = (error, attempts = []) => {
+  if (error && typeof error === 'object') {
+    error.dashboard302Attempts = attempts.map((attempt) => ({ ...attempt }))
+  }
+  return error
+}
+
+const getDashboardAttempts = (error = {}) =>
+  Array.isArray(error?.dashboard302Attempts) ? error.dashboard302Attempts : []
+
 const call302Dashboard = async (path, options = {}) => {
   const { method = 'GET', params = null, body, authHeaders: explicitAuthHeaders = null } = options
+  const isExplicitAuth = Boolean(explicitAuthHeaders)
   const authHeaders = explicitAuthHeaders
     ? normalizeDashboardAuthHeaders(explicitAuthHeaders)
     : getAuthHeaders()
@@ -277,8 +316,9 @@ const call302Dashboard = async (path, options = {}) => {
   const baseUrls = getDashboardBaseUrls()
   let lastBusinessError = null
   let lastError = null
+  const attempts = []
 
-  for (const authHeader of authHeaders) {
+  for (const [authIndex, authHeader] of authHeaders.entries()) {
     for (const baseUrl of baseUrls) {
       try {
         const data = await request302DashboardWithBase(baseUrl, path, {
@@ -296,17 +336,30 @@ const call302Dashboard = async (path, options = {}) => {
 
         return assert302DashboardSuccess(data)
       } catch (error) {
+        attempts.push(buildDashboardAttempt({
+          method,
+          path,
+          baseUrl,
+          error,
+          authSource: getAuthSource(authHeader, isExplicitAuth, authIndex)
+        }))
         lastError = error
-        if (!isRetryableDashboardRequestError(error)) throw error
+        if (!isRetryableDashboardRequestError(error)) throw attachDashboardAttempts(error, attempts)
         if (baseUrl !== baseUrls[baseUrls.length - 1]) continue
         if (isRetryableDashboardAuthError(error) && authHeader !== authHeaders[authHeaders.length - 1]) break
-        throw error
+        throw attachDashboardAttempts(error, attempts)
       }
     }
   }
 
-  if (lastBusinessError) return assert302DashboardSuccess(lastBusinessError)
-  throw lastError || new HttpError(502, '302 dashboard request failed', 'DASHBOARD_302_ERROR')
+  if (lastBusinessError) {
+    try {
+      return assert302DashboardSuccess(lastBusinessError)
+    } catch (error) {
+      throw attachDashboardAttempts(error, attempts)
+    }
+  }
+  throw attachDashboardAttempts(lastError || new HttpError(502, '302 dashboard request failed', 'DASHBOARD_302_ERROR'), attempts)
 }
 
 const request302ApiKeyUsageWithBase = async (baseUrl, path, options = {}) => {
@@ -420,9 +473,10 @@ export const get302ApiKeyUsageByKey = async (apiKey) => {
   return call302ApiKeyUsage(`/gpt/api/token/usage/${encodeURIComponent(tokenId)}`, { apiKey })
 }
 
-export const get302RuntimeApiKeyByName = async (apiName) => {
+export const get302RuntimeApiKeyByName = async (apiName, options = {}) => {
   const safeName = String(apiName || '').trim()
   if (!safeName) return ''
+  const throwOnMissing = Boolean(options?.throwOnMissing)
 
   const cached = runtimeApiKeyCache.get(safeName)
   if (cached && cached.expiresAt > Date.now()) {
@@ -430,12 +484,14 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
   }
 
   let apiKey = ''
+  const attempts = []
 
   try {
     const response = await get302ApiKey(safeName)
     const payload = response?.data && typeof response.data === 'object' ? response.data : response
     apiKey = read302RuntimeApiKey(payload)
   } catch (error) {
+    attempts.push(...getDashboardAttempts(error))
     apiKey = ''
   }
 
@@ -446,11 +502,18 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
       const matched = list.find((item) => String(item?.api_name || '').trim() === safeName)
       apiKey = read302RuntimeApiKey(matched)
     } catch (error) {
+      attempts.push(...getDashboardAttempts(error))
       apiKey = ''
     }
   }
 
-  if (!apiKey) return ''
+  if (!apiKey) {
+    if (throwOnMissing) {
+      const error = new HttpError(404, `302 API key was not found for apiName ${safeName}`, 'DASHBOARD_302_API_KEY_NOT_FOUND')
+      throw attachDashboardAttempts(error, attempts)
+    }
+    return ''
+  }
 
   runtimeApiKeyCache.set(safeName, {
     apiKey,

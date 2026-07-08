@@ -11,6 +11,7 @@ test('error middleware registers async issue writes with serverless waitUntil', 
   assert.match(source, /from '@vercel\/functions'/)
   assert.match(source, /waitUntil\(queueDatabaseIssue\(err, \{[\s\S]*pathTemplate: req\.path[\s\S]*\}\)\.catch\(\(\) => \{\}\)\)/)
   assert.match(source, /waitUntil\(queueIssueEvent\(buildServerErrorIssuePayload\(err, req, status, code\)\)\.catch\(\(\) => \{\}\)\)/)
+  assert.match(source, /\.\.\.\(err\.metadata && typeof err\.metadata === 'object' \? \{ details: err\.metadata \} : \{\}\)/)
 })
 
 test('error middleware reports Zod validation errors as bad requests', () => {

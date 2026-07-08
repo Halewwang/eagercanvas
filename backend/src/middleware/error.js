@@ -24,7 +24,8 @@ export const buildServerErrorIssuePayload = (err, req, status, code) => ({
   stack_summary: err.stack || '',
   metadata: {
     error_name: err.name || 'Error',
-    error_code: err.code || ''
+    error_code: err.code || '',
+    ...(err.metadata && typeof err.metadata === 'object' ? { details: err.metadata } : {})
   }
 })
 

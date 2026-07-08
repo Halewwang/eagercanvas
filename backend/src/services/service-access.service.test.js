@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   buildProviderApiName,
+  createUserServiceCredential,
   formatServiceCredentialForAdmin,
   getUserServiceStatus,
   resolveActiveUserServiceCredential
@@ -190,4 +191,231 @@ test('resolveActiveUserServiceCredential prefers the active credential over newe
     apiKey: 'sk-active'
   })
   assert.ok(calls.some((call) => call[0] === 'eq' && call[1] === 'status' && call[2] === 'active'))
+})
+
+test('createUserServiceCredential stores failed state when created api name cannot resolve a runtime key', async () => {
+  const inserts = []
+  const fakeSupabase = {
+    from(table) {
+      const filters = []
+      return {
+        select() { return this },
+        eq(column, value) {
+          filters.push([column, value])
+          return this
+        },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => {
+          if (table === 'users') return { data: { id: 'user-1', status: 'active' }, error: null }
+          return { data: null, error: null }
+        },
+        insert: (payload) => {
+          inserts.push({ table, payload })
+          return {
+            select() { return this },
+            single: async () => ({ data: { id: 'inserted', ...payload }, error: null })
+          }
+        }
+      }
+    }
+  }
+
+  await assert.rejects(
+    () => createUserServiceCredential({
+      userId: 'user-1',
+      operatorUserId: 'admin-1'
+    }, {
+      supabaseClient: fakeSupabase,
+      createProviderApiKey: async () => ({
+        data: { api_name: 'eager_user_user1' }
+      }),
+      getRuntimeApiKeyByName: async (apiName) => {
+        assert.equal(apiName, 'eager_user_user1')
+        return ''
+      }
+    }),
+    (error) => {
+      assert.equal(error.status, 502)
+      assert.equal(error.code, 'SERVICE_ACCESS_CREATE_FAILED')
+      return true
+    }
+  )
+
+  const credentialInsert = inserts.find((item) => item.table === 'user_service_credentials')
+  assert.equal(credentialInsert.payload.status, 'create_failed')
+  assert.equal(credentialInsert.payload.provider_api_name, 'eager_user_user1')
+  assert.match(credentialInsert.payload.last_error, /runtime API key/i)
+  assert.equal(inserts.some((item) => item.table === 'admin_operation_logs'), false)
+})
+
+test('createUserServiceCredential restores a failed credential when its runtime key becomes available', async () => {
+  const updates = []
+  let createProviderCalls = 0
+  const failedCredential = {
+    id: 'cred-failed',
+    user_id: 'user-1',
+    provider_api_name: 'eager_user_user1',
+    status: 'create_failed',
+    limit_cost: 0,
+    limit_daily_cost: 0,
+    expired_on: 0,
+    created_at: '2026-07-08T00:00:00.000Z',
+    last_error: 'Not Found'
+  }
+  const fakeSupabase = {
+    from(table) {
+      const filters = []
+      let updatePayload = null
+      return {
+        select() { return this },
+        eq(column, value) {
+          filters.push([column, value])
+          return this
+        },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => {
+          if (table === 'users') return { data: { id: 'user-1', status: 'active' }, error: null }
+          return { data: null, error: null }
+        },
+        then(resolve, reject) {
+          if (table === 'user_service_credentials') return Promise.resolve({ data: [failedCredential], error: null }).then(resolve, reject)
+          return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+        },
+        update(payload) {
+          updatePayload = payload
+          updates.push({ table, payload })
+          return this
+        },
+        single: async () => ({
+          data: {
+            ...failedCredential,
+            ...updatePayload
+          },
+          error: null
+        }),
+        insert: (payload) => {
+          updates.push({ table, insert: payload })
+          return {
+            select() { return this },
+            single: async () => ({ data: { id: 'log-1', ...payload }, error: null })
+          }
+        }
+      }
+    }
+  }
+
+  const result = await createUserServiceCredential({
+    userId: 'user-1',
+    operatorUserId: 'admin-1'
+  }, {
+    supabaseClient: fakeSupabase,
+    createProviderApiKey: async () => {
+      createProviderCalls += 1
+      throw new Error('new key should not be created')
+    },
+    getRuntimeApiKeyByName: async (apiName) => {
+      assert.equal(apiName, 'eager_user_user1')
+      return 'sk-restored'
+    }
+  })
+
+  assert.equal(createProviderCalls, 0)
+  assert.equal(result.serviceCredential.serviceStatus, 'active')
+  assert.equal(result.serviceCredential.apiKeyLast4, 'ored')
+  assert.ok(updates.some((item) => item.table === 'user_service_credentials' && item.payload.status === 'active'))
+})
+
+test('resolveActiveUserServiceCredential records last_error when active runtime key lookup fails', async () => {
+  const updates = []
+  const fakeSupabase = {
+    from(table) {
+      const filters = []
+      let updatePayload = null
+      return {
+        select() { return this },
+        eq(column, value) {
+          filters.push([column, value])
+          return this
+        },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => ({
+          data: filters.some(([column, value]) => column === 'status' && value === 'active')
+            ? {
+                id: 'cred-active',
+                user_id: 'user-1',
+                provider_api_name: 'eager_user_active',
+                status: 'active'
+              }
+            : null,
+          error: null
+        }),
+        update(payload) {
+          updatePayload = payload
+          updates.push({ table, payload })
+          return this
+        },
+        single: async () => ({ data: updatePayload, error: null })
+      }
+    }
+  }
+
+  await assert.rejects(
+    () => resolveActiveUserServiceCredential('user-1', {
+      supabaseClient: fakeSupabase,
+      getRuntimeApiKeyByName: async (apiName) => {
+        assert.equal(apiName, 'eager_user_active')
+        return ''
+      }
+    }),
+    (error) => {
+      assert.equal(error.status, 503)
+      assert.equal(error.code, 'SERVICE_CREDENTIAL_UNAVAILABLE')
+      return true
+    }
+  )
+
+  assert.deepEqual(updates, [
+    {
+      table: 'user_service_credentials',
+      payload: {
+        last_error: 'Runtime API key is unavailable for provider_api_name eager_user_active'
+      }
+    }
+  ])
+})
+
+test('resolveActiveUserServiceCredential ignores legacy api assignments when no active service credential exists', async () => {
+  const queriedTables = []
+  const fakeSupabase = {
+    from(table) {
+      queriedTables.push(table)
+      if (table === 'user_api_key_assignments') throw new Error('assignments must not be used for service access')
+      return {
+        select() { return this },
+        eq() { return this },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => ({ data: null, error: null })
+      }
+    }
+  }
+
+  await assert.rejects(
+    () => resolveActiveUserServiceCredential('user-1', {
+      supabaseClient: fakeSupabase,
+      getRuntimeApiKeyByName: async () => {
+        throw new Error('runtime lookup should not run without active service credential')
+      }
+    }),
+    (error) => {
+      assert.equal(error.status, 403)
+      assert.equal(error.code, 'SERVICE_NOT_ENABLED')
+      return true
+    }
+  )
+
+  assert.deepEqual(queriedTables, ['user_service_credentials', 'user_service_credentials'])
 })

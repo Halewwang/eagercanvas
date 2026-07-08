@@ -19,6 +19,30 @@ const last4 = (value = '') => {
   return raw ? raw.slice(-4) : ''
 }
 
+const runtimeUnavailableMessage = (providerApiName = '') =>
+  `Runtime API key is unavailable for provider_api_name ${String(providerApiName || '').trim()}`
+
+const summarizeDashboardAttempts = (attempts = []) => {
+  const list = Array.isArray(attempts) ? attempts : []
+  if (!list.length) return ''
+  return list
+    .map((attempt) => [
+      attempt.method,
+      attempt.path,
+      attempt.baseHost,
+      attempt.status,
+      attempt.message,
+      attempt.authSource ? `via ${attempt.authSource}` : ''
+    ].filter((item) => item !== undefined && item !== null && String(item).trim() !== '').join(' '))
+    .join('; ')
+}
+
+const summarizeCredentialFailure = (error = {}, fallback = 'Service credential creation failed') => {
+  const base = String(error?.message || fallback).trim() || fallback
+  const attempts = summarizeDashboardAttempts(error?.dashboard302Attempts)
+  return (attempts ? `${base} | attempts: ${attempts}` : base).slice(0, 500)
+}
+
 const serviceLabelMap = {
   not_enabled: '未开通',
   active: '已开通',
@@ -148,6 +172,44 @@ const normalizeProviderCreateResult = (result = {}, providerApiName = '') => {
   }
 }
 
+const activateExistingCredential = async (client, credential, apiKey, operatorUserId, ip, userAgent, metadata = {}) => {
+  const { data, error } = await client
+    .from(CREDENTIAL_TABLE)
+    .update({
+      status: 'active',
+      api_key_last4: last4(apiKey),
+      disabled_at: null,
+      deleted_at: null,
+      last_error: null
+    })
+    .eq('id', credential.id)
+    .select('*')
+    .single()
+  if (error) throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_UPDATE_FAILED')
+
+  await createAdminLog(client, {
+    operatorUserId,
+    targetUserId: credential.user_id,
+    action: 'admin.service_access.activate',
+    metadata: {
+      serviceIdentifier: maskServiceIdentifier(data.provider_api_name),
+      ip: String(ip || ''),
+      userAgent: String(userAgent || ''),
+      ...metadata
+    }
+  })
+
+  return { ok: true, serviceCredential: formatServiceCredentialForAdmin(data) }
+}
+
+const updateCredentialLastError = async (client, credentialId, message) => {
+  if (!credentialId) return
+  await client
+    .from(CREDENTIAL_TABLE)
+    .update({ last_error: String(message || '').slice(0, 500) })
+    .eq('id', credentialId)
+}
+
 export const getUserServiceStatus = async (userId, deps = {}) => {
   const client = deps.supabaseClient || supabase
   const safeUserId = String(userId || '').trim()
@@ -178,6 +240,7 @@ export const createUserServiceCredential = async ({
 }, deps = {}) => {
   const client = deps.supabaseClient || supabase
   const createProviderApiKey = deps.createProviderApiKey || create302ApiKey
+  const getRuntimeApiKeyByName = deps.getRuntimeApiKeyByName || get302RuntimeApiKeyByName
   const safeUserId = String(userId || '').trim()
   if (!safeUserId) throw new HttpError(400, 'userId is required', 'INVALID_USER_ID')
 
@@ -192,7 +255,16 @@ export const createUserServiceCredential = async ({
     }
   }
 
+  const failed = credentials.find((item) => String(item.status || '') === 'create_failed' && String(item.provider_api_name || '').trim())
+  if (failed) {
+    const restoredApiKey = await getRuntimeApiKeyByName(failed.provider_api_name)
+    if (restoredApiKey) {
+      return activateExistingCredential(client, failed, restoredApiKey, operatorUserId, ip, userAgent, { restored: true })
+    }
+  }
+
   const providerApiName = buildUniqueProviderApiName(safeUserId, credentials)
+  let attemptedProviderApiName = providerApiName
   const payload = {
     api_name: providerApiName,
     allow_save_logs: true,
@@ -206,21 +278,31 @@ export const createUserServiceCredential = async ({
   let created
   try {
     created = normalizeProviderCreateResult(await createProviderApiKey(payload), providerApiName)
+    attemptedProviderApiName = created.providerApiName || providerApiName
+    const runtimeApiKey = await getRuntimeApiKeyByName(attemptedProviderApiName, { throwOnMissing: true })
+    if (!runtimeApiKey) {
+      throw new Error(runtimeUnavailableMessage(attemptedProviderApiName))
+    }
   } catch (error) {
     const failed = {
       user_id: safeUserId,
       provider: '302ai',
-      internal_name: buildInternalName(providerApiName),
-      provider_api_name: providerApiName,
+      internal_name: buildInternalName(attemptedProviderApiName),
+      provider_api_name: attemptedProviderApiName,
       status: 'create_failed',
       limit_cost: Number(limitCost || 0),
       limit_daily_cost: Number(limitDailyCost || 0),
       expired_on: Number(expiredOn || 0),
       created_by: operatorUserId || null,
-      last_error: String(error?.message || 'Service credential creation failed').slice(0, 500)
+      last_error: summarizeCredentialFailure(error)
     }
     await client.from(CREDENTIAL_TABLE).insert(failed)
-    throw new HttpError(502, '服务开通失败，请稍后重试。', 'SERVICE_ACCESS_CREATE_FAILED')
+    const serviceError = new HttpError(502, '服务开通失败，请稍后重试。', 'SERVICE_ACCESS_CREATE_FAILED')
+    serviceError.metadata = {
+      providerApiName: maskServiceIdentifier(attemptedProviderApiName),
+      failure: failed.last_error
+    }
+    throw serviceError
   }
 
   const insertPayload = {
@@ -301,7 +383,14 @@ export const resolveActiveUserServiceCredential = async (userId, deps = {}) => {
 
   const apiKey = await getRuntimeApiKeyByName(data.provider_api_name)
   if (!apiKey) {
-    throw new HttpError(503, '服务凭证暂时不可用，请联系管理员。', 'SERVICE_CREDENTIAL_UNAVAILABLE')
+    const message = runtimeUnavailableMessage(data.provider_api_name)
+    await updateCredentialLastError(client, data.id, message)
+    const error = new HttpError(503, '服务凭证暂时不可用，请联系管理员。', 'SERVICE_CREDENTIAL_UNAVAILABLE')
+    error.metadata = {
+      providerApiName: maskServiceIdentifier(data.provider_api_name),
+      failure: message
+    }
+    throw error
   }
 
   return {
