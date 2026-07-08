@@ -5,6 +5,7 @@ import {
   resolveDashboard302BaseUrl,
   assert302DashboardSuccess,
   buildDashboard302AuthHeaders,
+  create302ApiKey,
   get302ApiRecordsForApiName,
   get302ApiKeys,
   get302ApiKeyUsageByKey,
@@ -228,6 +229,51 @@ test('dashboard management requests retry provider auth after http auth failures
     { url: 'https://api.302.ai/dashboard/balance', auth: 'Bearer sk-dashboard' },
     { url: 'https://api.302ai.cn/dashboard/balance', auth: 'Bearer sk-dashboard' },
     { url: 'https://api.302.ai/dashboard/balance', auth: 'Bearer sk-provider' }
+  ])
+})
+
+test('dashboard management requests retry provider auth after dashboard not-found business responses', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const attempts = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302.ai'
+  env.dashboard302ApiKey = 'sk-dashboard-invalid'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = 'sk-provider-system'
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url, options = {}) => {
+    attempts.push({
+      url: String(url),
+      auth: options.headers?.Authorization
+    })
+    if (options.headers?.Authorization === 'Bearer sk-dashboard-invalid') {
+      return new Response(JSON.stringify({ code: -1, msg: 'Not Found', data: {} }), { status: 200 })
+    }
+    return new Response(JSON.stringify({ code: 0, msg: 'success', data: { api_name: 'eager_user_created' } }), { status: 200 })
+  }
+
+  try {
+    const result = await create302ApiKey({ api_name: 'eager_user_created' })
+    assert.deepEqual(result, { code: 0, msg: 'success', data: { api_name: 'eager_user_created' } })
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(attempts, [
+    { url: 'https://api.302.ai/dashboard/api_key', auth: 'Bearer sk-dashboard-invalid' },
+    { url: 'https://api.302ai.cn/dashboard/api_key', auth: 'Bearer sk-dashboard-invalid' },
+    { url: 'https://api.302.ai/dashboard/api_key', auth: 'Bearer sk-provider-system' }
   ])
 })
 

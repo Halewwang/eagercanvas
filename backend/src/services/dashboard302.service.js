@@ -81,7 +81,7 @@ const getDashboardRawErrorMessage = (error = {}) =>
 const isRetryableDashboardAuthError = (error = {}) => {
   const status = Number(error?.status || 0)
   const message = getDashboardErrorMessage(error)
-  return [400, 401, 403].includes(status) && /key|api key|密钥|权限|不存在|invalid|disabled|permission|unauthorized|forbidden/.test(message)
+  return [400, 401, 403].includes(status) && /key|api key|密钥|权限|不存在|not\s*found|invalid|disabled|permission|unauthorized|forbidden/.test(message)
 }
 
 const getAuthHeaders = () => {
