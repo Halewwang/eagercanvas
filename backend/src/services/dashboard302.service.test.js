@@ -6,6 +6,7 @@ import {
   assert302DashboardSuccess,
   buildDashboard302AuthHeaders,
   get302ApiRecordsForApiName,
+  get302ApiKeys,
   get302ApiKeyUsageByKey,
   get302Balance,
   shouldRetry302DashboardWithNextKey,
@@ -77,6 +78,51 @@ test('dashboard management requests retry provider base url fallbacks after netw
   assert.deepEqual(requests, [
     'https://api.302ai.cn/dashboard/balance',
     'https://api.302.ai/dashboard/balance'
+  ])
+})
+
+test('dashboard management requests retry official base url after route-missing dashboard responses', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const requests = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302ai.cn'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url) => {
+    const requestUrl = String(url)
+    requests.push(requestUrl)
+    if (requestUrl.startsWith('https://api.302ai.cn')) {
+      return new Response(JSON.stringify({ msg: 'Not Found' }), { status: 400 })
+    }
+    return new Response(JSON.stringify({
+      code: 0,
+      data: [{ api_name: 'eager_user_one', api_key: 'sk-runtime-one' }]
+    }), { status: 200 })
+  }
+
+  try {
+    const result = await get302ApiKeys()
+    assert.deepEqual(normalize302ApiKeyList(result).map((item) => item.api_name), ['eager_user_one'])
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(requests, [
+    'https://api.302ai.cn/dashboard/api_keys',
+    'https://api.302.ai/dashboard/api_keys'
   ])
 })
 

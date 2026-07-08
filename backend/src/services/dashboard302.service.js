@@ -105,8 +105,10 @@ const parseResponse = async (response) => {
 
 const isRetryableDashboardRequestError = (error) => {
   const status = Number(error?.status || 0)
+  const message = getDashboardErrorMessage(error)
   return error?.name === 'AbortError' ||
     !status ||
+    (status === 400 && /not\s*found/.test(message)) ||
     status === 404 ||
     status === 405 ||
     status === 429 ||
