@@ -375,6 +375,79 @@ test('queries api-record logs with the matched runtime key for an api name', asy
   ])
 })
 
+test('uses camelCase runtime key returned by dashboard detail for an api name', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const attempts = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302.ai'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url)
+    attempts.push({
+      url: requestUrl,
+      auth: options.headers?.Authorization
+    })
+
+    if (/\/dashboard\/api_key\/eager_user_camel$/.test(requestUrl)) {
+      return new Response(JSON.stringify({
+        code: 0,
+        data: {
+          api_name: 'eager_user_camel',
+          apiKey: 'sk-runtime-camel'
+        }
+      }), { status: 200 })
+    }
+
+    if (/\/dashboard\/api_keys$/.test(requestUrl)) {
+      return new Response(JSON.stringify({
+        code: 0,
+        data: [
+          {
+            api_name: 'eager_user_camel',
+            apiKey: 'sk-runtime-camel'
+          }
+        ]
+      }), { status: 200 })
+    }
+
+    if (/\/dashboard\/api-record\?page=1&limit=20/.test(requestUrl)) {
+      return new Response(JSON.stringify({
+        items: [{ request_id: 'req-camel', cost: 2.5 }],
+        pagination: { total_page: 1, cur_page: 1, limit: 20 }
+      }), { status: 200 })
+    }
+
+    assert.fail(`Unexpected 302 mock request: ${requestUrl}`)
+  }
+
+  try {
+    const result = await get302ApiRecordsForApiName('eager_user_camel', { page: 1, limit: 20 })
+    const normalized = normalize302ApiRecordList(result)
+    assert.deepEqual(normalized.items.map((item) => item.request_id), ['req-camel'])
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(attempts, [
+    { url: 'https://api.302.ai/dashboard/api_key/eager_user_camel', auth: 'Bearer sk-dashboard' },
+    { url: 'https://api.302.ai/dashboard/api-record?page=1&limit=20', auth: 'Bearer sk-runtime-camel' }
+  ])
+})
+
 test('normalizes dashboard record amount aliases used by 302 records', () => {
   const record = normalizeDashboardRecord({
     model_name: 'gpt-test',

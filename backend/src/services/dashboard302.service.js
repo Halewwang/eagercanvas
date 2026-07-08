@@ -202,6 +202,9 @@ const get302ApiKeyAuthHeader = (apiKey = '') => {
   }
 }
 
+const read302RuntimeApiKey = (item = {}) =>
+  String(item?.api_key || item?.apiKey || item?.key || '').trim()
+
 const runtimeApiKeyCache = new Map()
 const RUNTIME_API_KEY_TTL_MS = 60 * 1000
 
@@ -429,7 +432,7 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
   try {
     const response = await get302ApiKey(safeName)
     const payload = response?.data && typeof response.data === 'object' ? response.data : response
-    apiKey = String(payload?.api_key || payload?.key || '').trim()
+    apiKey = read302RuntimeApiKey(payload)
   } catch (error) {
     apiKey = ''
   }
@@ -439,7 +442,7 @@ export const get302RuntimeApiKeyByName = async (apiName) => {
       const response = await get302ApiKeys()
       const list = normalize302ApiKeyList(response)
       const matched = list.find((item) => String(item?.api_name || '').trim() === safeName)
-      apiKey = String(matched?.api_key || matched?.key || '').trim()
+      apiKey = read302RuntimeApiKey(matched)
     } catch (error) {
       apiKey = ''
     }
