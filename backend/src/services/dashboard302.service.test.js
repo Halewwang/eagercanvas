@@ -666,6 +666,123 @@ test('uses camelCase runtime key returned by dashboard detail for an api name', 
   ])
 })
 
+test('runtime key lookup uses and caches a created-key fallback while dashboard detail lags', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const attempts = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302.ai'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url)
+    attempts.push({
+      url: requestUrl,
+      auth: options.headers?.Authorization
+    })
+
+    if (/\/dashboard\/api_key\/eager_user_created_fallback$/.test(requestUrl)) {
+      return new Response(JSON.stringify({ msg: 'Not Found' }), { status: 404 })
+    }
+
+    if (/\/dashboard\/api_keys$/.test(requestUrl)) {
+      return new Response(JSON.stringify({ code: 0, data: [] }), { status: 200 })
+    }
+
+    assert.fail(`Unexpected 302 mock request: ${requestUrl}`)
+  }
+
+  try {
+    const first = await get302RuntimeApiKeyByName('eager_user_created_fallback', {
+      throwOnMissing: true,
+      fallbackApiKey: 'sk-created-fallback'
+    })
+    const second = await get302RuntimeApiKeyByName('eager_user_created_fallback', { throwOnMissing: true })
+
+    assert.equal(first, 'sk-created-fallback')
+    assert.equal(second, 'sk-created-fallback')
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(attempts, [
+    { url: 'https://api.302.ai/dashboard/api_key/eager_user_created_fallback', auth: 'Bearer sk-dashboard' },
+    { url: 'https://api.302ai.cn/dashboard/api_key/eager_user_created_fallback', auth: 'Bearer sk-dashboard' },
+    { url: 'https://api.302.ai/dashboard/api_keys', auth: 'Bearer sk-dashboard' }
+  ])
+})
+
+test('runtime key lookup matches camelCase api names from the dashboard list fallback', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const attempts = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302.ai'
+  env.dashboard302ApiKey = 'sk-dashboard'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = ''
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url)
+    attempts.push({
+      url: requestUrl,
+      auth: options.headers?.Authorization
+    })
+
+    if (/\/dashboard\/api_key\/eager_user_list_camel$/.test(requestUrl)) {
+      return new Response(JSON.stringify({ code: 0, data: { apiName: 'eager_user_list_camel' } }), { status: 200 })
+    }
+
+    if (/\/dashboard\/api_keys$/.test(requestUrl)) {
+      return new Response(JSON.stringify({
+        code: 0,
+        data: [
+          {
+            apiName: 'eager_user_list_camel',
+            apiKey: 'sk-list-camel'
+          }
+        ]
+      }), { status: 200 })
+    }
+
+    assert.fail(`Unexpected 302 mock request: ${requestUrl}`)
+  }
+
+  try {
+    const result = await get302RuntimeApiKeyByName('eager_user_list_camel', { throwOnMissing: true })
+    assert.equal(result, 'sk-list-camel')
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(attempts, [
+    { url: 'https://api.302.ai/dashboard/api_key/eager_user_list_camel', auth: 'Bearer sk-dashboard' },
+    { url: 'https://api.302.ai/dashboard/api_keys', auth: 'Bearer sk-dashboard' }
+  ])
+})
+
 test('runtime key lookup can throw with safe diagnostics when requested', async () => {
   const originalFetch = global.fetch
   const originalEnv = {

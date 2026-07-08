@@ -123,3 +123,13 @@ test('admin section navigation composable is exported for the admin page contain
   assert.match(navigationHookSource, /getAdminSectionScrollCandidate/)
   assert.match(navigationHookSource, /shouldRouteOwnAdminActiveSection/)
 })
+
+test('admin section navigation requests scoped dashboard data for the target section', () => {
+  assert.match(navigationHookSource, /loadAll\(\{ sectionKey: key \}\)/)
+  assert.match(navigationHookSource, /loadAll\(\{ sectionKey: preferredSection \|\| 'overview' \}\)/)
+})
+
+test('admin section navigation avoids duplicate scoped loads during route handoff', () => {
+  assert.match(navigationHookSource, /shouldDeferToRouteWatcher/)
+  assert.match(navigationHookSource, /if \(loadData && !shouldDeferToRouteWatcher\) void loadAll\(\{ sectionKey: key \}\)/)
+})

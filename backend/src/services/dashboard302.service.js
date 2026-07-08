@@ -216,8 +216,22 @@ const get302ApiKeyAuthHeader = (apiKey = '') => {
 const read302RuntimeApiKey = (item = {}) =>
   String(item?.api_key || item?.apiKey || item?.key || '').trim()
 
+const read302ApiName = (item = {}) =>
+  String(item?.api_name || item?.apiName || item?.name || '').trim()
+
 const runtimeApiKeyCache = new Map()
 const RUNTIME_API_KEY_TTL_MS = 60 * 1000
+
+const writeRuntimeApiKeyCache = (apiName = '', apiKey = '') => {
+  const safeName = String(apiName || '').trim()
+  const safeKey = String(apiKey || '').trim()
+  if (!safeName || !safeKey) return ''
+  runtimeApiKeyCache.set(safeName, {
+    apiKey: safeKey,
+    expiresAt: Date.now() + RUNTIME_API_KEY_TTL_MS
+  })
+  return safeKey
+}
 
 const getDashboardBaseUrls = () =>
   resolveDashboard302BaseUrls(env.dashboard302ApiBaseUrl, env.providerApiBaseUrl, env.providerApiBaseUrls)
@@ -495,6 +509,7 @@ export const get302RuntimeApiKeyByName = async (apiName, options = {}) => {
   const safeName = String(apiName || '').trim()
   if (!safeName) return ''
   const throwOnMissing = Boolean(options?.throwOnMissing)
+  const fallbackApiKey = String(options?.fallbackApiKey || '').trim()
 
   const cached = runtimeApiKeyCache.get(safeName)
   if (cached && cached.expiresAt > Date.now()) {
@@ -517,12 +532,16 @@ export const get302RuntimeApiKeyByName = async (apiName, options = {}) => {
     try {
       const response = await get302ApiKeys()
       const list = normalize302ApiKeyList(response)
-      const matched = list.find((item) => String(item?.api_name || '').trim() === safeName)
+      const matched = list.find((item) => read302ApiName(item) === safeName)
       apiKey = read302RuntimeApiKey(matched)
     } catch (error) {
       attempts.push(...getDashboardAttempts(error))
       apiKey = ''
     }
+  }
+
+  if (!apiKey && fallbackApiKey) {
+    apiKey = fallbackApiKey
   }
 
   if (!apiKey) {
@@ -533,11 +552,7 @@ export const get302RuntimeApiKeyByName = async (apiName, options = {}) => {
     return ''
   }
 
-  runtimeApiKeyCache.set(safeName, {
-    apiKey,
-    expiresAt: Date.now() + RUNTIME_API_KEY_TTL_MS
-  })
-  return apiKey
+  return writeRuntimeApiKeyCache(safeName, apiKey)
 }
 
 export const get302ApiRecordsForApiName = async (apiName, query = {}) => {

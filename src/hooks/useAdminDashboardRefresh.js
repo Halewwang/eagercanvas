@@ -1,4 +1,8 @@
 import { computed } from 'vue'
+import {
+  getAdminDashboardRefreshLoaderKeys,
+  getAdminDashboardSessionOptions
+} from './useAdminDashboardRefreshCore.js'
 
 export const useAdminDashboardRefresh = ({
   auth,
@@ -27,9 +31,9 @@ export const useAdminDashboardRefresh = ({
     loadingIssues.value
   ))
 
-  const loadAll = async () => {
+  const loadAll = async (options = {}) => {
     const isLocalPreview = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
-    const allowed = await auth.loadAdminSession({ force: true })
+    const allowed = await auth.loadAdminSession(getAdminDashboardSessionOptions(options))
     if (!allowed) {
       if (isLocalPreview) return
       router.replace('/')
@@ -37,13 +41,22 @@ export const useAdminDashboardRefresh = ({
     }
     if (isLocalPreview) return
 
-    await Promise.all([
-      canReadUsage.value && loadUsage(),
-      canReadUsers.value && loadUsers(),
-      showServiceSection.value && load302All(),
-      canReadAudit.value && loadLogs(),
-      canReadIssues.value && loadIssues()
-    ].filter(Boolean))
+    const loaders = {
+      audit: loadLogs,
+      issues: loadIssues,
+      service: load302All,
+      usage: loadUsage,
+      users: loadUsers
+    }
+    const loaderKeys = getAdminDashboardRefreshLoaderKeys({
+      sectionKey: options.sectionKey || 'overview',
+      canReadAudit: canReadAudit.value,
+      canReadIssues: canReadIssues.value,
+      canReadUsage: canReadUsage.value,
+      canReadUsers: canReadUsers.value,
+      showServiceSection: showServiceSection.value
+    })
+    await Promise.all(loaderKeys.map((key) => loaders[key]()).filter(Boolean))
   }
 
   return {

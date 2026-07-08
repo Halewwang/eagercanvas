@@ -300,6 +300,63 @@ test('createUserServiceCredential stores active key last4 from resolved runtime 
   assert.equal(result.serviceCredential.apiKeyLast4, 'abcd')
 })
 
+test('createUserServiceCredential falls back to the created runtime key while dashboard detail lags', async () => {
+  const inserts = []
+  const fakeSupabase = {
+    from(table) {
+      return {
+        select() { return this },
+        eq() { return this },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => {
+          if (table === 'users') return { data: { id: 'user-1', status: 'active' }, error: null }
+          return { data: null, error: null }
+        },
+        then(resolve, reject) {
+          if (table === 'user_service_credentials') return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+          return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+        },
+        insert: (payload) => {
+          inserts.push({ table, payload })
+          return {
+            select() { return this },
+            single: async () => ({ data: { id: `${table}-inserted`, ...payload }, error: null })
+          }
+        }
+      }
+    }
+  }
+
+  const result = await createUserServiceCredential({
+    userId: 'user-1',
+    operatorUserId: 'admin-1'
+  }, {
+    supabaseClient: fakeSupabase,
+    createProviderApiKey: async () => ({
+      code: 0,
+      msg: 'success',
+      data: {
+        api_name: 'eager_user_user1',
+        api_key: 'sk-created-wxyz'
+      }
+    }),
+    getRuntimeApiKeyByName: async (apiName, options = {}) => {
+      assert.equal(apiName, 'eager_user_user1')
+      assert.equal(options.throwOnMissing, false)
+      assert.equal(options.fallbackApiKey, 'sk-created-wxyz')
+      throw new Error('dashboard detail is not ready yet')
+    }
+  })
+
+  const credentialInsert = inserts.find((item) => item.table === 'user_service_credentials')
+  assert.equal(credentialInsert.payload.status, 'active')
+  assert.equal(credentialInsert.payload.api_key_last4, 'wxyz')
+  assert.equal(result.serviceCredential.serviceStatus, 'active')
+  assert.equal(result.serviceCredential.apiKeyLast4, 'wxyz')
+  assert.equal(inserts.some((item) => item.table === 'user_service_credentials' && item.payload.status === 'create_failed'), false)
+})
+
 test('createUserServiceCredential restores a failed credential when its runtime key becomes available', async () => {
   const updates = []
   let createProviderCalls = 0

@@ -172,6 +172,20 @@ const normalizeProviderCreateResult = (result = {}, providerApiName = '') => {
   }
 }
 
+const resolveCreatedRuntimeApiKey = async (getRuntimeApiKeyByName, providerApiName, createdApiKey = '') => {
+  const fallbackApiKey = String(createdApiKey || '').trim()
+  try {
+    const runtimeApiKey = await getRuntimeApiKeyByName(providerApiName, {
+      throwOnMissing: !fallbackApiKey,
+      ...(fallbackApiKey ? { fallbackApiKey } : {})
+    })
+    return runtimeApiKey || fallbackApiKey
+  } catch (error) {
+    if (fallbackApiKey) return fallbackApiKey
+    throw error
+  }
+}
+
 const activateExistingCredential = async (client, credential, apiKey, operatorUserId, ip, userAgent, metadata = {}) => {
   const { data, error } = await client
     .from(CREDENTIAL_TABLE)
@@ -280,7 +294,7 @@ export const createUserServiceCredential = async ({
   try {
     created = normalizeProviderCreateResult(await createProviderApiKey(payload), providerApiName)
     attemptedProviderApiName = created.providerApiName || providerApiName
-    runtimeApiKey = await getRuntimeApiKeyByName(attemptedProviderApiName, { throwOnMissing: true })
+    runtimeApiKey = await resolveCreatedRuntimeApiKey(getRuntimeApiKeyByName, attemptedProviderApiName, created.apiKey)
     if (!runtimeApiKey) {
       throw new Error(runtimeUnavailableMessage(attemptedProviderApiName))
     }

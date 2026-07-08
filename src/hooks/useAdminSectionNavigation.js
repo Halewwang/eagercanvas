@@ -45,12 +45,14 @@ export const useAdminSectionNavigation = ({
     return navItems.value.some((item) => item.key === preferredSection) ? preferredSection : ''
   }
 
-  const scrollToSection = (key, { updateRoute = true } = {}) => {
+  const scrollToSection = (key, { updateRoute = true, loadData = true } = {}) => {
     activeSection.value = key
+    const routeName = ADMIN_ROUTE_NAME_BY_SECTION[key]
+    const shouldDeferToRouteWatcher = updateRoute && routeName && route.name !== routeName
+    if (loadData && !shouldDeferToRouteWatcher) void loadAll({ sectionKey: key })
     if (updateRoute) {
-      const name = ADMIN_ROUTE_NAME_BY_SECTION[key]
-      if (name && route.name !== name) {
-        router.replace({ name })
+      if (routeName && route.name !== routeName) {
+        router.replace({ name: routeName })
       }
     }
     const el = getSectionEl(key)
@@ -73,13 +75,13 @@ export const useAdminSectionNavigation = ({
   }, { immediate: true })
 
   onMounted(async () => {
-    await loadAll()
+    const preferredSection = getPreferredRouteSection() || 'overview'
+    await loadAll({ sectionKey: preferredSection || 'overview' })
     await nextTick()
     activeScrollTarget = resolveAdminScrollTarget({ scrollTarget, windowTarget }) || windowTarget
-    const preferredSection = ADMIN_SECTION_BY_ROUTE_NAME[route.name] || 'overview'
     if (navItems.value.some((item) => item.key === preferredSection)) {
       if (shouldAutoScrollAdminSection({ routeName: route.name, sectionKey: preferredSection })) {
-        scrollToSection(preferredSection, { updateRoute: false })
+        scrollToSection(preferredSection, { updateRoute: false, loadData: false })
       } else {
         activeSection.value = preferredSection
         onMainScroll()
@@ -95,10 +97,13 @@ export const useAdminSectionNavigation = ({
 
   watch(() => route.name, async (name) => {
     const preferredSection = ADMIN_SECTION_BY_ROUTE_NAME[name] || 'overview'
+    if (navItems.value.some((item) => item.key === preferredSection)) {
+      await loadAll({ sectionKey: preferredSection })
+    }
     await nextTick()
     if (navItems.value.some((item) => item.key === preferredSection)) {
       if (shouldAutoScrollAdminSection({ routeName: name, sectionKey: preferredSection })) {
-        scrollToSection(preferredSection, { updateRoute: false })
+        scrollToSection(preferredSection, { updateRoute: false, loadData: false })
       } else {
         activeSection.value = preferredSection
       }
