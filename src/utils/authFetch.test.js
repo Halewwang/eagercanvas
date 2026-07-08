@@ -74,3 +74,45 @@ test('fetchWithAuth reads token from injected storage and calls injected fetch',
     credentials: 'include'
   })
 })
+
+test('fetchWithAuth refreshes an expired access token once and retries the original request', async () => {
+  const values = new Map([['ec_access_token', 'expired-token']])
+  const calls = []
+  const storage = {
+    getItem(key) {
+      return values.get(key) || ''
+    },
+    setItem(key, value) {
+      values.set(key, value)
+    },
+    removeItem(key) {
+      values.delete(key)
+    }
+  }
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options })
+    if (calls.length === 1) {
+      assert.equal(url, 'https://api.test/api/v1/chat/completions')
+      assert.equal(options.headers.Authorization, 'Bearer expired-token')
+      return new Response(JSON.stringify({ message: 'Invalid or expired access token' }), { status: 401 })
+    }
+    if (calls.length === 2) {
+      assert.equal(url, 'https://api.test/api/v1/auth/refresh')
+      assert.equal(options.method, 'POST')
+      return new Response(JSON.stringify({ accessToken: 'fresh-token' }), { status: 200 })
+    }
+    assert.equal(url, 'https://api.test/api/v1/chat/completions')
+    assert.equal(options.headers.Authorization, 'Bearer fresh-token')
+    return new Response('ok', { status: 200 })
+  }
+
+  const result = await fetchWithAuth('https://api.test/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{"stream":true}'
+  }, { fetchImpl, storage })
+
+  assert.equal(result.status, 200)
+  assert.equal(values.get('ec_access_token'), 'fresh-token')
+  assert.equal(calls.length, 3)
+})

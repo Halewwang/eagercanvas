@@ -2,6 +2,7 @@
   <tr :class="rowClass">
     <AdminUserIdentityCell
       :role-label="roleLabel"
+      :service-status-label="serviceStatusLabel"
       :status-class="statusClass"
       :status-label="statusLabel"
       :user="user"
@@ -128,6 +129,10 @@ defineProps({
   serviceLoading: {
     type: Object,
     default: () => ({})
+  },
+  serviceStatusLabel: {
+    type: Function,
+    required: true
   },
   showUserActions: {
     type: Boolean,

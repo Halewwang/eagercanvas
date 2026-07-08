@@ -27,6 +27,7 @@
         :saving="saving"
         :selected-roles="selectedRoles"
         :service-loading="serviceLoading"
+        :service-status-label="serviceStatusLabel"
         :show-user-actions="showUserActions"
         :status-class="statusClass"
         :status-label="statusLabel"

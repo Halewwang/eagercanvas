@@ -10,6 +10,12 @@
         <span class="admin-user-api-prefix">API:</span>
         <span class="admin-user-service-id">{{ user.service?.serviceIdentifier || '尚未开通' }}</span>
       </div>
+      <div class="admin-user-service-state">
+        <span>{{ serviceStatusLabel(user.service?.serviceStatus) }}</span>
+        <span v-if="user.service?.apiKeyLast4" class="admin-user-key-last4">
+          Key 尾号 {{ user.service?.apiKeyLast4 }}
+        </span>
+      </div>
       <p v-if="user.service?.lastError" class="admin-user-service-error">
         {{ user.service.lastError }}
       </p>
@@ -30,11 +36,16 @@ import AdminUserIdentityMeta from './AdminUserIdentityMeta.vue'
 
 const {
   roleLabel,
+  serviceStatusLabel,
   statusClass,
   statusLabel,
   user
 } = defineProps({
   roleLabel: {
+    type: Function,
+    required: true
+  },
+  serviceStatusLabel: {
     type: Function,
     required: true
   },
@@ -114,13 +125,29 @@ const {
 
 .admin-user-service-id {
   min-width: 0;
-  max-width: 128px;
+  max-width: 168px;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.46);
   font-size: 11px;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.admin-user-service-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.admin-user-key-last4 {
+  color: rgba(255, 255, 255, 0.68);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .admin-user-service-error {

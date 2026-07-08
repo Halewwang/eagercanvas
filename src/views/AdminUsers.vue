@@ -33,7 +33,7 @@
       :issue-inbox-section="issueInboxSectionProps"
       @activate-service="activateService"
       @activate-user="activateUser"
-      @bind-manual-service="bindManualService"
+      @bind-manual-service="openManualServiceDialog"
       @delete-user="deleteUser"
       @disable-service="disableService"
       @load-api-logs="loadApiLogs"
@@ -64,6 +64,13 @@
       @update:search-query="userSearchQuery = $event"
       @update:status-filter="userStatusFilter = $event"
     />
+    <AdminManualServiceKeyModal
+      v-model:show="manualServiceDialogVisible"
+      :user="manualServiceUser"
+      :loading="manualServiceUser?.id ? !!serviceLoading[manualServiceUser.id] : false"
+      @close="closeManualServiceDialog"
+      @submit="submitManualServiceBinding"
+    />
   </AdminShell>
 </template>
 
@@ -72,7 +79,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AdminMobileNav, AdminPageHeader, AdminShell, AdminSidebar } from '@/components/admin'
 import { useAdminSectionNavigation } from '@/hooks/useAdminSectionNavigation'
-import { AdminDashboardSections } from '@/components/admin/features'
+import { AdminDashboardSections, AdminManualServiceKeyModal } from '@/components/admin/features'
 import { useAdminAccessState } from '@/hooks/useAdminAccessState'
 import { useAdminDashboardData } from '@/hooks/useAdminDashboardData'
 import { useAdminDashboardRefresh } from '@/hooks/useAdminDashboardRefresh'
@@ -251,8 +258,9 @@ const userActions = useAdminUserActions({
   selectedRoles
 })
 const {
-  activateService, activateUser, bindManualService, deleteUser, deleting, disableService, reconcileBilling, reconcilingBilling,
-  resetService, saveRoles, saving, serviceLoading, statusLoading, suspendUser, updateServiceLimits
+  activateService, activateUser, closeManualServiceDialog, deleteUser, deleting, disableService, manualServiceDialogVisible,
+  manualServiceUser, openManualServiceDialog, reconcileBilling, reconcilingBilling, resetService, saveRoles, saving,
+  serviceLoading, statusLoading, submitManualServiceBinding, suspendUser, updateServiceLimits
 } = userActions
 const {
   auditLogSectionProps,

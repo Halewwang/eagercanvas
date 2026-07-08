@@ -16,8 +16,6 @@ import {
   getAdminDisableServicePromptMessage,
   getAdminLimitCostPromptMessage,
   getAdminLimitDailyCostPromptMessage,
-  getAdminManualServiceApiKeyPromptMessage,
-  getAdminManualServiceApiNamePromptMessage,
   getAdminManualServiceCredentialPayload,
   getAdminReconcileBillingSuccessMessage,
   getAdminResetServiceConfirmMessage,
@@ -53,6 +51,8 @@ export const useAdminUserActions = ({
   const deleting = ref({})
   const serviceLoading = ref({})
   const reconcilingBilling = ref(false)
+  const manualServiceDialogVisible = ref(false)
+  const manualServiceUser = ref(null)
 
   const getMessageApi = () => windowTarget?.$message
   const refreshUsersAndLogs = () => runAdminUsersAndLogsRefresh({ loadUsers, loadLogs })
@@ -132,11 +132,22 @@ export const useAdminUserActions = ({
     }
   }
 
-  const bindManualService = async (user) => {
+  const closeManualServiceDialog = () => {
+    manualServiceDialogVisible.value = false
+    manualServiceUser.value = null
+  }
+
+  const openManualServiceDialog = (user) => {
     if (!canActivateService.value) return
-    const apiNameValue = windowTarget?.prompt?.(getAdminManualServiceApiNamePromptMessage(), user.service?.providerApiName || '') || ''
-    const apiKeyValue = windowTarget?.prompt?.(getAdminManualServiceApiKeyPromptMessage(), '') || ''
-    const result = getAdminManualServiceCredentialPayload(user, apiNameValue, apiKeyValue)
+    manualServiceUser.value = user
+    manualServiceDialogVisible.value = true
+  }
+
+  const submitManualServiceBinding = async (payload = {}) => {
+    const user = manualServiceUser.value
+    if (!canActivateService.value) return
+    if (!user?.id) return
+    const result = getAdminManualServiceCredentialPayload(user, payload.apiName, payload.apiKey)
     if (!result.ok) {
       getMessageApi()?.warning(result.message)
       return
@@ -146,6 +157,7 @@ export const useAdminUserActions = ({
       await bindManualAdminUserService(user.id, result.payload)
       getMessageApi()?.success('服务 Key 已绑定')
       await refreshUsersAndLogs()
+      closeManualServiceDialog()
     } catch (error) {
       if (!error?.__handled) getMessageApi()?.error(getErrorMessage(error, '手动绑定服务 Key 失败'))
     } finally {
@@ -222,10 +234,13 @@ export const useAdminUserActions = ({
   return {
     activateService,
     activateUser,
-    bindManualService,
+    closeManualServiceDialog,
     deleteUser,
     deleting,
     disableService,
+    manualServiceDialogVisible,
+    manualServiceUser,
+    openManualServiceDialog,
     reconcileBilling,
     reconcilingBilling,
     resetService,
@@ -233,6 +248,7 @@ export const useAdminUserActions = ({
     saving,
     serviceLoading,
     statusLoading,
+    submitManualServiceBinding,
     suspendUser,
     updateServiceLimits
   }
