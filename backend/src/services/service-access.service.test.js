@@ -249,6 +249,62 @@ test('createUserServiceCredential stores failed state when created api name cann
   assert.equal(inserts.some((item) => item.table === 'admin_operation_logs'), false)
 })
 
+test('createUserServiceCredential treats dashboard system permission failure as global config error', async () => {
+  const inserts = []
+  const fakeSupabase = {
+    from(table) {
+      return {
+        select() { return this },
+        eq() { return this },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => {
+          if (table === 'users') return { data: { id: 'user-1', status: 'active' }, error: null }
+          return { data: null, error: null }
+        },
+        then(resolve, reject) {
+          if (table === 'user_service_credentials') return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+          return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+        },
+        insert: (payload) => {
+          inserts.push({ table, payload })
+          return {
+            select() { return this },
+            single: async () => ({ data: { id: 'inserted', ...payload }, error: null })
+          }
+        }
+      }
+    }
+  }
+
+  await assert.rejects(
+    () => createUserServiceCredential({
+      userId: 'user-1',
+      operatorUserId: 'admin-1'
+    }, {
+      supabaseClient: fakeSupabase,
+      createProviderApiKey: async () => {
+        const error = new Error('302 dashboard management API key is missing or lacks system permissions')
+        error.status = 403
+        error.code = 'DASHBOARD_302_SYSTEM_PERMISSION_REQUIRED'
+        throw error
+      },
+      getRuntimeApiKeyByName: async () => {
+        throw new Error('runtime lookup should not run after provider config failure')
+      }
+    }),
+    (error) => {
+      assert.equal(error.status, 503)
+      assert.equal(error.code, 'SERVICE_ACCESS_PROVIDER_CONFIG_INVALID')
+      assert.match(error.message, /302 管理 API Key/)
+      return true
+    }
+  )
+
+  assert.equal(inserts.some((item) => item.table === 'user_service_credentials'), false)
+  assert.equal(inserts.some((item) => item.table === 'admin_operation_logs'), false)
+})
+
 test('createUserServiceCredential stores active key last4 from resolved runtime key when create response omits it', async () => {
   const inserts = []
   const fakeSupabase = {

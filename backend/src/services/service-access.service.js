@@ -43,6 +43,21 @@ const summarizeCredentialFailure = (error = {}, fallback = 'Service credential c
   return (attempts ? `${base} | attempts: ${attempts}` : base).slice(0, 500)
 }
 
+const isDashboardProviderConfigError = (error = {}) =>
+  [
+    'DASHBOARD_302_NOT_CONFIGURED',
+    'DASHBOARD_302_SYSTEM_PERMISSION_REQUIRED'
+  ].includes(String(error?.code || ''))
+
+const buildProviderConfigError = (error = {}) => {
+  const message = '302 管理 API Key 未配置或缺少系统权限，无法自动开通服务。请在生产环境 DASHBOARD_302_API_KEY 配置具备系统权限的 302 API Key 后重试。'
+  const configError = new HttpError(503, message, 'SERVICE_ACCESS_PROVIDER_CONFIG_INVALID')
+  configError.metadata = {
+    failure: summarizeCredentialFailure(error, message)
+  }
+  return configError
+}
+
 const serviceLabelMap = {
   not_enabled: '未开通',
   active: '已开通',
@@ -299,6 +314,9 @@ export const createUserServiceCredential = async ({
       throw new Error(runtimeUnavailableMessage(attemptedProviderApiName))
     }
   } catch (error) {
+    if (!created && isDashboardProviderConfigError(error)) {
+      throw buildProviderConfigError(error)
+    }
     const failed = {
       user_id: safeUserId,
       provider: '302ai',

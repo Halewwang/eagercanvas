@@ -13,13 +13,14 @@ import { runsRouter } from './runs.routes.js'
 import { usageRouter } from './usage.routes.js'
 import { usageAdminRouter } from './usage-admin.routes.js'
 import { workspaceRouter } from './workspace.routes.js'
+import { buildApiHealthPayload } from './health.js'
 
 import { uploadRouter } from './upload.routes.js'
 
 export const apiRouter = Router()
 
 apiRouter.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'eagercanvas-api' })
+  res.json(buildApiHealthPayload())
 })
 
 apiRouter.use('/auth', authRouter)
