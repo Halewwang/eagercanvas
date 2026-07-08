@@ -294,7 +294,8 @@ test('createUserServiceCredential treats dashboard system permission failure as 
             baseHost: 'api.302.ai',
             status: 400,
             message: 'Not Found',
-            authSource: 'dashboard'
+            authSource: 'dashboard',
+            authFingerprint: 'sha256:abc123def456'
           }
         ]
         throw error
@@ -309,6 +310,7 @@ test('createUserServiceCredential treats dashboard system permission failure as 
       assert.match(error.message, /302 管理 API Key/)
       assert.equal(error.exposeDetails, true)
       assert.match(error.metadata.failure, /api\.302\.ai 400 Not Found via dashboard/)
+      assert.match(error.metadata.failure, /sha256:abc123def456/)
       assert.deepEqual(error.metadata.providerAttempts, [
         {
           method: 'POST',
@@ -316,7 +318,8 @@ test('createUserServiceCredential treats dashboard system permission failure as 
           baseHost: 'api.302.ai',
           status: 400,
           message: 'Not Found',
-          authSource: 'dashboard'
+          authSource: 'dashboard',
+          authFingerprint: 'sha256:abc123def456'
         }
       ])
       return true

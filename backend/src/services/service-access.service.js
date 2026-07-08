@@ -24,14 +24,18 @@ const runtimeUnavailableMessage = (providerApiName = '') =>
 
 const normalizeDashboardAttempts = (attempts = []) => {
   const list = Array.isArray(attempts) ? attempts : []
-  return list.map((attempt = {}) => ({
-    method: String(attempt.method || '').trim(),
-    path: String(attempt.path || '').trim(),
-    baseHost: String(attempt.baseHost || '').trim(),
-    status: Number(attempt.status || 0) || 0,
-    message: String(attempt.message || '').slice(0, 160),
-    authSource: String(attempt.authSource || '').trim()
-  }))
+  return list.map((attempt = {}) => {
+    const authFingerprint = String(attempt.authFingerprint || '').trim().slice(0, 80)
+    return {
+      method: String(attempt.method || '').trim(),
+      path: String(attempt.path || '').trim(),
+      baseHost: String(attempt.baseHost || '').trim(),
+      status: Number(attempt.status || 0) || 0,
+      message: String(attempt.message || '').slice(0, 160),
+      authSource: String(attempt.authSource || '').trim(),
+      ...(authFingerprint ? { authFingerprint } : {})
+    }
+  })
 }
 
 const summarizeDashboardAttempts = (attempts = []) => {
@@ -44,7 +48,8 @@ const summarizeDashboardAttempts = (attempts = []) => {
       attempt.baseHost,
       attempt.status,
       attempt.message,
-      attempt.authSource ? `via ${attempt.authSource}` : ''
+      attempt.authSource ? `via ${attempt.authSource}` : '',
+      attempt.authFingerprint ? `fp ${attempt.authFingerprint}` : ''
     ].filter((item) => item !== undefined && item !== null && String(item).trim() !== '').join(' '))
     .join('; ')
 }
