@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  resolveDashboard302BaseUrls,
   resolveDashboard302BaseUrl,
   assert302DashboardSuccess,
   buildDashboard302AuthHeaders,
@@ -22,6 +23,13 @@ import { attachProviderResponseMetadata } from './provider-response-metadata.js'
 
 test('inherits provider host for dashboard management requests by default', () => {
   assert.equal(resolveDashboard302BaseUrl('', 'https://api.302ai.cn'), 'https://api.302ai.cn')
+})
+
+test('derives dashboard management fallback hosts from provider api origins', () => {
+  assert.deepEqual(
+    resolveDashboard302BaseUrls('', 'https://api.302ai.cn/v1/chat/completions', ''),
+    ['https://api.302ai.cn', 'https://api.302.ai']
+  )
 })
 
 test('allows explicit dashboard management base url override', () => {
@@ -158,7 +166,7 @@ test('dashboard management errors expose safe request attempt diagnostics withou
     await assert.rejects(
       () => get302ApiKeys(),
       (error) => {
-        assert.equal(error.code, 'DASHBOARD_302_ERROR')
+        assert.equal(error.code, 'DASHBOARD_302_SYSTEM_PERMISSION_REQUIRED')
         assert.deepEqual(error.dashboard302Attempts, [
           {
             method: 'GET',
@@ -274,6 +282,57 @@ test('dashboard management requests retry provider auth after dashboard not-foun
     { url: 'https://api.302.ai/dashboard/api_key', auth: 'Bearer sk-dashboard-invalid' },
     { url: 'https://api.302ai.cn/dashboard/api_key', auth: 'Bearer sk-dashboard-invalid' },
     { url: 'https://api.302.ai/dashboard/api_key', auth: 'Bearer sk-provider-system' }
+  ])
+})
+
+test('dashboard management reports missing system permissions after every auth candidate returns not found', async () => {
+  const originalFetch = global.fetch
+  const originalEnv = {
+    dashboard302ApiBaseUrl: env.dashboard302ApiBaseUrl,
+    dashboard302ApiKey: env.dashboard302ApiKey,
+    providerApiBaseUrl: env.providerApiBaseUrl,
+    providerApiBaseUrls: env.providerApiBaseUrls,
+    providerApiKey: env.providerApiKey,
+    dashboard302TimeoutMs: env.dashboard302TimeoutMs
+  }
+  const attempts = []
+
+  env.dashboard302ApiBaseUrl = 'https://api.302.ai'
+  env.dashboard302ApiKey = 'sk-dashboard-runtime'
+  env.providerApiBaseUrl = ''
+  env.providerApiBaseUrls = ''
+  env.providerApiKey = 'sk-provider-runtime'
+  env.dashboard302TimeoutMs = 5000
+
+  global.fetch = async (url, options = {}) => {
+    attempts.push({
+      url: String(url),
+      auth: options.headers?.Authorization
+    })
+    return new Response(JSON.stringify({ code: -1, msg: 'Not Found', data: {} }), { status: 200 })
+  }
+
+  try {
+    await assert.rejects(
+      () => create302ApiKey({ api_name: 'eager_user_created' }),
+      (error) => {
+        assert.equal(error.status, 403)
+        assert.equal(error.code, 'DASHBOARD_302_SYSTEM_PERMISSION_REQUIRED')
+        assert.match(error.message, /system permissions/)
+        assert.equal(error.dashboard302Attempts.at(-1)?.authSource, 'provider')
+        return true
+      }
+    )
+  } finally {
+    global.fetch = originalFetch
+    Object.assign(env, originalEnv)
+  }
+
+  assert.deepEqual(attempts, [
+    { url: 'https://api.302.ai/dashboard/api_key', auth: 'Bearer sk-dashboard-runtime' },
+    { url: 'https://api.302ai.cn/dashboard/api_key', auth: 'Bearer sk-dashboard-runtime' },
+    { url: 'https://api.302.ai/dashboard/api_key', auth: 'Bearer sk-provider-runtime' },
+    { url: 'https://api.302ai.cn/dashboard/api_key', auth: 'Bearer sk-provider-runtime' }
   ])
 })
 

@@ -276,10 +276,11 @@ export const createUserServiceCredential = async ({
   }
 
   let created
+  let runtimeApiKey = ''
   try {
     created = normalizeProviderCreateResult(await createProviderApiKey(payload), providerApiName)
     attemptedProviderApiName = created.providerApiName || providerApiName
-    const runtimeApiKey = await getRuntimeApiKeyByName(attemptedProviderApiName, { throwOnMissing: true })
+    runtimeApiKey = await getRuntimeApiKeyByName(attemptedProviderApiName, { throwOnMissing: true })
     if (!runtimeApiKey) {
       throw new Error(runtimeUnavailableMessage(attemptedProviderApiName))
     }
@@ -310,7 +311,7 @@ export const createUserServiceCredential = async ({
     provider: '302ai',
     internal_name: buildInternalName(created.providerApiName || providerApiName),
     provider_api_name: created.providerApiName || providerApiName,
-    api_key_last4: last4(created.apiKey),
+    api_key_last4: last4(runtimeApiKey || created.apiKey),
     api_key_encrypted: null,
     status: 'active',
     limit_cost: Number(limitCost || 0),

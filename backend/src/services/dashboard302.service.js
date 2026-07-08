@@ -1,13 +1,19 @@
 import { env } from '../config/env.js'
 import { HttpError } from '../utils/http.js'
 
-const normalizeBaseUrl = (input = '') => {
+const normalizeBaseUrl = (input = '', options = {}) => {
   const raw = String(input || '').trim()
   if (!raw) return 'https://api.302.ai'
   const noTrail = raw.replace(/\/+$/, '')
-  return noTrail
+  const normalized = noTrail
     .replace(/\/v1beta$/i, '')
     .replace(/\/v1$/i, '')
+  if (!options.originOnly) return normalized
+  try {
+    return new URL(normalized).origin
+  } catch {
+    return normalized
+  }
 }
 
 const splitBaseUrls = (value = '') =>
@@ -23,8 +29,8 @@ export const resolveDashboard302BaseUrls = (
 ) => {
   const candidates = [
     ...splitBaseUrls(dashboardBaseUrl),
-    ...splitBaseUrls(providerBaseUrls),
-    ...splitBaseUrls(providerBaseUrl),
+    ...splitBaseUrls(providerBaseUrls).map((item) => normalizeBaseUrl(item, { originOnly: true })),
+    ...splitBaseUrls(providerBaseUrl).map((item) => normalizeBaseUrl(item, { originOnly: true })),
     'https://api.302ai.cn',
     'https://api.302.ai'
   ]
@@ -300,6 +306,18 @@ const attachDashboardAttempts = (error, attempts = []) => {
 const getDashboardAttempts = (error = {}) =>
   Array.isArray(error?.dashboard302Attempts) ? error.dashboard302Attempts : []
 
+const buildDashboardFinalError = (error, attempts = []) => {
+  const finalError = error || new HttpError(502, '302 dashboard request failed', 'DASHBOARD_302_ERROR')
+  if (isRetryableDashboardAuthError(finalError) && attempts.some((attempt) => ['dashboard', 'provider'].includes(attempt.authSource))) {
+    return new HttpError(
+      403,
+      '302 dashboard management API key is missing or lacks system permissions',
+      'DASHBOARD_302_SYSTEM_PERMISSION_REQUIRED'
+    )
+  }
+  return finalError
+}
+
 const call302Dashboard = async (path, options = {}) => {
   const { method = 'GET', params = null, body, authHeaders: explicitAuthHeaders = null } = options
   const isExplicitAuth = Boolean(explicitAuthHeaders)
@@ -347,7 +365,7 @@ const call302Dashboard = async (path, options = {}) => {
         if (!isRetryableDashboardRequestError(error)) throw attachDashboardAttempts(error, attempts)
         if (baseUrl !== baseUrls[baseUrls.length - 1]) continue
         if (isRetryableDashboardAuthError(error) && authHeader !== authHeaders[authHeaders.length - 1]) break
-        throw attachDashboardAttempts(error, attempts)
+        throw attachDashboardAttempts(buildDashboardFinalError(error, attempts), attempts)
       }
     }
   }
@@ -356,10 +374,10 @@ const call302Dashboard = async (path, options = {}) => {
     try {
       return assert302DashboardSuccess(lastBusinessError)
     } catch (error) {
-      throw attachDashboardAttempts(error, attempts)
+      throw attachDashboardAttempts(buildDashboardFinalError(error, attempts), attempts)
     }
   }
-  throw attachDashboardAttempts(lastError || new HttpError(502, '302 dashboard request failed', 'DASHBOARD_302_ERROR'), attempts)
+  throw attachDashboardAttempts(buildDashboardFinalError(lastError, attempts), attempts)
 }
 
 const request302ApiKeyUsageWithBase = async (baseUrl, path, options = {}) => {
