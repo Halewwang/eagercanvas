@@ -132,7 +132,7 @@ test('admin display overview card helper preserves card order, labels, values, a
   ])
 })
 
-test('admin display overview cards prefer 302 official usage when provided', () => {
+test('admin display overview cards label provider usage generically when official usage is provided', () => {
   assert.deepEqual(adminDisplay.getAdminOverviewCards({
     canReadUsers: true,
     canReadUsage: true,
@@ -145,8 +145,8 @@ test('admin display overview cards prefer 302 official usage when provided', () 
   }), [
     { label: '管理用户数', value: 2, note: '当前后台可见用户总数' },
     { label: '已暂停', value: 0, note: '当前被暂停的账号数' },
-    { label: '302.ai 调用量', value: 5, note: '来自用户 302.ai 调用数据' },
-    { label: '302.ai 消耗 (PTC)', value: '6.50', note: '来自 302.ai usage-log' },
+    { label: '服务商调用量', value: 5, note: '来自用户服务商调用数据' },
+    { label: '服务商消耗 (PTC)', value: '6.50', note: '来自服务商 usage-log' },
     { label: '审计条目', value: '--', note: '无审计权限' },
     { label: '已开通服务', value: 2, note: '当前可调用服务的用户数' }
   ])

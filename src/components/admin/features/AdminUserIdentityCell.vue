@@ -16,9 +16,6 @@
           Key 尾号 {{ user.service?.apiKeyLast4 }}
         </span>
       </div>
-      <p v-if="user.service?.lastError" class="admin-user-service-error">
-        {{ user.service.lastError }}
-      </p>
       <div class="admin-user-meta-group">
         <AdminUserIdentityMeta
           :role-label="roleLabel"
@@ -148,14 +145,6 @@ const {
 .admin-user-key-last4 {
   color: rgba(255, 255, 255, 0.68);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.admin-user-service-error {
-  max-width: 220px;
-  margin-top: 5px;
-  color: rgba(255, 205, 215, 0.72);
-  font-size: 11px;
-  line-height: 1.45;
 }
 
 .admin-user-meta-group {

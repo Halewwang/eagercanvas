@@ -90,8 +90,8 @@ test('admin user action core owns prompt copy for user and service actions', () 
   assert.equal(actionsCore.getAdminDisableServicePromptMessage(), '请输入停用原因（可选）：')
   assert.equal(actionsCore.getAdminLimitCostPromptMessage(), '请输入总额度（USD，0 表示不限制）：')
   assert.equal(actionsCore.getAdminLimitDailyCostPromptMessage(), '请输入日额度（USD，0 表示不限制）：')
-  assert.equal(actionsCore.getAdminManualServiceApiNamePromptMessage(), '请输入 302 API Key 名称（api_name）：')
-  assert.equal(actionsCore.getAdminManualServiceApiKeyPromptMessage(), '请输入完整 302 API Key：')
+  assert.equal(actionsCore.getAdminManualServiceApiNamePromptMessage(), '请输入服务商 API Key 名称（api_name）：')
+  assert.equal(actionsCore.getAdminManualServiceApiKeyPromptMessage(), '请输入完整服务商 API Key：')
 })
 
 test('admin manual service payload requires key identity and secret', () => {
@@ -118,11 +118,11 @@ test('admin manual service payload requires key identity and secret', () => {
 
   assert.deepEqual(actionsCore.getAdminManualServiceCredentialPayload({}, '', 'sk-test'), {
     ok: false,
-    message: '请输入 302 API Key 名称'
+    message: '请输入服务商 API Key 名称'
   })
   assert.deepEqual(actionsCore.getAdminManualServiceCredentialPayload({}, 'manual-api', ''), {
     ok: false,
-    message: '请输入完整 302 API Key'
+    message: '请输入完整服务商 API Key'
   })
 })
 

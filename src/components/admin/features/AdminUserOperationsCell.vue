@@ -196,6 +196,8 @@ const forwardRoleSelection = (userId, role) => {
 }
 
 .admin-user-operations-action-slot {
+  display: grid;
+  gap: 8px;
   min-width: 0;
 }
 

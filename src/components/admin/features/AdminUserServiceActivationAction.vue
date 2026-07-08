@@ -13,12 +13,13 @@
       :disabled="serviceLoading[user.id] || user.status === 'deleted'"
       @click="emit('bind-manual-service', user)"
     >
-      {{ serviceLoading[user.id] ? '绑定中...' : '手动绑定 Key' }}
+      {{ serviceLoading[user.id] ? '绑定中...' : manualBindLabel }}
     </AdminEditorMainButton>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import AdminEditorMainButton from '@/components/admin/AdminEditorMainButton.vue'
 
 const emit = defineEmits(['activate-service', 'bind-manual-service'])
@@ -40,6 +41,13 @@ const {
     type: Object,
     default: () => ({})
   }
+})
+
+const manualBindLabel = computed(() => {
+  if (user.service?.serviceStatus === 'active' && user.service?.apiKeyLast4) {
+    return '切换 Key'
+  }
+  return '手动绑定 Key'
 })
 </script>
 

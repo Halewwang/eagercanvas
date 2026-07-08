@@ -803,6 +803,9 @@ test('admin user service row operations use focused feature modules', () => {
   assert.match(userServiceActivationActionSource, /开通中\.\.\./)
   assert.match(userServiceActivationActionSource, /开通服务/)
   assert.match(userServiceActivationActionSource, /手动绑定 Key/)
+  assert.match(userServiceActivationActionSource, /manualBindLabel/)
+  assert.match(userServiceActivationActionSource, /user\.service\?\.apiKeyLast4/)
+  assert.match(userServiceActivationActionSource, /切换 Key/)
 
   assert.match(userServiceActiveActionsSource, /import AdminEditorActions from '@\/components\/admin\/AdminEditorActions\.vue'/)
   assert.match(userServiceActiveActionsSource, /import AdminMicroButton from '@\/components\/admin\/AdminMicroButton\.vue'/)
@@ -845,14 +848,15 @@ test('admin manual service binding event reaches page action composable', () => 
   assert.match(userServiceActionsSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
   assert.match(userServiceActionsCellSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
   assert.match(userServiceActivationActionSource, /defineEmits\(\['activate-service', 'bind-manual-service'\]\)/)
-  assert.match(userManualServiceKeyModalSource, /完整 302 API Key/)
+  assert.match(userManualServiceKeyModalSource, /完整服务商 API Key/)
   assert.match(userManualServiceKeyModalSource, /type="password"/)
   assert.match(userManualServiceKeyModalSource, /绑定服务 Key/)
-  assert.match(userManualServiceKeyModalSource, /请输入完整 302 API Key/)
+  assert.match(userManualServiceKeyModalSource, /请输入完整服务商 API Key/)
   assert.match(userManualServiceKeyModalSource, /用户运行时模型调用 Key/)
-  assert.match(userManualServiceKeyModalSource, /不要填写 DASHBOARD_302_API_KEY/)
+  assert.match(userManualServiceKeyModalSource, /不要填写系统管理 Key/)
   assert.match(userManualServiceKeyModalSource, /不能使用系统管理 Key/)
   assert.doesNotMatch(userManualServiceKeyModalSource, /window\.prompt|prompt\(/)
+  assert.doesNotMatch(userManualServiceKeyModalSource, /302\.ai|302 API Key|302 Key/)
 })
 
 test('admin user service row combines service and account operations into one compact cell', () => {
@@ -878,6 +882,7 @@ test('admin user service row combines service and account operations into one co
   assert.match(userOperationsCellSource, /admin-user-operations-card\s*\{/)
   assert.match(userOperationsCellSource, /admin-user-operations-service/)
   assert.match(userOperationsCellSource, /admin-user-operations-account/)
+  assert.match(userOperationsCellSource, /\.admin-user-operations-action-slot\s*\{[\s\S]+display:\s*grid[\s\S]+gap:\s*8px/)
 })
 
 test('admin user service rows keep api identity compact and role controls inline', () => {
@@ -894,6 +899,10 @@ test('admin user service rows keep api identity compact and role controls inline
   assert.match(userIdentityCellSource, /serviceStatusLabel\(user\.service\?\.serviceStatus\)/)
   assert.match(userIdentityCellSource, /Key 尾号/)
   assert.match(userIdentityCellSource, /user\.service\?\.apiKeyLast4/)
+  assert.doesNotMatch(userIdentityCellSource, /user\.service\?\.lastError/)
+  assert.doesNotMatch(userIdentityCellSource, /admin-user-service-error/)
+  assert.doesNotMatch(userServiceStatusCellSource, /user\.service\?\.lastError/)
+  assert.doesNotMatch(userServiceStatusCellSource, /lastError/)
 
   assert.match(userRoleActionsSource, /class="admin-user-role-row"/)
   assert.match(userRoleActionsSource, /<AdminEditorSelect[\s\S]+<AdminEditorMainButton/s)

@@ -2,7 +2,7 @@
   <BaseModal
     :show="show"
     title="绑定服务 Key"
-    description="保存后该用户将使用绑定的用户运行时模型调用 Key 调用模型。不要填写 DASHBOARD_302_API_KEY 或 PROVIDER_API_KEY。"
+    description="保存后该用户将使用绑定的用户运行时模型调用 Key 调用模型。不要填写系统管理 Key 或全局 Provider Key。"
     size="sm"
     :close-on-overlay="!loading"
     :close-on-escape="!loading"
@@ -11,7 +11,7 @@
     <form class="admin-manual-key-form" @submit.prevent="submit">
       <BaseInput
         v-model="apiName"
-        label="302 Key 名称"
+        label="服务商 Key 名称"
         placeholder="用于官方对账的 api_name"
         :disabled="loading"
         autocomplete="off"
@@ -19,15 +19,15 @@
       />
       <BaseInput
         v-model="apiKey"
-        label="完整 302 API Key"
+        label="完整服务商 API Key"
         type="password"
-        placeholder="请输入完整 302 API Key"
+        placeholder="请输入完整服务商 API Key"
         :disabled="loading"
         autocomplete="off"
         spellcheck="false"
       />
       <p class="admin-manual-key-help">
-        不能使用系统管理 Key；请粘贴在 302.ai 为该用户单独创建的普通运行时 API Key。
+        不能使用系统管理 Key；请粘贴在服务商后台为该用户单独创建的普通运行时 API Key。
       </p>
       <p v-if="errorMessage" class="admin-manual-key-error">{{ errorMessage }}</p>
     </form>
@@ -112,7 +112,7 @@ const submit = () => {
 
   const nextApiKey = apiKey.value.trim()
   if (!nextApiKey) {
-    errorMessage.value = '请输入完整 302 API Key'
+    errorMessage.value = '请输入完整服务商 API Key'
     return
   }
 

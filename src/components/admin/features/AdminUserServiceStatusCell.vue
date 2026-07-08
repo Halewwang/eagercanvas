@@ -4,9 +4,6 @@
       {{ serviceStatusLabel(user.service?.serviceStatus) }}
     </AdminStatusPill>
     <p class="mt-2 text-xs text-white/45">{{ user.service?.serviceIdentifier || '尚未开通' }}</p>
-    <p v-if="user.service?.lastError" class="mt-1 max-w-[180px] text-[11px] leading-5 text-rose-100/70">
-      {{ user.service.lastError }}
-    </p>
   </td>
 </template>
 
