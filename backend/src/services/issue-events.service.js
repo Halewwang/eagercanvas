@@ -83,28 +83,58 @@ const buildEvidenceSummary = (record, existing = {}) => ({
   errors: addBounded(existing.errors, record.error_code || record.message_summary)
 })
 
-const buildCodexHandoff = (record, evidenceSummary) => ({
-  schema_version: 'codex_issue_table/v1',
-  evidence: {
-    source_layer: record.source_layer,
-    category: record.category,
-    route: record.route_name || record.route || 'unknown',
-    api_path: record.path_template || 'unknown',
-    request_id: record.request_id || 'unknown',
-    provider: record.provider || 'unknown',
-    model: record.model || 'unknown',
-    db_table: record.db_table || 'unknown',
-    error_code: record.error_code || 'unknown',
-    message_summary: record.message_summary || 'unknown'
-  },
-  root_cause_hints: [
-    record.request_id ? 'Request id is available for cross-layer tracing.' : '',
-    record.provider ? 'Provider/model metadata is available.' : '',
-    record.db_table ? 'Database table metadata is available.' : ''
-  ].filter(Boolean),
-  suspected_files: [],
-  evidence_summary: evidenceSummary
-})
+const normalizeProviderAttempts = (attempts = []) => {
+  if (!Array.isArray(attempts)) return []
+  return attempts.slice(0, 12).map((attempt = {}) => ({
+    method: String(attempt.method || '').trim(),
+    path: String(attempt.path || '').trim(),
+    baseHost: String(attempt.baseHost || '').trim(),
+    status: Number(attempt.status || 0) || 0,
+    message: String(attempt.message || '').slice(0, 160),
+    authSource: String(attempt.authSource || '').trim()
+  }))
+}
+
+const buildDiagnostics = (metadata = {}) => {
+  const details = metadata?.details && typeof metadata.details === 'object' && !Array.isArray(metadata.details)
+    ? metadata.details
+    : null
+  if (!details) return null
+  const providerAttempts = normalizeProviderAttempts(details.providerAttempts)
+  const diagnostics = {
+    ...(details.failure ? { failure: String(details.failure).slice(0, 500) } : {}),
+    ...(providerAttempts.length ? { providerAttempts } : {})
+  }
+  return Object.keys(diagnostics).length ? diagnostics : null
+}
+
+const buildCodexHandoff = (record, evidenceSummary) => {
+  const diagnostics = buildDiagnostics(record.metadata)
+  return {
+    schema_version: 'codex_issue_table/v1',
+    evidence: {
+      source_layer: record.source_layer,
+      category: record.category,
+      route: record.route_name || record.route || 'unknown',
+      api_path: record.path_template || 'unknown',
+      request_id: record.request_id || 'unknown',
+      provider: record.provider || 'unknown',
+      model: record.model || 'unknown',
+      db_table: record.db_table || 'unknown',
+      error_code: record.error_code || 'unknown',
+      message_summary: record.message_summary || 'unknown'
+    },
+    ...(diagnostics ? { diagnostics } : {}),
+    root_cause_hints: [
+      record.request_id ? 'Request id is available for cross-layer tracing.' : '',
+      record.provider ? 'Provider/model metadata is available.' : '',
+      record.db_table ? 'Database table metadata is available.' : '',
+      diagnostics ? 'Safe provider diagnostics are available in diagnostics.' : ''
+    ].filter(Boolean),
+    suspected_files: [],
+    evidence_summary: evidenceSummary
+  }
+}
 
 const buildGroupPayload = (record, event, existing = null, now) => {
   const evidenceSummary = buildEvidenceSummary(record, existing?.evidence_summary || {})

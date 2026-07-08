@@ -1864,6 +1864,12 @@ test('admin empty states use the shared empty-state module styling', () => {
   assert.match(adminOverviewTopSpendersListSource, /\.insight-row/)
 })
 
+test('admin issue detail renders event diagnostics metadata for provider failures', () => {
+  assert.match(adminIssueInboxSectionSource, /getEventDiagnostics\(event\)/)
+  assert.match(adminIssueInboxSectionSource, /toPrettyJson\(getEventDiagnostics\(event\)\)/)
+  assert.match(adminIssueInboxSectionSource, /\.admin-issue-event-diagnostics/)
+})
+
 test('admin page delegates user service and reconciliation sections to feature modules', () => {
   assert.match(source, /@\/components\/admin\/features/)
   assert.match(adminDashboardSectionsSource, /<AdminUserServiceSection/)

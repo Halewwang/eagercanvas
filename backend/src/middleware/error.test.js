@@ -4,6 +4,7 @@ import test from 'node:test'
 import { z } from 'zod'
 
 import { errorMiddleware } from './error.js'
+import { HttpError } from '../utils/http.js'
 
 const source = readFileSync(new URL('./error.js', import.meta.url), 'utf8')
 
@@ -33,6 +34,42 @@ test('error middleware reports Zod validation errors as bad requests', () => {
   assert.equal(response.statusCode, 400)
   assert.equal(response.body.code, 'VALIDATION_ERROR')
   assert.equal(response.body.message, 'Invalid email address')
+})
+
+test('error middleware exposes safe diagnostic details only when explicitly allowed', () => {
+  const error = new HttpError(503, 'provider config failed', 'SERVICE_ACCESS_PROVIDER_CONFIG_INVALID')
+  error.exposeDetails = true
+  error.metadata = {
+    failure: 'POST /dashboard/api_key api.302.ai 400 Not Found via dashboard',
+    providerAttempts: [
+      {
+        method: 'POST',
+        path: '/dashboard/api_key',
+        baseHost: 'api.302.ai',
+        status: 400,
+        message: 'Not Found',
+        authSource: 'dashboard'
+      }
+    ]
+  }
+  const response = {
+    statusCode: 0,
+    body: null,
+    status(statusCode) {
+      this.statusCode = statusCode
+      return this
+    },
+    json(payload) {
+      this.body = payload
+    }
+  }
+
+  errorMiddleware(error, { requestId: 'req-test', method: 'POST', path: '/admin/users/user-1/service-access/activate' }, response)
+
+  assert.equal(response.statusCode, 503)
+  assert.equal(response.body.code, 'SERVICE_ACCESS_PROVIDER_CONFIG_INVALID')
+  assert.equal(response.body.details.failure, error.metadata.failure)
+  assert.deepEqual(response.body.details.providerAttempts, error.metadata.providerAttempts)
 })
 
 test('error middleware builds a safe issue payload for server errors', () => {

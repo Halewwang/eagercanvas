@@ -107,3 +107,52 @@ test('recordIssueEvent inserts event and creates an issue group without leaking 
   assert.equal(groupInsert.payload.evidence_summary.providers[0], '302ai')
   assert.equal(groupInsert.payload.codex_handoff.evidence.provider, '302ai')
 })
+
+test('recordIssueEvent carries safe provider diagnostics into codex handoff', async () => {
+  const supabaseClient = createFakeSupabase()
+
+  const result = await recordIssueEvent({
+    source_layer: 'backend',
+    category: 'server_error',
+    method: 'POST',
+    path_template: '/admin/users/:userId/service-access/activate',
+    status_code: 503,
+    error_code: 'SERVICE_ACCESS_PROVIDER_CONFIG_INVALID',
+    request_id: 'req-service-activation',
+    metadata: {
+      details: {
+        failure: 'POST /dashboard/api_key api.302.ai 400 Not Found via dashboard',
+        providerAttempts: [
+          {
+            method: 'POST',
+            path: '/dashboard/api_key',
+            baseHost: 'api.302.ai',
+            status: 400,
+            message: 'Not Found',
+            authSource: 'dashboard'
+          }
+        ]
+      }
+    }
+  }, {
+    supabaseClient,
+    now: () => '2026-07-08T10:00:00.000Z'
+  })
+
+  assert.equal(result.ok, true)
+  const groupInsert = supabaseClient.calls.find((call) => call.table === 'issue_groups' && call.op === 'insert')
+  assert.equal(
+    groupInsert.payload.codex_handoff.diagnostics.failure,
+    'POST /dashboard/api_key api.302.ai 400 Not Found via dashboard'
+  )
+  assert.deepEqual(groupInsert.payload.codex_handoff.diagnostics.providerAttempts, [
+    {
+      method: 'POST',
+      path: '/dashboard/api_key',
+      baseHost: 'api.302.ai',
+      status: 400,
+      message: 'Not Found',
+      authSource: 'dashboard'
+    }
+  ])
+})

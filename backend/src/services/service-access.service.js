@@ -22,8 +22,20 @@ const last4 = (value = '') => {
 const runtimeUnavailableMessage = (providerApiName = '') =>
   `Runtime API key is unavailable for provider_api_name ${String(providerApiName || '').trim()}`
 
-const summarizeDashboardAttempts = (attempts = []) => {
+const normalizeDashboardAttempts = (attempts = []) => {
   const list = Array.isArray(attempts) ? attempts : []
+  return list.map((attempt = {}) => ({
+    method: String(attempt.method || '').trim(),
+    path: String(attempt.path || '').trim(),
+    baseHost: String(attempt.baseHost || '').trim(),
+    status: Number(attempt.status || 0) || 0,
+    message: String(attempt.message || '').slice(0, 160),
+    authSource: String(attempt.authSource || '').trim()
+  }))
+}
+
+const summarizeDashboardAttempts = (attempts = []) => {
+  const list = normalizeDashboardAttempts(attempts)
   if (!list.length) return ''
   return list
     .map((attempt) => [
@@ -52,8 +64,11 @@ const isDashboardProviderConfigError = (error = {}) =>
 const buildProviderConfigError = (error = {}) => {
   const message = '302 管理 API Key 未配置或缺少系统权限，无法自动开通服务。请在生产环境 DASHBOARD_302_API_KEY 配置具备系统权限的 302 API Key 后重试。'
   const configError = new HttpError(503, message, 'SERVICE_ACCESS_PROVIDER_CONFIG_INVALID')
+  const providerAttempts = normalizeDashboardAttempts(error?.dashboard302Attempts)
+  configError.exposeDetails = true
   configError.metadata = {
-    failure: summarizeCredentialFailure(error, message)
+    failure: summarizeCredentialFailure(error, message),
+    ...(providerAttempts.length ? { providerAttempts } : {})
   }
   return configError
 }

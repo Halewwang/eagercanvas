@@ -60,11 +60,16 @@ export const errorMiddleware = (err, req, res, _next) => {
     }
   }
 
-  res.status(status).json({
+  const responseBody = {
     code,
     message,
     requestId: req.requestId
-  })
+  }
+  if (err?.exposeDetails && err.metadata && typeof err.metadata === 'object' && !Array.isArray(err.metadata)) {
+    responseBody.details = err.metadata
+  }
+
+  res.status(status).json(responseBody)
 }
 
 errorMiddleware.buildIssuePayload = buildServerErrorIssuePayload

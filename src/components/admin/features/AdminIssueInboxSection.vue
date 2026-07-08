@@ -255,6 +255,10 @@
                 <span>{{ event.request_id || event.error_code || '-' }}</span>
               </div>
               <div class="mt-2">{{ event.message_summary || event.path_template || event.route || '-' }}</div>
+              <pre
+                v-if="hasEventDiagnostics(event)"
+                class="admin-issue-event-diagnostics"
+              >{{ toPrettyJson(getEventDiagnostics(event)) }}</pre>
             </div>
           </div>
           <AdminPaginationBar
@@ -381,6 +385,19 @@ const CONFIDENCE_LABELS = {
 const statusLabel = (status) => STATUS_LABELS[status] || '待处理'
 const sourceLayerLabel = (sourceLayer) => SOURCE_LAYER_LABELS[sourceLayer] || sourceLayer || '-'
 const confidenceLabel = (confidence) => CONFIDENCE_LABELS[confidence] || confidence || '-'
+
+const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value)
+
+const getEventDiagnostics = (event = {}) => {
+  const metadata = isPlainObject(event.metadata) ? event.metadata : null
+  if (!metadata) return null
+  return isPlainObject(metadata.details) ? metadata.details : metadata
+}
+
+const hasEventDiagnostics = (event = {}) => {
+  const diagnostics = getEventDiagnostics(event)
+  return isPlainObject(diagnostics) && Object.keys(diagnostics).length > 0
+}
 
 const statusClass = (status) => {
   if (status === 'resolved') return 'ui-status-pill-active'
@@ -560,6 +577,20 @@ const statusClass = (status) => {
   padding: 12px;
   color: rgb(255 255 255 / 70%);
   background: rgb(0 0 0 / 22%);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.admin-issue-event-diagnostics {
+  max-height: 180px;
+  overflow: auto;
+  margin-top: 10px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  padding: 10px;
+  color: rgb(255 255 255 / 64%);
+  background: rgb(0 0 0 / 18%);
   font-size: 11px;
   line-height: 1.6;
   white-space: pre-wrap;

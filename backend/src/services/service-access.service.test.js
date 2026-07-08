@@ -287,6 +287,16 @@ test('createUserServiceCredential treats dashboard system permission failure as 
         const error = new Error('302 dashboard management API key is missing or lacks system permissions')
         error.status = 403
         error.code = 'DASHBOARD_302_SYSTEM_PERMISSION_REQUIRED'
+        error.dashboard302Attempts = [
+          {
+            method: 'POST',
+            path: '/dashboard/api_key',
+            baseHost: 'api.302.ai',
+            status: 400,
+            message: 'Not Found',
+            authSource: 'dashboard'
+          }
+        ]
         throw error
       },
       getRuntimeApiKeyByName: async () => {
@@ -297,6 +307,18 @@ test('createUserServiceCredential treats dashboard system permission failure as 
       assert.equal(error.status, 503)
       assert.equal(error.code, 'SERVICE_ACCESS_PROVIDER_CONFIG_INVALID')
       assert.match(error.message, /302 管理 API Key/)
+      assert.equal(error.exposeDetails, true)
+      assert.match(error.metadata.failure, /api\.302\.ai 400 Not Found via dashboard/)
+      assert.deepEqual(error.metadata.providerAttempts, [
+        {
+          method: 'POST',
+          path: '/dashboard/api_key',
+          baseHost: 'api.302.ai',
+          status: 400,
+          message: 'Not Found',
+          authSource: 'dashboard'
+        }
+      ])
       return true
     }
   )
