@@ -40,6 +40,13 @@ export const activateAdminUserService = (userId, payload = {}) =>
     data: payload
   })
 
+export const bindManualAdminUserService = (userId, payload = {}) =>
+  apiRequest({
+    url: `/admin/users/${encodeURIComponent(userId)}/service-access/manual`,
+    method: 'post',
+    data: payload
+  })
+
 export const disableAdminUserService = (userId, reason = '') =>
   apiRequest({
     url: `/admin/users/${encodeURIComponent(userId)}/service-access/disable`,

@@ -15,6 +15,7 @@
       v-bind="userServiceContentProps"
       @activate-service="emit('activate-service', $event)"
       @activate-user="emit('activate-user', $event)"
+      @bind-manual-service="emit('bind-manual-service', $event)"
       @delete-user="emit('delete-user', $event)"
       @disable-service="emit('disable-service', $event)"
       @refresh-users="emit('refresh-users')"
@@ -88,6 +89,7 @@ import AdminUserServiceSection from './AdminUserServiceSection.vue'
 const emit = defineEmits([
   'activate-service',
   'activate-user',
+  'bind-manual-service',
   'delete-user',
   'disable-service',
   'load-api-logs',

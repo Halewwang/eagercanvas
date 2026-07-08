@@ -33,6 +33,7 @@
       :issue-inbox-section="issueInboxSectionProps"
       @activate-service="activateService"
       @activate-user="activateUser"
+      @bind-manual-service="bindManualService"
       @delete-user="deleteUser"
       @disable-service="disableService"
       @load-api-logs="loadApiLogs"
@@ -250,7 +251,7 @@ const userActions = useAdminUserActions({
   selectedRoles
 })
 const {
-  activateService, activateUser, deleteUser, deleting, disableService, reconcileBilling, reconcilingBilling,
+  activateService, activateUser, bindManualService, deleteUser, deleting, disableService, reconcileBilling, reconcilingBilling,
   resetService, saveRoles, saving, serviceLoading, statusLoading, suspendUser, updateServiceLimits
 } = userActions
 const {

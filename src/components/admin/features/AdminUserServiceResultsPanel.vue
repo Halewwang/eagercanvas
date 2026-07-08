@@ -27,6 +27,7 @@
     :top-model-label="topModelLabel"
     @activate-service="emit('activate-service', $event)"
     @activate-user="emit('activate-user', $event)"
+    @bind-manual-service="emit('bind-manual-service', $event)"
     @delete-user="emit('delete-user', $event)"
     @disable-service="emit('disable-service', $event)"
     @reset-service="emit('reset-service', $event)"
@@ -52,6 +53,7 @@ import AdminUserServiceTable from './AdminUserServiceTable.vue'
 const emit = defineEmits([
   'activate-service',
   'activate-user',
+  'bind-manual-service',
   'delete-user',
   'disable-service',
   'reset-service',

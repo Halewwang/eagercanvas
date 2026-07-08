@@ -28,6 +28,7 @@ import {
   updateUserRoles
 } from '../services/admin-usage.service.js'
 import {
+  createManualUserServiceCredential,
   createUserServiceCredential,
   disableUserServiceCredential,
   resetUserServiceCredential,
@@ -73,6 +74,12 @@ const serviceAccessLimitsSchema = z.object({
   limitCost: z.number().nonnegative().default(0),
   limitDailyCost: z.number().nonnegative().default(0),
   expiredOn: z.number().int().nonnegative().default(0)
+})
+
+const manualServiceAccessSchema = serviceAccessLimitsSchema.extend({
+  apiName: z.string().trim().min(1),
+  apiKey: z.string().trim().min(1),
+  replaceExisting: z.boolean().default(true)
 })
 
 const disableServiceSchema = z.object({
@@ -165,6 +172,23 @@ adminRouter.post('/users/:userId/service-access/activate', requirePermission(['a
     limitCost: payload.limitCost,
     limitDailyCost: payload.limitDailyCost,
     expiredOn: payload.expiredOn,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || ''
+  })
+  res.json({ ok: true, data: { userId: req.params.userId, ...result.serviceCredential } })
+}))
+
+adminRouter.post('/users/:userId/service-access/manual', requirePermission(['admin.service_access.activate']), asyncHandler(async (req, res) => {
+  const payload = manualServiceAccessSchema.parse(req.body || {})
+  const result = await createManualUserServiceCredential({
+    userId: req.params.userId,
+    operatorUserId: req.user.id,
+    apiName: payload.apiName,
+    apiKey: payload.apiKey,
+    limitCost: payload.limitCost,
+    limitDailyCost: payload.limitDailyCost,
+    expiredOn: payload.expiredOn,
+    replaceExisting: payload.replaceExisting,
     ip: req.ip,
     userAgent: req.headers['user-agent'] || ''
   })

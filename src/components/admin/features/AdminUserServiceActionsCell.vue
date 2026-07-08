@@ -8,6 +8,7 @@
       :service-loading="serviceLoading"
       :user="user"
       @activate-service="emit('activate-service', $event)"
+      @bind-manual-service="emit('bind-manual-service', $event)"
       @disable-service="emit('disable-service', $event)"
       @reset-service="emit('reset-service', $event)"
       @update-service-limits="emit('update-service-limits', $event)"
@@ -20,6 +21,7 @@ import AdminUserServiceActions from './AdminUserServiceActions.vue'
 
 const emit = defineEmits([
   'activate-service',
+  'bind-manual-service',
   'disable-service',
   'reset-service',
   'update-service-limits'

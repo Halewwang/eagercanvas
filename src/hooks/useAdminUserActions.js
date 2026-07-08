@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import {
   activateAdminUserService,
+  bindManualAdminUserService,
   deleteAdminUser,
   disableAdminUserService,
   reconcileAdminBilling,
@@ -15,6 +16,9 @@ import {
   getAdminDisableServicePromptMessage,
   getAdminLimitCostPromptMessage,
   getAdminLimitDailyCostPromptMessage,
+  getAdminManualServiceApiKeyPromptMessage,
+  getAdminManualServiceApiNamePromptMessage,
+  getAdminManualServiceCredentialPayload,
   getAdminReconcileBillingSuccessMessage,
   getAdminResetServiceConfirmMessage,
   getAdminSelectedRole,
@@ -128,6 +132,27 @@ export const useAdminUserActions = ({
     }
   }
 
+  const bindManualService = async (user) => {
+    if (!canActivateService.value) return
+    const apiNameValue = windowTarget?.prompt?.(getAdminManualServiceApiNamePromptMessage(), user.service?.providerApiName || '') || ''
+    const apiKeyValue = windowTarget?.prompt?.(getAdminManualServiceApiKeyPromptMessage(), '') || ''
+    const result = getAdminManualServiceCredentialPayload(user, apiNameValue, apiKeyValue)
+    if (!result.ok) {
+      getMessageApi()?.warning(result.message)
+      return
+    }
+    setAdminActionLoading(serviceLoading, user.id, true)
+    try {
+      await bindManualAdminUserService(user.id, result.payload)
+      getMessageApi()?.success('服务 Key 已绑定')
+      await refreshUsersAndLogs()
+    } catch (error) {
+      if (!error?.__handled) getMessageApi()?.error(getErrorMessage(error, '手动绑定服务 Key 失败'))
+    } finally {
+      setAdminActionLoading(serviceLoading, user.id, false)
+    }
+  }
+
   const disableService = async (user) => {
     if (!canDisableService.value) return
     const reason = windowTarget?.prompt?.(getAdminDisableServicePromptMessage(), '') || ''
@@ -197,6 +222,7 @@ export const useAdminUserActions = ({
   return {
     activateService,
     activateUser,
+    bindManualService,
     deleteUser,
     deleting,
     disableService,

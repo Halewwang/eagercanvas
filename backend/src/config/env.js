@@ -63,6 +63,7 @@ export const env = {
   dashboard302ApiBaseUrl: process.env.DASHBOARD_302_API_BASE_URL || '',
   dashboard302ApiKey: process.env.DASHBOARD_302_API_KEY || '',
   dashboard302TimeoutMs: Number(process.env.DASHBOARD_302_TIMEOUT_MS || 30000),
+  serviceCredentialEncryptionKey: process.env.SERVICE_CREDENTIAL_ENCRYPTION_KEY || process.env.JWT_REFRESH_SECRET || process.env.JWT_ACCESS_SECRET || 'dev-service-credential-secret',
   billingSyncEnabled: String(process.env.BILLING_SYNC_ENABLED || '').toLowerCase() === 'true',
   billingSyncIntervalMs: Number(process.env.BILLING_SYNC_INTERVAL_MS || 10 * 60 * 1000),
   billingSyncLookbackMs: Number(process.env.BILLING_SYNC_LOOKBACK_MS || 10 * 60 * 1000),

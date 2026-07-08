@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   buildProviderApiName,
+  createManualUserServiceCredential,
   createUserServiceCredential,
   formatServiceCredentialForAdmin,
   getUserServiceStatus,
@@ -443,6 +444,149 @@ test('createUserServiceCredential falls back to the created runtime key while da
   assert.equal(result.serviceCredential.serviceStatus, 'active')
   assert.equal(result.serviceCredential.apiKeyLast4, 'wxyz')
   assert.equal(inserts.some((item) => item.table === 'user_service_credentials' && item.payload.status === 'create_failed'), false)
+})
+
+test('createManualUserServiceCredential stores a local runtime key for service access without exposing it', async () => {
+  const inserts = []
+  const fakeSupabase = {
+    from(table) {
+      const filters = []
+      return {
+        select() { return this },
+        eq(column, value) {
+          filters.push([column, value])
+          return this
+        },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => {
+          if (table === 'users') return { data: { id: 'user-1', status: 'active' }, error: null }
+          if (table === 'user_service_credentials' && filters.some(([column]) => column === 'provider_api_name')) {
+            return { data: null, error: null }
+          }
+          return { data: null, error: null }
+        },
+        then(resolve, reject) {
+          if (table === 'user_service_credentials') return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+          return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+        },
+        insert: (payload) => {
+          inserts.push({ table, payload })
+          return {
+            select() { return this },
+            single: async () => ({ data: { id: `${table}-inserted`, created_at: '2026-07-08T00:00:00.000Z', ...payload }, error: null })
+          }
+        }
+      }
+    }
+  }
+
+  const result = await createManualUserServiceCredential({
+    userId: 'user-1',
+    operatorUserId: 'admin-1',
+    apiName: 'manual_user_key',
+    apiKey: 'sk-manual-runtime-abcd',
+    ip: '127.0.0.1',
+    userAgent: 'node-test'
+  }, {
+    supabaseClient: fakeSupabase
+  })
+
+  const credentialInsert = inserts.find((item) => item.table === 'user_service_credentials')
+  assert.equal(credentialInsert.payload.provider_api_name, 'manual_user_key')
+  assert.equal(credentialInsert.payload.status, 'active')
+  assert.equal(credentialInsert.payload.api_key_last4, 'abcd')
+  assert.ok(credentialInsert.payload.api_key_encrypted)
+  assert.notEqual(credentialInsert.payload.api_key_encrypted, 'sk-manual-runtime-abcd')
+  assert.doesNotMatch(credentialInsert.payload.api_key_encrypted, /sk-manual-runtime/)
+  assert.equal(result.serviceCredential.serviceStatus, 'active')
+  assert.equal(result.serviceCredential.apiKeyLast4, 'abcd')
+  assert.equal(JSON.stringify(result), JSON.stringify(result).replace('sk-manual-runtime-abcd', ''))
+  assert.ok(inserts.some((item) => item.table === 'admin_operation_logs' && item.payload.action === 'admin.service_access.manual_bind'))
+})
+
+test('resolveActiveUserServiceCredential uses a manually stored runtime key without dashboard lookup', async () => {
+  const inserts = []
+  const createSupabase = {
+    from(table) {
+      const filters = []
+      return {
+        select() { return this },
+        eq(column, value) {
+          filters.push([column, value])
+          return this
+        },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => {
+          if (table === 'users') return { data: { id: 'user-1', status: 'active' }, error: null }
+          if (table === 'user_service_credentials' && filters.some(([column]) => column === 'provider_api_name')) {
+            return { data: null, error: null }
+          }
+          return { data: null, error: null }
+        },
+        then(resolve, reject) {
+          if (table === 'user_service_credentials') return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+          return Promise.resolve({ data: [], error: null }).then(resolve, reject)
+        },
+        insert: (payload) => {
+          inserts.push({ table, payload })
+          return {
+            select() { return this },
+            single: async () => ({ data: { id: `${table}-inserted`, created_at: '2026-07-08T00:00:00.000Z', ...payload }, error: null })
+          }
+        }
+      }
+    }
+  }
+
+  await createManualUserServiceCredential({
+    userId: 'user-1',
+    operatorUserId: 'admin-1',
+    apiName: 'manual_user_key',
+    apiKey: 'sk-manual-runtime-abcd'
+  }, {
+    supabaseClient: createSupabase
+  })
+
+  const credential = {
+    id: 'cred-manual',
+    user_id: 'user-1',
+    provider_api_name: 'manual_user_key',
+    status: 'active',
+    api_key_encrypted: inserts.find((item) => item.table === 'user_service_credentials').payload.api_key_encrypted
+  }
+  const resolveSupabase = {
+    from(table) {
+      const filters = []
+      return {
+        select() { return this },
+        eq(column, value) {
+          filters.push([column, value])
+          return this
+        },
+        order() { return this },
+        limit() { return this },
+        maybeSingle: async () => ({
+          data: filters.some(([column, value]) => column === 'status' && value === 'active') ? credential : null,
+          error: null
+        })
+      }
+    }
+  }
+
+  const resolved = await resolveActiveUserServiceCredential('user-1', {
+    supabaseClient: resolveSupabase,
+    getRuntimeApiKeyByName: async () => {
+      throw new Error('dashboard lookup should not run for manually stored keys')
+    }
+  })
+
+  assert.deepEqual(resolved, {
+    serviceCredentialId: 'cred-manual',
+    apiName: 'manual_user_key',
+    apiKey: 'sk-manual-runtime-abcd'
+  })
 })
 
 test('createUserServiceCredential restores a failed credential when its runtime key becomes available', async () => {

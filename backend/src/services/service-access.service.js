@@ -1,3 +1,5 @@
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
+import { env } from '../config/env.js'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
 import { create302ApiKey, get302RuntimeApiKeyByName, update302ApiKey } from './dashboard302.service.js'
@@ -17,6 +19,67 @@ const toNumber = (value) => {
 const last4 = (value = '') => {
   const raw = String(value || '').trim()
   return raw ? raw.slice(-4) : ''
+}
+
+const normalizeApiKey = (value = '') => String(value || '').trim().replace(/^Bearer\s+/i, '').trim()
+
+const apiKeyFingerprint = (value = '') => {
+  const safeKey = normalizeApiKey(value)
+  if (!safeKey) return ''
+  return `sha256:${createHash('sha256').update(safeKey).digest('hex').slice(0, 12)}`
+}
+
+const getCredentialEncryptionKey = () => {
+  const secret = String(env.serviceCredentialEncryptionKey || '').trim()
+  if (!secret) {
+    throw new HttpError(500, 'SERVICE_CREDENTIAL_ENCRYPTION_KEY is not configured', 'SERVICE_CREDENTIAL_ENCRYPTION_NOT_CONFIGURED')
+  }
+  return createHash('sha256').update(secret).digest()
+}
+
+const encryptServiceApiKey = (apiKey = '') => {
+  const safeKey = normalizeApiKey(apiKey)
+  if (!safeKey) return ''
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', getCredentialEncryptionKey(), iv)
+  const encrypted = Buffer.concat([cipher.update(safeKey, 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return [
+    'v1',
+    iv.toString('base64url'),
+    tag.toString('base64url'),
+    encrypted.toString('base64url')
+  ].join('.')
+}
+
+const decryptServiceApiKey = (encrypted = '') => {
+  const raw = String(encrypted || '').trim()
+  if (!raw) return ''
+  const [version, ivValue, tagValue, encryptedValue] = raw.split('.')
+  if (version !== 'v1' || !ivValue || !tagValue || !encryptedValue) return ''
+  const decipher = createDecipheriv('aes-256-gcm', getCredentialEncryptionKey(), Buffer.from(ivValue, 'base64url'))
+  decipher.setAuthTag(Buffer.from(tagValue, 'base64url'))
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedValue, 'base64url')),
+    decipher.final()
+  ]).toString('utf8')
+}
+
+const assertManualApiKeyIsAssignable = (apiKey = '') => {
+  const safeKey = normalizeApiKey(apiKey)
+  if (!safeKey) throw new HttpError(400, 'apiKey is required', 'INVALID_API_KEY')
+
+  const fingerprint = apiKeyFingerprint(safeKey)
+  const reserved = [
+    env.dashboard302ApiKey,
+    env.providerApiKey
+  ].map(apiKeyFingerprint).filter(Boolean)
+
+  if (reserved.includes(fingerprint)) {
+    throw new HttpError(400, 'Management provider keys cannot be assigned to a user service credential.', 'SERVICE_API_KEY_RESERVED')
+  }
+
+  return safeKey
 }
 
 const runtimeUnavailableMessage = (providerApiName = '') =>
@@ -176,6 +239,21 @@ const listUserCredentials = async (client, userId) => {
     throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_QUERY_FAILED')
   }
   return Array.isArray(data) ? data : []
+}
+
+const findCredentialByProviderApiName = async (client, providerApiName = '') => {
+  const safeName = String(providerApiName || '').trim()
+  if (!safeName) return null
+  const { data, error } = await client
+    .from(CREDENTIAL_TABLE)
+    .select('*')
+    .eq('provider_api_name', safeName)
+    .maybeSingle()
+  if (error) {
+    if (isMissingRelation(error)) return null
+    throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_QUERY_FAILED')
+  }
+  return data || null
 }
 
 const getUserForServiceMutation = async (client, userId) => {
@@ -389,6 +467,94 @@ export const createUserServiceCredential = async ({
   return { ok: true, serviceCredential: formatServiceCredentialForAdmin(data) }
 }
 
+export const createManualUserServiceCredential = async ({
+  userId,
+  operatorUserId,
+  apiName,
+  apiKey,
+  limitCost = 0,
+  limitDailyCost = 0,
+  expiredOn = 0,
+  replaceExisting = true,
+  ip = '',
+  userAgent = ''
+}, deps = {}) => {
+  const client = deps.supabaseClient || supabase
+  const safeUserId = String(userId || '').trim()
+  const safeApiName = String(apiName || '').trim()
+  if (!safeUserId) throw new HttpError(400, 'userId is required', 'INVALID_USER_ID')
+  if (!safeApiName) throw new HttpError(400, 'apiName is required', 'INVALID_API_NAME')
+  const safeApiKey = assertManualApiKeyIsAssignable(apiKey)
+
+  await getUserForServiceMutation(client, safeUserId)
+  const credentials = await listUserCredentials(client, safeUserId)
+  const active = credentials.find((item) => String(item.status || '') === 'active')
+  if (active && !replaceExisting) {
+    throw new HttpError(409, 'User already has an active service credential.', 'SERVICE_ALREADY_ACTIVE')
+  }
+
+  const existingByApiName = await findCredentialByProviderApiName(client, safeApiName)
+  if (existingByApiName && String(existingByApiName.user_id || '') !== safeUserId) {
+    throw new HttpError(409, 'API key is already assigned to another user service credential.', 'SERVICE_API_KEY_ALREADY_ASSIGNED')
+  }
+  if (active && existingByApiName && existingByApiName.id !== active.id) {
+    throw new HttpError(409, 'API key is already present on another credential for this user. Disable the active service first.', 'SERVICE_API_KEY_ALREADY_ASSIGNED')
+  }
+
+  const mutationPayload = {
+    user_id: safeUserId,
+    provider: '302ai',
+    internal_name: buildInternalName(safeApiName),
+    provider_api_name: safeApiName,
+    api_key_last4: last4(safeApiKey),
+    api_key_encrypted: encryptServiceApiKey(safeApiKey),
+    status: 'active',
+    limit_cost: Number(limitCost || 0),
+    limit_daily_cost: Number(limitDailyCost || 0),
+    expired_on: Number(expiredOn || 0),
+    disabled_at: null,
+    deleted_at: null,
+    created_by: operatorUserId || null,
+    last_error: null
+  }
+
+  const target = active || existingByApiName
+  let data
+  if (target?.id) {
+    const { data: updated, error } = await client
+      .from(CREDENTIAL_TABLE)
+      .update(mutationPayload)
+      .eq('id', target.id)
+      .select('*')
+      .single()
+    if (error) throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_UPDATE_FAILED')
+    data = updated
+  } else {
+    const { data: inserted, error } = await client
+      .from(CREDENTIAL_TABLE)
+      .insert(mutationPayload)
+      .select('*')
+      .single()
+    if (error) throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_INSERT_FAILED')
+    data = inserted
+  }
+
+  await createAdminLog(client, {
+    operatorUserId,
+    targetUserId: safeUserId,
+    action: 'admin.service_access.manual_bind',
+    metadata: {
+      serviceIdentifier: maskServiceIdentifier(data.provider_api_name),
+      apiKeyFingerprint: apiKeyFingerprint(safeApiKey),
+      replaced: Boolean(target?.id),
+      ip: String(ip || ''),
+      userAgent: String(userAgent || '')
+    }
+  })
+
+  return { ok: true, serviceCredential: formatServiceCredentialForAdmin(data) }
+}
+
 const resolveActiveUserServiceCredentialRecord = async (safeUserId, client) => {
   const { data: activeCredential, error: activeError } = await activeCredentialQuery(client, safeUserId)
   if (activeError) {
@@ -433,6 +599,15 @@ export const resolveActiveUserServiceCredential = async (userId, deps = {}) => {
   if (!safeUserId) throw new HttpError(401, 'Missing authenticated user', 'UNAUTHORIZED')
 
   const data = await resolveActiveUserServiceCredentialRecord(safeUserId, client)
+
+  const storedApiKey = decryptServiceApiKey(data.api_key_encrypted)
+  if (storedApiKey) {
+    return {
+      serviceCredentialId: data.id,
+      apiName: data.provider_api_name,
+      apiKey: storedApiKey
+    }
+  }
 
   const apiKey = await getRuntimeApiKeyByName(data.provider_api_name)
   if (!apiKey) {

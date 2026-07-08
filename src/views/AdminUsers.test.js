@@ -773,6 +773,7 @@ test('admin user service row operations use focused feature modules', () => {
   assert.match(userOperationsCellSource, /<AdminUserServiceActiveActions/)
   assert.match(userOperationsCellSource, /<AdminUserRoleActions/)
   assert.match(userOperationsCellSource, /<AdminUserStatusActions/)
+  assert.match(userOperationsCellSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
   assert.match(userOperationsCellSource, /@update-service-limits="emit\('update-service-limits', \$event\)"/)
   assert.match(userOperationsCellSource, /@update-role-selection="forwardRoleSelection"/)
 
@@ -794,8 +795,10 @@ test('admin user service row operations use focused feature modules', () => {
   assert.match(userServiceActivationActionSource, /\['not_enabled', 'create_failed', 'deleted'\]\.includes\(user\.service\?\.serviceStatus \|\| 'not_enabled'\)/)
   assert.match(userServiceActivationActionSource, /:disabled="serviceLoading\[user\.id\] \|\| user\.status === 'deleted'"/)
   assert.match(userServiceActivationActionSource, /emit\('activate-service', user\)/)
+  assert.match(userServiceActivationActionSource, /emit\('bind-manual-service', user\)/)
   assert.match(userServiceActivationActionSource, /开通中\.\.\./)
   assert.match(userServiceActivationActionSource, /开通服务/)
+  assert.match(userServiceActivationActionSource, /手动绑定 Key/)
 
   assert.match(userServiceActiveActionsSource, /import AdminEditorActions from '@\/components\/admin\/AdminEditorActions\.vue'/)
   assert.match(userServiceActiveActionsSource, /import AdminMicroButton from '@\/components\/admin\/AdminMicroButton\.vue'/)
@@ -818,6 +821,20 @@ test('admin user service row operations use focused feature modules', () => {
   assert.match(userRoleActionsSource, /emit\('update-role-selection', user\.id, event\.target\.value\)/)
   assert.match(userStatusActionsSource, /禁止操作自己/)
   assert.match(userStatusActionsSource, /emit\('delete-user', user\)/)
+})
+
+test('admin manual service binding event reaches page action composable', () => {
+  assert.match(source, /@bind-manual-service="bindManualService"/)
+  assert.match(source, /bindManualService/)
+  assert.match(adminDashboardSectionsSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
+  assert.match(userServiceSectionSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
+  assert.match(userServiceResultsPanelSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
+  assert.match(userServiceTableSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
+  assert.match(userServiceRowSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
+  assert.match(userOperationsCellSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
+  assert.match(userServiceActionsSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
+  assert.match(userServiceActionsCellSource, /@bind-manual-service="emit\('bind-manual-service', \$event\)"/)
+  assert.match(userServiceActivationActionSource, /defineEmits\(\['activate-service', 'bind-manual-service'\]\)/)
 })
 
 test('admin user service row combines service and account operations into one compact cell', () => {

@@ -31,6 +31,10 @@ export const getAdminLimitCostPromptMessage = () => '请输入总额度（USD，
 
 export const getAdminLimitDailyCostPromptMessage = () => '请输入日额度（USD，0 表示不限制）：'
 
+export const getAdminManualServiceApiNamePromptMessage = () => '请输入 302 API Key 名称（api_name）：'
+
+export const getAdminManualServiceApiKeyPromptMessage = () => '请输入完整 302 API Key：'
+
 export const getAdminServiceLimitPayload = (user = {}, limitCostValue = 0, limitDailyCostValue = 0) => {
   const limitCost = Number(limitCostValue || 0)
   const limitDailyCost = Number(limitDailyCostValue || 0)
@@ -45,6 +49,26 @@ export const getAdminServiceLimitPayload = (user = {}, limitCostValue = 0, limit
       limitCost,
       limitDailyCost,
       expiredOn: Number(user?.service?.expiredOn || 0)
+    }
+  }
+}
+
+export const getAdminManualServiceCredentialPayload = (user = {}, apiNameValue = '', apiKeyValue = '') => {
+  const apiName = String(apiNameValue || '').trim()
+  const apiKey = String(apiKeyValue || '').trim()
+
+  if (!apiName) return { ok: false, message: '请输入 302 API Key 名称' }
+  if (!apiKey) return { ok: false, message: '请输入完整 302 API Key' }
+
+  return {
+    ok: true,
+    payload: {
+      apiName,
+      apiKey,
+      limitCost: Number(user?.service?.limitCost || 0),
+      limitDailyCost: Number(user?.service?.limitDailyCost || 0),
+      expiredOn: Number(user?.service?.expiredOn || 0),
+      replaceExisting: true
     }
   }
 }

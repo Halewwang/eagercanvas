@@ -5,6 +5,8 @@ import test from 'node:test'
 const actionsCore = await import('./useAdminUserActionsCore.js').catch(() => ({}))
 const actionsHookUrl = new URL('./useAdminUserActions.js', import.meta.url)
 const actionsHookSource = existsSync(actionsHookUrl) ? readFileSync(actionsHookUrl, 'utf8') : ''
+const adminApiUrl = new URL('../api/admin.js', import.meta.url)
+const adminApiSource = existsSync(adminApiUrl) ? readFileSync(adminApiUrl, 'utf8') : ''
 
 test('admin service limit payload preserves nonnegative numeric limits and expiry', () => {
   assert.equal(typeof actionsCore.getAdminServiceLimitPayload, 'function')
@@ -81,11 +83,47 @@ test('admin user action core owns prompt copy for user and service actions', () 
   assert.equal(typeof actionsCore.getAdminDisableServicePromptMessage, 'function')
   assert.equal(typeof actionsCore.getAdminLimitCostPromptMessage, 'function')
   assert.equal(typeof actionsCore.getAdminLimitDailyCostPromptMessage, 'function')
+  assert.equal(typeof actionsCore.getAdminManualServiceApiNamePromptMessage, 'function')
+  assert.equal(typeof actionsCore.getAdminManualServiceApiKeyPromptMessage, 'function')
 
   assert.equal(actionsCore.getAdminSuspendUserPromptMessage(), '请输入暂停原因（可选）：')
   assert.equal(actionsCore.getAdminDisableServicePromptMessage(), '请输入停用原因（可选）：')
   assert.equal(actionsCore.getAdminLimitCostPromptMessage(), '请输入总额度（USD，0 表示不限制）：')
   assert.equal(actionsCore.getAdminLimitDailyCostPromptMessage(), '请输入日额度（USD，0 表示不限制）：')
+  assert.equal(actionsCore.getAdminManualServiceApiNamePromptMessage(), '请输入 302 API Key 名称（api_name）：')
+  assert.equal(actionsCore.getAdminManualServiceApiKeyPromptMessage(), '请输入完整 302 API Key：')
+})
+
+test('admin manual service payload requires key identity and secret', () => {
+  assert.equal(typeof actionsCore.getAdminManualServiceCredentialPayload, 'function')
+
+  assert.deepEqual(
+    actionsCore.getAdminManualServiceCredentialPayload(
+      { service: { limitCost: 12, limitDailyCost: 2, expiredOn: 345 } },
+      ' manual-api ',
+      ' sk-test '
+    ),
+    {
+      ok: true,
+      payload: {
+        apiName: 'manual-api',
+        apiKey: 'sk-test',
+        limitCost: 12,
+        limitDailyCost: 2,
+        expiredOn: 345,
+        replaceExisting: true
+      }
+    }
+  )
+
+  assert.deepEqual(actionsCore.getAdminManualServiceCredentialPayload({}, '', 'sk-test'), {
+    ok: false,
+    message: '请输入 302 API Key 名称'
+  })
+  assert.deepEqual(actionsCore.getAdminManualServiceCredentialPayload({}, 'manual-api', ''), {
+    ok: false,
+    message: '请输入完整 302 API Key'
+  })
 })
 
 test('admin user action core owns refresh orchestration helpers', async () => {
@@ -111,12 +149,23 @@ test('admin user actions composable owns mutation api calls and loading state', 
   assert.match(actionsHookSource, /updateAdminUserStatus/)
   assert.match(actionsHookSource, /deleteAdminUser/)
   assert.match(actionsHookSource, /activateAdminUserService/)
+  assert.match(actionsHookSource, /bindManualAdminUserService/)
   assert.match(actionsHookSource, /reconcileAdminBilling/)
   assert.match(actionsHookSource, /const saving = ref\(\{\}\)/)
   assert.match(actionsHookSource, /const serviceLoading = ref\(\{\}\)/)
+  assert.match(actionsHookSource, /const bindManualService = async/)
   assert.match(actionsHookSource, /const reconcileBilling = async/)
   assert.match(actionsHookSource, /setAdminActionLoading/)
+  assert.match(actionsHookSource, /getAdminManualServiceApiNamePromptMessage/)
+  assert.match(actionsHookSource, /getAdminManualServiceApiKeyPromptMessage/)
+  assert.match(actionsHookSource, /getAdminManualServiceCredentialPayload/)
   assert.match(actionsHookSource, /getAdminReconcileBillingSuccessMessage/)
   assert.match(actionsHookSource, /runAdminUsersAndLogsRefresh/)
   assert.match(actionsHookSource, /getAdminSuspendUserPromptMessage/)
+})
+
+test('admin api exposes administrator-only manual service key binding endpoint', () => {
+  assert.match(adminApiSource, /export const bindManualAdminUserService/)
+  assert.match(adminApiSource, /service-access\/manual/)
+  assert.match(adminApiSource, /method: 'post'/)
 })
