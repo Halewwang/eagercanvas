@@ -106,6 +106,12 @@ test('project copy and direct sharing stay scoped to personal owner projects', (
   assert.match(projectsServiceSource, /Only personal projects can be shared with a user/)
 })
 
+test('project permission management stays scoped to team workspace projects', () => {
+  assert.match(projectsServiceSource, /PROJECT_PERMISSION_TEAM_PROJECT_REQUIRED/)
+  assert.match(projectsServiceSource, /Project permissions are only managed for team workspace projects/)
+  assert.match(projectsServiceSource, /assertTeamProjectPermissionsScope\(project\)/)
+})
+
 test('project listing uses batched access resolution instead of per-row permission lookups', () => {
   const start = projectsServiceSource.indexOf('export const listProjects = async')
   const end = projectsServiceSource.indexOf('export const getProject = async')

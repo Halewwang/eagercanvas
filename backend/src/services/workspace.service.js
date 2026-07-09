@@ -5,6 +5,7 @@ import { HttpError } from '../utils/http.js'
 import { isMissingColumnError, isMissingRelationError } from '../utils/supabase-schema.js'
 import { getProject, createProject } from './projects.service.js'
 import { sanitizeCanvasData } from './canvas-sanitize.service.js'
+import { listReviewableProjectEditRequests } from './project-permissions.service.js'
 import {
   acceptDirectInvite,
   createDirectInvite,
@@ -285,6 +286,17 @@ export const listPendingWorkspaceInvites = async (userId) => {
     expiresAt: invite.expires_at,
     createdAt: invite.created_at
   }))
+}
+
+export const getWorkspaceInbox = async (userId) => {
+  const [workspaceInvites, projectEditRequests] = await Promise.all([
+    listPendingWorkspaceInvites(userId),
+    listReviewableProjectEditRequests(userId)
+  ])
+  return {
+    workspaceInvites,
+    projectEditRequests
+  }
 }
 
 export const acceptWorkspaceDirectInvite = async (userId, inviteId) => {

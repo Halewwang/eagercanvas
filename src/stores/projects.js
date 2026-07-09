@@ -7,13 +7,15 @@ import {
   apiCopyProjectToWorkspace,
   apiCreateProject,
   apiDeleteProject,
+  apiGetProjectPermissions,
   apiGetProject,
   apiListProjects,
   apiListProjectEditRequests,
   apiPatchProject,
   apiRequestProjectEditAccess,
   apiReviewProjectEditRequest,
-  apiShareProjectWithUser
+  apiShareProjectWithUser,
+  apiUpdateProjectPermission
 } from '@/api/projects'
 import { useAuthStore } from '@/stores/auth'
 import { getCanvasDraftStorage } from '@/stores/canvasDrafts'
@@ -964,6 +966,16 @@ export const loadProjectEditRequests = async (id) => {
   return Array.isArray(response?.data?.requests) ? response.data.requests : []
 }
 
+export const loadProjectPermissions = async (id) => {
+  const response = await apiGetProjectPermissions(id)
+  return response?.data || null
+}
+
+export const updateProjectPermission = async (id, userId, role) => {
+  const response = await apiUpdateProjectPermission(id, userId, { role })
+  return response?.data || null
+}
+
 export const reviewProjectEditRequest = async (id, requestId, decision) => {
   const response = await apiReviewProjectEditRequest(id, requestId, { decision })
   return response?.data?.request || null
@@ -1027,6 +1039,8 @@ export const useProjectsStore = () => ({
   updateProjectThumbnail,
   requestProjectEditAccess,
   loadProjectEditRequests,
+  loadProjectPermissions,
+  updateProjectPermission,
   reviewProjectEditRequest,
   markProjectOpened,
   getSortedProjects,

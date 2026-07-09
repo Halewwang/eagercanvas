@@ -10,3 +10,8 @@ test('workspace routes expose owner update and delete team endpoints', () => {
   assert.match(routesSource, /workspaceRouter\.patch\('\/workspaces\/:workspaceId'/)
   assert.match(routesSource, /workspaceRouter\.delete\('\/workspaces\/:workspaceId'/)
 })
+
+test('workspace routes expose aggregated inbox endpoint', () => {
+  assert.match(routesSource, /getWorkspaceInbox/)
+  assert.match(routesSource, /workspaceRouter\.get\('\/inbox'/)
+})

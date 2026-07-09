@@ -4,6 +4,7 @@ import { HttpError } from '../utils/http.js'
 import { disableUserServiceCredential } from './service-access.service.js'
 import { createAdminLog } from './admin-operation-logs.js'
 import { removeApiKeyAssignmentsForUser } from './admin-api-key-assignments.js'
+import { transferSuspendedUserTeamProjects } from './workspace-ownership-transfer.service.js'
 
 const isMissingRelation = (error) => {
   const msg = String(error?.message || '').toLowerCase()
@@ -166,7 +167,13 @@ export const updateUserStatus = async ({
     .single()
   if (updateError) throw new HttpError(500, updateError.message, 'USER_STATUS_UPDATE_FAILED')
 
+  let projectOwnershipTransfer = null
   if (safeStatus === 'suspended') {
+    projectOwnershipTransfer = await transferSuspendedUserTeamProjects({
+      targetUserId: safeTargetUserId,
+      operatorUserId,
+      reason: 'account suspended'
+    })
     await supabase
       .from('sessions')
       .update({ revoked: true, revoked_at: new Date().toISOString() })
@@ -192,6 +199,7 @@ export const updateUserStatus = async ({
       beforeStatus: targetUser.status || 'active',
       afterStatus: updated.status,
       reason: updated.suspended_reason || null,
+      projectOwnershipTransfer,
       ip: String(ip || ''),
       userAgent: String(userAgent || '')
     }
@@ -240,6 +248,11 @@ export const deleteUserAccount = async ({
   }
 
   const now = new Date().toISOString()
+  const projectOwnershipTransfer = await transferSuspendedUserTeamProjects({
+    targetUserId: safeTargetUserId,
+    operatorUserId,
+    reason: 'account deleted'
+  })
   const { error: updateError } = await supabase
     .from('users')
     .update({
@@ -277,6 +290,7 @@ export const deleteUserAccount = async ({
     action: 'admin.user.delete',
     metadata: {
       beforeStatus: targetUser.status || 'active',
+      projectOwnershipTransfer,
       ip: String(ip || ''),
       userAgent: String(userAgent || '')
     }

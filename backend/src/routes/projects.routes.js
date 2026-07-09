@@ -6,11 +6,13 @@ import {
   createProject,
   getProject,
   getProjectEditRequests,
+  getProjectPermissions,
   listProjects,
   removeProject,
   requestProjectEditAccess,
   reviewProjectEditAccess,
   shareProjectWithUser,
+  updateProjectPermission,
   updateProject
 } from '../services/projects.service.js'
 
@@ -59,6 +61,16 @@ projectsRouter.get('/:id/edit-requests', asyncHandler(async (req, res) => {
 
 projectsRouter.post('/:id/edit-requests/:requestId/review', asyncHandler(async (req, res) => {
   const result = await reviewProjectEditAccess(req.user.id, req.params.id, req.params.requestId, req.body)
+  res.json({ data: result })
+}))
+
+projectsRouter.get('/:id/permissions', asyncHandler(async (req, res) => {
+  const result = await getProjectPermissions(req.user.id, req.params.id)
+  res.json({ data: result })
+}))
+
+projectsRouter.patch('/:id/permissions/:userId', asyncHandler(async (req, res) => {
+  const result = await updateProjectPermission(req.user.id, req.params.id, req.params.userId, req.body)
   res.json({ data: result })
 }))
 

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { mock, test } from 'node:test'
 
 import { supabase } from '../config/supabase.js'
 import { deleteUserAccount, updateUserRoles, updateUserStatus } from './admin-user-management.js'
+
+const source = readFileSync(new URL('./admin-user-management.js', import.meta.url), 'utf8')
 
 const roles = [
   { id: 'role-user', code: 'user' },
@@ -162,4 +165,11 @@ test('deleteUserAccount rejects self deletion before database queries', async ()
   } finally {
     restore.mock.restore()
   }
+})
+
+test('admin user suspension and deletion trigger team project ownership transfer', () => {
+  assert.match(source, /transferSuspendedUserTeamProjects/)
+  assert.match(source, /projectOwnershipTransfer/)
+  assert.match(source, /reason:\s*'account suspended'/)
+  assert.match(source, /reason:\s*'account deleted'/)
 })

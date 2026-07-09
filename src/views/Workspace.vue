@@ -36,35 +36,63 @@
         @create-project="createBlankProject"
       />
 
-      <div v-if="activeSection === 'featured'" class="template-tabs">
-        <button
-          v-for="tab in templateTabs"
-          :key="tab.key"
-          type="button"
-          :class="{ active: activeTemplateScope === tab.key }"
-          @click="changeTemplateScope(tab.key)"
-        >
-          {{ tab.label }}
-        </button>
-      </div>
-
-      <div v-if="workspaceSwitching" class="workspace-switching-status" role="status" aria-live="polite">
-        <span class="workspace-switching-status-dot" aria-hidden="true" />
-        Refreshing workspace
-      </div>
-
-      <WorkspaceCardsGrid
-        :active-section="activeSection"
-        :items="sectionItems"
-        :describe-item="describeItem"
-        :resolve-card-icon="resolveCardIcon"
-        :project-menu-options="projectMenuOptions"
-        :empty-state-title="cardsEmptyStateTitle"
-        :empty-state-copy="cardsEmptyStateCopy"
-        @primary-click="handlePrimaryClick"
-        @project-menu-select="handleProjectMenuSelect"
-        @favorite-template="toggleFavoriteTemplate"
+      <WorkspaceInboxPanel
+        v-if="activeSection === 'inbox'"
+        :workspace-invites="workspaceInbox.workspaceInvites"
+        :project-edit-requests="workspaceInbox.projectEditRequests"
+        :loading="workspaceInboxLoading"
+        @accept-workspace-invite="handleAcceptWorkspaceInvite"
+        @review-project-request="handleReviewProjectRequest"
+        @refresh="refreshWorkspaceInbox"
       />
+
+      <WorkspaceSettingsPanel
+        v-else-if="activeSection === 'settings' && isTeamWorkspaceOwner"
+        v-model:edit-name="editWorkspaceName"
+        v-model:edit-avatar-url="editWorkspaceAvatarUrl"
+        :current-workspace="currentWorkspace"
+        :members="settingsWorkspaceMembers"
+        :projects="settingsProjects"
+        :permission-detail="projectPermissionDetail"
+        :loading-permissions="projectPermissionLoading"
+        :saving-permission="projectPermissionSaving"
+        @update-workspace="saveWorkspaceSettingsFromPanel"
+        @load-project-permissions="loadProjectPermissionDetail"
+        @change-project-permission="changeProjectPermission"
+      />
+
+      <template v-else>
+        <div v-if="activeSection === 'featured'" class="template-tabs">
+          <button
+            v-for="tab in templateTabs"
+            :key="tab.key"
+            type="button"
+            :class="{ active: activeTemplateScope === tab.key }"
+            @click="changeTemplateScope(tab.key)"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+
+        <div v-if="workspaceSwitching" class="workspace-switching-status" role="status" aria-live="polite">
+          <span class="workspace-switching-status-dot" aria-hidden="true" />
+          Refreshing workspace
+        </div>
+
+        <WorkspaceCardsGrid
+          v-if="showsCardsGrid"
+          :active-section="activeSection"
+          :items="sectionItems"
+          :describe-item="describeItem"
+          :resolve-card-icon="resolveCardIcon"
+          :project-menu-options="projectMenuOptions"
+          :empty-state-title="cardsEmptyStateTitle"
+          :empty-state-copy="cardsEmptyStateCopy"
+          @primary-click="handlePrimaryClick"
+          @project-menu-select="handleProjectMenuSelect"
+          @favorite-template="toggleFavoriteTemplate"
+        />
+      </template>
     </main>
 
     <WorkspaceModals
@@ -135,7 +163,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   BookmarkOutline,
@@ -147,6 +175,8 @@ import {
   GridOutline,
   PersonOutline,
   RefreshOutline,
+  SettingsOutline,
+  WindowSidebarOutline,
   TrashOutline
 } from '@/icons/coolicons'
 import {
@@ -160,13 +190,18 @@ import {
   shareProjectWithUser,
   deleteProject,
   requestProjectEditAccess,
-  refreshProjectById
+  loadProjectPermissions,
+  refreshProjectById,
+  reviewProjectEditRequest,
+  updateProjectPermission
 } from '@/stores/projects'
 import WorkspaceCardsGrid from '@/components/workspace/WorkspaceCardsGrid.vue'
 import WorkspaceHeader from '@/components/workspace/WorkspaceHeader.vue'
+import WorkspaceInboxPanel from '@/components/workspace/WorkspaceInboxPanel.vue'
 import WorkspaceModals from '@/components/workspace/WorkspaceModals.vue'
 import WorkspaceProfileModal from '@/components/workspace/WorkspaceProfileModal.vue'
 import WorkspaceSidebar from '@/components/workspace/WorkspaceSidebar.vue'
+import WorkspaceSettingsPanel from '@/components/workspace/WorkspaceSettingsPanel.vue'
 import WorkspaceTeamModals from '@/components/workspace/WorkspaceTeamModals.vue'
 import { getErrorMessage } from '@/utils'
 import {
@@ -239,17 +274,12 @@ const profileSaving = ref(false)
 const usageSummary = ref(null)
 const usageSummaryLoading = ref(false)
 const workspaceSwitching = ref(false)
+const workspaceInboxLoading = ref(false)
+const settingsWorkspaceMembers = ref([])
+const projectPermissionDetail = ref(null)
+const projectPermissionLoading = ref(false)
+const projectPermissionSaving = ref(false)
 let workspaceSwitchRefreshId = 0
-
-const navItems = computed(() => [
-  {
-    key: 'projects',
-    label: currentWorkspace.value?.kind === 'team' ? 'Team Workspace' : 'My Project',
-    icon: FolderOpenOutline
-  },
-  { key: 'shared', label: 'Shared with me', icon: PersonOutline },
-  { key: 'featured', label: 'Shared Template', icon: BookmarkOutline }
-])
 
 const templateTabs = [
   { key: 'community', label: 'Community' },
@@ -287,6 +317,7 @@ const {
   workspaces,
   featuredTemplates,
   pendingWorkspaceInvites,
+  workspaceInbox,
   templatesScope,
   acceptWorkspaceInvite,
   createTeamWorkspace,
@@ -296,6 +327,7 @@ const {
   getSharedTemplate,
   joinWorkspaceInvite,
   loadFeaturedTemplates,
+  loadWorkspaceInbox,
   loadPendingWorkspaceInvites,
   loadWorkspaceMembers,
   loadWorkspaces,
@@ -306,6 +338,27 @@ const {
   unfavoriteSharedTemplate,
   useSharedTemplate
 } = useWorkspaceStore()
+
+const isTeamWorkspaceOwner = computed(() => (
+  currentWorkspace.value?.kind === 'team' && currentWorkspace.value?.role === 'owner'
+))
+
+const workspaceInboxCount = computed(() => (
+  Number(workspaceInbox.value?.workspaceInvites?.length || 0) +
+  Number(workspaceInbox.value?.projectEditRequests?.length || 0)
+))
+
+const navItems = computed(() => [
+  {
+    key: 'projects',
+    label: currentWorkspace.value?.kind === 'team' ? 'Team Workspace' : 'My Project',
+    icon: FolderOpenOutline
+  },
+  { key: 'shared', label: 'Shared with me', icon: PersonOutline },
+  { key: 'featured', label: 'Shared Template', icon: BookmarkOutline },
+  { key: 'inbox', label: 'Inbox', icon: WindowSidebarOutline, count: workspaceInboxCount.value },
+  ...(isTeamWorkspaceOwner.value ? [{ key: 'settings', label: 'Settings', icon: SettingsOutline }] : [])
+])
 
 const workspaceBrand = computed(() => getWorkspaceBrand({
   user: user.value,
@@ -318,13 +371,21 @@ const sectionTitle = computed(() => getWorkspaceSectionTitle(activeSection.value
 
 const sectionDescription = computed(() => getWorkspaceSectionDescription(activeSection.value, { currentWorkspace: currentWorkspace.value }))
 
+const showsCardsGrid = computed(() => ['projects', 'shared', 'featured'].includes(activeSection.value))
+
 const sectionItems = computed(() => {
   if (activeSection.value === 'featured') return featuredTemplates.value
   if (activeSection.value === 'shared') {
     return projects.value.filter((project) => getWorkspaceProjectSectionKey(project) === 'shared')
   }
+  if (!showsCardsGrid.value) return []
   return projects.value.filter((project) => getWorkspaceProjectSectionKey(project) === 'projects')
 })
+
+const settingsProjects = computed(() => projects.value.filter((project) => (
+  project.accessMode === 'team' &&
+  (!currentWorkspace.value?.id || project.workspaceId === currentWorkspace.value.id)
+)))
 
 const isProjectListUnavailable = computed(() => (
   ['projects', 'shared'].includes(activeSection.value) &&
@@ -453,6 +514,99 @@ const loadSidebarUsageSummary = async () => {
     usageSummary.value = null
   } finally {
     usageSummaryLoading.value = false
+  }
+}
+
+const refreshWorkspaceInbox = async () => {
+  workspaceInboxLoading.value = true
+  try {
+    await loadWorkspaceInbox()
+  } catch {
+    workspaceInbox.value = {
+      workspaceInvites: pendingWorkspaceInvites.value,
+      projectEditRequests: []
+    }
+  } finally {
+    workspaceInboxLoading.value = false
+  }
+}
+
+const prepareWorkspaceSettings = async () => {
+  const target = currentWorkspace.value
+  if (!target?.id || target.kind !== 'team' || target.role !== 'owner') return
+  editWorkspaceId.value = target.id
+  editWorkspaceName.value = target.name || ''
+  editWorkspaceAvatarUrl.value = target.avatarUrl || ''
+  try {
+    settingsWorkspaceMembers.value = await loadWorkspaceMembers(target.id)
+  } catch {
+    settingsWorkspaceMembers.value = []
+  }
+}
+
+const saveWorkspaceSettingsFromPanel = async () => {
+  const target = currentWorkspace.value
+  const workspaceId = target?.id || editWorkspaceId.value
+  if (!workspaceId || !editWorkspaceName.value.trim() || workspaceEditLoading.value) return
+  workspaceEditLoading.value = true
+  try {
+    await updateTeamWorkspace(workspaceId, {
+      name: editWorkspaceName.value.trim(),
+      avatarUrl: editWorkspaceAvatarUrl.value || null
+    })
+    notifier.success('Workspace updated')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to update workspace'))
+  } finally {
+    workspaceEditLoading.value = false
+  }
+}
+
+const loadProjectPermissionDetail = async (projectId) => {
+  const id = String(projectId || '').trim()
+  if (!id || projectPermissionLoading.value) return
+  projectPermissionLoading.value = true
+  try {
+    projectPermissionDetail.value = await loadProjectPermissions(id)
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to load project permissions'))
+  } finally {
+    projectPermissionLoading.value = false
+  }
+}
+
+const changeProjectPermission = async ({ projectId, userId, role } = {}) => {
+  const id = String(projectId || '').trim()
+  const targetUserId = String(userId || '').trim()
+  if (!id || !targetUserId || !role || projectPermissionSaving.value) return
+  projectPermissionSaving.value = true
+  try {
+    projectPermissionDetail.value = await updateProjectPermission(id, targetUserId, role)
+    await loadWorkspaceProjects()
+    notifier.success('Project permissions updated')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to update project permissions'))
+  } finally {
+    projectPermissionSaving.value = false
+  }
+}
+
+const handleReviewProjectRequest = async ({ projectId, requestId, decision } = {}) => {
+  const id = String(projectId || '').trim()
+  const reviewId = String(requestId || '').trim()
+  if (!id || !reviewId || !decision || workspaceInboxLoading.value) return
+  workspaceInboxLoading.value = true
+  try {
+    await reviewProjectEditRequest(id, reviewId, decision)
+    await loadWorkspaceInbox()
+    if (projectPermissionDetail.value?.project?.id === id) {
+      projectPermissionDetail.value = await loadProjectPermissions(id)
+    }
+    notifier.success(decision === 'approve' ? 'Edit request approved' : 'Edit request rejected')
+  } catch (error) {
+    notifier.error(getErrorMessage(error, 'Failed to review edit request'))
+  } finally {
+    workspaceInboxLoading.value = false
   }
 }
 
@@ -739,6 +893,7 @@ const handleAcceptWorkspaceInvite = async (inviteId) => {
     resetTemplateScopeForCurrentWorkspace()
     activeSection.value = 'projects'
     await refreshWorkspaceData()
+    await refreshWorkspaceInbox()
     notifier.success('Workspace joined')
   } catch (error) {
     notifier.error(getErrorMessage(error, 'Failed to accept invite'))
@@ -888,9 +1043,17 @@ const loadWorkspaceSurfaces = async () => {
   await Promise.all([
     (async () => {
       try {
-        await loadPendingWorkspaceInvites()
+        await loadWorkspaceInbox()
       } catch {
-        pendingWorkspaceInvites.value = []
+        workspaceInbox.value = {
+          workspaceInvites: [],
+          projectEditRequests: []
+        }
+        try {
+          await loadPendingWorkspaceInvites()
+        } catch {
+          pendingWorkspaceInvites.value = []
+        }
       }
     })(),
     (async () => {
@@ -902,6 +1065,38 @@ const loadWorkspaceSurfaces = async () => {
     })()
   ])
 }
+
+watch(activeSection, (section) => {
+  if (section === 'inbox') {
+    void refreshWorkspaceInbox()
+    return
+  }
+  if (section === 'settings') {
+    if (!isTeamWorkspaceOwner.value) {
+      activeSection.value = 'projects'
+      return
+    }
+    void prepareWorkspaceSettings()
+  }
+})
+
+watch(
+  () => [currentWorkspace.value?.id, currentWorkspace.value?.kind, currentWorkspace.value?.role],
+  () => {
+    projectPermissionDetail.value = null
+    settingsWorkspaceMembers.value = []
+    if (activeSection.value === 'settings') {
+      if (!isTeamWorkspaceOwner.value) {
+        activeSection.value = 'projects'
+        return
+      }
+      void prepareWorkspaceSettings()
+    }
+    if (activeSection.value === 'inbox') {
+      void refreshWorkspaceInbox()
+    }
+  }
+)
 
 onMounted(async () => {
   await bootstrapAuth()

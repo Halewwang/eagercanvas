@@ -45,8 +45,8 @@ const getProjectMemberRole = async (userId, projectId, { supabaseClient = supaba
   return String(data?.role || '')
 }
 
-const isWorkspaceMember = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
-  if (!userId || !workspaceId) return false
+const getWorkspaceMemberRole = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
+  if (!userId || !workspaceId) return ''
   const { data, error } = await supabaseClient
     .from('workspace_members')
     .select('role')
@@ -55,7 +55,7 @@ const isWorkspaceMember = async (userId, workspaceId, { supabaseClient = supabas
     .maybeSingle()
 
   if (error) throw new HttpError(500, error.message, 'WORKSPACE_MEMBER_QUERY_FAILED')
-  return !!data
+  return String(data?.role || '')
 }
 
 export const resolveProjectAccess = async (userId, project = {}, options = {}) => {
@@ -64,12 +64,17 @@ export const resolveProjectAccess = async (userId, project = {}, options = {}) =
 
   if (String(project.user_id || '') === normalizedUserId) return PROJECT_ACCESS.owner
 
+  const workspaceRole = isTeamProject(project)
+    ? await getWorkspaceMemberRole(normalizedUserId, project.workspace_id, options)
+    : ''
+  if (workspaceRole === PROJECT_ACCESS.owner) return PROJECT_ACCESS.owner
+
   const projectRole = await getProjectMemberRole(normalizedUserId, project.id, options)
   if (projectRole === PROJECT_ACCESS.owner) return PROJECT_ACCESS.owner
   if (projectRole === PROJECT_ACCESS.editor) return PROJECT_ACCESS.editor
   if (projectRole === PROJECT_ACCESS.viewer) return PROJECT_ACCESS.viewer
 
-  if (isTeamProject(project) && await isWorkspaceMember(normalizedUserId, project.workspace_id, options)) {
+  if (workspaceRole) {
     return PROJECT_ACCESS.viewer
   }
 
@@ -116,7 +121,6 @@ export const resolveProjectListAccessMap = async (userId, rows = [], options = {
   const workspaceIds = Array.from(new Set(nonOwnedProjects
     .filter((project) => (
       isTeamProject(project) &&
-      accessByProjectId.get(project.id) === PROJECT_ACCESS.none &&
       project.workspace_id
     ))
     .map((project) => project.workspace_id)))
@@ -129,14 +133,18 @@ export const resolveProjectListAccessMap = async (userId, rows = [], options = {
       .in('workspace_id', workspaceIds)
 
     if (error) throw new HttpError(500, error.message, 'WORKSPACE_MEMBER_QUERY_FAILED')
-    const memberWorkspaceIds = new Set((data || []).map((member) => member.workspace_id).filter(Boolean))
+    const roleByWorkspaceId = new Map((data || []).map((member) => [member.workspace_id, member.role]))
     nonOwnedProjects.forEach((project) => {
+      const workspaceRole = roleByWorkspaceId.get(project.workspace_id)
       if (
-        accessByProjectId.get(project.id) === PROJECT_ACCESS.none &&
         isTeamProject(project) &&
-        memberWorkspaceIds.has(project.workspace_id)
+        workspaceRole
       ) {
-        accessByProjectId.set(project.id, PROJECT_ACCESS.viewer)
+        assignProjectAccess(
+          accessByProjectId,
+          project.id,
+          workspaceRole === PROJECT_ACCESS.owner ? PROJECT_ACCESS.owner : PROJECT_ACCESS.viewer
+        )
       }
     })
   }
@@ -237,4 +245,132 @@ export const reviewProjectEditRequest = async (userId, project, requestId, decis
   }
 
   return request
+}
+
+const getRequesterProfiles = async (userIds = [], { supabaseClient = supabase } = {}) => {
+  const ids = Array.from(new Set((userIds || []).filter(Boolean)))
+  if (!ids.length) return new Map()
+
+  const [{ data: users }, { data: profiles }] = await Promise.all([
+    supabaseClient.from('users').select('id, email').in('id', ids),
+    supabaseClient.from('user_profiles').select('user_id, display_name, username, avatar_url').in('user_id', ids)
+  ])
+
+  const usersById = new Map((users || []).map((user) => [user.id, user]))
+  const profilesById = new Map((profiles || []).map((profile) => [profile.user_id, profile]))
+  return new Map(ids.map((id) => {
+    const user = usersById.get(id) || {}
+    const profile = profilesById.get(id) || {}
+    return [id, {
+      email: user.email || '',
+      displayName: profile.display_name || user.email || 'Workspace member',
+      username: profile.username || '',
+      avatarUrl: profile.avatar_url || ''
+    }]
+  }))
+}
+
+const queryRows = async (query, errorCode) => {
+  const { data, error } = await query
+  if (error) throw new HttpError(500, error.message, errorCode)
+  return data || []
+}
+
+const addProjects = (byId, rows = []) => {
+  ;(rows || []).forEach((row) => {
+    if (row?.id) byId.set(row.id, row)
+  })
+}
+
+export const listReviewableProjectEditRequests = async (userId, { supabaseClient = supabase } = {}) => {
+  const normalizedUserId = String(userId || '').trim()
+  if (!normalizedUserId) return []
+
+  const [workspaceOwnerRows, projectMemberRows] = await Promise.all([
+    queryRows(
+      supabaseClient
+        .from('workspace_members')
+        .select('workspace_id, role')
+        .eq('user_id', normalizedUserId)
+        .eq('role', PROJECT_ACCESS.owner),
+      'WORKSPACE_OWNER_QUERY_FAILED'
+    ),
+    queryRows(
+      supabaseClient
+        .from('project_members')
+        .select('project_id, role')
+        .eq('user_id', normalizedUserId)
+        .in('role', [PROJECT_ACCESS.owner, PROJECT_ACCESS.editor]),
+      'PROJECT_MEMBER_QUERY_FAILED'
+    )
+  ])
+
+  const workspaceIds = Array.from(new Set(workspaceOwnerRows.map((row) => row.workspace_id).filter(Boolean)))
+  const directProjectIds = Array.from(new Set(projectMemberRows.map((row) => row.project_id).filter(Boolean)))
+  const projectsById = new Map()
+
+  addProjects(projectsById, await queryRows(
+    supabaseClient
+      .from('projects')
+      .select('id, user_id, workspace_id, access_mode, name, thumbnail_url, updated_at')
+      .eq('user_id', normalizedUserId),
+    'PROJECT_REVIEW_OWNED_QUERY_FAILED'
+  ))
+
+  if (directProjectIds.length) {
+    addProjects(projectsById, await queryRows(
+      supabaseClient
+        .from('projects')
+        .select('id, user_id, workspace_id, access_mode, name, thumbnail_url, updated_at')
+        .in('id', directProjectIds),
+      'PROJECT_REVIEW_MEMBER_QUERY_FAILED'
+    ))
+  }
+
+  if (workspaceIds.length) {
+    addProjects(projectsById, await queryRows(
+      supabaseClient
+        .from('projects')
+        .select('id, user_id, workspace_id, access_mode, name, thumbnail_url, updated_at')
+        .eq('access_mode', 'team')
+        .in('workspace_id', workspaceIds),
+      'PROJECT_REVIEW_WORKSPACE_QUERY_FAILED'
+    ))
+  }
+
+  const projectIds = Array.from(projectsById.keys())
+  if (!projectIds.length) return []
+
+  const requests = await queryRows(
+    supabaseClient
+      .from('project_edit_requests')
+      .select('*')
+      .eq('status', 'pending')
+      .in('project_id', projectIds)
+      .order('created_at', { ascending: true }),
+    'PROJECT_EDIT_REQUEST_INBOX_FAILED'
+  )
+
+  const requesterProfiles = await getRequesterProfiles(
+    requests.map((request) => request.requester_user_id),
+    { supabaseClient }
+  )
+
+  return requests.map((request) => {
+    const project = projectsById.get(request.project_id) || {}
+    const requester = requesterProfiles.get(request.requester_user_id) || {}
+    return {
+      id: request.id,
+      projectId: request.project_id,
+      projectName: project.name || 'Untitled project',
+      workspaceId: project.workspace_id || '',
+      requesterUserId: request.requester_user_id,
+      requesterDisplayName: requester.displayName || 'Workspace member',
+      requesterEmail: requester.email || '',
+      requesterAvatarUrl: requester.avatarUrl || '',
+      message: request.message || '',
+      createdAt: request.created_at,
+      updatedAt: request.updated_at
+    }
+  })
 }

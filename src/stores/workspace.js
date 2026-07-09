@@ -7,6 +7,7 @@ import {
   apiDeleteTeamWorkspace,
   apiFavoriteSharedTemplate,
   apiGetCurrentWorkspace,
+  apiGetWorkspaceInbox,
   apiGetProjectTemplateStatus,
   apiGetSharedTemplate,
   apiJoinWorkspaceInvite,
@@ -34,6 +35,10 @@ export const currentWorkspace = ref(null)
 export const workspaces = ref([])
 export const featuredTemplates = ref([])
 export const pendingWorkspaceInvites = ref([])
+export const workspaceInbox = ref({
+  workspaceInvites: [],
+  projectEditRequests: []
+})
 export const templatesScope = ref('auto')
 const BYPASS_AUTH_IN_DEV = isLocalPreviewEnabled()
 let localPreviewActiveWorkspace = null
@@ -105,6 +110,29 @@ const normalizeInvite = (invite) => ({
   createdBy: invite?.createdBy || '',
   expiresAt: invite?.expiresAt || '',
   createdAt: invite?.createdAt || ''
+})
+
+const normalizeProjectEditRequest = (request) => ({
+  id: request?.id || '',
+  projectId: request?.projectId || request?.project_id || '',
+  projectName: request?.projectName || request?.project_name || 'Untitled project',
+  workspaceId: request?.workspaceId || request?.workspace_id || '',
+  requesterUserId: request?.requesterUserId || request?.requester_user_id || '',
+  requesterDisplayName: request?.requesterDisplayName || request?.requester_display_name || 'Workspace member',
+  requesterEmail: request?.requesterEmail || request?.requester_email || '',
+  requesterAvatarUrl: request?.requesterAvatarUrl || request?.requester_avatar_url || '',
+  message: request?.message || '',
+  createdAt: request?.createdAt || request?.created_at || '',
+  updatedAt: request?.updatedAt || request?.updated_at || ''
+})
+
+const normalizeWorkspaceInbox = (payload = {}) => ({
+  workspaceInvites: Array.isArray(payload.workspaceInvites)
+    ? payload.workspaceInvites.map(normalizeInvite).filter((invite) => invite.id)
+    : [],
+  projectEditRequests: Array.isArray(payload.projectEditRequests)
+    ? payload.projectEditRequests.map(normalizeProjectEditRequest).filter((request) => request.id && request.projectId)
+    : []
 })
 
 const normalizeTemplateScope = (scope = 'auto') => String(scope || 'auto').trim() || 'auto'
@@ -377,6 +405,10 @@ export const joinWorkspaceInvite = async (token) => {
 export const loadPendingWorkspaceInvites = async () => {
   if (BYPASS_AUTH_IN_DEV) {
     pendingWorkspaceInvites.value = []
+    workspaceInbox.value = {
+      ...workspaceInbox.value,
+      workspaceInvites: []
+    }
     return pendingWorkspaceInvites.value
   }
 
@@ -384,7 +416,27 @@ export const loadPendingWorkspaceInvites = async () => {
   pendingWorkspaceInvites.value = Array.isArray(response?.data?.invites)
     ? response.data.invites.map(normalizeInvite).filter((invite) => invite.id)
     : []
+  workspaceInbox.value = {
+    ...workspaceInbox.value,
+    workspaceInvites: pendingWorkspaceInvites.value
+  }
   return pendingWorkspaceInvites.value
+}
+
+export const loadWorkspaceInbox = async () => {
+  if (BYPASS_AUTH_IN_DEV) {
+    workspaceInbox.value = {
+      workspaceInvites: [],
+      projectEditRequests: []
+    }
+    pendingWorkspaceInvites.value = []
+    return workspaceInbox.value
+  }
+
+  const response = await apiGetWorkspaceInbox()
+  workspaceInbox.value = normalizeWorkspaceInbox(response?.data || {})
+  pendingWorkspaceInvites.value = workspaceInbox.value.workspaceInvites
+  return workspaceInbox.value
 }
 
 export const acceptWorkspaceInvite = async (inviteId) => {
@@ -395,6 +447,10 @@ export const acceptWorkspaceInvite = async (inviteId) => {
   const response = await apiAcceptWorkspaceInvite(inviteId)
   applyWorkspaceCollection(response?.data || {})
   pendingWorkspaceInvites.value = pendingWorkspaceInvites.value.filter((invite) => invite.id !== inviteId)
+  workspaceInbox.value = {
+    ...workspaceInbox.value,
+    workspaceInvites: workspaceInbox.value.workspaceInvites.filter((invite) => invite.id !== inviteId)
+  }
   return currentWorkspace.value
 }
 
@@ -528,6 +584,7 @@ export const useWorkspaceStore = () => ({
   workspaces,
   featuredTemplates,
   pendingWorkspaceInvites,
+  workspaceInbox,
   templatesScope,
   loadCurrentWorkspace,
   loadWorkspaces,
@@ -538,6 +595,7 @@ export const useWorkspaceStore = () => ({
   createWorkspaceDirectInvite,
   joinWorkspaceInvite,
   loadPendingWorkspaceInvites,
+  loadWorkspaceInbox,
   acceptWorkspaceInvite,
   leaveWorkspace,
   updateTeamWorkspace,

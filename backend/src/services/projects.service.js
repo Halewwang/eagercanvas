@@ -42,6 +42,10 @@ const reviewSchema = z.object({
   decision: z.enum(['approve', 'reject'])
 })
 
+const projectPermissionSchema = z.object({
+  role: z.enum(['owner', 'editor', 'viewer'])
+})
+
 const copyToWorkspaceSchema = z.object({
   workspaceId: z.string().trim().min(1)
 })
@@ -563,4 +567,189 @@ export const reviewProjectEditAccess = async (userId, id, requestId, input = {})
   const payload = reviewSchema.parse(input || {})
   const request = await reviewProjectEditRequest(userId, project, requestId, payload.decision)
   return { request }
+}
+
+const getWorkspaceMembersForProject = async (project) => {
+  if (!project.workspace_id || project.access_mode !== 'team') return []
+  const { data, error } = await supabase
+    .from('workspace_members')
+    .select('workspace_id, user_id, role, created_at')
+    .eq('workspace_id', project.workspace_id)
+    .order('created_at', { ascending: true })
+
+  if (error) throw new HttpError(500, error.message, 'PROJECT_PERMISSION_WORKSPACE_MEMBERS_FAILED')
+  return data || []
+}
+
+const getProjectMembersForProject = async (projectId) => {
+  const { data, error } = await supabase
+    .from('project_members')
+    .select('project_id, user_id, role, granted_by, created_at, updated_at')
+    .eq('project_id', projectId)
+
+  if (error) throw new HttpError(500, error.message, 'PROJECT_PERMISSION_MEMBERS_FAILED')
+  return data || []
+}
+
+const getProjectPermissionProfiles = async (userIds = []) => {
+  const ids = Array.from(new Set((userIds || []).filter(Boolean)))
+  if (!ids.length) return new Map()
+  const ownerProfiles = await getOwnerProfiles(ids)
+  return ownerProfiles
+}
+
+const getEffectiveProjectPermission = ({ project, workspaceRole = '', projectRole = '', userId = '' }) => {
+  if (String(project.user_id || '') === String(userId || '')) return 'owner'
+  if (projectRole === 'owner') return 'owner'
+  if (workspaceRole === 'owner' && project.access_mode === 'team') return 'owner'
+  if (projectRole === 'editor') return 'editor'
+  if (projectRole === 'viewer') return 'viewer'
+  if (workspaceRole && project.access_mode === 'team') return 'viewer'
+  return 'none'
+}
+
+const assertTeamProjectPermissionsScope = (project) => {
+  if (project?.access_mode === 'team' && project?.workspace_id) return
+  throw new HttpError(
+    400,
+    'Project permissions are only managed for team workspace projects',
+    'PROJECT_PERMISSION_TEAM_PROJECT_REQUIRED'
+  )
+}
+
+export const getProjectPermissions = async (userId, id) => {
+  const project = await getProjectById(id)
+  assertTeamProjectPermissionsScope(project)
+  await assertProjectCanEdit(userId, project)
+  const [workspaceMembers, projectMembers, pendingRequests] = await Promise.all([
+    getWorkspaceMembersForProject(project),
+    getProjectMembersForProject(project.id),
+    listProjectEditRequests(userId, project)
+  ])
+
+  const projectRoleByUserId = new Map(projectMembers.map((member) => [member.user_id, member.role]))
+  const workspaceRoleByUserId = new Map(workspaceMembers.map((member) => [member.user_id, member.role]))
+  const allUserIds = Array.from(new Set([
+    project.user_id,
+    ...workspaceMembers.map((member) => member.user_id),
+    ...projectMembers.map((member) => member.user_id),
+    ...pendingRequests.map((request) => request.requester_user_id)
+  ].filter(Boolean)))
+  const profiles = await getProjectPermissionProfiles(allUserIds)
+
+  const members = allUserIds.map((memberUserId) => {
+    const profile = profiles.get(memberUserId) || {}
+    const workspaceRole = workspaceRoleByUserId.get(memberUserId) || ''
+    const projectRole = projectRoleByUserId.get(memberUserId) || (String(project.user_id) === String(memberUserId) ? 'owner' : '')
+    return {
+      userId: memberUserId,
+      displayName: profile.displayName || profile.email || 'Workspace member',
+      username: profile.username || '',
+      email: profile.email || '',
+      avatarUrl: profile.avatarUrl || '',
+      workspaceRole: workspaceRole || '',
+      projectRole: projectRole || '',
+      effectivePermission: getEffectiveProjectPermission({
+        project,
+        workspaceRole,
+        projectRole,
+        userId: memberUserId
+      })
+    }
+  }).filter((member) => member.effectivePermission !== 'none' || member.workspaceRole)
+
+  return {
+    project: {
+      id: project.id,
+      name: project.name,
+      workspaceId: project.workspace_id || '',
+      accessMode: project.access_mode || 'private',
+      ownerUserId: project.user_id
+    },
+    ownerUserId: project.user_id,
+    members,
+    pendingRequests
+  }
+}
+
+const assertTargetWorkspaceMember = async (project, targetUserId) => {
+  if (project.access_mode !== 'team') return null
+  const { data, error } = await supabase
+    .from('workspace_members')
+    .select('workspace_id, user_id, role')
+    .eq('workspace_id', project.workspace_id)
+    .eq('user_id', targetUserId)
+    .maybeSingle()
+
+  if (error) throw new HttpError(500, error.message, 'PROJECT_PERMISSION_TARGET_MEMBER_FAILED')
+  if (!data) throw new HttpError(400, 'Target user must belong to the workspace', 'PROJECT_PERMISSION_TARGET_NOT_WORKSPACE_MEMBER')
+  return data
+}
+
+export const updateProjectPermission = async (userId, id, targetUserId, input = {}) => {
+  const project = await getProjectById(id)
+  assertTeamProjectPermissionsScope(project)
+  await assertProjectCanEdit(userId, project)
+  const safeTargetUserId = String(targetUserId || '').trim()
+  if (!safeTargetUserId) throw new HttpError(400, 'Target user is required', 'PROJECT_PERMISSION_TARGET_REQUIRED')
+  const payload = projectPermissionSchema.parse(input || {})
+
+  await assertTargetWorkspaceMember(project, safeTargetUserId)
+
+  if (payload.role === 'owner') {
+    const { error: projectUpdateError } = await supabase
+      .from('projects')
+      .update({ user_id: safeTargetUserId, updated_at: new Date().toISOString() })
+      .eq('id', project.id)
+    if (projectUpdateError) throw new HttpError(500, projectUpdateError.message, 'PROJECT_OWNER_UPDATE_FAILED')
+
+    const { error: memberError } = await supabase
+      .from('project_members')
+      .upsert(
+        {
+          project_id: project.id,
+          user_id: safeTargetUserId,
+          role: 'owner',
+          granted_by: userId
+        },
+        { onConflict: 'project_id,user_id' }
+      )
+    if (memberError) throw new HttpError(500, memberError.message, 'PROJECT_OWNER_MEMBER_UPSERT_FAILED')
+
+    if (String(project.user_id || '') !== safeTargetUserId) {
+      const { error: oldOwnerError } = await supabase
+        .from('project_members')
+        .delete()
+        .eq('project_id', project.id)
+        .eq('user_id', project.user_id)
+      if (oldOwnerError) throw new HttpError(500, oldOwnerError.message, 'PROJECT_OLD_OWNER_MEMBER_DELETE_FAILED')
+    }
+  } else if (payload.role === 'editor') {
+    if (String(project.user_id || '') !== safeTargetUserId) {
+      const { error } = await supabase
+        .from('project_members')
+        .upsert(
+          {
+            project_id: project.id,
+            user_id: safeTargetUserId,
+            role: 'editor',
+            granted_by: userId
+          },
+          { onConflict: 'project_id,user_id' }
+        )
+      if (error) throw new HttpError(500, error.message, 'PROJECT_EDITOR_MEMBER_UPSERT_FAILED')
+    }
+  } else {
+    if (String(project.user_id || '') === safeTargetUserId) {
+      throw new HttpError(400, 'Transfer project ownership before demoting the owner', 'PROJECT_OWNER_DEMOTION_REQUIRES_TRANSFER')
+    }
+    const { error } = await supabase
+      .from('project_members')
+      .delete()
+      .eq('project_id', project.id)
+      .eq('user_id', safeTargetUserId)
+    if (error) throw new HttpError(500, error.message, 'PROJECT_MEMBER_DELETE_FAILED')
+  }
+
+  return getProjectPermissions(userId, project.id)
 }

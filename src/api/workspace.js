@@ -80,6 +80,13 @@ export const apiListPendingWorkspaceInvites = () =>
     silentNetworkErrorToast: true
   })
 
+export const apiGetWorkspaceInbox = () =>
+  apiRequest({
+    url: '/workspace/inbox',
+    method: 'get',
+    silentNetworkErrorToast: true
+  })
+
 export const apiAcceptWorkspaceInvite = (inviteId) =>
   apiRequest({
     url: `/workspace/invites/${encodeURIComponent(inviteId)}/accept`,

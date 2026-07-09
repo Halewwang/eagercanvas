@@ -8,6 +8,8 @@ export const getWorkspaceBrand = ({ user = null, currentWorkspace = null } = {})
 }
 
 export const getWorkspaceSectionTitle = (activeSection, { currentWorkspace = null } = {}) => {
+  if (activeSection === 'inbox') return 'Inbox'
+  if (activeSection === 'settings') return 'Workspace Settings'
   if (activeSection === 'featured') return 'Share Templates'
   if (activeSection === 'shared') return 'Shared with me'
   if (currentWorkspace?.kind === 'team') return 'Team Workspace'
@@ -15,6 +17,12 @@ export const getWorkspaceSectionTitle = (activeSection, { currentWorkspace = nul
 }
 
 export const getWorkspaceSectionDescription = (activeSection, { currentWorkspace = null } = {}) => {
+  if (activeSection === 'inbox') {
+    return 'Review workspace invites and project edit requests from one place.'
+  }
+  if (activeSection === 'settings') {
+    return 'Manage team workspace identity, members, and team project permissions.'
+  }
   if (activeSection === 'featured') {
     return 'Community and workspace templates. Using one creates a full copy in the active workspace.'
   }

@@ -25,6 +25,7 @@
         >
           <NIcon class="nav-icon" :size="18"><component :is="item.icon" /></NIcon>
           <span>{{ item.label }}</span>
+          <strong v-if="item.count" class="nav-count">{{ item.count }}</strong>
         </button>
       </nav>
     </section>
@@ -211,6 +212,20 @@ const handleAccountMenuSelect = (key) => {
 
 .nav-icon {
   flex-shrink: 0;
+}
+
+.nav-count {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #fff;
+  color: #0d0e10;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .nav-item.active {

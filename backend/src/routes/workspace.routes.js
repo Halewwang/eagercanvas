@@ -11,6 +11,7 @@ import {
   favoriteSharedTemplate,
   getCurrentWorkspace,
   getSharedTemplateDetail,
+  getWorkspaceInbox,
   getWorkspaceMembers,
   getProjectTemplateStatus,
   joinWorkspaceInvite,
@@ -82,6 +83,11 @@ workspaceRouter.post('/join/:token', asyncHandler(async (req, res) => {
 workspaceRouter.get('/invites/pending', asyncHandler(async (req, res) => {
   const invites = await listPendingWorkspaceInvites(req.user.id)
   res.json({ data: { invites } })
+}))
+
+workspaceRouter.get('/inbox', asyncHandler(async (req, res) => {
+  const result = await getWorkspaceInbox(req.user.id)
+  res.json({ data: result })
 }))
 
 workspaceRouter.post('/invites/:inviteId/accept', asyncHandler(async (req, res) => {

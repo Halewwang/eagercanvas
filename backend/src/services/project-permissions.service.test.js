@@ -107,6 +107,28 @@ test('resolveProjectAccess treats team members as read-only viewers until grante
   assert.equal(await resolveProjectAccess('outsider-1', project, { supabaseClient }), 'none')
 })
 
+test('resolveProjectAccess treats workspace owners as team project owners', async () => {
+  const project = {
+    id: 'project-1',
+    user_id: 'owner-1',
+    workspace_id: 'team-1',
+    access_mode: 'team'
+  }
+  const supabaseClient = createFakeProjectAccessClient({
+    workspaceMembers: [
+      { workspace_id: 'team-1', user_id: 'workspace-owner-1', role: 'owner' },
+      { workspace_id: 'team-1', user_id: 'member-1', role: 'member' }
+    ],
+    projectMembers: [
+      { project_id: 'project-1', user_id: 'workspace-owner-1', role: 'viewer' }
+    ]
+  })
+
+  assert.equal(await resolveProjectAccess('workspace-owner-1', project, { supabaseClient }), 'owner')
+  assert.equal(await assertProjectCanEdit('workspace-owner-1', project, { supabaseClient }), 'owner')
+  assert.equal(await resolveProjectAccess('member-1', project, { supabaseClient }), 'viewer')
+})
+
 test('resolveProjectAccess treats directly shared project members as viewers', async () => {
   const project = {
     id: 'project-1',
@@ -137,7 +159,7 @@ test('resolveProjectListAccessMap batches project and workspace membership looku
       { project_id: 'editor-1', user_id: 'user-1', role: 'editor' }
     ],
     workspaceMembers: [
-      { workspace_id: 'team-1', user_id: 'user-1', role: 'member' }
+      { workspace_id: 'team-1', user_id: 'user-1', role: 'owner' }
     ]
   })
 
@@ -148,9 +170,9 @@ test('resolveProjectListAccessMap batches project and workspace membership looku
 
   assert.equal(accessByProjectId.get('owned-1'), 'owner')
   assert.equal(accessByProjectId.get('direct-1'), 'viewer')
-  assert.equal(accessByProjectId.get('direct-editor-1'), 'editor')
-  assert.equal(accessByProjectId.get('editor-1'), 'editor')
-  assert.equal(accessByProjectId.get('team-viewer-1'), 'viewer')
+  assert.equal(accessByProjectId.get('direct-editor-1'), 'owner')
+  assert.equal(accessByProjectId.get('editor-1'), 'owner')
+  assert.equal(accessByProjectId.get('team-viewer-1'), 'owner')
   assert.equal(accessByProjectId.get('outsider-1'), 'none')
   assert.equal(accessByProjectId.get('private-1'), 'none')
   assert.equal(supabaseClient.calls.filter((call) => call[1] === 'project_members').length, 1)

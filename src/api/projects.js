@@ -101,6 +101,21 @@ export const apiListProjectEditRequests = (id) =>
     silentNetworkErrorToast: true
   })
 
+export const apiGetProjectPermissions = (id) =>
+  apiRequest({
+    url: `/projects/${encodeURIComponent(id)}/permissions`,
+    method: 'get',
+    silentNetworkErrorToast: true
+  })
+
+export const apiUpdateProjectPermission = (id, userId, payload = {}) =>
+  apiRequest({
+    url: `/projects/${encodeURIComponent(id)}/permissions/${encodeURIComponent(userId)}`,
+    method: 'patch',
+    data: payload,
+    silentNetworkErrorToast: true
+  })
+
 export const apiReviewProjectEditRequest = (id, requestId, payload = {}) =>
   apiRequest({
     url: `/projects/${encodeURIComponent(id)}/edit-requests/${encodeURIComponent(requestId)}/review`,
