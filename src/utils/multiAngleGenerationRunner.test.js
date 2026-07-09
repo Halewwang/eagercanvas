@@ -68,7 +68,7 @@ test('multi angle generation runner builds apply payloads with url and ratio fal
   })
 })
 
-test('multi angle generation runner sends the existing generate request shape', async () => {
+test('multi angle generation runner sends camera parameters through provider tools', async () => {
   const calls = []
   const url = await runMultiAngleGeneration({
     context: baseContext,
@@ -92,9 +92,13 @@ test('multi angle generation runner sends the existing generate request shape', 
       model: 'gemini-3.1-flash-image-preview',
       prompt: baseContext.prompt,
       image: 'https://cdn.example.com/source.png',
-      horizontal_angle: 270,
-      vertical_angle: 6,
-      zoom: 5.2,
+      tools: {
+        camera: {
+          horizontal_angle: 270,
+          vertical_angle: 6,
+          zoom: 5.2
+        }
+      },
       size: '2048x1365',
       ratio: '3:2',
       resolution: '2k',

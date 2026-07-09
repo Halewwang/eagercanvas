@@ -32,6 +32,16 @@ const resolveRatio = (ratio, size) => {
   return computeRatioLabel(width, height)
 }
 
+const createCameraTools = (cameraInput = {}) => {
+  const camera = {}
+  for (const key of ['horizontal_angle', 'vertical_angle', 'zoom']) {
+    if (cameraInput[key] !== undefined && cameraInput[key] !== null) {
+      camera[key] = cameraInput[key]
+    }
+  }
+  return Object.keys(camera).length > 0 ? { camera } : undefined
+}
+
 export const createMultiAngleGenerationContext = ({
   azimuth = 0,
   elevation = 0,
@@ -96,7 +106,7 @@ export const runMultiAngleGeneration = async ({
     model,
     prompt: context?.prompt || '',
     image: imageSource,
-    ...(context?.cameraInput || {}),
+    tools: createCameraTools(context?.cameraInput),
     size,
     ratio,
     resolution: resolveResolution(resolution, size),

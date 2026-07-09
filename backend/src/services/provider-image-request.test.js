@@ -59,6 +59,29 @@ test('image request helper routes Gemini preview with derived aspect ratio, reso
   assert.deepEqual(request.payload.images, ['https://example.com/first.png'])
 })
 
+test('image request helper maps legacy multi-angle camera fields to Gemini tools', () => {
+  const request = resolveImageGenerationRequest({
+    tool: 'multi-angle',
+    model: 'gemini-3.1-flash-image-preview',
+    prompt: 'Adjust camera angle',
+    image: 'https://example.com/source.png',
+    horizontal_angle: 270,
+    vertical_angle: 6,
+    zoom: 5.2
+  })
+
+  assert.equal(request.kind, 'adapter')
+  assert.equal(request.adapter, 'dashboard302')
+  assert.deepEqual(request.payload.images, ['https://example.com/source.png'])
+  assert.deepEqual(request.payload.tools, {
+    camera: {
+      horizontal_angle: 270,
+      vertical_angle: 6,
+      zoom: 5.2
+    }
+  })
+})
+
 test('image request helper treats Nano Banana Pro aliases as Gemini preview adapter models', () => {
   const request = resolveImageGenerationRequest({
     model: 'nano-banana-pro',

@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { providerGenerateImage } from './provider.service.js'
 
-test('Multi angle keeps the selected image model and sends only camera prompt to provider', async () => {
+test('Multi angle keeps the selected image model and sends camera tools to provider', async () => {
   const originalFetch = global.fetch
   const requests = []
 
@@ -56,5 +56,11 @@ test('Multi angle keeps the selected image model and sends only camera prompt to
   assert.equal(requests[0].body.model, undefined)
   assert.equal(requests[0].body.prompt, 'Camera view parameters only. horizontal_angle=270. vertical_angle=6. zoom=5.2. Preserve existing image content; only adjust camera viewpoint.')
   assert.deepEqual(requests[0].body.images, ['https://example.com/source.png'])
-  assert.equal(Object.hasOwn(requests[0].body, 'tools'), false)
+  assert.deepEqual(requests[0].body.tools, {
+    camera: {
+      horizontal_angle: 270,
+      vertical_angle: 6,
+      zoom: 5.2
+    }
+  })
 })

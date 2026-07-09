@@ -18,6 +18,8 @@ const STYLE_PROMPTS = {
   'digital-art': 'Digital art, trending on artstation, highly detailed'
 }
 
+const CAMERA_TOOL_KEYS = ['horizontal_angle', 'vertical_angle', 'zoom']
+
 export const normalizeAspectRatioFromSize = (size = '') => {
   if (!size || typeof size !== 'string' || !size.includes('x')) return ''
   const [w, h] = String(size).split('x').map(Number)
@@ -97,6 +99,32 @@ const getInputImages = (payload = {}) => {
   return inputImages
 }
 
+const isPlainObject = (value) =>
+  value && typeof value === 'object' && !Array.isArray(value)
+
+const normalizeImageTools = (payload = {}) => {
+  const existingTools = isPlainObject(payload.tools) ? { ...payload.tools } : {}
+  const legacyCamera = {}
+
+  for (const key of CAMERA_TOOL_KEYS) {
+    if (payload[key] !== undefined && payload[key] !== null) {
+      legacyCamera[key] = payload[key]
+    }
+  }
+
+  const existingCamera = isPlainObject(existingTools.camera) ? existingTools.camera : {}
+  const camera = {
+    ...legacyCamera,
+    ...existingCamera
+  }
+
+  if (Object.keys(camera).length > 0) {
+    existingTools.camera = camera
+  }
+
+  return Object.keys(existingTools).length > 0 ? existingTools : undefined
+}
+
 export const resolveImageGenerationRequest = (payload = {}) => {
   const model = String(payload.model_name || payload.model || '').trim()
   const lowerModel = model.toLowerCase()
@@ -142,6 +170,7 @@ export const resolveImageGenerationRequest = (payload = {}) => {
   }
 
   if (isGeminiImagePreviewModel(model)) {
+    const tools = normalizeImageTools(payload)
     return {
       kind: 'adapter',
       adapter: 'dashboard302',
@@ -150,7 +179,8 @@ export const resolveImageGenerationRequest = (payload = {}) => {
         prompt,
         aspect_ratio: aspectRatio,
         resolution,
-        images: inputImages
+        images: inputImages,
+        ...(tools ? { tools } : {})
       }
     }
   }
