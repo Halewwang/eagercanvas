@@ -121,7 +121,7 @@ test('Dashboard302 adapter creates Gemini preview image tasks through 302 endpoi
   })
 })
 
-test('Dashboard302 adapter sends Gemini image edits with references and tool parameters', async () => {
+test('Dashboard302 adapter sends Gemini image edits with documented parameters only', async () => {
   const originalFetch = global.fetch
   const requests = []
 
@@ -173,7 +173,7 @@ test('Dashboard302 adapter sends Gemini image edits with references and tool par
   assert.equal(requests[0].body.resolution, '4k')
   assert.equal(requests[0].body.enable_sync_mode, false)
   assert.deepEqual(requests[0].body.images, ['https://example.com/source.png'])
-  assert.deepEqual(requests[0].body.tools, { camera: { horizontal_angle: 270 } })
+  assert.equal(Object.hasOwn(requests[0].body, 'tools'), false)
 })
 
 test('Dashboard302 adapter sends Gemini Pro text-to-image through the current Nano Banana Pro endpoint', async () => {

@@ -21,7 +21,8 @@ test('multi angle generation runner builds model camera context from UI controls
     vertical_angle: 6,
     zoom: 5.2
   })
-  assert.match(baseContext.prompt, /horizontal_angle=270/)
+  assert.match(baseContext.prompt, /left side profile view/i)
+  assert.doesNotMatch(baseContext.prompt, /horizontal_angle|vertical_angle/)
   assert.deepEqual(baseContext.meta, {
     tool: 'multi-angle',
     azimuth: 90,
@@ -68,7 +69,7 @@ test('multi angle generation runner builds apply payloads with url and ratio fal
   })
 })
 
-test('multi angle generation runner sends camera parameters through provider tools', async () => {
+test('multi angle generation runner sends camera instructions through prompt only', async () => {
   const calls = []
   const url = await runMultiAngleGeneration({
     context: baseContext,
@@ -92,13 +93,6 @@ test('multi angle generation runner sends camera parameters through provider too
       model: 'gemini-3.1-flash-image-preview',
       prompt: baseContext.prompt,
       image: 'https://cdn.example.com/source.png',
-      tools: {
-        camera: {
-          horizontal_angle: 270,
-          vertical_angle: 6,
-          zoom: 5.2
-        }
-      },
       size: '2048x1365',
       ratio: '3:2',
       resolution: '2k',
@@ -106,6 +100,8 @@ test('multi angle generation runner sends camera parameters through provider too
       enable_base64_output: false
     }
   ])
+  assert.equal(Object.hasOwn(calls[0], 'tools'), false)
+  assert.match(calls[0].prompt, /left side profile view/i)
 })
 
 test('multi angle generation runner rejects empty model output', async () => {

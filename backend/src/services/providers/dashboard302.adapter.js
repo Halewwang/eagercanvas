@@ -123,9 +123,6 @@ export const createGeminiImagePreview = async (payload = {}, requestOptions = {}
   if (images.length > 0) {
     body.images = images
   }
-  if (payload.tools && typeof payload.tools === 'object' && !Array.isArray(payload.tools)) {
-    body.tools = payload.tools
-  }
 
   const endpoint = images.length > 0
     ? `${endpointBase}/edit`

@@ -29,11 +29,19 @@ test('multi angle camera input only returns model and camera parameters', () => 
   assert.equal(input.zoom, 3.4)
 })
 
-test('multi angle camera prompt contains only camera direction instructions', () => {
-  const prompt = buildMultiAngleCameraPrompt({ horizontal_angle: 270, vertical_angle: 6, zoom: 5.2 })
+test('multi angle camera prompt converts UI camera controls into natural language', () => {
+  const prompt = buildMultiAngleCameraPrompt({
+    azimuth: 90,
+    elevation: 6,
+    horizontal_angle: 270,
+    vertical_angle: 6,
+    zoom: 5.2
+  })
 
-  assert.match(prompt, /horizontal_angle=270/)
-  assert.match(prompt, /vertical_angle=6/)
+  assert.match(prompt, /left side profile view/i)
+  assert.match(prompt, /90 degrees around the image content from the front/i)
+  assert.match(prompt, /slightly high/i)
   assert.match(prompt, /zoom=5\.2/)
+  assert.doesNotMatch(prompt, /horizontal_angle|vertical_angle/)
   assert.doesNotMatch(prompt, /person|subject|scene|background|outfit|identity|re-photograph/i)
 })
