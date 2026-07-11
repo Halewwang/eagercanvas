@@ -63,6 +63,7 @@ const createHarness = (overrides = {}) => {
     },
     getProjectCanvas: (projectId) => {
       calls.push(['get-project-canvas', projectId])
+      if (overrides.getProjectCanvas) return overrides.getProjectCanvas(projectId)
       return Object.prototype.hasOwnProperty.call(overrides, 'cachedCanvasData')
         ? overrides.cachedCanvasData
         : { nodes: [{ id: 'cached' }] }
@@ -76,7 +77,11 @@ const createHarness = (overrides = {}) => {
       calls.push(['init-projects-store'])
       return overrides.projectsReady || Promise.resolve(overrides.initProjectResult || null)
     },
-    loadCachedProjects: async () => calls.push(['load-cached-projects']),
+    loadCachedProjects: async () => {
+      calls.push(['load-cached-projects'])
+      if (overrides.loadCachedProjects) return overrides.loadCachedProjects()
+      return null
+    },
     loadProject: (projectId) => calls.push(['load-project', projectId]),
     nextTickFn: async () => calls.push(['next-tick']),
     nowFn: () => 12345,
@@ -194,6 +199,7 @@ test('canvas route lifecycle protects unsaved local edits when remote refresh co
 
   assert.deepEqual(calls, [
     ['refresh-project', 'project-1'],
+    ['get-project-canvas', 'project-1'],
     ['should-apply-remote', {
       refreshedProjectId: 'project-1',
       activeRouteProjectId: 'project-1',
@@ -297,6 +303,67 @@ test('canvas reports ready and unrecoverable error states', async () => {
   await failed.lifecycle.ensureProjectSnapshot('project-1')
   assert.equal(failed.projectLoadStates.at(-1).status, 'error')
   assert.equal(failed.projectLoadStates.at(-1).error, 'detail unavailable')
+})
+
+test('canvas reports an error when detail fallback has only a summary and no draft', async () => {
+  const harness = createHarness({
+    cachedCanvasData: null,
+    shouldUseCache: false,
+    refreshResult: { id: 'project-1', name: 'Summary only' }
+  })
+
+  await harness.lifecycle.ensureProjectSnapshot('project-1')
+
+  assert.deepEqual(harness.projectLoadStates.at(-1), {
+    status: 'error',
+    projectId: 'project-1',
+    error: 'Project could not be loaded'
+  })
+  assert.equal(harness.calls.some((call) => call[0] === 'load-project'), false)
+})
+
+test('canvas continues to remote detail after cached project hydration fails', async () => {
+  let remoteAvailable = false
+  const harness = createHarness({
+    getProjectCanvas: () => remoteAvailable ? { nodes: [{ id: 'remote' }] } : null,
+    loadCachedProjects: async () => {
+      throw new Error('cache unavailable')
+    },
+    refreshProjectById: async (projectId) => {
+      remoteAvailable = true
+      return { id: projectId, canvasData: { nodes: [{ id: 'remote' }] } }
+    },
+    shouldUseCache: false
+  })
+
+  await harness.mountedCallbacks[0]()
+
+  assert.equal(harness.calls.some((call) => call[0] === 'refresh-project'), true)
+  assert.equal(harness.projectLoadStates.at(-1).status, 'ready')
+  assert.equal(
+    harness.calls.some((call) => call[0] === 'warn' && call[1] === 'Cached project hydration skipped:'),
+    true
+  )
+})
+
+test('canvas reports remote detail failure after cached project hydration fails', async () => {
+  const harness = createHarness({
+    cachedCanvasData: null,
+    loadCachedProjects: async () => {
+      throw new Error('cache unavailable')
+    },
+    refreshError: new Error('detail unavailable'),
+    shouldUseCache: false
+  })
+
+  await harness.mountedCallbacks[0]()
+
+  assert.equal(harness.calls.some((call) => call[0] === 'refresh-project'), true)
+  assert.deepEqual(harness.projectLoadStates.at(-1), {
+    status: 'error',
+    projectId: 'project-1',
+    error: 'detail unavailable'
+  })
 })
 
 test('stale route completion does not replace the active project load state', async () => {

@@ -109,7 +109,7 @@ export const useCanvasRouteLifecycle = ({
       refreshError = error
     }
 
-    if (refreshError && !getProjectCanvas(id)) {
+    if (!getProjectCanvas(id)) {
       if (String(route.params.id || '') !== id) return false
       onProjectLoadStateChange({
         status: 'error',
@@ -190,7 +190,11 @@ export const useCanvasRouteLifecycle = ({
 
     const routeProjectId = String(route.params.id || '')
     await bootstrapAuth()
-    await loadCachedProjects()
+    try {
+      await loadCachedProjects()
+    } catch (error) {
+      consoleRef.warn('Cached project hydration skipped:', error?.message || error)
+    }
     const cachedCanvasData = routeProjectId && routeProjectId !== 'new'
       ? getProjectCanvas(routeProjectId)
       : null
