@@ -73,6 +73,8 @@ The project-store load accepts a `commitAfter` promise. The HTTP request begins 
 
 The existing project-list request token remains the last-write guard. The existing workspace refresh ID remains the view-level guard. A rapid A → B → A sequence can therefore finish requests out of order without an older result replacing the current workspace.
 
+Workspace preference writes themselves are serialized in selection order. Each target project-list request still starts immediately, but its staged result waits for its matching queued selection promise. A selection token prevents an earlier response from restoring or applying stale client state. This guarantees that the latest user choice is also the last preference written on the server without slowing the normal single-switch path.
+
 On failure:
 
 - `selectWorkspace` restores the previous workspace as it does now;
