@@ -8,6 +8,11 @@
       v-for="item in items"
       :key="item.id"
       class="project-card"
+      :tabindex="activeSection === 'featured' ? -1 : 0"
+      :aria-busy="openingProjectId === item.id"
+      @pointerenter="$emit('projectIntent', item)"
+      @focusin="$emit('projectIntent', item)"
+      @keydown.enter="$emit('primaryClick', item)"
       @click="$emit('primaryClick', item)"
     >
       <div class="card-media" :class="{ 'project-media': activeSection !== 'featured' }">
@@ -29,6 +34,10 @@
             <NIcon :size="28"><component :is="resolveCardIcon(item)" /></NIcon>
           </div>
         </template>
+        <div v-if="openingProjectId === item.id" class="project-opening-overlay" role="status">
+          <span class="project-opening-spinner" aria-hidden="true" />
+          <span>Opening project</span>
+        </div>
       </div>
 
       <div class="card-body">
@@ -112,11 +121,16 @@ const props = defineProps({
   emptyStateCopy: {
     type: String,
     default: ''
+  },
+  openingProjectId: {
+    type: String,
+    default: ''
   }
 })
 
 defineEmits([
   'primaryClick',
+  'projectIntent',
   'projectMenuSelect',
   'favoriteTemplate'
 ])
@@ -290,6 +304,36 @@ const projectBadges = (item = {}) => {
     linear-gradient(180deg, #111214 0%, #0d0e10 100%);
 }
 
+.project-opening-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: rgba(8, 8, 8, 0.66);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 500;
+  backdrop-filter: blur(6px);
+}
+
+.project-opening-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.22);
+  border-top: 1.5px solid rgba(255, 255, 255, 0.92);
+  animation: project-opening-spin 0.75s linear infinite;
+}
+
+@keyframes project-opening-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .fallback-icon {
   position: relative;
   z-index: 2;
@@ -447,6 +491,10 @@ const projectBadges = (item = {}) => {
   .project-card:hover .fallback-icon,
   .project-card:focus-within .fallback-icon {
     transform: none;
+  }
+
+  .project-opening-spinner {
+    animation: none;
   }
 }
 </style>

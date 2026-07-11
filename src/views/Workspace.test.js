@@ -613,7 +613,7 @@ test('workspace project card navigation does not block on a cloud detail refresh
   const end = workspaceSource.indexOf('const refreshProjectFromCloud = async')
   const branch = workspaceSource.slice(start, end)
 
-  assert.match(branch, /await router\.push\(`\/canvas\/\$\{item\.id\}`\)/)
+  assert.match(branch, /await router\.push\('\/canvas\/' \+ id\)/)
   assert.doesNotMatch(branch, /await refreshProjectById\(item\.id\)/)
   assert.doesNotMatch(branch, /Keep the local draft path available/)
 })
@@ -631,7 +631,7 @@ test('workspace project list does not render browser local cache as authoritativ
   assert.match(projectsStoreSource, /export const loadProjects = async \(\{\s*allowLocalFallback = true,\s*workspaceId = '',\s*commitAfter = null\s*\} = \{\}\) => \{/)
   assert.match(projectsStoreSource, /if \(!allowLocalFallback\)\s*\{[\s\S]*projects\.value = \[\][\s\S]*source:\s*'remote-error'/)
   assert.match(projectsStoreSource, /export const initProjectsStore = async \(options = \{\}\) => \{\s*await loadProjects\(options\)\s*\}/)
-  assert.match(workspaceSource, /const loadWorkspaceProjects = async \(\) => \{\s*await initProjectsStore\(\{ allowLocalFallback: false \}\)\s*\}/)
+  assert.match(workspaceSource, /const loadWorkspaceProjects = async \(options = \{\}\) => \{\s*await initProjectsStore\(\{ allowLocalFallback: false, \.\.\.options \}\)\s*\}/)
   assert.match(workspaceSource, /:empty-state-title="cardsEmptyStateTitle"/)
   assert.match(workspaceSource, /Project list unavailable/)
 })
@@ -645,16 +645,14 @@ test('workspace template scope follows the effective backend scope after loading
   assert.match(storeSource, /return setFeaturedTemplatesForScope\(responseScope, templates\)/)
 })
 
-test('workspace switching updates the visible workspace before background refresh completes', () => {
-  assert.match(workspaceSource, /const runWorkspaceRefreshInBackground = \(\) => \{/)
+test('workspace switching updates the visible workspace while scoped loading completes', () => {
   assert.match(workspaceSource, /const refreshWorkspaceData = async \(\) => \{/)
-  assert.match(workspaceSource, /const refreshWorkspaceProjectsFirst = async \(\) => \{/)
   assert.match(workspaceSource, /const workspaceSwitching = ref\(false\)/)
   assert.match(workspaceSource, /v-if="workspaceSwitching"/)
-  assert.match(workspaceSource, /await loadWorkspaceProjects\(\)/)
+  assert.match(workspaceSource, /await loadWorkspaceProjects\(\{ workspaceId, commitAfter: selection \}\)/)
   assert.match(workspaceSource, /void loadTemplatesForActiveScope\(\{ preferCache: true \}\)\.catch/)
-  assert.match(workspaceSource, /workspaceSwitching\.value = true[\s\S]*refreshWorkspaceProjectsFirst\(\)[\s\S]*workspaceSwitching\.value = false/)
-  assert.match(workspaceSource, /const selection = selectWorkspace\(workspaceId\)[\s\S]*activeSection\.value = 'projects'[\s\S]*await selection[\s\S]*runWorkspaceRefreshInBackground\(\)/)
+  assert.match(workspaceSource, /const refreshId = \+\+workspaceSwitchRefreshId[\s\S]*workspaceSwitching\.value = true[\s\S]*if \(refreshId === workspaceSwitchRefreshId\) workspaceSwitching\.value = false/)
+  assert.match(workspaceSource, /const selection = selectWorkspace\(workspaceId\)[\s\S]*activeSection\.value = 'projects'[\s\S]*commitAfter: selection/)
   assert.doesNotMatch(workspaceSource, /await reloadWorkspaceData\(\)/)
 })
 
@@ -706,4 +704,31 @@ test('workspace template preview fetches full canvas details on demand', () => {
   assert.match(previewSource, /await getSharedTemplate\(item\.id\)/)
   assert.match(previewSource, /previewTemplate\.value = \{ \.\.\.previewTemplate\.value, \.\.\.template \}/)
   assert.doesNotMatch(previewSource, /await useSharedTemplate/)
+})
+
+test('workspace switching hides stale cards behind accessible skeletons', () => {
+  const loading = readWorkspaceComponentSource('WorkspaceLoadingGrid')
+  assert.match(workspaceSource, /WorkspaceLoadingGrid/)
+  assert.match(workspaceSource, /<WorkspaceLoadingGrid v-if="workspaceSwitching"/)
+  assert.match(workspaceSource, /v-else-if="showsCardsGrid"/)
+  assert.match(loading, /role="status"/)
+  assert.match(loading, /prefers-reduced-motion/)
+})
+
+test('project cards preload on intent and expose selected busy state', () => {
+  const cards = readWorkspaceComponentSource('WorkspaceCardsGrid')
+  assert.match(cards, /openingProjectId/)
+  assert.match(cards, /projectIntent/)
+  assert.match(cards, /aria-busy/)
+  assert.match(cards, /project-opening-overlay/)
+  assert.match(workspaceSource, /preloadCanvasView/)
+})
+
+test('workspace switch starts scoped loading before activation settles', () => {
+  const start = workspaceSource.indexOf('const handleSelectWorkspace = async')
+  const end = workspaceSource.indexOf('const openCreateWorkspaceModal =')
+  const branch = workspaceSource.slice(start, end)
+  assert.match(branch, /const selection = selectWorkspace\(workspaceId\)/)
+  assert.match(branch, /workspaceId,[\s\S]*commitAfter: selection/)
+  assert.doesNotMatch(branch, /await selection[\s\S]*loadWorkspaceProjects/)
 })

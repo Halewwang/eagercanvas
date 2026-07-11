@@ -3,6 +3,7 @@
  */
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { loadCanvasView } from './viewLoaders.js'
 
 const routes = [
   {
@@ -23,7 +24,7 @@ const routes = [
   {
     path: '/canvas/:id?',
     name: 'Canvas',
-    component: () => import('@/views/Canvas.vue')
+    component: loadCanvasView
   },
   {
     path: '/workspace',

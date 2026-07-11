@@ -79,8 +79,10 @@
           Refreshing workspace
         </div>
 
+        <WorkspaceLoadingGrid v-if="workspaceSwitching" />
+
         <WorkspaceCardsGrid
-          v-if="showsCardsGrid"
+          v-else-if="showsCardsGrid"
           :active-section="activeSection"
           :items="sectionItems"
           :describe-item="describeItem"
@@ -88,7 +90,9 @@
           :project-menu-options="projectMenuOptions"
           :empty-state-title="cardsEmptyStateTitle"
           :empty-state-copy="cardsEmptyStateCopy"
+          :opening-project-id="openingProjectId"
           @primary-click="handlePrimaryClick"
+          @project-intent="preloadCanvasView"
           @project-menu-select="handleProjectMenuSelect"
           @favorite-template="toggleFavoriteTemplate"
         />
@@ -163,7 +167,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   BookmarkOutline,
@@ -198,6 +202,7 @@ import {
 import WorkspaceCardsGrid from '@/components/workspace/WorkspaceCardsGrid.vue'
 import WorkspaceHeader from '@/components/workspace/WorkspaceHeader.vue'
 import WorkspaceInboxPanel from '@/components/workspace/WorkspaceInboxPanel.vue'
+import WorkspaceLoadingGrid from '@/components/workspace/WorkspaceLoadingGrid.vue'
 import WorkspaceModals from '@/components/workspace/WorkspaceModals.vue'
 import WorkspaceProfileModal from '@/components/workspace/WorkspaceProfileModal.vue'
 import WorkspaceSidebar from '@/components/workspace/WorkspaceSidebar.vue'
@@ -218,6 +223,7 @@ import { useAuthStore } from '@/stores/auth'
 import { notifier } from '@/utils/notifier'
 import { useAvatarUpload } from '@/hooks/useAvatarUpload'
 import { getUsageSummary } from '@/api/usage'
+import { preloadCanvasView } from '@/router/viewLoaders.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -274,12 +280,35 @@ const profileSaving = ref(false)
 const usageSummary = ref(null)
 const usageSummaryLoading = ref(false)
 const workspaceSwitching = ref(false)
+const openingProjectId = ref('')
 const workspaceInboxLoading = ref(false)
 const settingsWorkspaceMembers = ref([])
 const projectPermissionDetail = ref(null)
 const projectPermissionLoading = ref(false)
 const projectPermissionSaving = ref(false)
 let workspaceSwitchRefreshId = 0
+let canvasPreloadHandle = null
+
+const scheduleCanvasPreload = () => {
+  if (typeof window.requestIdleCallback === 'function') {
+    canvasPreloadHandle = window.requestIdleCallback(() => {
+      canvasPreloadHandle = null
+      void preloadCanvasView()
+    }, { timeout: 1500 })
+    return
+  }
+  canvasPreloadHandle = window.setTimeout(() => {
+    canvasPreloadHandle = null
+    void preloadCanvasView()
+  }, 300)
+}
+
+const cancelCanvasPreload = () => {
+  if (canvasPreloadHandle === null) return
+  if (typeof window.cancelIdleCallback === 'function') window.cancelIdleCallback(canvasPreloadHandle)
+  else window.clearTimeout(canvasPreloadHandle)
+  canvasPreloadHandle = null
+}
 
 const templateTabs = [
   { key: 'community', label: 'Community' },
@@ -640,11 +669,20 @@ const createBlankProject = async () => {
 }
 
 const handlePrimaryClick = async (item) => {
-  if (activeSection.value === 'projects' || activeSection.value === 'shared') {
-    await router.push(`/canvas/${item.id}`)
+  if (activeSection.value !== 'projects' && activeSection.value !== 'shared') {
+    openTemplatePreview(item)
     return
   }
-  openTemplatePreview(item)
+  const id = String(item?.id || '').trim()
+  if (!id || openingProjectId.value) return
+  openingProjectId.value = id
+  void preloadCanvasView()
+  try {
+    await router.push('/canvas/' + id)
+  } catch (error) {
+    openingProjectId.value = ''
+    notifier.error(getErrorMessage(error, 'Failed to open project'))
+  }
 }
 
 const refreshProjectFromCloud = async (project) => {
@@ -675,8 +713,8 @@ const useTemplate = async (item) => {
   }
 }
 
-const loadWorkspaceProjects = async () => {
-  await initProjectsStore({ allowLocalFallback: false })
+const loadWorkspaceProjects = async (options = {}) => {
+  await initProjectsStore({ allowLocalFallback: false, ...options })
 }
 
 const refreshWorkspaceTemplates = () => {
@@ -686,46 +724,33 @@ const refreshWorkspaceTemplates = () => {
   })
 }
 
-const refreshWorkspaceProjectsFirst = async () => {
-  await loadWorkspaceProjects()
-  void loadTemplatesForActiveScope({ preferCache: true }).catch((error) => {
-    featuredTemplates.value = []
-    notifier.error(getErrorMessage(error, 'Failed to refresh shared templates'))
-  })
-}
-
 const refreshWorkspaceData = async () => {
   await loadWorkspaceProjects()
   await refreshWorkspaceTemplates()
 }
 
-const runWorkspaceRefreshInBackground = () => {
-  const refreshId = ++workspaceSwitchRefreshId
-  workspaceSwitching.value = true
-  void refreshWorkspaceProjectsFirst()
-    .catch((error) => {
-      notifier.error(getErrorMessage(error, 'Failed to refresh workspace data'))
-    })
-    .finally(() => {
-      if (refreshId === workspaceSwitchRefreshId) {
-        workspaceSwitching.value = false
-      }
-    })
-}
-
 const handleSelectWorkspace = async (workspaceId) => {
   if (!workspaceId || workspaceId === currentWorkspace.value?.id) return
+  const refreshId = ++workspaceSwitchRefreshId
   workspaceSwitching.value = true
+  openingProjectId.value = ''
   try {
     const selection = selectWorkspace(workspaceId)
     resetTemplateScopeForCurrentWorkspace()
     activeSection.value = 'projects'
-    await selection
+    await loadWorkspaceProjects({ workspaceId, commitAfter: selection })
+    if (refreshId !== workspaceSwitchRefreshId) return
     resetTemplateScopeForCurrentWorkspace()
-    runWorkspaceRefreshInBackground()
+    void loadTemplatesForActiveScope({ preferCache: true }).catch((error) => {
+      featuredTemplates.value = []
+      notifier.error(getErrorMessage(error, 'Failed to refresh shared templates'))
+    })
   } catch (error) {
-    workspaceSwitching.value = false
-    notifier.error(getErrorMessage(error, 'Failed to switch workspace'))
+    if (refreshId === workspaceSwitchRefreshId) {
+      notifier.error(getErrorMessage(error, 'Failed to switch workspace'))
+    }
+  } finally {
+    if (refreshId === workspaceSwitchRefreshId) workspaceSwitching.value = false
   }
 }
 
@@ -1116,6 +1141,11 @@ onMounted(async () => {
     loadWorkspaceProjects(),
     loadWorkspaceSurfaces()
   ])
+  scheduleCanvasPreload()
+})
+
+onBeforeUnmount(() => {
+  cancelCanvasPreload()
 })
 </script>
 
@@ -1177,11 +1207,24 @@ onMounted(async () => {
 }
 
 .workspace-switching-status-dot {
-  width: 6px;
-  height: 6px;
+  width: 12px;
+  height: 12px;
   border-radius: 999px;
-  background: #cfd4dd;
-  box-shadow: 0 0 0 3px rgba(207, 212, 221, 0.12);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.2);
+  border-top: 1.5px solid rgba(255, 255, 255, 0.9);
+  animation: workspace-switching-spin 0.75s linear infinite;
+}
+
+@keyframes workspace-switching-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-switching-status-dot {
+    animation: none;
+  }
 }
 
 @media (max-width: 900px) {
