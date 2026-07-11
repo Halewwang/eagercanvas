@@ -8,15 +8,19 @@
       v-for="item in items"
       :key="item.id"
       class="project-card"
-      :tabindex="activeSection === 'featured' ? -1 : 0"
-      :role="activeSection === 'featured' ? undefined : 'button'"
-      :aria-busy="openingProjectId === item.id"
       @pointerenter="$emit('projectIntent', item)"
       @focusin="$emit('projectIntent', item)"
-      @keydown.enter.self="$emit('primaryClick', item)"
-      @keydown.space.self.prevent="$emit('primaryClick', item)"
-      @click="$emit('primaryClick', item)"
+      @click="activeSection === 'featured' && $emit('primaryClick', item)"
     >
+      <button
+        v-if="activeSection !== 'featured'"
+        class="project-card-primary-action"
+        type="button"
+        :aria-label="`Open ${item.name || 'project'}`"
+        :aria-busy="openingProjectId === item.id"
+        @click="$emit('primaryClick', item)"
+      />
+
       <div class="card-media" :class="{ 'project-media': activeSection !== 'featured' }">
         <div v-if="showOwnerAvatar(item, activeSection)" class="owner-avatar" title="Shared by">
           <img v-if="item.ownerAvatarUrl" :src="item.ownerAvatarUrl" alt="owner avatar" />
@@ -52,7 +56,7 @@
                 <span v-for="badge in projectBadges(item)" :key="badge" class="badge">{{ badge }}</span>
               </div>
             </div>
-            <div @click.stop>
+            <div class="project-menu-action" @click.stop>
               <BaseDropdown
                 placement="bottom-end"
                 :options="projectMenuOptions(item)"
@@ -211,10 +215,35 @@ const projectBadges = (item = {}) => {
 }
 
 .project-card {
+  position: relative;
+  isolation: isolate;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.project-card-primary-action {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 24px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.project-card-primary-action:focus {
+  outline: none;
+}
+
+.project-card-primary-action:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.78);
+  outline-offset: 3px;
 }
 
 .card-media {
@@ -481,6 +510,11 @@ const projectBadges = (item = {}) => {
 .project-menu-btn {
   margin-top: -2px;
   flex-shrink: 0;
+}
+
+.project-menu-action {
+  position: relative;
+  z-index: 3;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -751,10 +751,19 @@ test('failed latest workspace switch reconciles rollback projects before reveali
   assert.match(branch.slice(finallyStart), /if \(refreshId === workspaceSwitchRefreshId\) workspaceSwitching\.value = false/)
 })
 
-test('focusable project cards expose button semantics and keyboard activation', () => {
+test('project cards use a dedicated semantic primary action beside the menu', () => {
   const cards = readWorkspaceComponentSource('WorkspaceCardsGrid')
+  const articleStart = cards.indexOf('<article')
+  const articleTag = cards.slice(articleStart, cards.indexOf('>', articleStart) + 1)
 
-  assert.match(cards, /:role="activeSection === 'featured' \? undefined : 'button'"/)
-  assert.match(cards, /@keydown\.enter\.self="\$emit\('primaryClick', item\)"/)
-  assert.match(cards, /@keydown\.space\.self\.prevent="\$emit\('primaryClick', item\)"/)
+  assert.doesNotMatch(articleTag, /tabindex|role=|@keydown/)
+  assert.doesNotMatch(cards, /role="button"|:role=/)
+  assert.match(articleTag, /@click="activeSection === 'featured' && \$emit\('primaryClick', item\)"/)
+  assert.match(cards, /<button\s+v-if="activeSection !== 'featured'"[\s\S]*class="project-card-primary-action"/)
+  assert.match(cards, /class="project-card-primary-action"[\s\S]*type="button"/)
+  assert.match(cards, /:aria-label="`Open \$\{item\.name \|\| 'project'\}`"/)
+  assert.match(cards, /:aria-busy="openingProjectId === item\.id"/)
+  assert.match(cards, /class="project-menu-action"/)
+  assert.match(cards, /\.project-card-primary-action\s*\{[^}]*position:\s*absolute[^}]*z-index:\s*2/s)
+  assert.match(cards, /\.project-menu-action\s*\{[^}]*position:\s*relative[^}]*z-index:\s*3/s)
 })
