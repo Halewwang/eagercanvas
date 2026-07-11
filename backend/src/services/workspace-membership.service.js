@@ -306,7 +306,7 @@ export const getWorkspaceById = async (workspaceId, { supabaseClient = supabase 
   return data || null
 }
 
-export const assertWorkspaceMember = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
+export const assertWorkspaceMemberAccess = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
   const [workspace, membership] = await Promise.all([
     getWorkspaceById(workspaceId, { supabaseClient }),
     getWorkspaceMembership(userId, workspaceId, { supabaseClient })
@@ -315,12 +315,13 @@ export const assertWorkspaceMember = async (userId, workspaceId, { supabaseClien
   if (!workspace || !membership || getWorkspaceKind(workspace) === WORKSPACE_KIND.public) {
     throw new HttpError(404, 'Workspace not found', 'WORKSPACE_NOT_FOUND')
   }
+  return { workspace, membership, mapped: mapWorkspace(workspace, membership.role) }
+}
 
-  return {
-    workspace,
-    membership,
-    mapped: mapWorkspace(workspace, membership.role, await countWorkspaceMembers(workspace.id, { supabaseClient }))
-  }
+export const assertWorkspaceMember = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
+  const { workspace, membership } = await assertWorkspaceMemberAccess(userId, workspaceId, { supabaseClient })
+  const memberCount = await countWorkspaceMembers(workspace.id, { supabaseClient })
+  return { workspace, membership, mapped: mapWorkspace(workspace, membership.role, memberCount) }
 }
 
 export const assertWorkspaceOwner = async (userId, workspaceId, options = {}) => {
@@ -344,28 +345,23 @@ const getPreferredWorkspaceId = async (userId, { supabaseClient = supabase } = {
 }
 
 export const setActiveWorkspace = async (userId, workspaceId, { supabaseClient = supabase } = {}) => {
-  const { workspace, membership, mapped } = await assertWorkspaceMember(userId, workspaceId, { supabaseClient })
-
-  if (getWorkspaceKind(workspace) === WORKSPACE_KIND.public) {
-    throw new HttpError(400, 'Community cannot be selected as a project workspace', 'PUBLIC_WORKSPACE_NOT_SELECTABLE')
-  }
-
-  const { error } = await supabaseClient
+  const { workspace, membership } = await assertWorkspaceMemberAccess(userId, workspaceId, { supabaseClient })
+  const preferenceWrite = supabaseClient
     .from('user_workspace_preferences')
-    .upsert(
-      {
-        user_id: userId,
-        active_workspace_id: workspace.id,
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: 'user_id' }
-    )
-
+    .upsert({
+      user_id: userId,
+      active_workspace_id: workspace.id,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' })
+  const [memberCount, { error }] = await Promise.all([
+    countWorkspaceMembers(workspace.id, { supabaseClient }),
+    preferenceWrite
+  ])
   if (isMissingRelationError(error, 'user_workspace_preferences')) {
-    return mapWorkspace(workspace, membership.role, mapped.memberCount)
+    return mapWorkspace(workspace, membership.role, memberCount)
   }
   if (error) throw new HttpError(500, error.message, 'WORKSPACE_SELECT_FAILED')
-  return mapWorkspace(workspace, membership.role, mapped.memberCount)
+  return mapWorkspace(workspace, membership.role, memberCount)
 }
 
 export const getActiveWorkspace = async (userId, { supabaseClient = supabase } = {}) => {

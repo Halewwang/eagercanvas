@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
+  assertWorkspaceMemberAccess,
   countWorkspaceMembersByWorkspaceId,
   ensurePersonalWorkspace,
   ensurePublicWorkspace,
@@ -331,4 +332,58 @@ test('workspace membership service exposes owner-only team update and delete hel
   assert.match(workspaceMembershipSource, /\.from\('workspaces'\)[\s\S]*\.update\(\{[\s\S]*name: payload\.name/)
   assert.match(workspaceMembershipSource, /\.from\('workspaces'\)[\s\S]*\.delete\(\)[\s\S]*\.eq\('id', workspaceId\)/)
   assert.match(workspaceMembershipSource, /deletedWorkspaceId: workspaceId/)
+})
+
+test('workspace access validation avoids member-count enrichment', () => {
+  const accessStart = workspaceMembershipSource.indexOf('export const assertWorkspaceMemberAccess = async')
+  const memberStart = workspaceMembershipSource.indexOf('export const assertWorkspaceMember = async')
+  const accessSource = workspaceMembershipSource.slice(accessStart, memberStart)
+  assert.ok(accessStart >= 0)
+  assert.match(accessSource, /Promise\.all/)
+  assert.doesNotMatch(accessSource, /countWorkspaceMembers/)
+})
+
+test('workspace selection overlaps count and preference persistence', () => {
+  const start = workspaceMembershipSource.indexOf('export const setActiveWorkspace = async')
+  const end = workspaceMembershipSource.indexOf('export const getActiveWorkspace = async')
+  const source = workspaceMembershipSource.slice(start, end)
+  assert.match(source, /assertWorkspaceMemberAccess/)
+  assert.match(source, /const preferenceWrite = supabaseClient/)
+  assert.match(source, /Promise\.all/)
+  assert.match(source, /mapWorkspace\(workspace, membership\.role, memberCount\)/)
+})
+
+const createWorkspaceAccessClient = ({ workspace = null, membership = null } = {}) => ({
+  from(table) {
+    return {
+      select() { return this },
+      eq() { return this },
+      maybeSingle: async () => ({
+        data: table === 'workspaces' ? workspace : membership,
+        error: null
+      })
+    }
+  }
+})
+
+test('lightweight workspace access rejects public workspaces and non-members', async () => {
+  await assert.rejects(
+    assertWorkspaceMemberAccess('user-1', 'public-1', {
+      supabaseClient: createWorkspaceAccessClient({
+        workspace: { id: 'public-1', slug: 'shared-workspace', kind: 'public' },
+        membership: { workspace_id: 'public-1', user_id: 'user-1', role: 'member' }
+      })
+    }),
+    (error) => error.code === 'WORKSPACE_NOT_FOUND'
+  )
+
+  await assert.rejects(
+    assertWorkspaceMemberAccess('user-1', 'team-1', {
+      supabaseClient: createWorkspaceAccessClient({
+        workspace: { id: 'team-1', slug: 'team-1', kind: 'team' },
+        membership: null
+      })
+    }),
+    (error) => error.code === 'WORKSPACE_NOT_FOUND'
+  )
 })
