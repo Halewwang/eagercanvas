@@ -23,6 +23,7 @@ const createRef = (value) => ({ value })
 
 const createHarness = (overrides = {}) => {
   const calls = []
+  const projectLoadStates = []
   const mountedCallbacks = []
   const unmountedCallbacks = []
   const watchers = []
@@ -62,7 +63,9 @@ const createHarness = (overrides = {}) => {
     },
     getProjectCanvas: (projectId) => {
       calls.push(['get-project-canvas', projectId])
-      return overrides.cachedCanvasData ?? { nodes: [{ id: 'cached' }] }
+      return Object.prototype.hasOwnProperty.call(overrides, 'cachedCanvasData')
+        ? overrides.cachedCanvasData
+        : { nodes: [{ id: 'cached' }] }
     },
     getWorkflowByIdFn: (workflowId) => {
       calls.push(['get-workflow', workflowId])
@@ -71,7 +74,7 @@ const createHarness = (overrides = {}) => {
     hasPendingCanvasChanges: () => overrides.hasPendingCanvasChanges ?? false,
     initProjectsStore: () => {
       calls.push(['init-projects-store'])
-      return Promise.resolve(overrides.initProjectResult || null)
+      return overrides.projectsReady || Promise.resolve(overrides.initProjectResult || null)
     },
     loadCachedProjects: async () => calls.push(['load-cached-projects']),
     loadProject: (projectId) => calls.push(['load-project', projectId]),
@@ -79,12 +82,15 @@ const createHarness = (overrides = {}) => {
     nowFn: () => 12345,
     onMountedFn: (callback) => mountedCallbacks.push(callback),
     onUnmountedFn: (callback) => unmountedCallbacks.push(callback),
+    onProjectLoadStateChange: (state) => projectLoadStates.push(state),
     recoverMissingNodeMediaFn: (params) => {
       calls.push(['recover-missing-media', params])
       return overrides.recovery || { restoredCount: 0, nodes: params.nodes, restoredNodeIds: [] }
     },
     refreshProjectById: async (projectId) => {
       calls.push(['refresh-project', projectId])
+      if (overrides.refreshProjectById) return overrides.refreshProjectById(projectId)
+      if (overrides.refreshError) throw overrides.refreshError
       return overrides.refreshResult || { id: projectId, canvasData: { nodes: [{ id: 'remote' }] } }
     },
     resetCanvasSession: () => calls.push(['reset-canvas-session']),
@@ -98,6 +104,9 @@ const createHarness = (overrides = {}) => {
     },
     shouldApplyRemoteProjectSnapshotFn: (params) => {
       calls.push(['should-apply-remote', params])
+      if (overrides.shouldApplyRemoteProjectSnapshotFn) {
+        return overrides.shouldApplyRemoteProjectSnapshotFn(params)
+      }
       return overrides.shouldApplyRemote ?? true
     },
     shouldUseCachedProjectBeforeRemoteFn: (params) => {
@@ -134,6 +143,7 @@ const createHarness = (overrides = {}) => {
     listeners,
     mountedCallbacks,
     nodes,
+    projectLoadStates,
     route,
     unmountedCallbacks,
     watchers
@@ -255,4 +265,114 @@ test('canvas route lifecycle skips blank media recovery in local preview mode', 
   assert.deepEqual(calls, [
     ['load-project', 'project-1']
   ])
+})
+
+test('canvas starts detail without waiting for project list', async () => {
+  let releaseProjects
+  const projectsReady = new Promise((resolve) => { releaseProjects = resolve })
+  const { calls, mountedCallbacks } = createHarness({
+    cachedCanvasData: null,
+    shouldUseCache: false,
+    projectsReady
+  })
+  const mounted = mountedCallbacks[0]()
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(calls.some((call) => call[0] === 'init-projects-store'), true)
+  assert.equal(calls.some((call) => call[0] === 'refresh-project'), true)
+  releaseProjects()
+  await mounted
+})
+
+test('canvas reports ready and unrecoverable error states', async () => {
+  const ready = createHarness({ shouldUseCache: false })
+  await ready.lifecycle.ensureProjectSnapshot('project-1')
+  assert.equal(ready.projectLoadStates.at(-1).status, 'ready')
+
+  const failed = createHarness({
+    cachedCanvasData: null,
+    shouldUseCache: false,
+    refreshError: new Error('detail unavailable')
+  })
+  await failed.lifecycle.ensureProjectSnapshot('project-1')
+  assert.equal(failed.projectLoadStates.at(-1).status, 'error')
+  assert.equal(failed.projectLoadStates.at(-1).error, 'detail unavailable')
+})
+
+test('stale route completion does not replace the active project load state', async () => {
+  const pendingRefreshes = new Map()
+  const harness = createHarness({
+    shouldUseCache: false,
+    refreshProjectById: (projectId) => new Promise((resolve) => {
+      pendingRefreshes.set(projectId, resolve)
+    }),
+    shouldApplyRemoteProjectSnapshotFn: ({ refreshedProjectId, activeRouteProjectId }) => (
+      refreshedProjectId === activeRouteProjectId
+    )
+  })
+  const routeWatcher = harness.watchers[0].callback
+
+  harness.route.params.id = 'project-2'
+  harness.currentCanvasProjectId.value = 'project-2'
+  const projectTwoLoad = routeWatcher('project-2', 'project-1')
+  await Promise.resolve()
+
+  harness.route.params.id = 'project-3'
+  harness.currentCanvasProjectId.value = 'project-3'
+  const projectThreeLoad = routeWatcher('project-3', 'project-2')
+  await Promise.resolve()
+
+  pendingRefreshes.get('project-2')({ id: 'project-2', canvasData: { nodes: [] } })
+  await projectTwoLoad
+  assert.deepEqual(harness.projectLoadStates.at(-1), {
+    status: 'loading',
+    projectId: 'project-3',
+    error: ''
+  })
+
+  pendingRefreshes.get('project-3')({ id: 'project-3', canvasData: { nodes: [] } })
+  await projectThreeLoad
+  assert.deepEqual(harness.projectLoadStates.at(-1), {
+    status: 'ready',
+    projectId: 'project-3',
+    error: ''
+  })
+  assert.deepEqual(
+    harness.calls.filter((call) => call[0] === 'load-project'),
+    [['load-project', 'project-3']]
+  )
+})
+
+test('warm draft refresh starts independently and ignores a stale remote result', async () => {
+  let resolveRefresh
+  let rejectProjects
+  const projectsReady = new Promise((resolve, reject) => { rejectProjects = reject })
+  const harness = createHarness({
+    projectsReady,
+    refreshProjectById: () => new Promise((resolve) => { resolveRefresh = resolve }),
+    shouldApplyRemoteProjectSnapshotFn: ({ refreshedProjectId, activeRouteProjectId }) => (
+      refreshedProjectId === activeRouteProjectId
+    )
+  })
+
+  const mounted = harness.mountedCallbacks[0]()
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.equal(harness.calls.some((call) => call[0] === 'refresh-project'), true)
+
+  harness.route.params.id = 'project-2'
+  harness.currentCanvasProjectId.value = 'project-2'
+  resolveRefresh({ id: 'project-1', canvasData: { nodes: [{ id: 'remote' }] } })
+  rejectProjects(new Error('list unavailable'))
+  await mounted
+  await Promise.resolve()
+
+  assert.deepEqual(
+    harness.calls.filter((call) => call[0] === 'load-project'),
+    [['load-project', 'project-1']]
+  )
+  assert.equal(
+    harness.calls.some((call) => call[0] === 'warn' && call[1] === 'Project list refresh skipped:'),
+    true
+  )
 })

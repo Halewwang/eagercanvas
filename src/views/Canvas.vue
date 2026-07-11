@@ -28,7 +28,7 @@
         :owner-name="currentProject?.ownerDisplayName || ''"
         @request-edit="requestCanvasEditAccess"
       />
-
+      <CanvasProjectLoadingOverlay :state="canvasProjectLoadState" @retry="retryProjectLoad" @back="goWorkspace" />
       <CanvasFlowStage
         :key="flowKey"
         v-model:nodes="nodes"
@@ -206,6 +206,7 @@ import CanvasFlowStage from '@/components/canvas/CanvasFlowStage.vue'
 import CanvasGroupOverlay from '@/components/canvas/CanvasGroupOverlay.vue'
 import CanvasNodeMenu from '@/components/canvas/CanvasNodeMenu.vue'
 import CanvasProjectModals from '@/components/canvas/CanvasProjectModals.vue'
+import CanvasProjectLoadingOverlay from '@/components/canvas/CanvasProjectLoadingOverlay.vue'
 import CanvasReadOnlyBanner from '@/components/canvas/CanvasReadOnlyBanner.vue'
 import CanvasShareModal from '@/components/canvas/CanvasShareModal.vue'
 import CanvasSyncModals from '@/components/canvas/CanvasSyncModals.vue'
@@ -279,6 +280,7 @@ import DefaultEdge from '@/components/edges/DefaultEdge.vue'
 
 const router = useRouter()
 const route = useRoute()
+const canvasProjectLoadState = ref({ status: String(route.params.id || '') && route.params.id !== 'new' ? 'loading' : 'ready', projectId: String(route.params.id || ''), error: '' })
 const { user, updateProfile, bootstrapAuth } = useAuthStore()
 const {
   currentWorkspace,
@@ -789,7 +791,7 @@ watch(selectedGroupId, (groupId) => {
   scheduleOverlayRectUpdate()
 })
 
-const { loadProjectById } = useCanvasRouteLifecycle({
+const { loadProjectById, retryProjectLoad } = useCanvasRouteLifecycle({
   route,
   currentCanvasProjectId,
   edges,
@@ -798,6 +800,7 @@ const { loadProjectById } = useCanvasRouteLifecycle({
   isMobile,
   nodes,
   nodesFactory,
+  onProjectLoadStateChange: (state) => { canvasProjectLoadState.value = state },
   bootstrapAuth,
   cleanupOverlayRectUpdates,
   clearViewportSettleTimer,

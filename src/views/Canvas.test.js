@@ -844,3 +844,13 @@ test('canvas view delegates workspace share modal to a focused component', () =>
   assert.match(shareActionsSource, /@click="\$emit\('unpublish'\)"/)
   assert.match(shareActionsSource, /@click="\$emit\('save'\)"/)
 })
+
+test('canvas renders lifecycle loading and recoverable error UI', () => {
+  const overlay = readComponentSource('CanvasProjectLoadingOverlay')
+  assert.match(canvasSource, /CanvasProjectLoadingOverlay/)
+  assert.match(canvasSource, /canvasProjectLoadState/)
+  assert.match(canvasSource, /retryProjectLoad/)
+  assert.match(overlay, /role="status"/)
+  assert.match(overlay, /role="alert"/)
+  assert.match(overlay, /prefers-reduced-motion/)
+})

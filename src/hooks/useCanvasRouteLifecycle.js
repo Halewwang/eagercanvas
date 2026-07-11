@@ -34,6 +34,7 @@ export const useCanvasRouteLifecycle = ({
   nextTickFn = nextTick,
   nowFn = () => Date.now(),
   onMountedFn = onMounted,
+  onProjectLoadStateChange = () => {},
   onUnmountedFn = onUnmounted,
   recoverMissingNodeMediaFn = recoverMissingNodeMedia,
   refreshProjectById,
@@ -82,28 +83,40 @@ export const useCanvasRouteLifecycle = ({
 
     if (projectId && projectId !== 'new') {
       loadProject(projectId)
+      onProjectLoadStateChange({ status: 'ready', projectId, error: '' })
       try {
         await recoverBlankMediaNodes(projectId)
       } catch (error) {
         consoleRef.warn('Blank media recovery skipped:', error?.message || error)
       }
-      return
+      return true
     }
 
     resetCanvasSession()
+    onProjectLoadStateChange({ status: 'ready', projectId: '', error: '' })
+    return true
   }
 
   const ensureProjectSnapshot = async (projectId) => {
     const id = String(projectId || '')
-    if (!id || id === 'new') {
-      await loadProjectById(id)
-      return
-    }
+    if (!id || id === 'new') return loadProjectById(id)
 
+    onProjectLoadStateChange({ status: 'loading', projectId: id, error: '' })
+    let refreshError = null
     try {
       await refreshProjectById(id)
-    } catch {
-      // Fall back to any locally cached draft when detail refresh is unavailable.
+    } catch (error) {
+      refreshError = error
+    }
+
+    if (refreshError && !getProjectCanvas(id)) {
+      if (String(route.params.id || '') !== id) return false
+      onProjectLoadStateChange({
+        status: 'error',
+        projectId: id,
+        error: refreshError?.message || 'Project could not be loaded'
+      })
+      return false
     }
 
     if (!shouldApplyRemoteProjectSnapshotFn({
@@ -112,10 +125,13 @@ export const useCanvasRouteLifecycle = ({
       currentCanvasProjectId: currentCanvasProjectId.value,
       hasPendingCanvasChanges: hasPendingCanvasChanges()
     })) {
-      return
+      if (String(route.params.id || '') === id) {
+        onProjectLoadStateChange({ status: 'ready', projectId: id, error: '' })
+      }
+      return true
     }
 
-    await loadProjectById(id)
+    return loadProjectById(id)
   }
 
   const applyPendingWorkflowTemplate = async () => {
@@ -184,16 +200,26 @@ export const useCanvasRouteLifecycle = ({
     })
 
     if (routeProjectId === 'new' || hasWarmProject) {
-      loadProjectById(route.params.id)
+      void loadProjectById(route.params.id).catch((error) => {
+        consoleRef.warn('Cached project load skipped:', error?.message || error)
+      })
     }
 
-    const projectsReady = initProjectsStore()
+    let projectsReady
+    try {
+      projectsReady = Promise.resolve(initProjectsStore())
+    } catch (error) {
+      projectsReady = Promise.reject(error)
+    }
+    projectsReady = projectsReady.catch((error) => {
+      consoleRef.warn('Project list refresh skipped:', error?.message || error)
+      return null
+    })
 
     if (!hasWarmProject) {
-      await projectsReady
       await ensureProjectSnapshot(route.params.id)
     } else if (routeProjectId && routeProjectId !== 'new') {
-      projectsReady.then(() => refreshProjectById(routeProjectId)).then((project) => {
+      void refreshProjectById(routeProjectId).then((project) => {
         if (!shouldApplyRemoteProjectSnapshotFn({
           refreshedProjectId: project?.id || routeProjectId,
           activeRouteProjectId: String(route.params.id || ''),
@@ -201,11 +227,12 @@ export const useCanvasRouteLifecycle = ({
           hasPendingCanvasChanges: hasPendingCanvasChanges()
         })) return
         if (!project?.canvasData) return
-        loadProjectById(routeProjectId)
+        return loadProjectById(routeProjectId)
       }).catch(() => {
-        // Fall back to local cache when remote detail refresh is unavailable.
+        // Keep the already-rendered local draft.
       })
     }
+    void projectsReady
 
     await nextTickFn()
     await applyPendingWorkflowTemplate()
@@ -233,7 +260,8 @@ export const useCanvasRouteLifecycle = ({
     handlePageHide,
     handleVisibilityChange,
     loadProjectById,
-    recoverBlankMediaNodes
+    recoverBlankMediaNodes,
+    retryProjectLoad: () => ensureProjectSnapshot(route.params.id)
   }
 }
 
