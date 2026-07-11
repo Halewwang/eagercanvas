@@ -22,7 +22,7 @@ import { getCanvasDraftStorage } from '@/stores/canvasDrafts'
 import { buildRevisionSavePayload, CANVAS_SYNC_STATES, isConflictError } from '@/stores/canvasSyncStatus'
 import { canvasBroadcast } from '@/stores/canvasBroadcast'
 import { syncOfflineCanvasDraftRecord } from './canvasOfflineSync.js'
-import { PROJECT_LIST_ACTIVATION_FAILED, awaitProjectListActivation } from './projectListActivation.js'
+import { PROJECT_LIST_ACTIVATION_FAILED, captureProjectListActivation } from './projectListActivation.js'
 import { isLocalPreviewEnabled } from '@/utils/localPreview'
 import {
   cloneProjectCanvasData as cloneCanvasData,
@@ -334,6 +334,16 @@ export const loadProjects = async ({
     }
     return projects.value
   }
+  let projectListActivation = null
+  if (!BYPASS_AUTH_IN_DEV) {
+    let requestPromise
+    try {
+      requestPromise = apiListProjects({ workspaceId })
+    } catch (error) {
+      requestPromise = Promise.reject(error)
+    }
+    projectListActivation = captureProjectListActivation({ requestPromise, commitAfter })
+  }
   await hydrateCanvasDraftCache()
   const localDrafts = await loadLocalCache()
   if (BYPASS_AUTH_IN_DEV) {
@@ -348,10 +358,9 @@ export const loadProjects = async ({
     return projects.value
   }
   try {
-    const response = await awaitProjectListActivation({
-      requestPromise: apiListProjects({ workspaceId }),
-      commitAfter
-    })
+    const activationResult = await projectListActivation
+    if (activationResult.error) throw activationResult.error
+    const response = activationResult.response
     if (requestToken !== projectListRequestToken) return projects.value
     const tombstones = loadDeleteTombstones()
     const remote = (response?.data || [])

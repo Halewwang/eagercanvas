@@ -20,3 +20,8 @@ export const awaitProjectListActivation = async ({ requestPromise, commitAfter =
   if (result.error) throw result.error
   return result.response
 }
+
+export const captureProjectListActivation = (options = {}) => awaitProjectListActivation(options).then(
+  (response) => ({ response, error: null }),
+  (error) => ({ response: null, error })
+)

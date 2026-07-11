@@ -25,6 +25,7 @@ import {
 } from '@/api/workspace'
 import { createLocalProjectFromTemplate } from '@/stores/projects'
 import { isLocalPreviewEnabled } from '@/utils/localPreview'
+import { createWorkspaceSelectionCoordinator } from './workspaceSelection.js'
 import {
   getLocalPreviewTemplateById,
   getLocalPreviewTemplates,
@@ -46,8 +47,7 @@ let localPreviewWorkspaces = null
 let localPreviewInviteCounter = 0
 const templateCache = new Map()
 let templateRequestToken = 0
-let workspaceSelectionQueue = Promise.resolve()
-let workspaceSelectionRequestToken = 0
+let workspaceSelectionCoordinator = null
 
 const slugifyWorkspaceName = (value = '') => {
   const slug = String(value || '')
@@ -219,7 +219,10 @@ const createLocalPreviewInviteUrl = (workspaceId = currentWorkspace.value?.id) =
 
 const applyWorkspaceCollection = (payload = {}) => {
   const active = normalizeWorkspace(payload.activeWorkspace || payload.active_workspace || payload.workspace || payload)
-  if (active) currentWorkspace.value = active
+  if (active) {
+    currentWorkspace.value = active
+    workspaceSelectionCoordinator?.confirm(active)
+  }
   if (Array.isArray(payload.workspaces)) {
     workspaces.value = dedupeWorkspaces(payload.workspaces)
     if (active && !workspaces.value.some((item) => item.id === active.id)) {
@@ -231,6 +234,25 @@ const applyWorkspaceCollection = (payload = {}) => {
   return currentWorkspace.value
 }
 
+const getWorkspaceSelectionCoordinator = () => {
+  if (!workspaceSelectionCoordinator) {
+    workspaceSelectionCoordinator = createWorkspaceSelectionCoordinator({
+      applyResponse: (response) => applyWorkspaceCollection(response?.data || {}),
+      findWorkspace: (workspaceId) => workspaces.value.find((workspace) => workspace.id === workspaceId),
+      getConfirmedFromResponse: (response) => normalizeWorkspace(
+        response?.data?.activeWorkspace ||
+        response?.data?.active_workspace ||
+        response?.data?.workspace ||
+        response?.data
+      ),
+      getCurrentWorkspace: () => currentWorkspace.value,
+      requestSelection: (workspaceId) => apiSelectWorkspace(workspaceId),
+      setCurrentWorkspace: (workspace) => { currentWorkspace.value = workspace }
+    })
+  }
+  return workspaceSelectionCoordinator
+}
+
 export const loadCurrentWorkspace = async () => {
   if (BYPASS_AUTH_IN_DEV) {
     return ensureLocalPreviewWorkspaceState().activeWorkspace
@@ -238,6 +260,7 @@ export const loadCurrentWorkspace = async () => {
 
   const response = await apiGetCurrentWorkspace()
   currentWorkspace.value = normalizeWorkspace(response?.data || null)
+  workspaceSelectionCoordinator?.confirm(currentWorkspace.value)
   if (currentWorkspace.value && !workspaces.value.length) {
     workspaces.value = [currentWorkspace.value]
   }
@@ -310,26 +333,7 @@ export const updateTeamWorkspace = async (workspaceId = currentWorkspace.value?.
 
 export const selectWorkspace = async (workspaceId) => {
   if (BYPASS_AUTH_IN_DEV) return setLocalPreviewActiveWorkspace(workspaceId)
-
-  const requestToken = ++workspaceSelectionRequestToken
-  const previousWorkspace = currentWorkspace.value
-  const optimisticWorkspace = workspaces.value.find((workspace) => workspace.id === workspaceId)
-  if (optimisticWorkspace) currentWorkspace.value = optimisticWorkspace
-
-  const selectionRequest = workspaceSelectionQueue
-    .catch(() => null)
-    .then(() => apiSelectWorkspace(workspaceId))
-  workspaceSelectionQueue = selectionRequest.catch(() => null)
-
-  try {
-    const response = await selectionRequest
-    if (requestToken !== workspaceSelectionRequestToken) return currentWorkspace.value
-    applyWorkspaceCollection(response?.data || {})
-    return currentWorkspace.value
-  } catch (error) {
-    if (requestToken === workspaceSelectionRequestToken) currentWorkspace.value = previousWorkspace
-    throw error
-  }
+  return getWorkspaceSelectionCoordinator().select(workspaceId)
 }
 
 export const loadWorkspaceMembers = async (workspaceId = currentWorkspace.value?.id) => {
