@@ -22,6 +22,7 @@ import { getCanvasDraftStorage } from '@/stores/canvasDrafts'
 import { buildRevisionSavePayload, CANVAS_SYNC_STATES, isConflictError } from '@/stores/canvasSyncStatus'
 import { canvasBroadcast } from '@/stores/canvasBroadcast'
 import { syncOfflineCanvasDraftRecord } from './canvasOfflineSync.js'
+import { PROJECT_LIST_ACTIVATION_FAILED, awaitProjectListActivation } from './projectListActivation.js'
 import { isLocalPreviewEnabled } from '@/utils/localPreview'
 import {
   cloneProjectCanvasData as cloneCanvasData,
@@ -316,7 +317,11 @@ const mergeRemoteWithLocalDrafts = (remoteProjects, localProjects) => {
   })
 }
 
-export const loadProjects = async ({ allowLocalFallback = true } = {}) => {
+export const loadProjects = async ({
+  allowLocalFallback = true,
+  workspaceId = '',
+  commitAfter = null
+} = {}) => {
   const requestToken = ++projectListRequestToken
   const { isAuthenticated } = useAuthStore()
   if (!isAuthenticated.value) {
@@ -343,7 +348,10 @@ export const loadProjects = async ({ allowLocalFallback = true } = {}) => {
     return projects.value
   }
   try {
-    const response = await apiListProjects()
+    const response = await awaitProjectListActivation({
+      requestPromise: apiListProjects({ workspaceId }),
+      commitAfter
+    })
     if (requestToken !== projectListRequestToken) return projects.value
     const tombstones = loadDeleteTombstones()
     const remote = (response?.data || [])
@@ -364,6 +372,9 @@ export const loadProjects = async ({ allowLocalFallback = true } = {}) => {
     return projects.value
   } catch (error) {
     if (requestToken !== projectListRequestToken) return projects.value
+    if (error?.code === PROJECT_LIST_ACTIVATION_FAILED) {
+      throw error.cause || error
+    }
     const fallbackError = error?.message || 'Project list unavailable'
     if (!allowLocalFallback) {
       projects.value = []

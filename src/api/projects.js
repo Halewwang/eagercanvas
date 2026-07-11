@@ -23,12 +23,15 @@ const withRetry = async (fn, { retries = 2, delayMs = 250 } = {}) => {
   throw lastError
 }
 
-export const apiListProjects = () =>
-  apiRequest({
+export const apiListProjects = (options = {}) => {
+  const workspaceId = String(options.workspaceId || '').trim()
+  return apiRequest({
     url: '/projects',
     method: 'get',
+    ...(workspaceId ? { params: { workspaceId } } : {}),
     silentNetworkErrorToast: true
   })
+}
 
 export const apiCreateProject = (payload) =>
   withRetry(() =>

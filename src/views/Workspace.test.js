@@ -628,7 +628,7 @@ test('workspace cloud surfaces fail softly while project list stays cloud author
 })
 
 test('workspace project list does not render browser local cache as authoritative data', () => {
-  assert.match(projectsStoreSource, /export const loadProjects = async \(\{ allowLocalFallback = true \} = \{\}\) => \{/)
+  assert.match(projectsStoreSource, /export const loadProjects = async \(\{\s*allowLocalFallback = true,\s*workspaceId = '',\s*commitAfter = null\s*\} = \{\}\) => \{/)
   assert.match(projectsStoreSource, /if \(!allowLocalFallback\)\s*\{[\s\S]*projects\.value = \[\][\s\S]*source:\s*'remote-error'/)
   assert.match(projectsStoreSource, /export const initProjectsStore = async \(options = \{\}\) => \{\s*await loadProjects\(options\)\s*\}/)
   assert.match(workspaceSource, /const loadWorkspaceProjects = async \(\) => \{\s*await initProjectsStore\(\{ allowLocalFallback: false \}\)\s*\}/)

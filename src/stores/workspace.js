@@ -46,6 +46,8 @@ let localPreviewWorkspaces = null
 let localPreviewInviteCounter = 0
 const templateCache = new Map()
 let templateRequestToken = 0
+let workspaceSelectionQueue = Promise.resolve()
+let workspaceSelectionRequestToken = 0
 
 const slugifyWorkspaceName = (value = '') => {
   const slug = String(value || '')
@@ -307,20 +309,25 @@ export const updateTeamWorkspace = async (workspaceId = currentWorkspace.value?.
 }
 
 export const selectWorkspace = async (workspaceId) => {
-  if (BYPASS_AUTH_IN_DEV) {
-    return setLocalPreviewActiveWorkspace(workspaceId)
-  }
+  if (BYPASS_AUTH_IN_DEV) return setLocalPreviewActiveWorkspace(workspaceId)
 
+  const requestToken = ++workspaceSelectionRequestToken
   const previousWorkspace = currentWorkspace.value
   const optimisticWorkspace = workspaces.value.find((workspace) => workspace.id === workspaceId)
   if (optimisticWorkspace) currentWorkspace.value = optimisticWorkspace
 
+  const selectionRequest = workspaceSelectionQueue
+    .catch(() => null)
+    .then(() => apiSelectWorkspace(workspaceId))
+  workspaceSelectionQueue = selectionRequest.catch(() => null)
+
   try {
-    const response = await apiSelectWorkspace(workspaceId)
+    const response = await selectionRequest
+    if (requestToken !== workspaceSelectionRequestToken) return currentWorkspace.value
     applyWorkspaceCollection(response?.data || {})
     return currentWorkspace.value
   } catch (error) {
-    currentWorkspace.value = previousWorkspace
+    if (requestToken === workspaceSelectionRequestToken) currentWorkspace.value = previousWorkspace
     throw error
   }
 }
