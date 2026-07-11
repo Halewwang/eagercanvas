@@ -20,7 +20,10 @@ export const projectsRouter = Router()
 projectsRouter.use(authRequired)
 
 projectsRouter.get('/', asyncHandler(async (req, res) => {
-  const projects = await listProjects(req.user.id)
+  const workspaceId = typeof req.query.workspaceId === 'string'
+    ? req.query.workspaceId.trim()
+    : ''
+  const projects = await listProjects(req.user.id, { workspaceId })
   res.json({ data: projects })
 }))
 

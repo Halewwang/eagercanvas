@@ -121,6 +121,19 @@ test('project listing uses batched access resolution instead of per-row permissi
   assert.doesNotMatch(listProjectsSource, /await resolveProjectAccess\(userId, row\)/)
 })
 
+test('project listing supports authorized explicit scope and preserves direct shares', () => {
+  const resolverStart = projectsServiceSource.indexOf('const resolveProjectListWorkspace = async')
+  const listStart = projectsServiceSource.indexOf('export const listProjects = async')
+  const listEnd = projectsServiceSource.indexOf('export const getProject = async')
+  const resolver = projectsServiceSource.slice(resolverStart, listStart)
+  const listing = projectsServiceSource.slice(listStart, listEnd)
+
+  assert.match(resolver, /if \(!workspaceId\) return getActiveWorkspace\(userId\)/)
+  assert.match(resolver, /assertWorkspaceMemberAccess\(userId, workspaceId\)/)
+  assert.match(listing, /listDirectSharedProjectRows\(userId\)/)
+  assert.match(listing, /resolveProjectListAccessMap/)
+})
+
 test('project update returns a lightweight project row without full canvas payload', () => {
   const start = projectsServiceSource.indexOf('export const updateProject = async')
   const end = projectsServiceSource.indexOf('export const removeProject = async')

@@ -13,6 +13,7 @@ import {
   reviewProjectEditRequest
 } from './project-permissions.service.js'
 import {
+  assertWorkspaceMemberAccess,
   assertWorkspaceMember,
   getActiveWorkspace,
   resolveProjectCreateWorkspace
@@ -226,8 +227,15 @@ const listDirectSharedProjectRows = async (userId) => {
   return data || []
 }
 
-export const listProjects = async (userId) => {
-  const activeWorkspace = await getActiveWorkspace(userId)
+const resolveProjectListWorkspace = async (userId, options = {}) => {
+  const workspaceId = String(options.workspaceId || '').trim()
+  if (!workspaceId) return getActiveWorkspace(userId)
+  const { mapped } = await assertWorkspaceMemberAccess(userId, workspaceId)
+  return mapped
+}
+
+export const listProjects = async (userId, options = {}) => {
+  const activeWorkspace = await resolveProjectListWorkspace(userId, options)
   let data = null
   let error = null
 
