@@ -732,3 +732,29 @@ test('workspace switch starts scoped loading before activation settles', () => {
   assert.match(branch, /workspaceId,[\s\S]*commitAfter: selection/)
   assert.doesNotMatch(branch, /await selection[\s\S]*loadWorkspaceProjects/)
 })
+
+test('failed latest workspace switch reconciles rollback projects before revealing cards', () => {
+  const start = workspaceSource.indexOf('const handleSelectWorkspace = async')
+  const end = workspaceSource.indexOf('const openCreateWorkspaceModal =')
+  const branch = workspaceSource.slice(start, end)
+  const catchStart = branch.indexOf('  } catch (error) {')
+  const finallyStart = branch.indexOf('  } finally {')
+  const catchBranch = branch.slice(catchStart, finallyStart)
+
+  assert.ok(catchStart >= 0)
+  assert.ok(finallyStart > catchStart)
+  assert.match(catchBranch, /if \(refreshId !== workspaceSwitchRefreshId\) return/)
+  assert.match(catchBranch, /currentWorkspace\.value\?\.id/)
+  assert.match(catchBranch, /await loadWorkspaceProjects\(\{ workspaceId: rollbackWorkspaceId \}\)/)
+  assert.match(catchBranch, /projects\.value = \[\]/)
+  assert.ok(branch.indexOf('await loadWorkspaceProjects({ workspaceId: rollbackWorkspaceId })') < finallyStart)
+  assert.match(branch.slice(finallyStart), /if \(refreshId === workspaceSwitchRefreshId\) workspaceSwitching\.value = false/)
+})
+
+test('focusable project cards expose button semantics and keyboard activation', () => {
+  const cards = readWorkspaceComponentSource('WorkspaceCardsGrid')
+
+  assert.match(cards, /:role="activeSection === 'featured' \? undefined : 'button'"/)
+  assert.match(cards, /@keydown\.enter\.self="\$emit\('primaryClick', item\)"/)
+  assert.match(cards, /@keydown\.space\.self\.prevent="\$emit\('primaryClick', item\)"/)
+})

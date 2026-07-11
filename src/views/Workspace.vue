@@ -746,8 +746,17 @@ const handleSelectWorkspace = async (workspaceId) => {
       notifier.error(getErrorMessage(error, 'Failed to refresh shared templates'))
     })
   } catch (error) {
-    if (refreshId === workspaceSwitchRefreshId) {
-      notifier.error(getErrorMessage(error, 'Failed to switch workspace'))
+    if (refreshId !== workspaceSwitchRefreshId) return
+    notifier.error(getErrorMessage(error, 'Failed to switch workspace'))
+    const rollbackWorkspaceId = String(currentWorkspace.value?.id || '').trim()
+    if (!rollbackWorkspaceId) {
+      projects.value = []
+      return
+    }
+    try {
+      await loadWorkspaceProjects({ workspaceId: rollbackWorkspaceId })
+    } catch {
+      if (refreshId === workspaceSwitchRefreshId) projects.value = []
     }
   } finally {
     if (refreshId === workspaceSwitchRefreshId) workspaceSwitching.value = false

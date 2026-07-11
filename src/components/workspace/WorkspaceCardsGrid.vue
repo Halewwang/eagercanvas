@@ -9,10 +9,12 @@
       :key="item.id"
       class="project-card"
       :tabindex="activeSection === 'featured' ? -1 : 0"
+      :role="activeSection === 'featured' ? undefined : 'button'"
       :aria-busy="openingProjectId === item.id"
       @pointerenter="$emit('projectIntent', item)"
       @focusin="$emit('projectIntent', item)"
-      @keydown.enter="$emit('primaryClick', item)"
+      @keydown.enter.self="$emit('primaryClick', item)"
+      @keydown.space.self.prevent="$emit('primaryClick', item)"
       @click="$emit('primaryClick', item)"
     >
       <div class="card-media" :class="{ 'project-media': activeSection !== 'featured' }">
