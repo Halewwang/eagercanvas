@@ -46,9 +46,9 @@ import { useRouter } from 'vue-router'
 import { getUsageSummary, getUsageTimeseries } from '@/api/usage'
 import UsageNavButton from '@/components/usage/UsageNavButton.vue'
 import UsageSurface from '@/components/usage/UsageSurface.vue'
-import { getErrorMessage } from '@/utils'
+import { getErrorMessage, isLocalPreviewEnabled } from '@/utils'
 
-const isLocalPreviewMode = () => import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
+const isLocalPreviewMode = () => isLocalPreviewEnabled()
 
 const router = useRouter()
 

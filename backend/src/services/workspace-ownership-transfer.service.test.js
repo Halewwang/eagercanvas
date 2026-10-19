@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { transferSuspendedUserTeamProjects } from './workspace-ownership-transfer.service.js'
+
+const source = readFileSync(new URL('./workspace-ownership-transfer.service.js', import.meta.url), 'utf8')
+const migration = readFileSync(new URL('../../../supabase/016_admin_rbac_lifecycle.sql', import.meta.url), 'utf8')
 
 const createQuery = ({ table, calls, rows }) => {
   const state = {
@@ -78,6 +82,10 @@ const createTransferClient = (rows) => {
   const calls = []
   return {
     calls,
+    rpc(name, payload) {
+      calls.push(['rpc', name, payload])
+      return Promise.resolve({ data: payload.p_project_ids.length, error: null })
+    },
     from(table) {
       return createQuery({ table, calls, rows })
     }
@@ -96,6 +104,7 @@ test('transferSuspendedUserTeamProjects transfers team projects to active worksp
       { workspace_id: 'team-1', user_id: 'owner-2', role: 'owner' }
     ],
     users: [
+      { id: 'suspended-1', status: 'suspending', suspension_event_id: 'event-1' },
       { id: 'creator-1', status: 'active', deleted_at: null },
       { id: 'owner-2', status: 'active', deleted_at: null },
       { id: 'admin-1', status: 'active', deleted_at: null }
@@ -110,18 +119,17 @@ test('transferSuspendedUserTeamProjects transfers team projects to active worksp
 
   assert.equal(result.transferredProjectCount, 2)
   assert.deepEqual(result.transfers.map((item) => item.toUserId), ['creator-1'])
-  assert.deepEqual(supabaseClient.calls.filter((call) => call[0] === 'projects' && call[1] === 'update'), [
-    ['projects', 'update', { user_id: 'creator-1' }]
+  assert.deepEqual(supabaseClient.calls.find((call) => call[0] === 'rpc')?.slice(1), [
+    'admin_transfer_workspace_projects_atomic',
+    {
+      p_event_id: 'event-1',
+      p_workspace_id: 'team-1',
+      p_project_ids: ['project-1', 'project-2'],
+      p_from_user_id: 'suspended-1',
+      p_to_user_id: 'creator-1',
+      p_operator_user_id: 'admin-1'
+    }
   ])
-  assert.deepEqual(supabaseClient.calls.find((call) => call[0] === 'project_members' && call[1] === 'upsert')?.[2], [
-    { project_id: 'project-1', user_id: 'creator-1', role: 'owner', granted_by: 'admin-1' },
-    { project_id: 'project-2', user_id: 'creator-1', role: 'owner', granted_by: 'admin-1' }
-  ])
-  assert.deepEqual(supabaseClient.calls.find((call) => call[0] === 'workspace_members' && call[1] === 'upsert')?.[2], {
-    workspace_id: 'team-1',
-    user_id: 'creator-1',
-    role: 'owner'
-  })
 })
 
 test('transferSuspendedUserTeamProjects falls back to active owner then operator', async () => {
@@ -139,6 +147,7 @@ test('transferSuspendedUserTeamProjects falls back to active owner then operator
       { workspace_id: 'team-2', user_id: 'suspended-1', role: 'owner' }
     ],
     users: [
+      { id: 'suspended-1', status: 'suspending', suspension_event_id: 'event-2' },
       { id: 'creator-1', status: 'suspended', deleted_at: null },
       { id: 'creator-2', status: 'deleted', deleted_at: '2026-07-01T00:00:00.000Z' },
       { id: 'owner-2', status: 'active', deleted_at: null },
@@ -157,4 +166,22 @@ test('transferSuspendedUserTeamProjects falls back to active owner then operator
     ['team-1', 'owner-2'],
     ['team-2', 'admin-1']
   ])
+})
+
+test('workspace lifecycle transfer delegates each exact plan and owner membership to database triggers', () => {
+  const transferStart = migration.indexOf('create or replace function public.admin_transfer_workspace_projects_atomic')
+  const transferEnd = migration.indexOf('revoke execute on function public.admin_transfer_workspace_projects_atomic', transferStart)
+  const transferFunction = migration.slice(transferStart, transferEnd)
+
+  assert.match(source, /rpc\('admin_transfer_workspace_projects_atomic'/)
+  assert.match(source, /admin_workspace_transfer_plans/)
+  assert.doesNotMatch(source, /from\('projects'\)[\s\S]+\.update\(\{ user_id: toUserId \}\)/)
+  assert.match(migration, /create table if not exists public\.admin_workspace_transfer_plans/i)
+  assert.match(migration, /create or replace function public\.admin_transfer_workspace_projects_atomic/i)
+  assert.match(transferFunction, /insert into public\.workspace_members/i)
+  assert.doesNotMatch(transferFunction, /insert into public\.project_members/i)
+  assert.doesNotMatch(transferFunction, /delete from public\.project_members/i)
+  assert.match(migration, /create or replace function public\.admin_sync_project_owner_membership\(\)/i)
+  assert.match(migration, /create or replace function public\.admin_enforce_project_member_owner_integrity\(\)/i)
+  assert.match(migration, /create trigger trg_project_members_owner_integrity\s+before insert or update on public\.project_members/i)
 })

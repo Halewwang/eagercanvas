@@ -69,7 +69,7 @@ import { useCanvasStore } from '@/stores/canvas'
 import { pinia } from '@/stores/pinia'
 import { useChat } from '@/hooks/api/useChatApi.js'
 import { useApiConfig } from '@/hooks/useApiConfig'
-import { chatModelSelectOptions, DEFAULT_CHAT_MODEL } from '@/stores/models'
+import { chatModelSelectOptions, resolveChatModelKey } from '@/stores/models'
 import ConfigNodeContent from './config/ConfigNodeContent.vue'
 import ConfigNodeField from './config/ConfigNodeField.vue'
 import ConfigNodeHandles from './config/ConfigNodeHandles.vue'
@@ -98,7 +98,7 @@ const { isConfigured: isApiConfigured } = useApiConfig()
 
 // Local state | 本地状态
 const systemPrompt = ref(props.data?.systemPrompt || '')
-const model = ref(props.data?.model || DEFAULT_CHAT_MODEL)
+const model = ref(resolveChatModelKey(props.data?.model))
 const outputContent = ref(props.data?.outputContent || '')
 const isGenerating = ref(false)
 const showActions = ref(false)
@@ -109,7 +109,7 @@ const modelOptions = chatModelSelectOptions
 // Watch for external data changes | 监听外部数据变化
 watch(() => props.data, (newData) => {
   if (newData?.systemPrompt !== undefined) systemPrompt.value = newData.systemPrompt
-  if (newData?.model !== undefined) model.value = newData.model
+  if (newData?.model !== undefined) model.value = resolveChatModelKey(newData.model)
   if (newData?.outputContent !== undefined) outputContent.value = newData.outputContent
 }, { deep: true })
 
@@ -123,7 +123,7 @@ const updateConfig = () => {
 }
 
 const handleModelUpdate = (value) => {
-  model.value = value
+  model.value = resolveChatModelKey(value)
   updateConfig()
 }
 

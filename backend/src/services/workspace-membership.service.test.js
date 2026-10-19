@@ -387,3 +387,12 @@ test('lightweight workspace access rejects public workspaces and non-members', a
     (error) => error.code === 'WORKSPACE_NOT_FOUND'
   )
 })
+
+test('workspace leave delegates project owner membership synchronization to the database', () => {
+  const leaveStart = workspaceMembershipSource.indexOf('export const leaveWorkspace = async')
+  const leaveEnd = workspaceMembershipSource.indexOf('export const deleteTeamWorkspace = async')
+  const leaveSource = workspaceMembershipSource.slice(leaveStart, leaveEnd)
+
+  assert.match(leaveSource, /\.update\(\{ user_id: transferToUserId \}\)/)
+  assert.doesNotMatch(leaveSource, /from\('project_members'\)/)
+})

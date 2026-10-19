@@ -218,15 +218,15 @@ test('image node delegates base tool action orchestration to a focused composabl
   assert.match(imageNodeSource, /applyCrop/)
   assert.doesNotMatch(imageNodeSource, /const handleToolAction = async/)
   assert.doesNotMatch(imageNodeSource, /const buildEnhancementRequest = \(\) =>/)
-  assert.doesNotMatch(imageNodeSource, /const handleEnhanceTo4k = async/)
+  assert.doesNotMatch(imageNodeSource, /const handleEnhance = async/)
   assert.doesNotMatch(imageNodeSource, /const handleRemoveBackground = async/)
   assert.doesNotMatch(imageNodeSource, /const applyCrop = async/)
 
   assert.match(toolActionsSource, /export const useImageNodeToolActions = \(/)
   assert.match(toolActionsSource, /const handleToolAction = async/)
   assert.match(toolActionsSource, /const buildEnhancementRequest = \(\) =>/)
-  assert.match(toolActionsSource, /const handleEnhanceTo4k = async/)
-  assert.match(toolActionsSource, /const handleRemoveBackground = async/)
+  assert.match(toolActionsSource, /const handleEnhance = async/)
+  assert.doesNotMatch(toolActionsSource, /const handleRemoveBackground = async/)
   assert.match(toolActionsSource, /const applyCrop = async/)
 })
 
@@ -461,7 +461,7 @@ test('image node delegates model and size capsule state to a focused composable'
   assert.doesNotMatch(imageNodeSource, /getImageNodeSizeSelection/)
   assert.doesNotMatch(imageNodeSource, /getImageNodeNearestSizeKey/)
 
-  assert.match(modelControlsSource, /export const GPT_IMAGE_2_RATIO_OPTIONS = \[/)
+  assert.doesNotMatch(modelControlsSource, /export const GPT_IMAGE_2_RATIO_OPTIONS = \[/)
   assert.match(modelControlsSource, /export const useImageNodeModelControls = \(/)
   assert.match(modelControlsSource, /const imageModelDropdownOptions = computed/)
   assert.match(modelControlsSource, /const pickNearestSizeKey = \(ratioKey, resolutionKey\) =>/)
@@ -551,4 +551,11 @@ test('image node delegates linked image node orchestration to a focused composab
   assert.match(linkedNodesSource, /addEdge\(resolveEdge\(\{/)
   assert.match(linkedNodesSource, /setNodes\(buildSelectionState\(\{/)
   assert.match(linkedNodesSource, /return \{\s*createLinkedImageNode,\s*updateLinkedImageNode\s*\}/s)
+})
+
+
+test('image node forwards its background selection to both generation tools', () => {
+  const toolDrawersSource = readImageComponentSource('ImageNodeToolDrawers')
+  assert.match(imageNodeSource, /:background="localBackground"/)
+  assert.equal((toolDrawersSource.match(/:background="background"/g) || []).length, 2)
 })

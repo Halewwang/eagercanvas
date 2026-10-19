@@ -18,6 +18,16 @@ export const getImageNodeSourceRefImages = (...groups) => {
     })
 }
 
+export const resolveImageNodeGenerationInputs = ({ resolved = {}, data = {} } = {}) => {
+  const prompt = String(resolved.prompt || '').trim()
+  const refImages = getImageNodeSourceRefImages(Array.isArray(resolved.refImages) ? resolved.refImages : [])
+  if (prompt || refImages.length) return { prompt: prompt || String(data?.prompt || '').trim(), refImages }
+  return {
+    prompt: String(data?.sourcePrompt || '').trim() || String(data?.prompt || '').trim(),
+    refImages: getImageNodeSourceRefImages(Array.isArray(data?.sourceRefImages) ? data.sourceRefImages : [])
+  }
+}
+
 export const getImageNodeActiveInputKeys = ({
   edges = [],
   nodes = [],
@@ -156,6 +166,7 @@ const getImageNodeLinkedBaseData = ({
   now = Date.now()
 } = {}) => ({
   model: payload.model || defaults.model || '',
+  ...(payload.background || defaults.background ? { background: payload.background || defaults.background } : {}),
   quality: payload.quality || defaults.quality || '',
   size: payload.size || defaults.size || '',
   ratio: payload.ratio || defaults.ratio || '',
@@ -269,21 +280,17 @@ export const getImageNodeEnhancementRequest = ({
   currentNodeData = {},
   displayImageUrl = '',
   localImageModel = '',
-  localImageQuality = '',
-  localImageRatio = '',
-  localImageSize = '',
+  localBackground = '',
   projectId = '',
   defaultImageModel = '',
-  defaultImageSize = '1024x1024',
-  defaultEnhancePrompt = '',
-  findNearestSizeKey,
-  getRatioFromSizeKey
+  defaultEnhancePrompt = ''
 } = {}) => {
   const inheritedPrompt = String(currentNodeData?.sourcePrompt || '').trim()
   const inheritedRefs = Array.isArray(currentNodeData?.sourceRefImages)
     ? currentNodeData.sourceRefImages.filter(Boolean)
     : []
   const selfImage = String(displayImageUrl || '').trim()
+  const background = localBackground || currentNodeData?.background || sourceConfig?.data?.background
 
   let prompt = inheritedPrompt
   let refImages = inheritedRefs
@@ -305,24 +312,9 @@ export const getImageNodeEnhancementRequest = ({
     return null
   }
 
-  const ratio = String(
-    sourceConfig?.data?.ratio ||
-    currentNodeData?.ratio ||
-    localImageRatio ||
-    (typeof getRatioFromSizeKey === 'function' ? getRatioFromSizeKey(localImageSize) : '') ||
-    '1:1'
-  ).trim()
-
-  const baseSize = String(
-    sourceConfig?.data?.size ||
-    currentNodeData?.size ||
-    localImageSize ||
-    defaultImageSize
-  ).trim()
-
-  const nextSize = typeof findNearestSizeKey === 'function'
-    ? findNearestSizeKey(ratio, '4k')
-    : ''
+  if (prompt && defaultEnhancePrompt && prompt !== defaultEnhancePrompt) {
+    prompt = `${defaultEnhancePrompt}\n\nOriginal brief:\n${prompt}`
+  }
 
   return {
     model: String(
@@ -333,16 +325,7 @@ export const getImageNodeEnhancementRequest = ({
     ).trim(),
     projectId,
     prompt,
-    size: nextSize || baseSize,
-    quality: String(
-      sourceConfig?.data?.quality ||
-      currentNodeData?.quality ||
-      localImageQuality ||
-      'standard'
-    ).trim(),
-    ratio,
-    aspect_ratio: ratio,
-    resolution: '4k',
+    ...(background ? { background } : {}),
     image: refImages,
     sourceConfigId: sourceConfig?.id || currentNodeData?.sourceConfigId || '',
     sourcePrompt: prompt,
@@ -351,17 +334,11 @@ export const getImageNodeEnhancementRequest = ({
 }
 
 const imageNodeToolSaveMessages = {
-  'enhance-4k': {
-    synced: '4K enhanced image created',
-    localOnly: '4K enhanced image saved in the current project',
-    temporary: '4K result is only shown temporarily. Please retry until it is saved.',
-    failed: 'Project save failed after 4K enhancement. Please retry save.'
-  },
-  'remove-background': {
-    synced: 'Background removed and linked',
-    localOnly: 'Background removed and saved in the current project',
-    temporary: 'Background removed, but the result is only shown temporarily. Please retry.',
-    failed: 'Background removed, but project save failed. Please retry save.'
+  'enhance': {
+    synced: 'Enhanced image created',
+    localOnly: 'Enhanced image saved in the current project',
+    temporary: 'Enhanced result is only shown temporarily. Please retry until it is saved.',
+    failed: 'Project save failed after enhancement. Please retry save.'
   },
   'multi-angle-replace': {
     synced: 'Multi-angle result applied',
@@ -486,6 +463,7 @@ export const getImageNodeToolLinkedResultPatch = ({
   suppressErrorModal: false,
   ...(labelFallback ? { label: payload.label || labelFallback } : {}),
   fileType: payload.fileType || 'image/png',
+  ...(payload.background || defaults.background ? { background: payload.background || defaults.background } : {}),
   size: payload.size || defaults.size || '',
   ratio: payload.ratio || defaults.ratio || '',
   resolution: payload.resolution || defaults.resolution || '',
@@ -511,6 +489,7 @@ export const getImageNodeToolLinkedCreatePatch = ({
   ...getImageNodePersistencePatch(persistence, {}, { now }),
   ...(labelFallback ? { label: payload.label || labelFallback } : {}),
   fileType: payload.fileType || 'image/png',
+  ...(payload.background || defaults.background ? { background: payload.background || defaults.background } : {}),
   size: payload.size || defaults.size || '',
   ratio: payload.ratio || defaults.ratio || '',
   resolution: payload.resolution || defaults.resolution || '',
@@ -532,9 +511,7 @@ export const getImageNodeEnhancementResultPatch = ({
   loading: false,
   shouldSave: !!persistence?.persisted,
   fileType: 'image/png',
-  size: request.size || '',
-  ratio: request.ratio || '',
-  resolution: request.resolution || '',
+  ...(request.background ? { background: request.background } : {}),
   sourceConfigId: request.sourceConfigId || '',
   sourcePrompt: request.sourcePrompt || '',
   sourceRefImages: Array.isArray(request.sourceRefImages) ? request.sourceRefImages : []
@@ -547,24 +524,9 @@ export const getImageNodeEnhancementErrorPatch = ({
 } = {}) => ({
   loading: false,
   error: message || fallbackMessage,
-  size: request.size || '',
-  ratio: request.ratio || '',
-  resolution: request.resolution || '',
   sourceConfigId: request.sourceConfigId || '',
   sourcePrompt: request.sourcePrompt || '',
   sourceRefImages: Array.isArray(request.sourceRefImages) ? request.sourceRefImages : []
-})
-
-export const getImageNodeRemoveBackgroundResultPatch = ({
-  persistence = {},
-  defaults = {},
-  now = Date.now()
-} = {}) => ({
-  ...getImageNodePersistencePatch(persistence, {}, { now }),
-  size: defaults.size || '',
-  ratio: defaults.ratio || '',
-  resolution: defaults.resolution || '',
-  fileType: 'image/png'
 })
 
 export const getImageNodeGenerationSaveMessage = ({

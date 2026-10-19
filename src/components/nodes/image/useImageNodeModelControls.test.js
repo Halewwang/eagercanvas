@@ -30,9 +30,9 @@ const createHarness = async (overrides = {}) => {
   const imageModelOptions = ref([
     { key: 'model-a', label: 'Model A' },
     { key: 'model-b', label: 'Model B' },
-    { key: 'gpt-image-2', label: 'GPT Image 2' },
-    { key: 'gpt-image-lite', label: 'GPT Image lite' }
+    { key: 'gpt-image-2', label: 'GPT Image 2' }
   ])
+  const naturalSize = ref(overrides.naturalSize || { width: 0, height: 0 })
   const configs = {
     'model-a': {
       defaultParams: {
@@ -42,6 +42,8 @@ const createHarness = async (overrides = {}) => {
         output_format: 'png'
       },
       sizes: ['1024x1024', '2048x2048', '1280x720', '2560x1440'],
+      ratios: ['1:1', '16:9'],
+      resolutions: [{ key: '1k' }, { key: '2k' }],
       qualities: [
         { key: 'standard', label: 'Standard' },
         { key: 'hd', label: 'HD' }
@@ -64,6 +66,8 @@ const createHarness = async (overrides = {}) => {
         output_format: 'webp'
       },
       sizes: ['1280x720', '2560x1440'],
+      ratios: ['16:9'],
+      resolutions: [{ key: '1k' }, { key: '2k' }],
       qualities: [
         { key: 'standard', label: 'Standard' },
         { key: 'hd', label: 'HD' }
@@ -89,24 +93,12 @@ const createHarness = async (overrides = {}) => {
         { key: '1k', label: '1K' },
         { key: '2k', label: '2K' }
       ],
-      sizes: [],
-      hideRatioCapsule: false
-    },
-    'gpt-image-lite': {
-      defaultParams: {
-        size: 'auto',
-        quality: 'auto',
-        background: 'auto',
-        output_format: 'png'
-      },
-      resolutions: [
-        { key: '1k', label: '1K' },
-        { key: '2k', label: '2K' }
-      ],
-      sizes: [],
+      sizes: ['auto'],
+      ratios: ['1:1', '16:9', '21:9'],
       hideRatioCapsule: false
     }
   }
+  if (overrides.config) configs['gpt-image-2'] = overrides.config
   const controls = useImageNodeModelControls({
     buildModelParamsPatch: (payload) => ({ type: 'model', ...payload }),
     buildSizeParamsPatch: (payload) => ({ type: 'size', ...payload }),
@@ -117,6 +109,7 @@ const createHarness = async (overrides = {}) => {
     getModelSizeOptions: (key) => (configs[key]?.sizes || []).map((size) => ({ key: size, label: size })),
     imageModelOptions,
     nodeId: () => 'node-1',
+    naturalSize,
     resolveGptImage2Size: ({ ratio, resolution }) => `${ratio}-${resolution}`,
     updateNode: (id, patch) => updates.push([id, patch])
   })
@@ -125,6 +118,7 @@ const createHarness = async (overrides = {}) => {
     controls,
     data,
     imageModelOptions,
+    naturalSize,
     updates
   }
 }
@@ -142,8 +136,7 @@ test('image node model controls expose capsule options and display labels from l
   assert.deepEqual(controls.imageModelDropdownOptions.value, [
     { key: 'model-a', label: 'Model A' },
     { key: 'model-b', label: 'Model B' },
-    { key: 'gpt-image-2', label: 'GPT Image 2' },
-    { key: 'gpt-image-lite', label: 'GPT Image lite' }
+    { key: 'gpt-image-2', label: 'GPT Image 2' }
   ])
   assert.deepEqual(controls.ratioDropdownOptions.value.map((item) => item.key), ['1:1', '16:9'])
   assert.deepEqual(controls.resolutionDropdownOptions.value.map((item) => item.key), ['1k', '2k'])
@@ -241,23 +234,50 @@ test('image node model controls keep gpt image 2 ratios and resolved size semant
   assert.equal(controls.findNearestSizeKey('auto', '2k'), 'auto')
 })
 
-test('image node model controls keep GPT Image lite on GPT Image 2 ratio semantics', async () => {
-  const { controls } = await createHarness({
-    data: {
-      model: 'gpt-image-lite',
-      size: 'auto',
-      ratio: 'auto',
-      resolution: '1k',
-      quality: 'auto',
-      background: 'auto',
-      output_format: 'png'
-    }
+test('image node model controls replace retired models from saved canvas data', async () => {
+  const { controls, data, imageModelOptions } = await createHarness({
+    data: { model: 'gemini-3.1-flash-image-preview', size: '1024x1024' }
   })
+  assert.equal(controls.localImageModel.value, 'model-a')
+  imageModelOptions.value = [{ key: 'model-a', label: 'Model A' }]
+  data.value = { model: 'gpt-image-lite', size: '2048x2048' }
+  await nextTick()
+  assert.equal(controls.localImageModel.value, 'model-a')
+  controls.setImageModel('gemini-3-pro-image-preview')
+  assert.equal(controls.localImageModel.value, 'model-a')
+})
 
-  assert.equal(controls.displayRatio.value, 'Auto')
-  assert.equal(controls.ratioDropdownOptions.value.at(-1).key, '21:9')
 
-  controls.setImageRatio('16:9')
-  controls.setResolution('2k')
-  assert.equal(controls.localImageSize.value, '16:9-2k')
+test('empty image capabilities do not recreate parameter controls from saved values', async () => {
+  const { controls } = await createHarness({
+    data: { model: 'gpt-image-2', ratio: '16:9', size: '4096x2304', resolution: '4k', quality: 'high', background: 'transparent', output_format: 'jpeg' },
+    config: { sizes: [], ratios: [], resolutions: [], qualities: [], backgrounds: [], outputFormats: [], defaultParams: {}, showAdvancedCapsuleParams: true }
+  })
+  for (const name of ['imageSizeOptions', 'ratioDropdownOptions', 'resolutionDropdownOptions', 'qualityDropdownOptions', 'backgroundDropdownOptions', 'formatDropdownOptions']) {
+    assert.deepEqual(controls[name].value, [], name)
+  }
+})
+
+test('image stage follows loaded image dimensions instead of saved generation parameters', async () => {
+  const { controls, naturalSize } = await createHarness({
+    data: { model: 'gpt-image-2', ratio: '9:16', size: '2160x3840' }
+  })
+  naturalSize.value = { width: 1536, height: 1024 }
+  assert.deepEqual(controls.stageStyle.value, { width: '360px', height: '240px' })
+  naturalSize.value = { width: 1024, height: 1536 }
+  assert.deepEqual(controls.stageStyle.value, { width: '240px', height: '360px' })
+})
+
+test('selecting an image model without output size controls preserves media dimensions', async () => {
+  const { controls, data, updates } = await createHarness({
+    data: { model: 'gpt-image-2', size: '1536x1024', ratio: '3:2', background: 'opaque' },
+    config: { sizes: [], ratios: [], resolutions: [], qualities: [], backgrounds: [{ key: 'auto' }, { key: 'opaque' }], defaultParams: { background: 'auto' } }
+  })
+  controls.setImageModel('gpt-image-2')
+  const patch = updates.at(-1)[1]
+  assert.equal(Object.hasOwn(patch, 'size'), false)
+  assert.equal(Object.hasOwn(patch, 'ratio'), false)
+  const result = { ...data.value, ...patch }
+  assert.equal(result.size, '1536x1024')
+  assert.equal(result.ratio, '3:2')
 })

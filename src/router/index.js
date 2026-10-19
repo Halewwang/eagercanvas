@@ -3,7 +3,15 @@
  */
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { resolveAdminRouteAccess } from '@/utils/adminNavigation'
+import { createAdminRouteRecords, createNavigationGuard } from './adminRouter.js'
 import { loadCanvasView } from './viewLoaders.js'
+
+const adminRouteRecords = createAdminRouteRecords({
+  loadAdminLayout: () => import('@/layouts/AdminLayout.vue'),
+  loadAdminUsers: () => import('@/views/AdminUsers.vue'),
+  loadAdminUserDetail: () => import('@/views/AdminUserDetail.vue')
+})
 
 const routes = [
   {
@@ -41,40 +49,7 @@ const routes = [
     name: 'Usage',
     component: () => import('@/views/Usage.vue')
   },
-  {
-    path: '/usage-admin',
-    name: 'UsageAdmin',
-    component: () => import('@/views/UsageAdmin.vue')
-  },
-  {
-    path: '/admin',
-    redirect: '/admin/dashboard'
-  },
-  {
-    path: '/admin/dashboard',
-    name: 'AdminDashboard',
-    component: () => import('@/views/AdminUsers.vue')
-  },
-  {
-    path: '/admin/users',
-    name: 'AdminUsers',
-    component: () => import('@/views/AdminUsers.vue')
-  },
-  {
-    path: '/admin/service',
-    name: 'AdminService',
-    component: () => import('@/views/AdminUsers.vue')
-  },
-  {
-    path: '/admin/audit',
-    name: 'AdminAudit',
-    component: () => import('@/views/AdminUsers.vue')
-  },
-  {
-    path: '/admin/issues',
-    name: 'AdminIssues',
-    component: () => import('@/views/AdminUsers.vue')
-  }
+  ...adminRouteRecords
 ]
 
 const router = createRouter({
@@ -82,58 +57,13 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach(async (to) => {
-  const bypassAuthInDev = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
-  if (bypassAuthInDev) {
-    return true
-  }
-
-  const protectedPaths = ['/canvas', '/workspace', '/usage', '/admin']
-  const isUsageAdmin = to.path.startsWith('/usage-admin')
-  const requiresAuth = !isUsageAdmin && protectedPaths.some((path) => to.path.startsWith(path))
-  const requiresBootstrap = to.path === '/login' || requiresAuth
-  if (!requiresBootstrap) {
-    return true
-  }
-
-  const auth = useAuthStore()
-  await auth.bootstrapAuth()
-
-  if (to.path === '/login') {
-    if (auth.isAuthenticated.value) return '/'
-    return {
-      path: '/',
-      query: {
-        auth: to.query.mode === 'register' ? 'register' : 'login',
-        ...(typeof to.query.redirect === 'string' && to.query.redirect ? { redirect: to.query.redirect } : {})
-      }
-    }
-  }
-
-  if (isUsageAdmin) {
-    return true
-  }
-
-  if (requiresAuth && !auth.isAuthenticated.value) {
-    return {
-      path: '/',
-      query: {
-        auth: 'login',
-        redirect: to.fullPath
-      }
-    }
-  }
-
-  if (to.path.startsWith('/admin')) {
-    const allowed = await auth.loadAdminSession()
-    if (!allowed) {
-      return '/'
-    }
-  }
-})
+router.beforeEach(createNavigationGuard({
+  getAuthStore: useAuthStore,
+  resolveAdminAccess: resolveAdminRouteAccess
+}))
 
 router.afterEach((to) => {
-  const isDashboard = to.path.startsWith('/admin') || to.path.startsWith('/usage-admin')
+  const isDashboard = to.path.startsWith('/admin')
   document.title = isDashboard ? 'Aion Dashboard' : 'Aion Craft｜Canvas'
 })
 

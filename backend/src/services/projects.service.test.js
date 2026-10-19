@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
+import * as projectsService from './projects.service.js'
+
 import {
   applyProjectListWorkspaceFilter,
   mergeProjectListRows,
@@ -10,6 +12,7 @@ import {
 } from './projects.service.js'
 
 const projectsServiceSource = readFileSync(new URL('./projects.service.js', import.meta.url), 'utf8')
+const workspaceMembershipSource = readFileSync(new URL('./workspace-membership.service.js', import.meta.url), 'utf8')
 
 const createProjectListQueryRecorder = () => ({
   filters: [],
@@ -141,4 +144,41 @@ test('project update returns a lightweight project row without full canvas paylo
 
   assert.match(updateProjectSource, /\.select\(PROJECT_MUTATION_RESPONSE_COLUMNS\)\.maybeSingle\(\)/)
   assert.doesNotMatch(updateProjectSource, /\.select\('\*'\)\.maybeSingle\(\)/)
+})
+
+test('project owner eligibility database errors map to one safe API contract on every owner write path', () => {
+  assert.equal(typeof projectsService.throwProjectOwnerWriteError, 'function')
+  assert.throws(
+    () => projectsService.throwProjectOwnerWriteError(
+      { message: 'PROJECT_OWNER_INELIGIBLE internal sql context' },
+      'PROJECT_CREATE_FAILED'
+    ),
+    (error) => (
+      error.status === 409 &&
+      error.code === 'PROJECT_OWNER_INELIGIBLE' &&
+      error.message === 'Project owner must be an active account' &&
+      !error.message.includes('sql')
+    )
+  )
+  assert.match(projectsServiceSource, /throwProjectOwnerWriteError\(error, 'PROJECT_CREATE_FAILED'\)/)
+  assert.match(projectsServiceSource, /throwProjectOwnerWriteError\(error, 'PROJECT_COPY_TO_WORKSPACE_FAILED'\)/)
+  assert.match(projectsServiceSource, /throwProjectOwnerWriteError\(projectUpdateError, 'PROJECT_OWNER_UPDATE_FAILED'\)/)
+  assert.match(workspaceMembershipSource, /throwProjectOwnerWriteError\(projectUpdateError, 'WORKSPACE_PROJECT_TRANSFER_FAILED'\)/)
+})
+
+test('project owner membership is database-owned across create copy and permission transfer', () => {
+  const createStart = projectsServiceSource.indexOf('export const createProject = async')
+  const copyStart = projectsServiceSource.indexOf('export const copyProjectToWorkspace = async')
+  const copyEnd = projectsServiceSource.indexOf('const findUserByEmail = async')
+  const permissionStart = projectsServiceSource.indexOf("if (payload.role === 'owner')")
+  const editorStart = projectsServiceSource.indexOf("} else if (payload.role === 'editor')", permissionStart)
+
+  const createProjectSource = projectsServiceSource.slice(createStart, copyStart)
+  const copyProjectSource = projectsServiceSource.slice(copyStart, copyEnd)
+  const ownerPermissionSource = projectsServiceSource.slice(permissionStart, editorStart)
+
+  assert.doesNotMatch(createProjectSource, /from\('project_members'\)/)
+  assert.doesNotMatch(copyProjectSource, /from\('project_members'\)/)
+  assert.doesNotMatch(ownerPermissionSource, /from\('project_members'\)/)
+  assert.match(projectsServiceSource.slice(editorStart), /role: 'editor'/)
 })

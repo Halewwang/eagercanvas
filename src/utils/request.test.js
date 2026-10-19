@@ -4,15 +4,12 @@ import { test } from 'node:test'
 
 const requestSource = readFileSync(new URL('./request.js', import.meta.url), 'utf8')
 
-test('request interceptor delays 401 issue reporting until refresh cannot recover', () => {
-  const responseHandlerStart = requestSource.indexOf('async (error) => {')
-  const unauthorizedBranch = requestSource.indexOf('if (status === 401)', responseHandlerStart)
-  const firstIssueReport = requestSource.indexOf('reportRequestIssue()', responseHandlerStart)
-
-  assert.match(requestSource, /const reportRequestIssue = \(\) => \{/)
-  assert.ok(unauthorizedBranch > responseHandlerStart)
-  assert.ok(firstIssueReport > unauthorizedBranch)
+test('request interceptor retains 401 refresh and retry handling', () => {
+  assert.match(requestSource, /if \(status === 401\)/)
+  assert.match(requestSource, /const refreshRes = await instance\.post\('\/auth\/refresh'\)/)
+  assert.match(requestSource, /flushQueue\(null, nextToken\)/)
   assert.match(requestSource, /return instance\(originalRequest\)/)
+  assert.match(requestSource, /flushQueue\(refreshError, ''\)/)
 })
 
 test('request interceptor normalizes backend business error copy before toast', () => {

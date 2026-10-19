@@ -1,89 +1,120 @@
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
-import { buildAdminUserUsageView } from './admin-usage-view.js'
-import { loadApiKeyAssignments, loadUserApiKeyBillingInventory } from './admin-api-key-assignments.js'
+import { buildAdminUserDetail } from './admin-user-detail.js'
 
-const isMissingRelation = (error) => {
-  const msg = String(error?.message || '').toLowerCase()
-  return msg.includes('relation') && msg.includes('does not exist')
+const normalizePage = (query = {}) => {
+  const rawPage = Number(query.page)
+  const rawLimit = Number(query.limit)
+  const pageProvided = query.page !== undefined && query.page !== null && query.page !== ''
+  const limitProvided = query.limit !== undefined && query.limit !== null && query.limit !== ''
+  const pageInteger = Math.trunc(rawPage)
+  const limitInteger = Math.trunc(rawLimit)
+  if (
+    (pageProvided && (!Number.isFinite(rawPage) || !Number.isSafeInteger(pageInteger))) ||
+    (limitProvided && (!Number.isFinite(rawLimit) || !Number.isSafeInteger(limitInteger)))
+  ) throw new HttpError(400, 'Invalid pagination', 'INVALID_PAGINATION')
+  const page = Math.max(1, pageProvided ? pageInteger : 1)
+  const limit = Math.min(100, Math.max(1, limitProvided ? limitInteger : 25))
+  const from = (page - 1) * limit
+  const to = from + limit - 1
+  if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to)) {
+    throw new HttpError(400, 'Invalid pagination', 'INVALID_PAGINATION')
+  }
+  return { page, limit, from, to }
 }
 
-const loadRolesMap = async (userIds) => {
-  const safeUserIds = [...new Set((userIds || []).filter(Boolean))]
-  if (!safeUserIds.length) return new Map()
+const clean = (value) => String(value || '').trim()
 
-  const [{ data: userRoles, error: userRolesError }, { data: roles, error: rolesError }] = await Promise.all([
-    supabase.from('user_roles').select('user_id, role_id').in('user_id', safeUserIds),
-    supabase.from('roles').select('id, code')
-  ])
+const idsFrom = (rows) => new Set((rows || []).map((row) => row.user_id).filter(Boolean))
 
-  if (userRolesError) {
-    if (isMissingRelation(userRolesError)) return new Map()
-    throw new HttpError(500, userRolesError.message, 'USER_ROLES_QUERY_FAILED')
-  }
-  if (rolesError) {
-    if (isMissingRelation(rolesError)) return new Map()
-    throw new HttpError(500, rolesError.message, 'ROLES_QUERY_FAILED')
-  }
-
-  const roleCodeMap = new Map((roles || []).map((row) => [row.id, row.code]).filter(([, code]) => !!code))
-  const mapped = new Map()
-
-  for (const row of userRoles || []) {
-    const roleCode = roleCodeMap.get(row.role_id)
-    if (!roleCode) continue
-    const list = mapped.get(row.user_id) || []
-    list.push(roleCode)
-    mapped.set(row.user_id, list)
-  }
-
-  for (const [key, list] of mapped.entries()) {
-    mapped.set(key, [...new Set(list)].sort())
-  }
-  return mapped
+const intersectIds = (left, right) => {
+  if (left === null) return new Set(right)
+  return new Set([...left].filter((value) => right.has(value)))
 }
 
-export const listUsersForAdmin = async () => {
-  const [usersRes, profilesRes, assignments, usageEventsRes, credentialsRes, billingRecordsRes] = await Promise.all([
-    supabase.from('users').select('*').order('created_at', { ascending: false }),
-    supabase.from('user_profiles').select('user_id, display_name, registered_at, last_login_at'),
-    loadApiKeyAssignments(),
-    supabase
-      .from('usage_events')
-      .select('user_id, api_name, cost_usd, estimated_cost_usd, billing_status, created_at')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('user_service_credentials')
-      .select('*')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('provider_billing_records')
-      .select('user_id, service_credential_id, model, input_tokens, output_tokens, image_count, video_seconds, cost_amount, cost_currency, reconciliation_status, official_created_at')
-      .order('official_created_at', { ascending: false })
-  ])
+const queryCandidateIds = async (query, client) => {
+  let candidates = null
+  const role = clean(query.role)
+  if (role) {
+    const result = await client.from('user_roles').select('user_id,roles!inner(code)').eq('roles.code', role)
+    if (result.error) throw new HttpError(500, 'Unable to filter admin users by role', 'ADMIN_USERS_ROLE_FILTER_FAILED')
+    candidates = intersectIds(candidates, idsFrom(result.data))
+    if (!candidates.size) return candidates
+  }
 
-  if (usersRes.error) throw new HttpError(500, usersRes.error.message, 'USERS_QUERY_FAILED')
-  if (profilesRes.error) throw new HttpError(500, profilesRes.error.message, 'PROFILES_QUERY_FAILED')
-  if (usageEventsRes.error) throw new HttpError(500, usageEventsRes.error.message, 'USAGE_EVENTS_QUERY_FAILED')
-  if (credentialsRes.error && !isMissingRelation(credentialsRes.error)) throw new HttpError(500, credentialsRes.error.message, 'SERVICE_CREDENTIALS_QUERY_FAILED')
-  if (billingRecordsRes.error && !isMissingRelation(billingRecordsRes.error)) throw new HttpError(500, billingRecordsRes.error.message, 'BILLING_RECORDS_QUERY_FAILED')
-  const credentialRows = credentialsRes.data || []
-  const apiKeyInventory = await loadUserApiKeyBillingInventory([
-    ...credentialRows,
-    ...(assignments || [])
-  ])
-  const rolesMap = await loadRolesMap((usersRes.data || []).map((item) => item.id))
-  const activeApiKeyNames = apiKeyInventory ? new Set(apiKeyInventory.keys()) : null
+  const serviceStatus = clean(query.serviceStatus)
+  if (serviceStatus) {
+    const [usersRes, credentialsRes] = await Promise.all([
+      serviceStatus === 'not_enabled' ? client.from('users').select('id') : { data: [] },
+      client.from('user_service_credentials').select('user_id,status,created_at')
+        .order('created_at', { ascending: false })
+    ])
+    if (usersRes.error || credentialsRes.error) {
+      throw new HttpError(500, 'Unable to filter admin users by service status', 'ADMIN_USERS_SERVICE_FILTER_FAILED')
+    }
+    const credentialsByUser = new Map()
+    for (const credential of credentialsRes.data || []) {
+      const list = credentialsByUser.get(credential.user_id) || []
+      list.push(credential)
+      credentialsByUser.set(credential.user_id, list)
+    }
+    const userIds = serviceStatus === 'not_enabled'
+      ? (usersRes.data || []).map((user) => user.id)
+      : [...credentialsByUser.keys()]
+    const serviceIds = new Set(userIds.filter((userId) =>
+      buildAdminUserDetail({ credentials: credentialsByUser.get(userId) || [] }).service.serviceStatus === serviceStatus
+    ))
+    candidates = intersectIds(candidates, serviceIds)
+    if (!candidates.size) return candidates
+  }
 
-  return buildAdminUserUsageView({
-    users: usersRes.data || [],
-    profiles: profilesRes.data || [],
-    assignments,
-    usageEvents: usageEventsRes.data || [],
-    credentials: credentialRows,
-    billingRecords: billingRecordsRes.data || [],
-    apiKeyInventory,
-    activeApiKeyNames,
-    rolesMap
-  })
+  return candidates
+}
+
+const loadPageAssociations = async (userIds, client) => {
+  const results = await Promise.all([
+    client.from('user_profiles').select('user_id,display_name,registered_at,last_login_at').in('user_id', userIds),
+    client.from('user_roles').select('user_id,roles(code)').in('user_id', userIds),
+    client.from('user_service_credentials').select('id,user_id,status,created_at,disabled_at,deleted_at')
+      .in('user_id', userIds).order('created_at', { ascending: false })
+  ])
+  if (results.some((result) => result.error)) throw new HttpError(500, 'Unable to load admin user page associations', 'ADMIN_USERS_ASSOCIATIONS_QUERY_FAILED')
+  const [profilesRes, rolesRes, credentialsRes] = results
+  return { profiles: profilesRes.data || [], roles: rolesRes.data || [], credentials: credentialsRes.data || [] }
+}
+
+export const listUsersForAdmin = async (query = {}, { client = supabase } = {}) => {
+  const { page, limit, from, to } = normalizePage(query)
+  const candidates = await queryCandidateIds(query, client)
+  if (candidates !== null && candidates.size === 0) {
+    return { items: [], pagination: { page, limit, total: 0 } }
+  }
+
+  let usersQuery = client.from('users')
+    .select('id,email,status,created_at,suspended_at,suspended_reason,deleted_at', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+  const status = clean(query.status)
+  const search = clean(query.search)
+  if (status) usersQuery = usersQuery.eq('status', status)
+  if (search) usersQuery = usersQuery.ilike('email', `%${search.replace(/[%_]/g, '')}%`)
+  if (candidates !== null) usersQuery = usersQuery.in('id', [...candidates].sort())
+  const usersRes = await usersQuery.range(from, to)
+  if (usersRes.error) throw new HttpError(500, 'Unable to load admin users', 'USERS_QUERY_FAILED')
+
+  const users = usersRes.data || []
+  if (!users.length) {
+    return { items: [], pagination: { page, limit, total: Number(usersRes.count || 0) } }
+  }
+  const associations = await loadPageAssociations(users.map((row) => row.id), client)
+  const items = users.map((user) => buildAdminUserDetail({
+    user,
+    profile: associations.profiles.find((profile) => profile.user_id === user.id),
+    roles: associations.roles.filter((row) => row.user_id === user.id).map((row) => row.roles?.code).filter(Boolean),
+    credentials: associations.credentials.filter((row) => row.user_id === user.id)
+  }))
+  return {
+    items,
+    pagination: { page, limit, total: Number(usersRes.count || 0) }
+  }
 }

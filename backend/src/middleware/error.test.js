@@ -1,19 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { z } from 'zod'
 
 import { errorMiddleware } from './error.js'
 import { HttpError } from '../utils/http.js'
-
-const source = readFileSync(new URL('./error.js', import.meta.url), 'utf8')
-
-test('error middleware registers async issue writes with serverless waitUntil', () => {
-  assert.match(source, /from '@vercel\/functions'/)
-  assert.match(source, /waitUntil\(queueDatabaseIssue\(err, \{[\s\S]*pathTemplate: req\.path[\s\S]*\}\)\.catch\(\(\) => \{\}\)\)/)
-  assert.match(source, /waitUntil\(queueIssueEvent\(buildServerErrorIssuePayload\(err, req, status, code\)\)\.catch\(\(\) => \{\}\)\)/)
-  assert.match(source, /\.\.\.\(err\.metadata && typeof err\.metadata === 'object' \? \{ details: err\.metadata \} : \{\}\)/)
-})
 
 test('error middleware reports Zod validation errors as bad requests', () => {
   const error = z.object({ email: z.string().email() }).safeParse({ email: 'bad-email' }).error
@@ -36,21 +26,13 @@ test('error middleware reports Zod validation errors as bad requests', () => {
   assert.equal(response.body.message, 'Invalid email address')
 })
 
-test('error middleware exposes safe diagnostic details only when explicitly allowed', () => {
-  const error = new HttpError(503, 'provider config failed', 'SERVICE_ACCESS_PROVIDER_CONFIG_INVALID')
+test('error middleware exposes safe diagnostic details only when explicitly allowed', (t) => {
+  t.mock.method(console, 'error', () => {})
+  const error = new HttpError(503, 'storage unavailable', 'STORAGE_UNAVAILABLE')
   error.exposeDetails = true
   error.metadata = {
-    failure: 'POST /dashboard/api_key api.302.ai 400 Not Found via dashboard',
-    providerAttempts: [
-      {
-        method: 'POST',
-        path: '/dashboard/api_key',
-        baseHost: 'api.302.ai',
-        status: 400,
-        message: 'Not Found',
-        authSource: 'dashboard'
-      }
-    ]
+    operation: 'asset_upload',
+    retryable: true
   }
   const response = {
     statusCode: 0,
@@ -64,30 +46,38 @@ test('error middleware exposes safe diagnostic details only when explicitly allo
     }
   }
 
-  errorMiddleware(error, { requestId: 'req-test', method: 'POST', path: '/admin/users/user-1/service-access/activate' }, response)
+  errorMiddleware(error, { requestId: 'req-test', method: 'POST', path: '/upload' }, response)
 
   assert.equal(response.statusCode, 503)
-  assert.equal(response.body.code, 'SERVICE_ACCESS_PROVIDER_CONFIG_INVALID')
-  assert.equal(response.body.details.failure, error.metadata.failure)
-  assert.deepEqual(response.body.details.providerAttempts, error.metadata.providerAttempts)
+  assert.equal(response.body.code, 'STORAGE_UNAVAILABLE')
+  assert.deepEqual(response.body.details, error.metadata)
 })
 
-test('error middleware builds a safe issue payload for server errors', () => {
-  const error = new Error('database exploded')
-  error.code = 'DB_FAILED'
+test('error middleware retains server logging and request correlation without exposing metadata', (t) => {
+  const loggedErrors = []
+  t.mock.method(console, 'error', (...args) => loggedErrors.push(args))
+  const error = new Error('database unavailable')
+  error.metadata = { private: 'internal details' }
+  const response = {
+    status(statusCode) {
+      this.statusCode = statusCode
+      return this
+    },
+    json(body) {
+      this.body = body
+    }
+  }
 
-  const payload = errorMiddleware.buildIssuePayload(error, {
-    requestId: 'req-test',
-    method: 'POST',
-    path: '/projects/11111111-1111-1111-1111-111111111111',
-    user: { id: 'user-1' }
-  }, 500, 'INTERNAL_ERROR')
+  errorMiddleware(error, { requestId: 'req-test', method: 'POST', path: '/projects' }, response)
 
-  assert.equal(payload.source_layer, 'backend')
-  assert.equal(payload.category, 'server_error')
-  assert.equal(payload.severity, 'p1')
-  assert.equal(payload.request_id, 'req-test')
-  assert.equal(payload.user_id, 'user-1')
-  assert.equal(payload.error_code, 'INTERNAL_ERROR')
-  assert.equal(payload.path_template, '/projects/11111111-1111-1111-1111-111111111111')
+  assert.equal(response.statusCode, 500)
+  assert.deepEqual(response.body, {
+    code: 'INTERNAL_ERROR',
+    message: 'database unavailable',
+    requestId: 'req-test'
+  })
+  assert.equal(loggedErrors.length, 1)
+  assert.equal(loggedErrors[0][0], '[server:error]')
+  assert.equal(loggedErrors[0][1].requestId, 'req-test')
+  assert.equal(loggedErrors[0][1].path, '/projects')
 })

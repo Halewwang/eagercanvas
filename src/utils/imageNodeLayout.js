@@ -79,20 +79,15 @@ export const getImageNodeToolOptions = ({
       disabled: Boolean(isUploading)
     },
     {
-      label: 'Cutout',
-      key: 'remove-background',
-      disabled: imageToolDisabled
-    },
-    {
       label: 'Crop',
       key: 'crop',
       disabled: imageToolDisabled
     },
     {
-      label: 'Upscale',
-      key: 'enhance-4k',
+      label: 'Enhance',
+      key: 'enhance',
       disabled: imageToolDisabled,
-      description: 'Reuse original model and inputs, increase resolution only'
+      description: 'Refine clarity and detail while preserving the image'
     },
     {
       label: '3D Camera',
@@ -163,47 +158,16 @@ export const getImageNodeSizeMetaOptions = (imageSizeOptions = []) => (
 })
 
 export const getImageNodeRatioDropdownOptions = ({
-  isGptImage2Model = false,
-  gptImage2RatioOptions = [],
-  hideRatioCapsule = false,
-  sizeMetaOptions = []
-} = {}) => {
-  if (isGptImage2Model) return getImageNodeSelectOptions(gptImage2RatioOptions)
-  if (hideRatioCapsule) return []
+  modelRatios = [],
+  hideRatioCapsule = false
+} = {}) => hideRatioCapsule ? [] : getImageNodeSelectOptions(
+  (Array.isArray(modelRatios) ? modelRatios : []).map((ratio) => (
+    typeof ratio === 'string' ? { key: ratio, label: ratio } : ratio
+  ))
+)
 
-  const seen = new Set()
-  return (Array.isArray(sizeMetaOptions) ? sizeMetaOptions : [])
-    .map((opt) => opt.ratio)
-    .filter((ratio) => {
-      if (seen.has(ratio)) return false
-      seen.add(ratio)
-      return true
-    })
-    .map((ratio) => ({ key: ratio, label: ratio }))
-}
-
-export const getImageNodeResolutionDropdownOptions = ({
-  modelResolutions = [],
-  sizeMetaOptions = [],
-  imageRatio = ''
-} = {}) => {
-  if (Array.isArray(modelResolutions) && modelResolutions.length > 0) {
-    return getImageNodeSelectOptions(modelResolutions, { uppercaseFallback: true })
-  }
-
-  const seen = new Set()
-  const list = (Array.isArray(sizeMetaOptions) ? sizeMetaOptions : [])
-    .filter((opt) => opt.ratio === imageRatio)
-    .sort((a, b) => a.pixels - b.pixels)
-    .filter((opt) => {
-      if (seen.has(opt.resolutionKey)) return false
-      seen.add(opt.resolutionKey)
-      return true
-    })
-    .map((opt) => ({ key: opt.resolutionKey, label: opt.resolutionKey.toUpperCase() }))
-
-  return list.length > 0 ? list : [{ key: '1k', label: '1K' }]
-}
+export const getImageNodeResolutionDropdownOptions = ({ modelResolutions = [] } = {}) =>
+  getImageNodeSelectOptions(modelResolutions, { uppercaseFallback: true })
 
 export const getImageNodeAdvancedDropdownOptions = ({
   enabled = false,
@@ -327,11 +291,10 @@ export const getImageNodeStageRatio = ({ ratio = '', size = '' } = {}) => {
   const [w, h] = getSizeParts(size)
   if (!w || !h) return '1:1'
   const sizeRatio = w / h
-  if (Math.abs(sizeRatio - 1) < 0.05) return '1:1'
-  if (Math.abs(sizeRatio - 16 / 9) < 0.05) return '16:9'
-  if (Math.abs(sizeRatio - 9 / 16) < 0.05) return '9:16'
-  if (Math.abs(sizeRatio - 4 / 3) < 0.05) return '4:3'
-  if (Math.abs(sizeRatio - 3 / 4) < 0.05) return '3:4'
+  for (const ratio of Object.keys(STAGE_SIZE_BY_RATIO)) {
+    const [ratioWidth, ratioHeight] = ratio.split(':').map(Number)
+    if (Math.abs(sizeRatio - ratioWidth / ratioHeight) < 0.02) return ratio
+  }
   return `${w}:${h}`
 }
 

@@ -15,19 +15,6 @@ import {
   getImageNodeStageStyle
 } from '@/utils/imageNodeLayout'
 
-export const GPT_IMAGE_2_RATIO_OPTIONS = [
-  { key: '1:1', label: '1:1' },
-  { key: '3:2', label: '3:2' },
-  { key: '2:3', label: '2:3' },
-  { key: '4:3', label: '4:3' },
-  { key: '3:4', label: '3:4' },
-  { key: '4:5', label: '4:5' },
-  { key: '5:4', label: '5:4' },
-  { key: '16:9', label: '16:9' },
-  { key: '9:16', label: '9:16' },
-  { key: '21:9', label: '21:9' }
-]
-
 const noop = () => {}
 const identityPatch = (payload = {}) => payload
 
@@ -47,6 +34,7 @@ export const useImageNodeModelControls = ({
   getModelSizeOptions = () => [],
   imageModelOptions = [],
   nodeId,
+  naturalSize,
   resolveGptImage2Size,
   updateNode = noop
 } = {}) => {
@@ -54,27 +42,41 @@ export const useImageNodeModelControls = ({
   const readDefaultImageModel = () => readOption(defaultImageModel) || ''
   const readDefaultImageSize = () => readOption(defaultImageSize) || '1024x1024'
   const readImageModelOptions = () => readOption(imageModelOptions) || []
+  const resolveModel = (key) => readImageModelOptions().some((model) => model.key === key)
+    ? key
+    : readDefaultImageModel()
   const readNodeId = () => readOption(nodeId)
 
   const initialData = readData()
-  const localImageModel = ref(initialData.model || readDefaultImageModel())
-  const localImageSize = ref(initialData.size || readDefaultImageSize())
-  const localImageQuality = ref(initialData.quality || 'standard')
-  const localBackground = ref(initialData.background || 'auto')
-  const localOutputFormat = ref(initialData.output_format || initialData.outputFormat || 'png')
-  const localImageRatio = ref(initialData.ratio || getImageNodeRatioFromSizeKey(localImageSize.value))
-  const localResolution = ref(initialData.resolution || getImageNodeResolutionFromSizeKey(localImageSize.value))
+  const localImageModel = ref(resolveModel(initialData.model))
+  const localImageSize = ref(getModelConfig(localImageModel.value)?.sizes?.length ? initialData.size || readDefaultImageSize() : '')
+  const resolveQuality = (quality) => {
+    const config = getModelConfig(localImageModel.value)
+    if (!config?.qualities?.length) return ''
+    return config.qualities.some((item) => item.key === quality)
+      ? quality
+      : config?.defaultParams?.quality || quality || 'auto'
+  }
+  const localImageQuality = ref(resolveQuality(initialData.quality))
+  const resolveBackground = (background) => {
+    const config = getModelConfig(localImageModel.value)
+    return config?.backgrounds?.some((item) => item.key === background) ? background : config?.defaultParams?.background || ''
+  }
+  const localBackground = ref(resolveBackground(initialData.background))
+  const localOutputFormat = ref(getModelConfig(localImageModel.value)?.outputFormats?.length > 1 ? initialData.output_format || initialData.outputFormat || 'png' : '')
+  const localImageRatio = ref(getModelConfig(localImageModel.value)?.ratios?.length ? initialData.ratio || getImageNodeRatioFromSizeKey(localImageSize.value) : '')
+  const localResolution = ref(getModelConfig(localImageModel.value)?.resolutions?.length ? initialData.resolution || getImageNodeResolutionFromSizeKey(localImageSize.value) : '')
 
   const syncFromData = (nextData = {}) => {
     if (!nextData) return
-    if (nextData.model && nextData.model !== localImageModel.value) localImageModel.value = nextData.model
-    if (nextData.size && nextData.size !== localImageSize.value) localImageSize.value = nextData.size
-    if (nextData.quality && nextData.quality !== localImageQuality.value) localImageQuality.value = nextData.quality
-    if (nextData.background && nextData.background !== localBackground.value) localBackground.value = nextData.background
+    localImageModel.value = resolveModel(nextData.model)
+    localImageSize.value = getModelConfig(localImageModel.value)?.sizes?.length ? nextData.size || readDefaultImageSize() : ''
+    localImageQuality.value = resolveQuality(nextData.quality)
+    localBackground.value = resolveBackground(nextData.background)
     const nextFormat = nextData.output_format || nextData.outputFormat
-    if (nextFormat && nextFormat !== localOutputFormat.value) localOutputFormat.value = nextFormat
-    localImageRatio.value = nextData.ratio || getImageNodeRatioFromSizeKey(localImageSize.value)
-    localResolution.value = nextData.resolution || getImageNodeResolutionFromSizeKey(localImageSize.value)
+    localOutputFormat.value = getModelConfig(localImageModel.value)?.outputFormats?.length > 1 ? nextFormat || '' : ''
+    localImageRatio.value = getModelConfig(localImageModel.value)?.ratios?.length ? nextData.ratio || getImageNodeRatioFromSizeKey(localImageSize.value) : ''
+    localResolution.value = getModelConfig(localImageModel.value)?.resolutions?.length ? nextData.resolution || getImageNodeResolutionFromSizeKey(localImageSize.value) : ''
   }
 
   watch(
@@ -87,14 +89,13 @@ export const useImageNodeModelControls = ({
 
   const imageModelDropdownOptions = computed(() => getImageNodeSelectOptions(readImageModelOptions()))
   const currentImageModelConfig = computed(() => getModelConfig(localImageModel.value))
-  const isGptImage2Model = computed(() => ['gpt-image-2', 'gpt-image-lite'].includes(localImageModel.value))
+  const isGptImage2Model = computed(() => localImageModel.value === 'gpt-image-2')
   const showAdvancedCapsuleParams = computed(() => currentImageModelConfig.value?.showAdvancedCapsuleParams === true)
   const imageSizeOptions = computed(() => getModelSizeOptions(localImageModel.value, localImageQuality.value))
   const sizeMetaOptions = computed(() => getImageNodeSizeMetaOptions(imageSizeOptions.value))
 
   const ratioDropdownOptions = computed(() => getImageNodeRatioDropdownOptions({
-    isGptImage2Model: isGptImage2Model.value,
-    gptImage2RatioOptions: GPT_IMAGE_2_RATIO_OPTIONS,
+    modelRatios: currentImageModelConfig.value?.ratios,
     hideRatioCapsule: currentImageModelConfig.value?.hideRatioCapsule,
     sizeMetaOptions: sizeMetaOptions.value
   }))
@@ -148,8 +149,9 @@ export const useImageNodeModelControls = ({
     placeholderLabel: 'Format'
   }))
   const stageStyle = computed(() => getImageNodeStageStyle({
-    ratio: localImageRatio.value,
-    size: localImageSize.value
+    ...(readOption(naturalSize)?.width && readOption(naturalSize)?.height
+      ? { size: `${readOption(naturalSize).width}x${readOption(naturalSize).height}` }
+      : { ratio: localImageRatio.value, size: localImageSize.value })
   }))
   const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
 
@@ -168,6 +170,7 @@ export const useImageNodeModelControls = ({
   }
 
   const findNearestSizeKey = (ratioKey, resolutionKey) => {
+    if (!imageSizeOptions.value.length) return ''
     return getImageNodeNearestSizeKey({
       ratioKey,
       resolutionKey,
@@ -179,16 +182,16 @@ export const useImageNodeModelControls = ({
   }
 
   const setImageModel = (key) => {
-    localImageModel.value = key
-    const config = getModelConfig(key)
-    localImageSize.value = config?.defaultParams?.size || localImageSize.value || readDefaultImageSize()
-    localImageQuality.value = config?.defaultParams?.quality || localImageQuality.value
-    localBackground.value = config?.defaultParams?.background || localBackground.value
-    localOutputFormat.value = config?.defaultParams?.output_format || localOutputFormat.value
-    localImageRatio.value = getImageNodeRatioFromSizeKey(localImageSize.value)
-    localResolution.value = getImageNodeResolutionFromSizeKey(localImageSize.value)
-    localImageSize.value = pickNearestSizeKey(localImageRatio.value, localResolution.value)
-    updateNode(readNodeId(), buildModelParamsPatch({
+    localImageModel.value = resolveModel(key)
+    const config = getModelConfig(localImageModel.value)
+    localImageSize.value = config?.sizes?.length ? config.defaultParams?.size || localImageSize.value || readDefaultImageSize() : ''
+    localImageQuality.value = resolveQuality(config?.defaultParams?.quality)
+    localBackground.value = resolveBackground(config?.defaultParams?.background)
+    localOutputFormat.value = config?.outputFormats?.length > 1 ? config.defaultParams?.output_format || localOutputFormat.value : ''
+    localImageRatio.value = config?.ratios?.length ? getImageNodeRatioFromSizeKey(localImageSize.value) : ''
+    localResolution.value = config?.resolutions?.length ? getImageNodeResolutionFromSizeKey(localImageSize.value) : ''
+    if (imageSizeOptions.value.length) localImageSize.value = pickNearestSizeKey(localImageRatio.value, localResolution.value)
+    const patch = buildModelParamsPatch({
       model: localImageModel.value,
       size: localImageSize.value,
       quality: localImageQuality.value,
@@ -196,10 +199,14 @@ export const useImageNodeModelControls = ({
       outputFormat: localOutputFormat.value,
       ratio: localImageRatio.value,
       resolution: localResolution.value
-    }))
+    })
+    if (!config?.sizes?.length) delete patch.size
+    if (!config?.ratios?.length) delete patch.ratio
+    updateNode(readNodeId(), patch)
   }
 
   const setImageRatio = (ratioKey) => {
+    if (!ratioDropdownOptions.value.some((item) => item.key === ratioKey)) return
     localImageSize.value = pickNearestSizeKey(ratioKey, localResolution.value)
     updateNode(readNodeId(), buildSizeParamsPatch({
       size: localImageSize.value,
@@ -209,6 +216,7 @@ export const useImageNodeModelControls = ({
   }
 
   const setResolution = (resolutionKey) => {
+    if (!resolutionDropdownOptions.value.some((item) => item.key === resolutionKey)) return
     localImageSize.value = pickNearestSizeKey(localImageRatio.value, resolutionKey)
     updateNode(readNodeId(), buildSizeParamsPatch({
       size: localImageSize.value,

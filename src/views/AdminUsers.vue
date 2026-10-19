@@ -1,282 +1,132 @@
 <template>
-  <AdminShell>
-    <template #sidebar>
-      <AdminSidebar
-        :nav-items="navItems"
-        :active-section="activeSection"
-        :access-scope="accessScope"
-        :account-label="adminAccountLabel"
-        :roles="auth.roles.value"
-        @select-section="scrollToSection"
-      />
-    </template>
-
-    <AdminMobileNav
-      :nav-items="navItems"
-      :active-section="activeSection"
-      @select-section="scrollToSection"
+  <AdminUserDetail
+    v-if="accessFocus"
+    :target-user-id="accessFocus.targetUserId"
+    :initial-tab="accessFocus.initialTab"
+    embedded
+    @close="closeAccessFocus"
+  />
+  <div v-else class="space-y-5 pb-8">
+    <AdminPageHeader :display-name="displayName" :access-scope="accessScope" @go-home="router.push('/')" />
+    <AdminUserServiceHeader :loading-users="loadingUsers" @refresh-users="loadUsers" />
+    <p class="text-sm text-white/50">开通服务后，用户即可使用全部文字、图片和视频模型。</p>
+    <AdminUserServiceFilters
+      v-model:search-query="userSearchQuery"
+      v-model:status-filter="userStatusFilter"
+      v-model:service-status-filter="userServiceStatusFilter"
+      v-model:role-filter="userRoleFilter"
+      :total-users="pagination.total"
+      :user-page-start="userPageStart"
+      :user-page-end="userPageEnd"
     />
-
-    <AdminPageHeader
-      :display-name="displayName"
-      :access-scope="accessScope"
-      @go-home="goHome"
+    <AdminEmptyState v-if="!users.length">{{ loadingUsers ? '正在加载用户…' : '暂无符合条件的注册用户' }}</AdminEmptyState>
+    <AdminTableShell v-else min-width-class="min-w-[760px]">
+      <template #header>
+        <th class="px-3 py-3">用户</th>
+        <th class="px-3 py-3">注册时间</th>
+        <th class="px-3 py-3">最近登录</th>
+        <th class="px-3 py-3">操作</th>
+      </template>
+      <template #default="{ rowClass }">
+        <tr v-for="user in users" :key="user.id" :class="rowClass">
+          <AdminUserIdentityCell
+            :user="user"
+            :role-label="getAdminRoleLabel"
+            :service-status-label="getAdminServiceStatusLabel"
+            :status-class="getAdminUserStatusClass"
+            :status-label="getAdminUserStatusLabel"
+            @open-detail="openDetail(user)"
+          />
+          <td class="px-3 py-4 text-xs text-white/55">{{ formatAdminDateTime(user.createdAt) }}</td>
+          <td class="px-3 py-4 text-xs text-white/55">{{ formatAdminDateTime(user.lastLoginAt) }}</td>
+          <AdminUserOperationsCell
+            :user="user"
+            :can-activate-service="canActivateService"
+            :can-archive-user="canArchiveUser"
+            :can-disable-service="canDisableService"
+            :can-manage-roles="canManageRoles"
+            :can-manage-user-status="canManageUserStatus"
+            :can-restore-user="canRestoreUser"
+            :deleting="deleting"
+            :is-self="isSelf"
+            :service-loading="serviceLoading"
+            :status-loading="statusLoading"
+            @open-detail="openDetail(user)"
+            @open-role-detail="openDetail(user, 'roles')"
+            @activate-service="activateService"
+            @activate-user="activateUser"
+            @delete-user="deleteUser"
+            @disable-service="disableService"
+            @restore-user="restoreUser"
+            @suspend-user="suspendUser"
+          />
+        </tr>
+      </template>
+    </AdminTableShell>
+    <AdminUserServicePagination :user-page="userPage" :total-user-pages="totalUserPages" :visible-user-pages="visibleUserPages" @set-user-page="setUserPage" />
+    <AdminUserMutationDialog
+      :show="mutationDialogVisible"
+      :desktop-enabled="isDesktop"
+      :action="mutationDialogAction"
+      :user="mutationDialogUser"
+      :loading="mutationSubmitting"
+      @close="closeMutationDialog"
+      @submit="submitMutation"
     />
-
-    <AdminDashboardSections
-      ref="dashboardSectionsRef"
-      :active-route-section="activeRouteSection"
-      :overview-section="overviewSectionProps"
-      :user-service-section="userServiceSectionProps"
-      :service-reconciliation-section="serviceReconciliationSectionProps"
-      :audit-log-section="auditLogSectionProps"
-      :issue-inbox-section="issueInboxSectionProps"
-      @activate-service="activateService"
-      @activate-user="activateUser"
-      @bind-manual-service="openManualServiceDialog"
-      @delete-user="deleteUser"
-      @disable-service="disableService"
-      @load-api-logs="loadApiLogs"
-      @load-issues="loadIssues"
-      @load-logs="loadLogs"
-      @export-issues="exportIssues"
-      @notify-issue="notifyIssue"
-      @open-issue="openIssue"
-      @query-record="queryRecord"
-      @reconcile-billing="reconcileBilling"
-      @refresh-overview="refreshDashboardOverview"
-      @refresh-service-data="refreshServiceData"
-      @refresh-users="loadUsers"
-      @reset-service="resetService"
-      @save-roles="saveRoles"
-      @send-issue-digest-email="sendIssueDigestEmail"
-      @set-user-page="setUserPage"
-      @suspend-user="suspendUser"
-      @update-audit-log-query="updateAuditLogQuery"
-      @toggle-all-issue-selection="toggleAllVisibleIssueSelection"
-      @toggle-issue-selection="toggleIssueSelection"
-      @update-issue-query="updateIssueQuery"
-      @update-issue-status="setIssueStatus"
-      @update-log-query="updateLog302Query"
-      @update:record-request-id="recordRequestId = $event"
-      @update-role-selection="updateRoleSelection"
-      @update-service-limits="updateServiceLimits"
-      @update:search-query="userSearchQuery = $event"
-      @update:status-filter="userStatusFilter = $event"
-    />
-    <AdminManualServiceKeyModal
-      v-model:show="manualServiceDialogVisible"
-      :user="manualServiceUser"
-      :loading="manualServiceUser?.id ? !!serviceLoading[manualServiceUser.id] : false"
-      @close="closeManualServiceDialog"
-      @submit="submitManualServiceBinding"
-    />
-  </AdminShell>
+  </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AdminMobileNav, AdminPageHeader, AdminShell, AdminSidebar } from '@/components/admin'
-import { useAdminSectionNavigation } from '@/hooks/useAdminSectionNavigation'
-import { AdminDashboardSections, AdminManualServiceKeyModal } from '@/components/admin/features'
+import { AdminEmptyState, AdminPageHeader, AdminTableShell } from '@/components/admin'
+import {
+  AdminUserIdentityCell, AdminUserMutationDialog, AdminUserOperationsCell,
+  AdminUserServiceFilters, AdminUserServiceHeader, AdminUserServicePagination
+} from '@/components/admin/features'
 import { useAdminAccessState } from '@/hooks/useAdminAccessState'
-import { useAdminDashboardData } from '@/hooks/useAdminDashboardData'
-import { useAdminDashboardRefresh } from '@/hooks/useAdminDashboardRefresh'
-import { useAdminDisplayState } from '@/hooks/useAdminDisplayState'
-import { useAdminIssueInbox } from '@/hooks/useAdminIssueInbox'
-import { useAdminUsersDashboardSections } from '@/hooks/useAdminUsersDashboardSections'
+import { ADMIN_DESKTOP_ACTIONS_KEY, useAdminDesktopOnly } from '@/hooks/useAdminDesktopOnly'
+import { buildAdminUserDetailTarget } from '@/hooks/adminAccessNavigation'
+import { useAdminUsersAccessFocus } from '@/hooks/useAdminUsersAccessFocus'
 import { useAdminUserActions } from '@/hooks/useAdminUserActions'
-import { useAdminServiceOps } from '@/hooks/useAdminServiceOps'
 import { useAdminUsersState } from '@/hooks/useAdminUsersState'
 import { useAuthStore } from '@/stores/auth'
-import { ADMIN_SECTION_BY_ROUTE_NAME } from '@/utils/adminDisplay'
+import {
+  formatAdminDateTime, getAdminRoleLabel, getAdminServiceStatusLabel,
+  getAdminUserStatusClass, getAdminUserStatusLabel
+} from '@/utils/adminDisplay'
+import AdminUserDetail from './AdminUserDetail.vue'
 
-const router = useRouter()
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
-const dashboardSectionsRef = ref(null)
-const activeRouteSection = computed(() => ADMIN_SECTION_BY_ROUTE_NAME[route.name] || 'overview')
+const { isDesktop } = useAdminDesktopOnly()
+provide(ADMIN_DESKTOP_ACTIONS_KEY, isDesktop)
 const accessState = useAdminAccessState({ auth })
 const {
-  accessScope, adminAccountLabel, canActivateService, canDisableService, canManageRoles, canManageUserStatus,
-  canReadAudit, canReadIssues, canReadUsage, canReadUsers, canReconcileBilling, canResetService,
-  canUpdateIssues, canUpdateServiceLimits, displayName, isSelf, showServiceSection, showUserActions
+  accessScope, canActivateService, canArchiveUser, canDisableService, canManageRoles,
+  canManageUserStatus, canReadUsers, canRestoreUser, displayName, isSelf
 } = accessState
-const usersState = useAdminUsersState({
-  canReadUsers
+const {
+  loadUsers, loadingUsers, pagination, setUserPage, totalUserPages, userPage, userPageEnd,
+  userPageStart, userRoleFilter, userSearchQuery, userServiceStatusFilter, userStatusFilter,
+  users, visibleUserPages
+} = useAdminUsersState({ canReadUsers })
+const { accessFocus, closeAccessFocus, loadUsersForCurrentView } = useAdminUsersAccessFocus({
+  routeQuery: computed(() => route.query),
+  routerReplace: (target) => router.replace(target),
+  loadUsers
 })
 const {
-  activeServiceUsers,
-  filteredUsers,
-  loadUsers,
-  loadingUsers,
-  notEnabledActiveUsers,
-  officialUsageSummary,
-  pagedUsers,
-  pendingBillingUsers,
-  selectedRoles,
-  serviceActivationRate,
-  setUserPage,
-  topSpenders,
-  totalUserPages,
-  updateRoleSelection,
-  userPage,
-  userPageEnd,
-  userPageStart,
-  userSearchQuery,
-  userStats,
-  userStatusFilter,
-  users,
-  visibleUserPages
-} = usersState
-const dashboardData = useAdminDashboardData({
-  canReadAudit,
-  canReadUsage
+  activateService, activateUser, closeMutationDialog, deleteUser, deleting, disableService,
+  mutationDialogAction, mutationDialogUser, mutationDialogVisible, mutationSubmitting,
+  restoreUser, serviceLoading, statusLoading, submitMutation, suspendUser
+} = useAdminUserActions({
+  ...accessState,
+  canUseDesktopActions: isDesktop,
+  isSelf,
+  loadUsers
 })
-const {
-  auditLogs,
-  barWidth,
-  loadLogs,
-  loadUsage,
-  loadingLogs,
-  loadingOverview,
-  loadingUsage,
-  logQuery,
-  pagination,
-  refreshOverview,
-  updateAuditLogQuery,
-  usageSeries,
-  usageSummary
-} = dashboardData
-const displayState = useAdminDisplayState({
-  activeServiceUsers,
-  canReadAudit,
-  canReadUsage,
-  canReadUsers,
-  officialUsageSummary,
-  pagination,
-  usageSummary,
-  userStats
-})
-const {
-  cards,
-  formatDateTime,
-  formatRoleList,
-  formatUsd,
-  nowLabel,
-  roleLabel,
-  roleOptions,
-  serviceStatusClass,
-  serviceStatusLabel,
-  statusClass,
-  statusLabel,
-  toPrettyJson,
-  topModelLabel
-} = displayState
-const serviceOps = useAdminServiceOps({
-  canReadUsage,
-  canManageApiKeys: computed(() => false),
-  canAssignApiKeys: computed(() => false),
-  loadUsers: () => loadUsers(),
-  loadLogs: () => loadLogs()
-})
-const {
-  apiLogs,
-  balanceDisplay,
-  load302All,
-  loadApiLogs,
-  loading302,
-  loadingApiLogs,
-  loadingRecord,
-  log302Query,
-  queryRecord,
-  recordData,
-  recordRequestId,
-  serviceLoadNotice,
-  updateLog302Query
-} = serviceOps
-const refreshDashboardOverview = () => Promise.all([refreshOverview(), loadUsers()])
-const refreshServiceData = () => Promise.all([load302All(), loadUsers()])
-const issueInbox = useAdminIssueInbox({ canReadIssues, canUpdateIssues })
-const {
-  exportIssues,
-  loadIssues,
-  loadingIssues,
-  notifyIssue,
-  openIssue,
-  sendIssueDigestEmail,
-  setIssueStatus,
-  toggleAllVisibleIssueSelection, toggleIssueSelection,
-  updateIssueQuery
-} = issueInbox
-const { loadAll } = useAdminDashboardRefresh({
-  auth,
-  canReadAudit,
-  canReadIssues,
-  canReadUsage,
-  canReadUsers,
-  load302All,
-  loadIssues,
-  loadLogs,
-  loadUsage,
-  loadUsers,
-  loading302,
-  loadingIssues,
-  loadingLogs,
-  loadingOverview,
-  loadingUsers,
-  router,
-  showServiceSection
-})
-const {
-  activeSection,
-  navItems,
-  scrollToSection
-} = useAdminSectionNavigation({
-  canReadAudit,
-  canReadIssues,
-  canReadUsers,
-  dashboardSectionsRef,
-  loadAll: () => loadAll(),
-  route,
-  router,
-  showServiceSection
-})
-const userActions = useAdminUserActions({
-  canActivateService,
-  canDisableService,
-  canManageRoles,
-  canManageUserStatus,
-  canReconcileBilling,
-  canResetService,
-  canUpdateServiceLimits,
-  isSelf: (user) => isSelf(user),
-  loadLogs: () => loadLogs(),
-  loadUsage: () => loadUsage(),
-  loadUsers: () => loadUsers(),
-  selectedRoles
-})
-const {
-  activateService, activateUser, closeManualServiceDialog, deleteUser, deleting, disableService, manualServiceDialogVisible,
-  manualServiceUser, openManualServiceDialog, reconcileBilling, reconcilingBilling, resetService, saveRoles, saving,
-  serviceLoading, statusLoading, submitManualServiceBinding, suspendUser, updateServiceLimits
-} = userActions
-const {
-  auditLogSectionProps,
-  issueInboxSectionProps,
-  overviewSectionProps,
-  serviceReconciliationSectionProps,
-  userServiceSectionProps
-} = useAdminUsersDashboardSections({
-  accessState,
-  usersState,
-  dashboardData,
-  displayState,
-  serviceOps,
-  userActions,
-  issueInbox,
-  auth
-})
-const goHome = () => router.push('/')
+const openDetail = (user, tab = 'summary') => router.push(buildAdminUserDetailTarget(user.id, tab))
+onMounted(() => { void loadUsersForCurrentView() })
 </script>

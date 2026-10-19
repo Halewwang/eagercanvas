@@ -21,36 +21,20 @@ test('runs.service preserves existing public helper exports for compatibility', 
   assert.match(source, /buildImageGenerationAssets,[\s\S]*buildVideoGenerationAssets[\s\S]*from '\.\/run-assets\.js'/)
 })
 
-test('runs.service returns synchronous image assets before noncritical completion bookkeeping', () => {
-  assert.match(source, /shouldPersistImageResultAssetsBeforeResponse/)
-  assert.match(source, /const shouldClientPersistImageResultAssets = \(payload = \{\}, providerResponse = \{\}\) =>/)
-  assert.match(source, /!shouldPersistImageResultAssetsBeforeResponse\(providerResponse\)/)
-  assert.match(source, /markImageResultAssetsForClientPersistence\(providerResponse\)/)
-  assert.match(source, /const queueCompletedRunFinalization = \(params = \{\}\) => \{/)
-  assert.match(source, /waitUntil\(finalizeCompletedRun\(params\)\.catch\(\(error\) => \{[\s\S]*completed run finalization failed/)
-  assert.match(source, /if \(isImageRun && imageHasAssets\) \{[\s\S]*queueCompletedRunFinalization\(\{[\s\S]*return \{[\s\S]*status: 'completed'/)
-})
-
-test('getImageTask returns completed provider image URLs before persistence finalization', () => {
-  const getImageTaskSource = source.match(/export const getImageTask = async \(_userId, taskId\) => \{[\s\S]*?\n  return result\n\}/)?.[0] || ''
-  assert.ok(getImageTaskSource, 'getImageTask source should be found')
-  assert.match(getImageTaskSource, /const imageRunContext = await resolveImageTaskContextByTask\(\{ userId: _userId, taskId \}\)/)
-  assert.doesNotMatch(getImageTaskSource, /assertImageTaskOwnership\(\{ userId: _userId, taskId \}\)/)
-  assert.doesNotMatch(getImageTaskSource, /findImageRunContextByTask\(\{ userId: _userId, taskId \}\)/)
-  assert.doesNotMatch(getImageTaskSource, /await persistImageResultAssets\(rawResult\)/)
-  assert.match(getImageTaskSource, /const result = markImageResultAssetsForClientPersistence\(rawResult\)/)
-  assert.match(getImageTaskSource, /queueImageTaskResultFinalization\(\{[\s\S]*rawResult[\s\S]*sourceNodeId/)
-  assert.match(getImageTaskSource, /return result/)
-})
-
-test('runs.service wraps GPT Image lite in the existing image task polling contract', () => {
+test('image runs use the local queue and persist outputs before completion', () => {
   assert.match(source, /const LOCAL_IMAGE_RUN_TASK_PREFIX = 'local-image-run:'/)
-  assert.match(source, /export const isGptImageLiteImageRun = \(payload = \{\}\) =>/)
-  assert.match(source, /if \(isGptImageLiteImageRun\(payload\)\) \{[\s\S]*const imageTaskId = buildLocalImageRunTaskId\(run\.id\)[\s\S]*bindImageTaskOwnership\([\s\S]*queueImageLiteRunExecution\([\s\S]*status: 'running'[\s\S]*task_id: imageTaskId/)
+  assert.match(source, /if \(isQueuedImageRun\(payload\)\) \{[\s\S]*bindImageTaskOwnership\([\s\S]*queueImageRunExecution\([\s\S]*task_id: imageTaskId/)
   assert.match(source, /persistImageResultAssets\(providerResponse, \{ persistInlineDataUrls: true \}\)/)
   assert.match(source, /waitUntil\(executeQueuedImageRun\(params\)\)/)
-  assert.match(source, /findGeneratedMediaRecordByRunId/)
-  assert.match(source, /if \(isLocalImageRunTaskId\(taskId\)\) \{[\s\S]*return getLocalImageRunTaskResult\(\{ userId: _userId, taskId, runId \}\)/)
+  assert.doesNotMatch(source, /gpt-image-lite|derouter|providerImageStatus/)
+})
+
+test('image task reads preserve ownership and recover persisted local or historical assets', () => {
+  const taskSource = source.slice(source.indexOf('export const getImageTask ='))
+  assert.match(taskSource, /resolveImageTaskContextByTask\(\{ userId: _userId, taskId \}\)/)
+  assert.match(taskSource, /getLocalImageRunTaskResult/)
+  assert.match(taskSource, /IMAGE_TASK_RETIRED/)
+  assert.doesNotMatch(taskSource, /resolveActiveUserServiceCredential|providerImageStatus/)
 })
 
 test('runs.service delegates task ownership and status helpers to run-task-records service', () => {

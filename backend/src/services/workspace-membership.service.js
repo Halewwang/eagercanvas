@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
 import { isMissingColumnError, isMissingRelationError } from '../utils/supabase-schema.js'
+import { throwProjectOwnerWriteError } from './project-owner-eligibility.js'
 
 export const PUBLIC_WORKSPACE_SLUG = 'shared-workspace'
 
@@ -590,20 +591,7 @@ export const leaveWorkspace = async (userId, workspaceId, input = {}, { supabase
         .from('projects')
         .update({ user_id: transferToUserId })
         .eq('id', project.id)
-      if (projectUpdateError) throw new HttpError(500, projectUpdateError.message, 'WORKSPACE_PROJECT_TRANSFER_FAILED')
-
-      const { error: projectMemberError } = await supabaseClient
-        .from('project_members')
-        .upsert(
-          {
-            project_id: project.id,
-            user_id: transferToUserId,
-            role: 'owner',
-            granted_by: userId
-          },
-          { onConflict: 'project_id,user_id' }
-        )
-      if (projectMemberError) throw new HttpError(500, projectMemberError.message, 'WORKSPACE_PROJECT_MEMBER_TRANSFER_FAILED')
+      if (projectUpdateError) throwProjectOwnerWriteError(projectUpdateError, 'WORKSPACE_PROJECT_TRANSFER_FAILED')
     }
   }
 

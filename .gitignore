@@ -33,3 +33,8 @@ backend/.env.*
 *.sw?
 .vercel
 vite.config.js.timestamp-*
+
+# Local acceptance artifacts and import files
+/output/
+/supabase/.temp/
+/backend/import.env

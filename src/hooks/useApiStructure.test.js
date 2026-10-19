@@ -18,7 +18,7 @@ test('chat API hook lives in the chat domain module with legacy exports preserve
 
   assert.match(chatSource, /export const useChat = /)
   assert.match(chatSource, /streamChatCompletions/)
-  assert.match(chatSource, /DEFAULT_CHAT_MODEL/)
+  assert.match(chatSource, /resolveChatModelKey/)
   assert.match(chatSource, /useApiState/)
 
   assert.match(useApiSource, /export \{ useChat \} from '\.\/api\/useChatApi\.js'/)
@@ -45,10 +45,10 @@ test('image API hooks live in the image domain module with legacy exports preser
   const imageCoreSource = readSource('./api/imageApiCore.js')
 
   assert.match(imageSource, /export const useImageGeneration = /)
-  assert.match(imageSource, /export const useImageTools = /)
+  assert.doesNotMatch(imageSource, /export const useImageTools = /)
   assert.match(imageSource, /generateImage/)
   assert.match(imageSource, /getImageGenerationTask/)
-  assert.match(imageSource, /removeBackground/)
+  assert.doesNotMatch(imageSource, /removeBackground/)
   assert.match(imageSource, /useApiState/)
   assert.match(imageSource, /from '\.\/imageApiCore\.js'/)
   assert.doesNotMatch(imageSource, /const ratioFromSize = /)
@@ -57,7 +57,7 @@ test('image API hooks live in the image domain module with legacy exports preser
   assert.match(imageCoreSource, /export const normalizeGeneratedImages = /)
   assert.ok(countLines(imageSource) < 200, 'useImageApi.js should stay below 200 lines')
 
-  assert.match(useApiSource, /export \{ useImageGeneration, useImageTools \} from '\.\/api\/useImageApi\.js'/)
+  assert.match(useApiSource, /export \{ useImageGeneration \} from '\.\/api\/useImageApi\.js'/)
   assert.doesNotMatch(useApiSource, /export const useImageGeneration = /)
   assert.doesNotMatch(useApiSource, /export const useImageTools = /)
   assert.doesNotMatch(useApiSource, /generateImage/)
@@ -96,7 +96,6 @@ test('runtime API callers import hooks from their domain modules instead of comp
   const callerSources = [
     '../components/nodes/LLMConfigNode.vue',
     '../components/nodes/TextNode.vue',
-    '../components/nodes/ImageConfigNode.vue',
     '../components/nodes/ImageNode.vue',
     '../components/nodes/VideoConfigNode.vue',
     '../components/nodes/VideoNode.vue',

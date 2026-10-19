@@ -6,6 +6,7 @@ import { gzipSync } from 'node:zlib'
 
 const homeSource = readFileSync(new URL('./Home.vue', import.meta.url), 'utf8')
 const routerSource = readFileSync(new URL('../router/index.js', import.meta.url), 'utf8')
+const routerGuardSource = readFileSync(new URL('../router/adminRouter.js', import.meta.url), 'utf8')
 const homeStyleUrl = new URL('./Home.css', import.meta.url)
 const homeStylePath = fileURLToPath(homeStyleUrl)
 
@@ -76,8 +77,9 @@ test('home page delegates scoped presentation styles to a focused stylesheet', (
 })
 
 test('public home first paint does not wait for auth bootstrap', () => {
-  assert.match(routerSource, /const requiresBootstrap = /)
-  assert.match(routerSource, /if \(!requiresBootstrap\) \{\s*return true\s*\}/)
+  assert.match(routerSource, /createNavigationGuard/)
+  assert.match(routerGuardSource, /const requiresBootstrap = /)
+  assert.match(routerGuardSource, /if \(!requiresBootstrap\) return true/)
   assert.doesNotMatch(homeSource, /onMounted\(async \(\) => \{\s*await bootstrapAuth\(\)/)
   assert.match(homeSource, /void bootstrapAuth\(\)/)
 })
@@ -98,4 +100,11 @@ test('home page defers non-critical module image downloads', () => {
     const pattern = new RegExp(`class="${className}"[\\s\\S]*loading="lazy"[\\s\\S]*decoding="async"|loading="lazy"[\\s\\S]*decoding="async"[\\s\\S]*class="${className}"`)
     assert.match(homeSource, pattern)
   })
+})
+
+
+test('home image copy avoids unsupported output and removed tool claims', () => {
+  const source = readFileSync(new URL('./Home.vue', import.meta.url), 'utf8')
+  assert.doesNotMatch(source, /1K \/ 2K \/ 4K|Remove Background/)
+  assert.match(source, /Crop, Multi-Angle, and Theme Set tools/)
 })

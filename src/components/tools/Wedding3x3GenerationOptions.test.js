@@ -58,6 +58,6 @@ test('wedding 3x3 selected size prefers exact ratio and resolution before fallba
   assert.equal(resolveWedding3x3SelectedSize(sizeOptions, '3:2', '4k', 'fallback-size'), '3072x2048')
   assert.equal(resolveWedding3x3SelectedSize(sizeOptions, '3:2', '2k', 'fallback-size'), '1536x1024')
   assert.equal(resolveWedding3x3SelectedSize(sizeOptions, '21:9', '2k', 'fallback-size'), '1024x1024')
-  assert.equal(resolveWedding3x3SelectedSize([], '3:2', '1k', 'fallback-size'), 'fallback-size')
-  assert.equal(resolveWedding3x3SelectedSize([], '3:2', '1k', ''), '1024x1024')
+  assert.equal(resolveWedding3x3SelectedSize([], '3:2', '1k', 'fallback-size'), '')
+  assert.equal(resolveWedding3x3SelectedSize([], '3:2', '1k', ''), '')
 })

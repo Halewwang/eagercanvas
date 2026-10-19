@@ -42,7 +42,8 @@ test('usage page panels use a scoped surface component', () => {
 })
 
 test('usage page fails softly in local preview mode', () => {
-  assert.match(usageViewSource, /const isLocalPreviewMode = \(\) => import\.meta\.env\.DEV && import\.meta\.env\.VITE_BYPASS_AUTH === 'true'/)
+  assert.match(usageViewSource, /import \{ getErrorMessage, isLocalPreviewEnabled \} from '@\/utils'/)
+  assert.doesNotMatch(usageViewSource, /VITE_BYPASS_AUTH === 'true'/)
   assert.match(usageViewSource, /onMounted\(async \(\) => \{\s*if \(isLocalPreviewMode\(\)\) return\s*try \{/s)
   assert.match(usageViewSource, /window\.\$message\?\.error\(getErrorMessage\(error, 'Failed to load usage dashboard'\)\)/)
 })

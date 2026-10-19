@@ -54,6 +54,5 @@ export const STORAGE_KEYS = {
   CUSTOM_VIDEO_MODELS: 'customVideoModels',
   SELECTED_CHAT_MODEL: 'selectedChatModel',
   SELECTED_IMAGE_MODEL: 'selectedImageModel',
-  SELECTED_VIDEO_MODEL: 'selectedVideoModel',
-  USAGE_ADMIN_TOKEN: 'usageAdminToken'
+  SELECTED_VIDEO_MODEL: 'selectedVideoModel'
 }

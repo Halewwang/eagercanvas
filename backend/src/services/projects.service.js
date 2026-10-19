@@ -18,6 +18,9 @@ import {
   getActiveWorkspace,
   resolveProjectCreateWorkspace
 } from './workspace-membership.service.js'
+import { throwProjectOwnerWriteError } from './project-owner-eligibility.js'
+
+export { throwProjectOwnerWriteError } from './project-owner-eligibility.js'
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -329,22 +332,7 @@ export const createProject = async (userId, input) => {
     error = legacyResult.error
   }
 
-  if (error) throw new HttpError(500, error.message, 'PROJECT_CREATE_FAILED')
-
-  if (accessMode === 'team') {
-    const { error: memberError } = await supabase
-      .from('project_members')
-      .upsert(
-        {
-          project_id: data.id,
-          user_id: userId,
-          role: 'owner',
-          granted_by: userId
-        },
-        { onConflict: 'project_id,user_id' }
-      )
-    if (memberError) throw new HttpError(500, memberError.message, 'PROJECT_OWNER_MEMBER_CREATE_FAILED')
-  }
+  if (error) throwProjectOwnerWriteError(error, 'PROJECT_CREATE_FAILED')
 
   const ownerProfiles = await getOwnerProfiles([userId])
   return mapProjectForRead(data, {
@@ -383,21 +371,7 @@ export const copyProjectToWorkspace = async (userId, id, input = {}) => {
     .select('*')
     .single()
 
-  if (error) throw new HttpError(500, error.message, 'PROJECT_COPY_TO_WORKSPACE_FAILED')
-
-  const { error: memberError } = await supabase
-    .from('project_members')
-    .upsert(
-      {
-        project_id: data.id,
-        user_id: userId,
-        role: 'owner',
-        granted_by: userId
-      },
-      { onConflict: 'project_id,user_id' }
-    )
-
-  if (memberError) throw new HttpError(500, memberError.message, 'PROJECT_COPY_OWNER_MEMBER_FAILED')
+  if (error) throwProjectOwnerWriteError(error, 'PROJECT_COPY_TO_WORKSPACE_FAILED')
 
   const ownerProfiles = await getOwnerProfiles([userId])
   return mapProjectForRead(data, {
@@ -709,29 +683,7 @@ export const updateProjectPermission = async (userId, id, targetUserId, input = 
       .from('projects')
       .update({ user_id: safeTargetUserId, updated_at: new Date().toISOString() })
       .eq('id', project.id)
-    if (projectUpdateError) throw new HttpError(500, projectUpdateError.message, 'PROJECT_OWNER_UPDATE_FAILED')
-
-    const { error: memberError } = await supabase
-      .from('project_members')
-      .upsert(
-        {
-          project_id: project.id,
-          user_id: safeTargetUserId,
-          role: 'owner',
-          granted_by: userId
-        },
-        { onConflict: 'project_id,user_id' }
-      )
-    if (memberError) throw new HttpError(500, memberError.message, 'PROJECT_OWNER_MEMBER_UPSERT_FAILED')
-
-    if (String(project.user_id || '') !== safeTargetUserId) {
-      const { error: oldOwnerError } = await supabase
-        .from('project_members')
-        .delete()
-        .eq('project_id', project.id)
-        .eq('user_id', project.user_id)
-      if (oldOwnerError) throw new HttpError(500, oldOwnerError.message, 'PROJECT_OLD_OWNER_MEMBER_DELETE_FAILED')
-    }
+    if (projectUpdateError) throwProjectOwnerWriteError(projectUpdateError, 'PROJECT_OWNER_UPDATE_FAILED')
   } else if (payload.role === 'editor') {
     if (String(project.user_id || '') !== safeTargetUserId) {
       const { error } = await supabase

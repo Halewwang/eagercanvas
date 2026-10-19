@@ -2,7 +2,7 @@
   <AdminSidebarFrame
     brand-eyebrow="EagerCanvas"
     brand-title="管理控制台"
-    brand-caption="面向成员、用量与服务操作的权限感知管理中枢。"
+    brand-caption="管理注册用户的权限与账户状态。"
     session-title="当前操作会话"
     :session-primary="accountLabel"
     :session-secondary="roleSummary"
@@ -14,8 +14,8 @@
         :icon="resolveSidebarNavIcon(item.key)"
         :label="item.label"
         :note="item.note"
-        :active="activeSection === item.key"
-        @select="$emit('select-section', item.key)"
+        :active="activeSection === item.routeName"
+        @select="$emit('select-section', item.routeName)"
       />
     </template>
 
@@ -26,13 +26,7 @@
 import { computed } from 'vue'
 import AdminSidebarFrame from './AdminSidebarFrame.vue'
 import AdminSidebarNavItem from './AdminSidebarNavItem.vue'
-import {
-  AppsOutline,
-  ChatbubbleOutline,
-  DocumentOutline,
-  RefreshOutline,
-  UsersOutline
-} from '@/icons/coolicons'
+import { UsersOutline } from '@/icons/coolicons'
 
 defineEmits(['select-section'])
 
@@ -60,13 +54,5 @@ const props = defineProps({
 })
 
 const roleSummary = computed(() => props.roles.join(', ') || '未加载角色')
-const sidebarNavIcons = {
-  overview: AppsOutline,
-  users: UsersOutline,
-  service: RefreshOutline,
-  audit: DocumentOutline,
-  issues: ChatbubbleOutline
-}
-
-const resolveSidebarNavIcon = (key) => sidebarNavIcons[key] || AppsOutline
+const resolveSidebarNavIcon = () => UsersOutline
 </script>

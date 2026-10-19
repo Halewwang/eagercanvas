@@ -75,6 +75,32 @@ test('fetchWithAuth reads token from injected storage and calls injected fetch',
   })
 })
 
+test('fetchWithAuth sends the guarded dev token when local preview is explicitly enabled', async () => {
+  const calls = []
+  const storage = {
+    getItem() {
+      return ''
+    }
+  }
+  const fetchImpl = async (...args) => {
+    calls.push(args)
+    return { ok: true }
+  }
+
+  await fetchWithAuth('/api/demo', {}, {
+    fetchImpl,
+    storage,
+    env: {
+      DEV: true,
+      VITE_BYPASS_AUTH: 'true',
+      VITE_LOCAL_PREVIEW_ACCESS_TOKEN: 'local-preview-browser-token'
+    }
+  })
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][1].headers.Authorization, 'Bearer local-preview-browser-token')
+})
+
 test('fetchWithAuth refreshes an expired access token once and retries the original request', async () => {
   const values = new Map([['ec_access_token', 'expired-token']])
   const calls = []

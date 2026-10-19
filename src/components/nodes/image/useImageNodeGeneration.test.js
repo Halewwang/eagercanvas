@@ -134,7 +134,9 @@ test('image node generation creates a persisted image with merged references and
   assert.equal(imageActionLoading.value, '')
   assert.deepEqual(calls[0], ['update-node', 'image-node-1', { kind: 'action-pending' }, { persist: false }])
   assert.deepEqual(calls[1][0], 'generate')
-  assert.equal(calls[1][1].output_compression, 100)
+  for (const key of ['size', 'ratio', 'aspect_ratio', 'resolution', 'quality', 'output_format', 'output_compression', 'moderation']) {
+    assert.equal(Object.hasOwn(calls[1][1], key), false, key)
+  }
   assert.deepEqual(calls[1][1].image, [
     'https://cdn.example.com/current.png',
     'https://cdn.example.com/ref.png'
@@ -342,4 +344,17 @@ test('image node generation stop resets progress and marks the node stopped', as
     }, { persist: false }]
   ])
   assert.deepEqual(messages, [['info', 'Generation stopped']])
+})
+
+test('regenerating a migrated image adds its displayed source only once', async () => {
+  const current = 'https://cdn.example.com/current.png'
+  const { calls, generation } = await createHarness({
+    selfImage: current,
+    inputs: { prompt: 'Saved creative brief', refImages: ['reference.png', current] }
+  })
+  await generation.runImageGeneration('regenerate')
+  await flushBackgroundTasks()
+  const request = calls.find(([key]) => key === 'generate')[1]
+  assert.equal(request.prompt, 'Saved creative brief')
+  assert.deepEqual(request.image, [current, 'reference.png'])
 })

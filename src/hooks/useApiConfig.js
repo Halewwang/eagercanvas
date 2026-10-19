@@ -6,8 +6,9 @@ import { ref, computed, watch } from 'vue'
 import { setApiBaseUrl as setRequestBaseUrl } from '@/api/_httpClient.js'
 import { getStoredValue, setStoredValue } from '@/utils'
 import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from '@/utils'
+import { isLocalPreviewEnabled } from '@/utils/localPreview'
 
-const BYPASS_AUTH_IN_DEV = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH === 'true'
+const BYPASS_AUTH_IN_DEV = isLocalPreviewEnabled()
 
 /**
  * API Configuration Hook | API 配置 Hook

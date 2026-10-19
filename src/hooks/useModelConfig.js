@@ -15,6 +15,7 @@ import {
 } from '@/config/models'
 
 const MODEL_KEY_RE = /^[a-z0-9][a-z0-9.-]*$/
+const BUILTIN_CHAT_KEYS = new Set(CHAT_MODELS.map(m => m.key))
 const BUILTIN_IMAGE_KEYS = new Set(IMAGE_MODELS.map(m => m.key))
 const BUILTIN_VIDEO_KEYS = new Set(VIDEO_MODELS.map(m => m.key))
 
@@ -85,7 +86,7 @@ const setStored = (key, value) => {
 }
 
 // Shared reactive state (singleton pattern)
-const customChatModels = ref(getStoredJson(STORAGE_KEYS.CUSTOM_CHAT_MODELS, []))
+const customChatModels = ref(sanitizeCustomModels(getStoredJson(STORAGE_KEYS.CUSTOM_CHAT_MODELS, []), BUILTIN_CHAT_KEYS))
 const customImageModels = ref(sanitizeCustomModels(getStoredJson(STORAGE_KEYS.CUSTOM_IMAGE_MODELS, []), BUILTIN_IMAGE_KEYS))
 const customVideoModels = ref(sanitizeCustomModels(getStoredJson(STORAGE_KEYS.CUSTOM_VIDEO_MODELS, []), BUILTIN_VIDEO_KEYS))
 
@@ -108,14 +109,10 @@ export const useModelConfig = () => {
   }
 
   // Combined models (built-in + custom)
-  const allChatModels = computed(() => [
-    ...CHAT_MODELS.map(m => ({ ...m, isCustom: false })),
-    ...customChatModels.value.map(m => ({ 
-      label: m.label || m.key, 
-      key: m.key,
-      isCustom: true 
-    }))
-  ])
+  const allChatModels = computed(() => mergeBuiltinsAndCustom(
+    CHAT_MODELS,
+    sanitizeCustomModels(customChatModels.value, BUILTIN_CHAT_KEYS)
+  ))
 
   const allImageModels = computed(() => mergeBuiltinsAndCustom(
     IMAGE_MODELS,
@@ -141,7 +138,14 @@ export const useModelConfig = () => {
   ))
 
   // Watch and persist changes
-  watch(customChatModels, (val) => setStoredJson(STORAGE_KEYS.CUSTOM_CHAT_MODELS, val), { deep: true })
+  watch(customChatModels, (val) => {
+    const next = sanitizeCustomModels(val, BUILTIN_CHAT_KEYS)
+    if (JSON.stringify(next) !== JSON.stringify(val)) {
+      customChatModels.value = next
+      return
+    }
+    setStoredJson(STORAGE_KEYS.CUSTOM_CHAT_MODELS, next)
+  }, { deep: true, immediate: true })
   watch(customImageModels, (val) => {
     const next = sanitizeCustomModels(val, BUILTIN_IMAGE_KEYS)
     if (JSON.stringify(next) !== JSON.stringify(val)) {
@@ -159,7 +163,13 @@ export const useModelConfig = () => {
     setStoredJson(STORAGE_KEYS.CUSTOM_VIDEO_MODELS, next)
   }, { deep: true, immediate: true })
 
-  watch(selectedChatModel, (val) => setStored(STORAGE_KEYS.SELECTED_CHAT_MODEL, val))
+  watch(selectedChatModel, (val) => {
+    if (!allChatModels.value.some(m => m.key === val)) {
+      selectedChatModel.value = DEFAULT_CHAT_MODEL
+      return
+    }
+    setStored(STORAGE_KEYS.SELECTED_CHAT_MODEL, val)
+  }, { immediate: true })
   watch(selectedImageModel, (val) => {
     if (!allImageModels.value.some(m => m.key === val)) {
       selectedImageModel.value = DEFAULT_IMAGE_MODEL
@@ -177,7 +187,7 @@ export const useModelConfig = () => {
 
   // Add custom model
   const addCustomChatModel = (modelKey, label = '') => {
-    if (!modelKey || customChatModels.value.some(m => m.key === modelKey)) return false
+    if (!modelKey || !BUILTIN_CHAT_KEYS.has(modelKey) || customChatModels.value.some(m => m.key === modelKey)) return false
     customChatModels.value.push({ key: modelKey, label: label || modelKey })
     return true
   }

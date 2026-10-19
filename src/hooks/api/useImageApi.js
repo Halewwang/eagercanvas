@@ -1,6 +1,6 @@
 import { ref } from 'vue'
-import { generateImage, getImageGenerationTask, removeBackground } from '@/api'
-import { getModelByName } from '@/config/models'
+import { generateImage, getImageGenerationTask } from '@/api'
+import { getModelByName, resolveImageModelKey } from '@/config/models'
 import { useApiState } from './useApiState.js'
 import {
   IMAGE_REQUEST_TIMEOUT_MS,
@@ -75,38 +75,41 @@ export const useImageGeneration = () => {
     currentImage.value = null
 
     try {
-      const modelConfig = getModelByName(params.model)
+      const model = resolveImageModelKey(params.model)
+      const modelConfig = getModelByName(model)
 
       // Build request data | 构建请求数据
       const requestData = {
-        model: params.model,
-        model_name: params.model,
+        model,
+        model_name: model,
         prompt: params.prompt
       }
       if (params.projectId) requestData.projectId = params.projectId
 
-      requestData.size = params.size || modelConfig?.defaultParams?.size || '1024x1024'
-      requestData.quality = params.quality || modelConfig?.defaultParams?.quality || 'standard'
-
-      const aspectRatio = String(params.aspect_ratio || params.ratio || ratioFromSize(requestData.size) || '1:1')
-      const resolution =
-        normalizeResolution(params.resolution) ||
-        normalizeResolution(params.quality) ||
-        resolutionFromSize(requestData.size, aspectRatio)
-
-      requestData.aspect_ratio = aspectRatio
-      requestData.resolution = resolution || '1k'
-      requestData.enable_sync_mode = params.enable_sync_mode ?? true
-      requestData.enable_base64_output = params.enable_base64_output ?? false
-      if (params.tools && typeof params.tools === 'object' && !Array.isArray(params.tools)) {
-        requestData.tools = params.tools
+      if (modelConfig.sizes?.length) {
+        requestData.size = modelConfig.sizes.includes(params.size)
+          ? params.size
+          : modelConfig.defaultParams?.size || modelConfig.sizes[0]
+      }
+      for (const [key, options] of [
+        ['quality', modelConfig.qualities],
+        ['background', modelConfig.backgrounds],
+        ['output_format', modelConfig.outputFormats]
+      ]) {
+        if (!options?.length || (key === 'output_format' && options.length < 2)) continue
+        requestData[key] = options.some((item) => item.key === params[key])
+          ? params[key]
+          : modelConfig.defaultParams?.[key] || options[0].key
+      }
+      if (modelConfig.ratios?.length) {
+        const ratio = params.aspect_ratio || params.ratio || ratioFromSize(requestData.size)
+        if (modelConfig.ratios.includes(ratio)) requestData.aspect_ratio = ratio
+      }
+      if (modelConfig.resolutions?.length) {
+        const resolution = normalizeResolution(params.resolution) || resolutionFromSize(requestData.size, requestData.aspect_ratio)
+        if (modelConfig.resolutions.some((item) => item.key === resolution)) requestData.resolution = resolution
       }
       if (params.tool) requestData.tool = params.tool
-      for (const key of ['background', 'output_format', 'output_compression', 'moderation']) {
-        if (params[key] !== undefined && params[key] !== null && String(params[key]).trim() !== '') {
-          requestData[key] = params[key]
-        }
-      }
       if (params.image_url) requestData.image_url = params.image_url
       if (params.sourceNodeId) requestData.sourceNodeId = params.sourceNodeId
       for (const key of ['horizontal_angle', 'vertical_angle', 'zoom']) {
@@ -118,8 +121,14 @@ export const useImageGeneration = () => {
       // Add reference image if provided | 添加参考图
       if (params.image) {
         if (Array.isArray(params.image)) {
-          requestData.image = params.image[0]
-          requestData.images = params.image
+          const references = params.image.filter((value) => typeof value === 'string' && value.trim())
+          if (modelConfig.maxReferenceImages && references.length > modelConfig.maxReferenceImages) {
+            throw new Error(`最多支持 ${modelConfig.maxReferenceImages} 张参考图，请移除多余图片后重试。`)
+          }
+          if (references.length) {
+            requestData.image = references[0]
+            requestData.images = references
+          }
         } else {
           requestData.image = params.image
         }
@@ -157,43 +166,4 @@ export const useImageGeneration = () => {
   }
 
   return { loading, error, status, images, currentImage, generate, reset }
-}
-
-export const useImageTools = () => {
-  const { loading, error, status, reset, setLoading, setError, setSuccess } = useApiState()
-
-  const removeBg = async (params = {}) => {
-    setLoading(true)
-
-    try {
-      const response = await removeBackground({
-        image: params.image,
-        size: params.size || 'full',
-        format: params.format || 'png',
-        channels: params.channels || 'rgba',
-        crop: params.crop ?? false,
-        despill: params.despill ?? false,
-        bg_color: params.bgColor || ''
-      })
-
-      const data = response?.data || response
-      const url =
-        data?.url ||
-        data?.data?.[0]?.url ||
-        data?.data?.url ||
-        ''
-
-      if (!url) {
-        throw new Error('No image output')
-      }
-
-      setSuccess()
-      return { url, raw: data }
-    } catch (err) {
-      setError(err)
-      throw err
-    }
-  }
-
-  return { loading, error, status, removeBg, reset }
 }

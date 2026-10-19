@@ -50,7 +50,7 @@ test('multi angle generation runner builds pending payloads without changing tar
   })
 })
 
-test('multi angle generation runner builds apply payloads with url and ratio fallback', () => {
+test('multi angle generation runner builds apply payloads without inventing missing controls', () => {
   assert.deepEqual(createMultiAngleApplyPayload({
     context: baseContext,
     ratio: '',
@@ -63,8 +63,6 @@ test('multi angle generation runner builds apply payloads with url and ratio fal
     base64: '',
     fileType: 'image/png',
     size: '2048x1365',
-    ratio: '2048:1365',
-    resolution: '2k',
     meta: baseContext.meta
   })
 })
@@ -95,9 +93,7 @@ test('multi angle generation runner sends camera instructions through prompt onl
       image: 'https://cdn.example.com/source.png',
       size: '2048x1365',
       ratio: '3:2',
-      resolution: '2k',
-      enable_sync_mode: true,
-      enable_base64_output: false
+      resolution: '2k'
     }
   ])
   assert.equal(Object.hasOwn(calls[0], 'tools'), false)
@@ -119,4 +115,19 @@ test('multi angle generation runner rejects empty model output', async () => {
     }),
     /No image output from model/
   )
+})
+
+test('multi angle keeps camera prompt and reference without inventing output controls', async () => {
+  const calls = []
+  await runMultiAngleGeneration({
+    context: baseContext,
+    imageGen: { generate: async (request) => { calls.push(request); return [{ url: 'result.png' }] } },
+    imageSource: 'reference.png',
+    model: 'gpt-image-2', background: 'opaque'
+  })
+  assert.deepEqual(calls[0], {
+    tool: 'multi-angle', model: 'gpt-image-2', prompt: baseContext.prompt, image: 'reference.png', background: 'opaque'
+  })
+  const pending = createMultiAnglePendingPayload({ context: baseContext })
+  for (const key of ['size', 'ratio', 'resolution']) assert.equal(Object.hasOwn(pending, key), false)
 })

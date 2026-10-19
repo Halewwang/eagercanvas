@@ -1,4 +1,5 @@
 import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from './constants.js'
+import { resolveLocalPreviewAccessToken } from './localPreview.js'
 import { getStoredValue, removeStoredValue, setStoredValue } from './storage.js'
 
 const API_PREFIX = '/api/v1'
@@ -91,10 +92,11 @@ export const fetchWithAuth = async (
   options = {},
   {
     fetchImpl = fetch,
-    storage
+    storage,
+    env = import.meta.env || {}
   } = {}
 ) => {
-  const token = getStoredValue(STORAGE_KEYS.ACCESS_TOKEN, '', { storage })
+  const token = resolveLocalPreviewAccessToken(getStoredValue(STORAGE_KEYS.ACCESS_TOKEN, '', { storage }), env)
   const response = await fetchImpl(url, buildAuthFetchOptions({ token, options }))
   if (response?.status !== 401 || String(url || '').includes(AUTH_REFRESH_PATH)) {
     return response

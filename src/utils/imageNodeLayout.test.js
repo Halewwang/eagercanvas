@@ -401,16 +401,15 @@ test('image node tool options keep upload available while disabling image-only t
 
   assert.deepEqual(options.map(({ label, key, disabled }) => ({ label, key, disabled })), [
     { label: 'Upload Image', key: 'replace-image', disabled: false },
-    { label: 'Cutout', key: 'remove-background', disabled: true },
     { label: 'Crop', key: 'crop', disabled: true },
-    { label: 'Upscale', key: 'enhance-4k', disabled: true },
+    { label: 'Enhance', key: 'enhance', disabled: true },
     { label: '3D Camera', key: 'multi-angle', disabled: true },
     { label: 'Theme Set', key: 'wedding-3x3', disabled: true }
   ])
   assert.equal(options.some((option) => 'renderIcon' in option), false)
 })
 
-test('image node tool options enable image tools and preserve upscale copy for existing images', () => {
+test('image node tool options enable image tools and preserve enhancement copy for existing images', () => {
   const options = getImageNodeToolOptions({
     hasDisplayImage: true,
     isUploading: false,
@@ -419,14 +418,14 @@ test('image node tool options enable image tools and preserve upscale copy for e
 
   assert.equal(getOption(options, 'replace-image').label, 'Replace')
   assert.equal(getOption(options, 'replace-image').disabled, false)
-  assert.equal(getOption(options, 'remove-background').disabled, false)
+  assert.equal(options.some((option) => option.key === 'remove-background'), false)
   assert.equal(getOption(options, 'crop').disabled, false)
-  assert.equal(getOption(options, 'enhance-4k').disabled, false)
+  assert.equal(getOption(options, 'enhance').disabled, false)
   assert.equal(getOption(options, 'multi-angle').disabled, false)
   assert.equal(getOption(options, 'wedding-3x3').disabled, false)
   assert.equal(
-    getOption(options, 'enhance-4k').description,
-    'Reuse original model and inputs, increase resolution only'
+    getOption(options, 'enhance').description,
+    'Refine clarity and detail while preserving the image'
   )
 })
 
@@ -454,9 +453,8 @@ test('image node tool options disable image-only actions while a tool is busy', 
       .filter((option) => option.key !== 'replace-image')
       .map((option) => [option.key, option.disabled]),
     [
-      ['remove-background', true],
       ['crop', true],
-      ['enhance-4k', true],
+      ['enhance', true],
       ['multi-angle', true],
       ['wedding-3x3', true]
     ]
@@ -495,73 +493,13 @@ test('image node size meta options preserve ratio, resolution, and pixel orderin
   ])
 })
 
-test('image node ratio dropdown options preserve GPT Image 2 and hidden-ratio behavior', () => {
-  const sizeMetaOptions = getImageNodeSizeMetaOptions([
-    { key: '1024x1024' },
-    { key: '2048x2048' },
-    { key: '1536x1024' },
-    { key: '1024x1536' }
-  ])
-  const gptImage2RatioOptions = [{ key: 'auto', label: 'Auto' }, { key: '1:1', label: '1:1' }]
-
-  assert.deepEqual(getImageNodeRatioDropdownOptions({
-    isGptImage2Model: true,
-    gptImage2RatioOptions,
-    hideRatioCapsule: false,
-    sizeMetaOptions
-  }), gptImage2RatioOptions)
-
-  assert.deepEqual(getImageNodeRatioDropdownOptions({
-    isGptImage2Model: false,
-    gptImage2RatioOptions,
-    hideRatioCapsule: true,
-    sizeMetaOptions
-  }), [])
-
-  assert.deepEqual(getImageNodeRatioDropdownOptions({
-    isGptImage2Model: false,
-    gptImage2RatioOptions,
-    hideRatioCapsule: false,
-    sizeMetaOptions
-  }), [
-    { key: '1:1', label: '1:1' },
-    { key: '3:2', label: '3:2' },
-    { key: '2:3', label: '2:3' }
-  ])
-})
-
-test('image node resolution dropdown options prefer model config before derived size buckets', () => {
-  const sizeMetaOptions = getImageNodeSizeMetaOptions([
-    { key: '4096x4096' },
-    { key: '1024x1024' },
-    { key: '2048x2048' },
-    { key: '1536x1024' }
-  ])
-
-  assert.deepEqual(getImageNodeResolutionDropdownOptions({
-    modelResolutions: [{ key: 'auto' }, { key: '4k', label: 'Ultra' }],
-    sizeMetaOptions,
-    imageRatio: '1:1'
-  }), [
-    { key: 'auto', label: 'AUTO' },
-    { key: '4k', label: 'Ultra' }
-  ])
-
-  assert.deepEqual(getImageNodeResolutionDropdownOptions({
-    modelResolutions: [],
-    sizeMetaOptions,
-    imageRatio: '1:1'
-  }), [
-    { key: '1k', label: '1K' },
-    { key: '2k', label: '2K' },
-    { key: '4k', label: '4K' }
-  ])
-
-  assert.deepEqual(getImageNodeResolutionDropdownOptions({
-    modelResolutions: [],
-    sizeMetaOptions,
-    imageRatio: '9:16'
-  }), [{ key: '1k', label: '1K' }])
+test('image parameter dropdowns only expose declared capabilities', () => {
+  const modelRatios = [{ key: '1:1', label: 'Square' }, { key: '3:2', label: 'Landscape' }]
+  assert.deepEqual(getImageNodeRatioDropdownOptions({ modelRatios }), modelRatios)
+  assert.deepEqual(getImageNodeRatioDropdownOptions({ modelRatios, hideRatioCapsule: true }), [])
+  assert.deepEqual(getImageNodeRatioDropdownOptions({ modelRatios: [] }), [])
+  assert.deepEqual(getImageNodeResolutionDropdownOptions({ modelResolutions: [{ key: '4k', label: 'Ultra' }] }), [{ key: '4k', label: 'Ultra' }])
+  assert.deepEqual(getImageNodeResolutionDropdownOptions({ modelResolutions: [] }), [])
 })
 
 test('image node advanced dropdown options and display labels preserve capsule placeholders', () => {

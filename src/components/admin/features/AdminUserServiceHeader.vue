@@ -1,8 +1,8 @@
 <template>
   <AdminSectionHeader
     class="mb-5"
-    title="用户服务"
-    caption="围绕用户服务状态、开通操作、官方消耗和待处理事项组织。"
+    title="注册用户"
+    caption="管理注册用户的服务权限、角色和账户状态。"
   >
     <template #actions>
       <AdminMicroButton size="md" :disabled="loadingUsers" @click="emit('refresh-users')">

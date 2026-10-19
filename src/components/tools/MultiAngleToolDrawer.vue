@@ -19,8 +19,8 @@
             </div>
           </div>
 
-          <div class="input-options-grid">
-            <label class="option-field">
+          <div v-if="normalizedRatioOptions.length || filteredResolutionOptions.length" class="input-options-grid">
+            <label v-if="normalizedRatioOptions.length" class="option-field">
               <span class="option-label">Ratio</span>
               <select v-model="selectedRatio" class="option-select">
                 <option v-for="option in normalizedRatioOptions" :key="option.key" :value="option.key">
@@ -29,8 +29,8 @@
               </select>
             </label>
 
-            <label class="option-field">
-              <span class="option-label">Size</span>
+            <label v-if="filteredResolutionOptions.length" class="option-field">
+              <span class="option-label">Resolution</span>
               <select v-model="selectedResolution" class="option-select">
                 <option v-for="option in filteredResolutionOptions" :key="option.key" :value="option.key">
                   {{ option.label }}
@@ -44,8 +44,10 @@
 
         <section class="multi-angle-section">
           <div class="section-heading">
-            <span class="section-title">Camera Control</span>
+            <span class="section-title">Target Viewpoint</span>
           </div>
+
+          <p class="section-note">Viewpoint guidance; generated angles may vary.</p>
 
           <div ref="controlAreaRef" class="camera-control-card">
             <svg viewBox="0 0 420 320" class="camera-control-svg">
@@ -201,6 +203,7 @@
 
 <script setup>
 import { Teleport, computed, onUnmounted, ref, watch } from 'vue'
+import { DEFAULT_IMAGE_MODEL, getModelByName, resolveImageModelKey } from '@/config/models'
 import { useImageGeneration } from '@/hooks/api/useImageApi.js'
 import {
   createMultiAngleApplyPayload,
@@ -210,7 +213,6 @@ import {
 } from '@/utils/multiAngleGenerationRunner.js'
 import {
   getMultiAngleFilteredSizeOptions,
-  getMultiAngleResolutionOptions,
   normalizeMultiAngleOptionList,
   ratioFromMultiAngleSize,
   resolutionFromMultiAngleSize
@@ -222,9 +224,13 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  background: {
+    type: String,
+    default: 'auto'
+  },
   model: {
     type: String,
-    default: 'gemini-3.1-flash-image-preview'
+    default: DEFAULT_IMAGE_MODEL
   },
   ratio: {
     type: String,
@@ -298,16 +304,14 @@ const normalize360 = (value) => {
 const displayAzimuth = computed(() => `${Math.round(Number(azimuth.value) || 0)}°`)
 const displayElevation = computed(() => `${Math.round(Number(elevation.value) || 0)}°`)
 const displayZoom = computed(() => Number(zoom.value || 0).toFixed(1))
-const normalizedRatioOptions = computed(() => {
-  const options = normalizeMultiAngleOptionList(props.ratioOptions)
-  return options.length ? options : [{ key: selectedRatio.value || '1:1', label: selectedRatio.value || '1:1' }]
-})
-const normalizedSizeOptions = computed(() => {
-  const options = normalizeMultiAngleOptionList(props.sizeOptions)
-  return options.length ? options : [{ key: selectedSize.value || '1024x1024', label: selectedSize.value || '1024x1024' }]
-})
+const currentModelConfig = computed(() => getModelByName(resolveImageModelKey(props.model)))
+const normalizedRatioOptions = computed(() => normalizeMultiAngleOptionList(props.ratioOptions)
+  .filter((item) => currentModelConfig.value?.ratios?.includes(item.key)))
+const normalizedSizeOptions = computed(() => normalizeMultiAngleOptionList(props.sizeOptions)
+  .filter((item) => currentModelConfig.value?.sizes?.includes(item.key)))
 const filteredSizeOptions = computed(() => getMultiAngleFilteredSizeOptions(normalizedSizeOptions.value, selectedRatio.value))
-const filteredResolutionOptions = computed(() => getMultiAngleResolutionOptions(normalizedSizeOptions.value, selectedRatio.value))
+const filteredResolutionOptions = computed(() => (currentModelConfig.value?.resolutions || [])
+  .map((item) => ({ key: item.key, label: item.label || item.key.toUpperCase() })))
 
 const azimuthRadians = computed(() => (normalize360(Number(azimuth.value) || 0) - 90) * Math.PI / 180)
 const azimuthHandle = computed(() => ({
@@ -413,14 +417,15 @@ const applyTransform = async () => {
     const context = createMultiAngleGenerationContext({
       azimuth: azimuth.value,
       elevation: elevation.value,
-      model: props.model,
+      model: resolveImageModelKey(props.model),
       zoom: zoom.value
     })
     const generationPayload = {
       context,
-      size: selectedSize.value,
-      ratio: selectedRatio.value,
-      resolution: selectedResolution.value || resolutionFromMultiAngleSize(selectedSize.value)
+      background: props.background,
+      ...(normalizedSizeOptions.value.some((item) => item.key === selectedSize.value) ? { size: selectedSize.value } : {}),
+      ...(normalizedRatioOptions.value.some((item) => item.key === selectedRatio.value) ? { ratio: selectedRatio.value } : {}),
+      ...(filteredResolutionOptions.value.some((item) => item.key === selectedResolution.value) ? { resolution: selectedResolution.value } : {})
     }
     emit('pending', createMultiAnglePendingPayload(generationPayload))
 
@@ -428,7 +433,7 @@ const applyTransform = async () => {
       ...generationPayload,
       imageGen,
       imageSource: imageSource.value,
-      model: props.model,
+      model: resolveImageModelKey(props.model),
     })
 
     emit('apply', createMultiAngleApplyPayload({

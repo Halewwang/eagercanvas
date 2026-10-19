@@ -41,37 +41,23 @@ export const env = {
   jwtAccessTtlSec: Number(process.env.JWT_ACCESS_TTL_SEC || 900),
   jwtRefreshTtlSec: Number(process.env.JWT_REFRESH_TTL_SEC || 2592000),
 
+  localPreviewAuthEnabled: parseBoolean(process.env.LOCAL_PREVIEW_AUTH_ENABLED, false),
+  localPreviewAccessToken: process.env.LOCAL_PREVIEW_ACCESS_TOKEN || '',
+
   resendApiKey: process.env.RESEND_API_KEY || '',
   resendFromEmail: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
   resendAuthCodeTemplateId: process.env.RESEND_AUTH_CODE_TEMPLATE_ID || '',
-  issueAlertEnabled: parseBoolean(process.env.ISSUE_ALERT_ENABLED, false),
-  issueAlertEmails: process.env.ISSUE_ALERT_EMAILS || '',
-  issueAlertMinSeverity: process.env.ISSUE_ALERT_MIN_SEVERITY || 'p1',
-  issueAlertCooldownMinutes: Number(process.env.ISSUE_ALERT_COOLDOWN_MINUTES || 60),
-  issueAlertEvidenceDelaySeconds: Number(process.env.ISSUE_ALERT_EVIDENCE_DELAY_SECONDS || 0),
-  issueAlertMaxPerHour: Number(process.env.ISSUE_ALERT_MAX_PER_HOUR || 10),
 
+  openaiApiBaseUrl: process.env.OPENAI_API_BASE_URL || 'https://api.enbrand.co/v1',
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
+  openaiTimeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 1800000),
+
+  // Video requests use the shared server credential after service authorization.
   providerApiBaseUrl: process.env.PROVIDER_API_BASE_URL || 'https://api.302ai.cn',
   providerApiBaseUrls: process.env.PROVIDER_API_BASE_URLS || '',
   providerApiKey: process.env.PROVIDER_API_KEY || '',
   providerTimeoutMs: Number(process.env.PROVIDER_TIMEOUT_MS || 180000),
 
-  derouterApiBaseUrl: process.env.DEROUTER_API_BASE_URL || 'https://api-direct.derouter.ai/openai/v1',
-  derouterApiKey: process.env.DEROUTER_API_KEY || '',
-  derouterTimeoutMs: Number(process.env.DEROUTER_TIMEOUT_MS || 300000),
-
-  dashboard302ApiBaseUrl: process.env.DASHBOARD_302_API_BASE_URL || '',
-  dashboard302ApiKey: process.env.DASHBOARD_302_API_KEY || '',
-  dashboard302TimeoutMs: Number(process.env.DASHBOARD_302_TIMEOUT_MS || 30000),
-  serviceCredentialEncryptionKey: process.env.SERVICE_CREDENTIAL_ENCRYPTION_KEY || process.env.JWT_REFRESH_SECRET || process.env.JWT_ACCESS_SECRET || 'dev-service-credential-secret',
-  billingSyncEnabled: String(process.env.BILLING_SYNC_ENABLED || '').toLowerCase() === 'true',
-  billingSyncIntervalMs: Number(process.env.BILLING_SYNC_INTERVAL_MS || 10 * 60 * 1000),
-  billingSyncLookbackMs: Number(process.env.BILLING_SYNC_LOOKBACK_MS || 10 * 60 * 1000),
-
-  adminDashboardUsername: process.env.ADMIN_DASHBOARD_USERNAME || '',
-  adminDashboardPassword: process.env.ADMIN_DASHBOARD_PASSWORD || '',
-  adminDashboardJwtSecret: process.env.ADMIN_DASHBOARD_JWT_SECRET || '',
-  adminDashboardTokenTtlSec: Number(process.env.ADMIN_DASHBOARD_TOKEN_TTL_SEC || 86400),
 
   rateLimitPerMinute: Number(process.env.RATE_LIMIT_PER_MINUTE || 120),
   codeCooldownSec: Number(process.env.AUTH_CODE_COOLDOWN_SEC || 60)

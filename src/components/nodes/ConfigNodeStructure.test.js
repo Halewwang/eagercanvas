@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 
-const imageConfigSource = readFileSync(new URL('./ImageConfigNode.vue', import.meta.url), 'utf8')
 const videoConfigSource = readFileSync(new URL('./VideoConfigNode.vue', import.meta.url), 'utf8')
 const llmConfigSource = readFileSync(new URL('./LLMConfigNode.vue', import.meta.url), 'utf8')
 
@@ -16,10 +15,10 @@ function readConfigComponentSource(name) {
   return ''
 }
 
-test('image and video config nodes delegate connection status pills to a shared component', () => {
+test('video config node delegate connection status pills to a shared component', () => {
   const connectionStatusSource = readConfigComponentSource('ConfigNodeConnectionStatus')
 
-  for (const source of [imageConfigSource, videoConfigSource]) {
+  for (const source of [videoConfigSource]) {
     assert.match(source, /import ConfigNodeConnectionStatus from '\.\/config\/ConfigNodeConnectionStatus\.vue'/)
     assert.match(source, /<ConfigNodeConnectionStatus\s+:items="connectionStatusItems"/)
     assert.doesNotMatch(source, /class="flex(?: flex-wrap)? items-center gap-2 text-xs text-\[#8f939e\] py-1 border-t border-\[rgba\(143,143,143,0\.28\)\]"/)
@@ -27,10 +26,6 @@ test('image and video config nodes delegate connection status pills to a shared 
     assert.doesNotMatch(source, /bg-\[#2a2a2a\] text-\[#f2f3f5\] border border-\[rgba\(255,255,255,0\.62\)\]/)
   }
 
-  assert.match(imageConfigSource, /const connectionStatusItems = computed\(\(\) => \[/)
-  assert.match(imageConfigSource, /key: 'prompt'/)
-  assert.match(imageConfigSource, /key: 'reference'/)
-  assert.match(imageConfigSource, /currentModelConfig\.value\?\.supportImageReference/)
   assert.match(videoConfigSource, /const connectionStatusItems = computed\(\(\) => \{/)
   assert.match(videoConfigSource, /:wrap="true"/)
 
@@ -44,15 +39,13 @@ test('image and video config nodes delegate connection status pills to a shared 
 test('config nodes delegate shared header chrome while keeping actions parent-owned', () => {
   const headerSource = readConfigComponentSource('ConfigNodeHeader')
 
-  for (const source of [imageConfigSource, videoConfigSource, llmConfigSource]) {
+  for (const source of [videoConfigSource, llmConfigSource]) {
     assert.match(source, /import ConfigNodeHeader from '\.\/config\/ConfigNodeHeader\.vue'/)
     assert.match(source, /<ConfigNodeHeader\b[^>]*@delete="handleDelete"/)
     assert.doesNotMatch(source, /class="flex items-center justify-between px-3 py-2 border-b border-\[rgba\(143,143,143,0\.28\)\]"/)
     assert.doesNotMatch(source, /@click="handleDelete" class="p-1 hover:bg-\[rgba\(255,255,255,0\.04\)\] rounded transition-colors"/)
   }
 
-  assert.match(imageConfigSource, /<template #actions>/)
-  assert.match(imageConfigSource, /<BaseDropdown :options="modelOptions" compact @select="handleModelSelect">/)
   assert.match(llmConfigSource, /<template #icon>/)
   assert.match(headerSource, /defineEmits\(\['delete'\]\)/)
   assert.match(headerSource, /<slot name="icon"/)
@@ -66,10 +59,7 @@ test('config node header icon buttons use shared compact chrome', () => {
   const iconButtonSource = readConfigComponentSource('ConfigNodeIconButton')
 
   assert.match(headerSource, /import ConfigNodeIconButton from '\.\/ConfigNodeIconButton\.vue'/)
-  assert.match(imageConfigSource, /import ConfigNodeIconButton from '\.\/config\/ConfigNodeIconButton\.vue'/)
-  assert.match(imageConfigSource, /<ConfigNodeIconButton>\s*<ChevronDownOutline \/>/)
   assert.doesNotMatch(headerSource, /class="p-1 hover:bg-\[rgba\(255,255,255,0\.04\)\] rounded transition-colors"/)
-  assert.doesNotMatch(imageConfigSource, /class="p-1 hover:bg-\[rgba\(255,255,255,0\.04\)\] rounded transition-colors"/)
 
   assert.match(iconButtonSource, /<button class="p-1 hover:bg-\[rgba\(255,255,255,0\.04\)\] rounded transition-colors">/)
   assert.match(iconButtonSource, /<n-icon :size="size">/)
@@ -80,15 +70,13 @@ test('config node header icon buttons use shared compact chrome', () => {
 test('config nodes delegate selected shell chrome to a shared component', () => {
   const shellSource = readConfigComponentSource('ConfigNodeShell')
 
-  assert.match(imageConfigSource, /import ConfigNodeShell from '\.\/config\/ConfigNodeShell\.vue'/)
   assert.match(videoConfigSource, /import ConfigNodeShell from '\.\/config\/ConfigNodeShell\.vue'/)
   assert.match(llmConfigSource, /import ConfigNodeShell from '\.\/config\/ConfigNodeShell\.vue'/)
 
-  assert.match(imageConfigSource, /<ConfigNodeShell :selected="data\.selected" class="image-config-node min-w-\[300px\]">/)
   assert.match(videoConfigSource, /<ConfigNodeShell :selected="data\.selected" class="video-config-node min-w-\[300px\]">/)
   assert.match(llmConfigSource, /<ConfigNodeShell :selected="data\.selected" class="llm-node min-w-\[320px\] max-w-\[400px\] relative">/)
 
-  for (const source of [imageConfigSource, videoConfigSource, llmConfigSource]) {
+  for (const source of [videoConfigSource, llmConfigSource]) {
     assert.doesNotMatch(source, /bg-\[#0f0f0f\] rounded-2xl border/)
     assert.doesNotMatch(source, /:class="data\.selected \? 'border-\[#8f8f8f\]' : 'border-transparent'"/)
   }
@@ -102,7 +90,7 @@ test('dropdown config rows keep option row chrome in a shared component', () => 
   const optionRowSource = readConfigComponentSource('ConfigNodeOptionRow')
   const dropdownRowSource = readConfigComponentSource('ConfigNodeDropdownRow')
 
-  for (const source of [imageConfigSource, videoConfigSource]) {
+  for (const source of [videoConfigSource]) {
     assert.doesNotMatch(source, /import ConfigNodeOptionRow from '\.\/config\/ConfigNodeOptionRow\.vue'/)
     assert.doesNotMatch(source, /<ConfigNodeOptionRow\b/)
     assert.doesNotMatch(source, /<div(?: v-if="[^"]+")? class="flex items-center justify-between">/)
@@ -117,10 +105,10 @@ test('dropdown config rows keep option row chrome in a shared component', () => 
   assert.match(optionRowSource, /defineProps\(\{\s*label:/s)
 })
 
-test('image and video config nodes delegate dropdown rows to a shared component', () => {
+test('video config node delegate dropdown rows to a shared component', () => {
   const dropdownRowSource = readConfigComponentSource('ConfigNodeDropdownRow')
 
-  for (const source of [imageConfigSource, videoConfigSource]) {
+  for (const source of [videoConfigSource]) {
     assert.match(source, /import ConfigNodeDropdownRow from '\.\/config\/ConfigNodeDropdownRow\.vue'/)
     assert.match(source, /<ConfigNodeDropdownRow label="Model" :options="modelOptions" icon="down" @select="handleModelSelect">/)
     assert.doesNotMatch(source, /import ConfigNodeDropdownButton from '\.\/config\/ConfigNodeDropdownButton\.vue'/)
@@ -128,9 +116,6 @@ test('image and video config nodes delegate dropdown rows to a shared component'
     assert.doesNotMatch(source, /class="flex items-center gap-1 text-sm text-\[#eceff2\] hover:text-\[#f2f3f5\]"/)
   }
 
-  assert.match(imageConfigSource, /<ConfigNodeDropdownRow label="Model" :options="modelOptions" icon="down" @select="handleModelSelect">\s*\{\{ displayModelName \}\}\s*<\/ConfigNodeDropdownRow>/)
-  assert.match(imageConfigSource, /<ConfigNodeDropdownRow v-if="hasQualityOptions" label="Quality" :options="qualityOptions" @select="handleQualitySelect">/)
-  assert.match(imageConfigSource, /<ConfigNodeDropdownRow v-if="hasSizeOptions" label="Size" :options="sizeOptions" @select="handleSizeSelect">/)
   assert.match(videoConfigSource, /<ConfigNodeDropdownRow label="Model" :options="modelOptions" icon="down" @select="handleModelSelect">\s*\{\{ displayModelName \}\}\s*<\/ConfigNodeDropdownRow>/)
   assert.match(videoConfigSource, /<ConfigNodeDropdownRow v-if="inputProfile\.allowRatio" label="Ratio" :options="ratioOptions" @select="handleRatioSelect">/)
   assert.match(videoConfigSource, /<ConfigNodeDropdownRow v-if="inputProfile\.allowDuration" label="Duration" :options="durationOptions" @select="handleDurationSelect">/)
@@ -142,13 +127,9 @@ test('image and video config nodes delegate dropdown rows to a shared component'
   assert.match(dropdownRowSource, /<ConfigNodeDropdownButton :icon="icon">/)
 })
 
-test('image config node delegates model tip display to a shared component', () => {
+test('shared config model tip component preserves message display', () => {
   const tipSource = readConfigComponentSource('ConfigNodeTipMessage')
 
-  assert.match(imageConfigSource, /import ConfigNodeTipMessage from '\.\/config\/ConfigNodeTipMessage\.vue'/)
-  assert.match(imageConfigSource, /<ConfigNodeTipMessage v-if="currentModelConfig\?\.tips" :message="currentModelConfig\.tips" \/>/)
-  assert.doesNotMatch(imageConfigSource, /<div v-if="currentModelConfig\?\.tips" class="text-xs text-\[#8f939e\] bg-\[#14161a\] rounded px-2 py-1">/)
-  assert.doesNotMatch(imageConfigSource, /💡 \{\{ currentModelConfig\.tips \}\}/)
 
   assert.match(tipSource, /<div v-if="message" class="config-node-tip-message">/)
   assert.match(tipSource, /<span class="config-node-tip-message__icon">💡<\/span>/)
@@ -159,52 +140,21 @@ test('image config node delegates model tip display to a shared component', () =
   assert.match(tipSource, /\.config-node-tip-message\s*\{[^}]*border-radius:\s*0\.25rem/s)
 })
 
-test('image config node delegates provider size semantics to a pure helper', () => {
-  const sizeOptionsSource = readConfigComponentSource('ImageConfigSizeOptions')
-
-  assert.match(imageConfigSource, /from '\.\/config\/ImageConfigSizeOptions\.js'/)
-  assert.match(imageConfigSource, /resolveImageConfigSizeSelection\(\{/)
-  assert.doesNotMatch(imageConfigSource, /const BASE_SIZE_BY_RATIO = \{/)
-  assert.doesNotMatch(imageConfigSource, /const sizeMetaOptions = computed\(\(\) =>/)
-  assert.doesNotMatch(imageConfigSource, /const pickNearestSizeKey = \(ratioKey, resolutionKey\) =>/)
-
-  assert.match(sizeOptionsSource, /export const getImageConfigRatioFromSizeKey = \(sizeKey\) =>/)
-  assert.match(sizeOptionsSource, /export const getImageConfigResolutionFromSizeKey = \(sizeKey\) =>/)
-  assert.match(sizeOptionsSource, /export const resolveImageConfigSizeSelection = \(/)
-})
-
 test('config result nodes use grid collision placement for automatic output creation', () => {
-  for (const source of [imageConfigSource, videoConfigSource]) {
+  for (const source of [videoConfigSource]) {
     assert.match(source, /getAutoPlacementPosition/)
   }
 
-  assert.match(imageConfigSource, /const imageNodeData = \{\s*url: '',\s*loading: true,\s*label: 'Image Result'\s*\}/s)
-  assert.match(imageConfigSource, /const imageNodePosition = getAutoPlacementPosition\('image', \{ x: nodeX \+ 400, y: nodeY \+ yOffset \}, imageNodeData\)/)
-  assert.match(imageConfigSource, /imageNodeId = addNode\('image', imageNodePosition, imageNodeData\)/)
 
   assert.match(videoConfigSource, /const videoNodeData = \{\s*url: '',\s*previewUrl: '',\s*loading: true,\s*label: 'Generating video\.\.\.',\s*sourceConfigId: props\.id\s*\}/s)
   assert.match(videoConfigSource, /const videoNodePosition = getAutoPlacementPosition\('video', \{ x: nodeX \+ 350, y: nodeY \}, videoNodeData\)/)
   assert.match(videoConfigSource, /const videoNodeId = addNode\('video', videoNodePosition, videoNodeData\)/)
 })
 
-test('image config generation shows provider output before background persistence', () => {
-  assert.match(imageConfigSource, /const getImageNodeDisplayUrl = \(imageNodeId\) => \{/)
-  assert.match(imageConfigSource, /const persistGeneratedImageResultInBackground = async \(/)
-  assert.match(imageConfigSource, /if \(getImageNodeDisplayUrl\(imageNodeId\) !== rawUrl\) \{\s*return\s*\}/)
-  assert.match(imageConfigSource, /previewUrl:\s*rawUrl/)
-  assert.match(imageConfigSource, /persistStatus:\s*'pending'/)
-  assert.match(imageConfigSource, /void persistGeneratedImageResultInBackground\(\{/)
-
-  const handleGenerateStart = imageConfigSource.indexOf('const handleGenerate = async')
-  const backgroundStart = imageConfigSource.indexOf('const persistGeneratedImageResultInBackground = async')
-  assert.ok(backgroundStart > 0 && handleGenerateStart > 0)
-  assert.doesNotMatch(imageConfigSource.slice(handleGenerateStart, backgroundStart), /await resolveImagePersistence\(/)
-})
-
-test('image and video config nodes delegate error display to a shared component', () => {
+test('video config node delegate error display to a shared component', () => {
   const errorMessageSource = readConfigComponentSource('ConfigNodeErrorMessage')
 
-  for (const source of [imageConfigSource, videoConfigSource]) {
+  for (const source of [videoConfigSource]) {
     assert.match(source, /import ConfigNodeErrorMessage from '\.\/config\/ConfigNodeErrorMessage\.vue'/)
     assert.match(source, /<ConfigNodeErrorMessage :error="error" \/>/)
     assert.doesNotMatch(source, /<div v-if="error" class="text-xs text-red-500 mt-2">\s*\{\{ error\.message \|\| 'Generation failed' \}\}\s*<\/div>/)
@@ -218,14 +168,13 @@ test('image and video config nodes delegate error display to a shared component'
 test('config nodes delegate hover duplicate actions to a shared component', () => {
   const hoverActionsSource = readConfigComponentSource('ConfigNodeHoverActions')
 
-  for (const source of [imageConfigSource, videoConfigSource, llmConfigSource]) {
+  for (const source of [videoConfigSource, llmConfigSource]) {
     assert.match(source, /import ConfigNodeHoverActions from '\.\/config\/ConfigNodeHoverActions\.vue'/)
     assert.match(source, /<ConfigNodeHoverActions\b[^>]*:visible="showActions"[^>]*@duplicate="handleDuplicate"/)
     assert.doesNotMatch(source, /<NodeActionButton\b/)
     assert.doesNotMatch(source, /class="absolute -top-5 right-(?:0|12) z-\[1000\]"/)
   }
 
-  assert.match(imageConfigSource, /<ConfigNodeHoverActions :visible="showActions" @duplicate="handleDuplicate" \/>/)
   assert.match(videoConfigSource, /<ConfigNodeHoverActions :visible="showActions" wide @duplicate="handleDuplicate" \/>/)
   assert.match(llmConfigSource, /<ConfigNodeHoverActions :visible="showActions" position-class="right-12" wide @duplicate="handleDuplicate" \/>/)
 
@@ -240,7 +189,7 @@ test('config nodes delegate hover duplicate actions to a shared component', () =
 test('config nodes delegate Vue Flow handles to a shared component', () => {
   const handlesSource = readConfigComponentSource('ConfigNodeHandles')
 
-  for (const source of [imageConfigSource, videoConfigSource, llmConfigSource]) {
+  for (const source of [videoConfigSource, llmConfigSource]) {
     assert.match(source, /import ConfigNodeHandles from '\.\/config\/ConfigNodeHandles\.vue'/)
     assert.match(source, /<ConfigNodeHandles \/>/)
     assert.doesNotMatch(source, /<Handle type="target"/)
@@ -317,7 +266,7 @@ test('LLM config node delegates model select chrome to a shared component', () =
 
   assert.match(llmConfigSource, /import ConfigNodeSelect from '\.\/config\/ConfigNodeSelect\.vue'/)
   assert.match(llmConfigSource, /<ConfigNodeSelect\s+:model-value="model"\s+:options="modelOptions"\s+@update:modelValue="handleModelUpdate"\s+\/>/)
-  assert.match(llmConfigSource, /const handleModelUpdate = \(value\) => \{\s*model\.value = value\s*updateConfig\(\)\s*\}/s)
+  assert.match(llmConfigSource, /const handleModelUpdate = \(value\) => \{\s*model\.value = resolveChatModelKey\(value\)\s*updateConfig\(\)\s*\}/s)
   assert.doesNotMatch(llmConfigSource, /<n-select\b/)
   assert.doesNotMatch(llmConfigSource, /NSelect/)
 
@@ -331,15 +280,13 @@ test('LLM config node delegates model select chrome to a shared component', () =
 test('config nodes delegate full-width primary action chrome to a shared component', () => {
   const primaryActionSource = readConfigComponentSource('ConfigNodePrimaryActionButton')
 
-  assert.match(imageConfigSource, /import ConfigNodePrimaryActionButton from '\.\/config\/ConfigNodePrimaryActionButton\.vue'/)
   assert.match(videoConfigSource, /import ConfigNodePrimaryActionButton from '\.\/config\/ConfigNodePrimaryActionButton\.vue'/)
   assert.match(llmConfigSource, /import ConfigNodePrimaryActionButton from '\.\/config\/ConfigNodePrimaryActionButton\.vue'/)
 
-  assert.match(imageConfigSource, /<ConfigNodePrimaryActionButton v-else @click="handleGenerate\('auto'\)" :disabled="loading \|\| !isConfigured" emphasized>/)
   assert.match(videoConfigSource, /<ConfigNodePrimaryActionButton @click="handleGenerate" :disabled="loading \|\| !isConfigured" emphasized>/)
   assert.match(llmConfigSource, /<ConfigNodePrimaryActionButton\s+@click="handleGenerate"\s+:disabled="isGenerating"\s*>/)
 
-  for (const source of [imageConfigSource, videoConfigSource]) {
+  for (const source of [videoConfigSource]) {
     assert.doesNotMatch(source, /class="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"/)
   }
   assert.doesNotMatch(llmConfigSource, /class="w-full px-4 py-2 text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"/)
@@ -350,16 +297,9 @@ test('config nodes delegate full-width primary action chrome to a shared compone
   assert.match(primaryActionSource, /emphasized: Boolean/)
 })
 
-test('image config node delegates split action row chrome to a shared component', () => {
+test('shared config split action component preserves button chrome', () => {
   const splitActionsSource = readConfigComponentSource('ConfigNodeSplitActions')
 
-  assert.match(imageConfigSource, /import ConfigNodeSplitActions from '\.\/config\/ConfigNodeSplitActions\.vue'/)
-  assert.match(imageConfigSource, /<ConfigNodeSplitActions\s+v-if="hasConnectedImageWithContent"\s+:disabled="loading \|\| !isConfigured"\s+@primary="handleGenerate\('new'\)"\s+@secondary="handleGenerate\('replace'\)"/)
-  assert.match(imageConfigSource, /<template #primary>/)
-  assert.match(imageConfigSource, /<template #secondary>/)
-  assert.doesNotMatch(imageConfigSource, /<div v-if="hasConnectedImageWithContent" class="flex gap-2">/)
-  assert.doesNotMatch(imageConfigSource, /class="flex-1 flex items-center justify-center gap-1\.5 py-2 px-3 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"/)
-  assert.doesNotMatch(imageConfigSource, /class="flex-shrink-0 flex items-center justify-center gap-1 py-2 px-2\.5 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed"/)
 
   assert.match(splitActionsSource, /import NodePrimaryButton from '@\/components\/nodes\/NodePrimaryButton\.vue'/)
   assert.match(splitActionsSource, /import NodeSecondaryButton from '@\/components\/nodes\/NodeSecondaryButton\.vue'/)
@@ -391,7 +331,7 @@ test('LLM config node delegates output preview chrome to a shared component', ()
 test('config nodes delegate content spacing to a shared component', () => {
   const contentSource = readConfigComponentSource('ConfigNodeContent')
 
-  for (const source of [imageConfigSource, videoConfigSource, llmConfigSource]) {
+  for (const source of [videoConfigSource, llmConfigSource]) {
     assert.match(source, /import ConfigNodeContent from '\.\/config\/ConfigNodeContent\.vue'/)
     assert.match(source, /<ConfigNodeContent>/)
     assert.match(source, /<\/ConfigNodeContent>/)

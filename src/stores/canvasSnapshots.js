@@ -1,4 +1,5 @@
 import { cloneCanvasData } from './canvasClone.js'
+import { migrateLegacyImageConfigNodes } from './legacyImageConfig.js'
 
 const TRANSIENT_NODE_FIELDS = new Set([
   'base64',
@@ -59,9 +60,22 @@ const hasNodeUnpersistedMedia = (node) => {
   return isTransientRemoteMediaUrl(url)
 }
 
+export const normalizeImageNodeParameters = (node) => {
+  if (!['image', 'imageConfig'].includes(node?.type)) return node
+  const data = { ...(node.data || {}) }
+  for (const key of ['quality', 'resolution', 'aspect_ratio', 'output_format', 'outputFormat', 'output_compression', 'moderation', 'enable_sync_mode', 'enable_base64_output']) {
+    delete data[key]
+  }
+  if (node.type === 'imageConfig') {
+    delete data.size
+    delete data.ratio
+  }
+  return { ...node, data }
+}
+
 const sanitizeNodeForPersistence = (node, options = {}) => {
   const { preserveTransientMedia = false } = options
-  const nextNode = cloneCanvasData(node)
+  const nextNode = normalizeImageNodeParameters(cloneCanvasData(node))
   delete nextNode.selected
   delete nextNode.dragging
   delete nextNode.resizing
@@ -109,14 +123,18 @@ const sanitizeEdgeForPersistence = (edge) => {
   return nextEdge
 }
 
-export const createCanvasSnapshot = ({ nodes = [], edges = [], groups = [], viewport = {} } = {}, options = {}) => ({
-  nodes: Array.from(nodes, (node) => sanitizeNodeForPersistence(node, options)),
-  edges: Array.from(edges, sanitizeEdgeForPersistence),
-  groups: cloneCanvasData(groups),
-  viewport: { ...viewport }
-})
+export const createCanvasSnapshot = (canvas = {}, options = {}) => {
+  const { nodes = [], edges = [], groups = [], viewport = {} } = migrateLegacyImageConfigNodes(canvas)
+  return {
+    nodes: Array.from(nodes, (node) => sanitizeNodeForPersistence(node, options)),
+    edges: Array.from(edges, sanitizeEdgeForPersistence),
+    groups: cloneCanvasData(groups),
+    viewport: { ...viewport }
+  }
+}
 
-export const createCanvasPersistenceSnapshots = ({ nodes = [], edges = [], groups = [], viewport = {} } = {}) => {
+export const createCanvasPersistenceSnapshots = (canvas = {}) => {
+  const { nodes = [], edges = [], groups = [], viewport = {} } = migrateLegacyImageConfigNodes(canvas)
   const localNodes = []
   const remoteNodes = []
   let containsTransientMedia = false

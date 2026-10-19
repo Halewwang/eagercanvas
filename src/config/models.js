@@ -3,181 +3,37 @@
  * Centralized model configuration | 集中模型配置
  */
 
-const GEMINI_BASE_SIZES = [
-    { ratio: '1:1', width: 1024, height: 1024 },
-    { ratio: '3:2', width: 1152, height: 768 },
-    { ratio: '2:3', width: 768, height: 1152 },
-    { ratio: '4:3', width: 1152, height: 864 },
-    { ratio: '3:4', width: 864, height: 1152 },
-    { ratio: '4:5', width: 896, height: 1120 },
-    { ratio: '5:4', width: 1120, height: 896 },
-    { ratio: '16:9', width: 1280, height: 720 },
-    { ratio: '9:16', width: 720, height: 1280 },
-    { ratio: '21:9', width: 1680, height: 720 }
-]
-
-const GEMINI_RESOLUTION_LEVELS = [
-    { key: '1k', scale: 1 },
-    { key: '2k', scale: 2 },
-    { key: '4k', scale: 4 }
-]
-
-// Gemini image size options | Gemini 图片尺寸选项
-export const GEMINI_IMAGE_SIZE_OPTIONS = GEMINI_BASE_SIZES.flatMap((base) =>
-    GEMINI_RESOLUTION_LEVELS.map((level) => ({
-        label: `${base.ratio}`,
-        key: `${base.width * level.scale}x${base.height * level.scale}`
-    }))
-)
-
-export const GEMINI_IMAGE_QUALITY_OPTIONS = [
-    { label: '标准', key: 'standard' },
-    { label: '高清', key: 'hd' }
-]
-
-export const GPT_IMAGE_2_RESOLUTION_OPTIONS = [
-    { label: '1K', key: '1k' },
-    { label: '2K', key: '2k' },
-    { label: '4K', key: '4k' }
-]
-
-export const GPT_IMAGE_2_QUALITY_OPTIONS = [
-    { label: 'Auto', key: 'auto' },
-    { label: 'Low', key: 'low' },
-    { label: 'Medium', key: 'medium' },
-    { label: 'High', key: 'high' }
-]
-
 export const GPT_IMAGE_2_BACKGROUND_OPTIONS = [
     { label: 'Auto', key: 'auto' },
     { label: 'Opaque', key: 'opaque' }
 ]
 
 export const GPT_IMAGE_2_OUTPUT_FORMAT_OPTIONS = [
-    { label: 'PNG', key: 'png' },
-    { label: 'JPEG', key: 'jpeg' },
-    { label: 'WEBP', key: 'webp' }
+    { label: 'PNG', key: 'png' }
 ]
-
-export const GPT_IMAGE_2_BASE_SIZES = [
-    { ratio: '1:1', width: 1024, height: 1024 },
-    { ratio: '3:2', width: 1536, height: 1024 },
-    { ratio: '2:3', width: 1024, height: 1536 },
-    { ratio: '4:3', width: 1152, height: 864 },
-    { ratio: '3:4', width: 864, height: 1152 },
-    { ratio: '4:5', width: 896, height: 1120 },
-    { ratio: '5:4', width: 1120, height: 896 },
-    { ratio: '16:9', width: 1280, height: 720 },
-    { ratio: '9:16', width: 720, height: 1280 },
-    { ratio: '21:9', width: 1680, height: 720 }
-]
-
-const GPT_IMAGE_2_MAX_EDGE = 3840
-const GPT_IMAGE_2_MAX_PIXELS = 8294400
-
-const alignToMultipleOf16 = (value) => Math.max(16, Math.round(Number(value || 0) / 16) * 16)
-
-const clampToGptImage2Limits = (width, height) => {
-    let safeWidth = alignToMultipleOf16(width)
-    let safeHeight = alignToMultipleOf16(height)
-
-    while (
-        Math.max(safeWidth, safeHeight) > GPT_IMAGE_2_MAX_EDGE ||
-        safeWidth * safeHeight > GPT_IMAGE_2_MAX_PIXELS
-    ) {
-        if (safeWidth >= safeHeight) {
-            safeWidth = Math.max(16, safeWidth - 16)
-        } else {
-            safeHeight = Math.max(16, safeHeight - 16)
-        }
-    }
-
-    return { width: safeWidth, height: safeHeight }
-}
-
-const scaleGptImage2Size = (base, resolution = '1k') => {
-    const safeResolution = String(resolution || '1k').toLowerCase()
-    if (safeResolution === '1k') return { width: base.width, height: base.height }
-    if (safeResolution === '2k') return { width: base.width * 2, height: base.height * 2 }
-
-    const ratioWidth = base.width
-    const ratioHeight = base.height
-    const edgeScale = GPT_IMAGE_2_MAX_EDGE / Math.max(ratioWidth, ratioHeight)
-    const pixelScale = Math.sqrt(GPT_IMAGE_2_MAX_PIXELS / (ratioWidth * ratioHeight))
-    const scale = Math.min(edgeScale, pixelScale)
-    return clampToGptImage2Limits(ratioWidth * scale, ratioHeight * scale)
-}
-
-export const resolveGptImage2Size = ({ ratio = '1:1', resolution = '1k' } = {}) => {
-    const base = GPT_IMAGE_2_BASE_SIZES.find((item) => item.ratio === ratio) || GPT_IMAGE_2_BASE_SIZES[0]
-    const size = scaleGptImage2Size(base, resolution)
-    return `${size.width}x${size.height}`
-}
-
-export const GPT_IMAGE_2_SIZE_OPTIONS = GPT_IMAGE_2_BASE_SIZES.flatMap((base) =>
-    GPT_IMAGE_2_RESOLUTION_OPTIONS.map((resolution) => ({
-        label: `${base.ratio} ${resolution.label}`,
-        key: resolveGptImage2Size({ ratio: base.ratio, resolution: resolution.key })
-    }))
-)
 
 const GPT_IMAGE_2_MODEL_CONFIG = {
     label: 'GPT Image 2',
     key: 'gpt-image-2',
-    sizes: ['auto', ...GPT_IMAGE_2_SIZE_OPTIONS.map(s => s.key)],
-    resolutions: GPT_IMAGE_2_RESOLUTION_OPTIONS,
-    qualities: GPT_IMAGE_2_QUALITY_OPTIONS,
+    sizes: [],
+    ratios: [],
+    resolutions: [],
+    qualities: [],
+    hideRatioCapsule: true,
     backgrounds: GPT_IMAGE_2_BACKGROUND_OPTIONS,
     outputFormats: GPT_IMAGE_2_OUTPUT_FORMAT_OPTIONS,
     defaultParams: {
-        size: '1024x1024',
-        quality: 'auto',
-        background: 'auto',
-        output_format: 'png'
+        background: 'auto'
     },
     supportImageReference: true,
+    maxReferenceImages: 16,
     showAdvancedCapsuleParams: true,
     requestTimeoutMs: 1800000,
-    tips: '使用 302.AI GPT-Image-2，比例选项与 Gemini 一致，分辨率胶囊选择 1K/2K/4K，尺寸会限制在最长边 3840px、长短边 3:1 以内、总像素 65.5 万到 829.4 万之间。'
+    tips: '尺寸与清晰度由模型决定，输出 PNG，最多 16 张参考图。'
 }
 
 // Image generation models | 图片生成模型
-export const IMAGE_MODELS = [
-    GPT_IMAGE_2_MODEL_CONFIG,
-    {
-        ...GPT_IMAGE_2_MODEL_CONFIG,
-        label: 'GPT Image lite',
-        key: 'gpt-image-lite',
-        requestTimeoutMs: 1800000,
-        tips: '使用 derouter GPT-Image-2 接口，参数与 GPT Image 2 保持一致，创建后通过任务轮询等待长耗时生成。'
-    },
-    {
-        label: 'Gemini 3.1 Flash Image Preview',
-        key: 'gemini-3.1-flash-image-preview',
-        sizes: GEMINI_IMAGE_SIZE_OPTIONS.map(s => s.key),
-        qualities: GEMINI_IMAGE_QUALITY_OPTIONS,
-        defaultParams: {
-            size: '1024x1024',
-            quality: 'standard',
-            style: 'vivid'
-        },
-        supportImageReference: true,
-        tips: '使用 302 ws 同步图片路由，支持 1K/2K/4K 分辨率枚举参数。'
-    },
-    {
-        label: 'Gemini 3 Pro Image Preview',
-        key: 'gemini-3-pro-image-preview',
-        sizes: GEMINI_IMAGE_SIZE_OPTIONS.map(s => s.key),
-        qualities: GEMINI_IMAGE_QUALITY_OPTIONS,
-        defaultParams: {
-            size: '1024x1024',
-            quality: 'standard',
-            style: 'vivid'
-        },
-        supportImageReference: true,
-        tips: '使用 302 ws 同步图片路由，支持 1K/2K/4K 分辨率枚举参数。'
-    }
-]
+export const IMAGE_MODELS = [GPT_IMAGE_2_MODEL_CONFIG]
 
 // Video ratio options | 视频比例选项
 export const VIDEO_RATIO_LIST = [
@@ -366,19 +222,14 @@ export const getVideoConnectionProfile = (modelKey = '', generationType = '') =>
 
 // Chat/LLM models | 对话模型
 export const CHAT_MODELS = [
-    { label: 'Gemini 2.5 Flash', key: 'gemini-2.5-flash' },
-    { label: 'Gemini 2.5 Flash Lite', key: 'gemini-2.5-flash-lite' }
+    { label: 'GPT 5.6 Sol', key: 'gpt-5.6-sol' }
 ]
 
 // Image size options | 图片尺寸选项
-export const IMAGE_SIZE_OPTIONS = [
-    ...GEMINI_IMAGE_SIZE_OPTIONS
-]
+export const IMAGE_SIZE_OPTIONS = []
 
 // Image quality options | 图片质量选项
-export const IMAGE_QUALITY_OPTIONS = [
-    ...GEMINI_IMAGE_QUALITY_OPTIONS
-]
+export const IMAGE_QUALITY_OPTIONS = []
 
 // Image style options | 图片风格选项
 export const IMAGE_STYLE_OPTIONS = [
@@ -396,12 +247,14 @@ export const VIDEO_DURATION_OPTIONS = [
 ]
 
 // Default values | 默认值
-export const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
+export const DEFAULT_IMAGE_MODEL = 'gpt-image-2'
 export const DEFAULT_VIDEO_MODEL = 'veo-3.1'
-export const DEFAULT_CHAT_MODEL = 'gemini-2.5-flash'
+export const DEFAULT_CHAT_MODEL = 'gpt-5.6-sol'
 export const DEFAULT_IMAGE_SIZE = '1024x1024'
 export const DEFAULT_VIDEO_RATIO = '16:9'
 export const DEFAULT_VIDEO_DURATION = 8
+export const resolveImageModelKey = (key) => IMAGE_MODELS.some((model) => model.key === key) ? key : DEFAULT_IMAGE_MODEL
+export const resolveChatModelKey = (key) => CHAT_MODELS.some((model) => model.key === key) ? key : DEFAULT_CHAT_MODEL
 export const hasVideoModel = (key) => VIDEO_MODELS.some((model) => model.key === key)
 export const resolveVideoModelKey = (key) => (hasVideoModel(key) ? key : DEFAULT_VIDEO_MODEL)
 

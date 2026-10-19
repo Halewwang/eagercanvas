@@ -12,10 +12,14 @@ import {
   verifyLoginCode,
   verifyRegisterCode
 } from '@/api/auth'
-import { getLocalPreviewAdminSession, isLocalPreviewEnabled } from '@/utils/localPreview'
+import { getLocalPreviewAdminSession, isLocalPreviewEnabled, resolveLocalPreviewAccessToken } from '@/utils/localPreview'
+import { hasAdminAccessPermission } from '@/utils/adminNavigation'
 
 const BYPASS_AUTH_IN_DEV = isLocalPreviewEnabled()
+const LOCAL_PREVIEW_ACCESS_TOKEN = resolveLocalPreviewAccessToken('')
 const LOCAL_PREVIEW_ADMIN_SESSION = getLocalPreviewAdminSession()
+const INITIAL_STORED_ACCESS_TOKEN = getStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
+const INITIAL_LOCAL_PREVIEW_SESSION = BYPASS_AUTH_IN_DEV && !INITIAL_STORED_ACCESS_TOKEN
 const BYPASS_USER = {
   id: 'dev-bypass-user',
   email: 'preview@local.dev',
@@ -23,13 +27,14 @@ const BYPASS_USER = {
   serviceStatus: 'active'
 }
 
-const user = ref(BYPASS_AUTH_IN_DEV ? { ...BYPASS_USER } : null)
-const accessToken = ref(BYPASS_AUTH_IN_DEV ? 'dev-bypass-token' : '')
-const bootstrapped = ref(BYPASS_AUTH_IN_DEV)
-const adminUser = ref(BYPASS_AUTH_IN_DEV ? { ...LOCAL_PREVIEW_ADMIN_SESSION.user } : null)
-const roles = ref(BYPASS_AUTH_IN_DEV ? [...LOCAL_PREVIEW_ADMIN_SESSION.roles] : [])
-const permissions = ref(BYPASS_AUTH_IN_DEV ? [...LOCAL_PREVIEW_ADMIN_SESSION.permissions] : [])
-const adminBootstrapped = ref(BYPASS_AUTH_IN_DEV)
+const user = ref(INITIAL_LOCAL_PREVIEW_SESSION ? { ...BYPASS_USER } : null)
+const accessToken = ref(INITIAL_STORED_ACCESS_TOKEN || (INITIAL_LOCAL_PREVIEW_SESSION ? LOCAL_PREVIEW_ACCESS_TOKEN : ''))
+const bootstrapped = ref(INITIAL_LOCAL_PREVIEW_SESSION)
+const adminUser = ref(INITIAL_LOCAL_PREVIEW_SESSION ? { ...LOCAL_PREVIEW_ADMIN_SESSION.user } : null)
+const roles = ref(INITIAL_LOCAL_PREVIEW_SESSION ? [...LOCAL_PREVIEW_ADMIN_SESSION.roles] : [])
+const permissions = ref(INITIAL_LOCAL_PREVIEW_SESSION ? [...LOCAL_PREVIEW_ADMIN_SESSION.permissions] : [])
+const adminBootstrapped = ref(INITIAL_LOCAL_PREVIEW_SESSION)
+const localPreviewSessionActive = ref(INITIAL_LOCAL_PREVIEW_SESSION)
 
 const applyLocalPreviewAdminSession = () => {
   adminUser.value = { ...LOCAL_PREVIEW_ADMIN_SESSION.user }
@@ -38,27 +43,32 @@ const applyLocalPreviewAdminSession = () => {
   adminBootstrapped.value = true
 }
 
+const activateLocalPreviewSession = () => {
+  accessToken.value = LOCAL_PREVIEW_ACCESS_TOKEN
+  user.value = { ...BYPASS_USER }
+  localPreviewSessionActive.value = true
+  applyLocalPreviewAdminSession()
+  bootstrapped.value = true
+}
+
 const readToken = () => {
   return getStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
 }
 
 const persistToken = (token) => {
   accessToken.value = token || ''
-  if (!token) {
-    adminUser.value = null
-    roles.value = []
-    permissions.value = []
-    adminBootstrapped.value = false
-  } else {
-    adminBootstrapped.value = false
-  }
+  localPreviewSessionActive.value = false
+  adminUser.value = null
+  roles.value = []
+  permissions.value = []
+  adminBootstrapped.value = false
   if (token) setStoredValue(STORAGE_KEYS.ACCESS_TOKEN, token)
   else removeStoredValue(STORAGE_KEYS.ACCESS_TOKEN)
 }
 
 export const useAuthStore = () => {
   const isAuthenticated = computed(() => !!accessToken.value)
-  const isAdmin = computed(() => permissions.value.includes('admin.dashboard.read'))
+  const isAdmin = computed(() => hasAdminAccessPermission(permissions.value))
 
   const sendCode = (email) => sendLoginCode(email)
   const sendRegister = (email) => sendRegisterCode(email)
@@ -84,16 +94,9 @@ export const useAuthStore = () => {
   const bootstrapAuth = async () => {
     if (bootstrapped.value) return
 
-    if (BYPASS_AUTH_IN_DEV) {
-      persistToken('dev-bypass-token')
-      user.value = { ...BYPASS_USER }
-      applyLocalPreviewAdminSession()
-      bootstrapped.value = true
-      return
-    }
-
     const token = readToken()
     if (token) {
+      localPreviewSessionActive.value = false
       accessToken.value = token
       try {
         const me = await getMe()
@@ -106,8 +109,17 @@ export const useAuthStore = () => {
         } catch {
           persistToken('')
           user.value = null
+          if (BYPASS_AUTH_IN_DEV) {
+            activateLocalPreviewSession()
+            return
+          }
         }
       }
+    } else if (BYPASS_AUTH_IN_DEV) {
+      activateLocalPreviewSession()
+      return
+    } else {
+      accessToken.value = ''
     }
 
     bootstrapped.value = true
@@ -125,7 +137,7 @@ export const useAuthStore = () => {
   }
 
   const loadAdminSession = async ({ force = false } = {}) => {
-    if (BYPASS_AUTH_IN_DEV) {
+    if (localPreviewSessionActive.value) {
       applyLocalPreviewAdminSession()
       return true
     }
@@ -166,10 +178,7 @@ export const useAuthStore = () => {
     } finally {
       persistToken('')
       user.value = null
-      adminUser.value = null
-      roles.value = []
-      permissions.value = []
-      adminBootstrapped.value = false
+      if (BYPASS_AUTH_IN_DEV) activateLocalPreviewSession()
     }
   }
 

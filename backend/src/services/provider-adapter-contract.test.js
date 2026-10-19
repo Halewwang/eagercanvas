@@ -4,9 +4,7 @@ import test from 'node:test'
 import { BaseProviderAdapter } from './providers/base.adapter.js'
 import { Dashboard302ProviderAdapter } from './providers/dashboard302.adapter.js'
 import { Dashboard302VideoProviderAdapter } from './providers/dashboard302-video.adapter.js'
-import { DerouterProviderAdapter } from './providers/derouter.adapter.js'
 import { OpenAiProviderAdapter } from './providers/openai.adapter.js'
-import { PhotoRoomProviderAdapter } from './providers/photoroom.adapter.js'
 import { SeedanceProviderAdapter } from './providers/seedance.adapter.js'
 import { getProviderAdapter, providerAdapters } from './providers/index.js'
 
@@ -25,13 +23,11 @@ test('base provider adapter defines the shared adapter contract', async () => {
 })
 
 test('provider adapter registry exposes the planned provider adapters', () => {
-  assert.deepEqual(Object.keys(providerAdapters).sort(), ['dashboard302', 'dashboard302-video', 'derouter', 'openai', 'photoroom', 'seedance'])
+  assert.deepEqual(Object.keys(providerAdapters).sort(), ['dashboard302', 'dashboard302-video', 'openai', 'seedance'])
   assert.ok(providerAdapters.openai instanceof OpenAiProviderAdapter)
   assert.ok(providerAdapters.seedance instanceof SeedanceProviderAdapter)
   assert.ok(providerAdapters.dashboard302 instanceof Dashboard302ProviderAdapter)
   assert.ok(providerAdapters['dashboard302-video'] instanceof Dashboard302VideoProviderAdapter)
-  assert.ok(providerAdapters.derouter instanceof DerouterProviderAdapter)
-  assert.ok(providerAdapters.photoroom instanceof PhotoRoomProviderAdapter)
 
   for (const adapter of Object.values(providerAdapters)) {
     assert.ok(adapter instanceof BaseProviderAdapter)
@@ -45,8 +41,8 @@ test('provider adapter registry exposes the planned provider adapters', () => {
   assert.equal(getProviderAdapter('seedance'), providerAdapters.seedance)
   assert.equal(getProviderAdapter('dashboard302'), providerAdapters.dashboard302)
   assert.equal(getProviderAdapter('dashboard302-video'), providerAdapters['dashboard302-video'])
-  assert.equal(getProviderAdapter('derouter'), providerAdapters.derouter)
-  assert.equal(getProviderAdapter('photoroom'), providerAdapters.photoroom)
+  assert.equal(getProviderAdapter('derouter'), null)
+  assert.equal(getProviderAdapter('photoroom'), null)
   assert.equal(getProviderAdapter('unknown'), null)
 })
 
@@ -78,4 +74,11 @@ test('provider adapters delegate contract calls to injected provider operations'
     taskId: 'task-1',
     options: { apiKey: 'key' }
   })
+})
+
+test('legacy provider adapters retain only video operations', () => {
+  for (const adapter of Object.values(providerAdapters)) {
+    assert.equal(adapter.operations.imageGeneration, undefined)
+    assert.equal(adapter.operations.chatCompletion, undefined)
+  }
 })

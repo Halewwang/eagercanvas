@@ -4,6 +4,8 @@ import { mock, test } from 'node:test'
 import { supabase } from '../config/supabase.js'
 import {
   assertImageTaskOwnership,
+  assertVideoTaskOwnership,
+  bindVideoTaskOwnership,
   bindImageTaskOwnership,
   findImageRunContextByTask,
   resolveImageTaskContextByTask,
@@ -234,4 +236,28 @@ test('syncRunStatusFromVideoTask marks completed task results when a provider vi
   assert.equal(updateCalls[0].status, 'completed')
   assert.equal(updateCalls[0].error_msg, null)
   assert.match(updateCalls[0].finished_at, /^\d{4}-\d{2}-\d{2}T/)
+})
+
+
+test('video ownership rejects missing or foreign-user task records in every environment', async () => {
+  const filters = []
+  const restore = mockSupabaseFrom((table) => {
+    assert.equal(table, 'audit_logs')
+    return {
+      ...createAuditLogQuery({ selectData: [] }),
+      eq(column, value) { filters.push([column, value]); return this },
+      contains(column, value) { filters.push([column, value]); return this }
+    }
+  })
+  try {
+    await assert.rejects(assertVideoTaskOwnership({ userId: 'user-1', taskId: 'foreign-task' }), { status: 404, code: 'VIDEO_TASK_NOT_FOUND' })
+    assert.deepEqual(filters, [['user_id', 'user-1'], ['action', 'video.task.created'], ['metadata', { task_id: 'foreign-task' }]])
+  } finally { restore.mock.restore() }
+})
+
+test('video task creation reports ownership persistence failures', async () => {
+  const restore = mockSupabaseFrom(() => ({ insert: async () => ({ error: { message: 'Audit unavailable' } }) }))
+  try {
+    await assert.rejects(bindVideoTaskOwnership({ userId: 'user-1', runId: 'run-1', taskId: 'task-1' }), { status: 500, code: 'TASK_OWNERSHIP_BIND_FAILED' })
+  } finally { restore.mock.restore() }
 })

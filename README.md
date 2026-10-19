@@ -75,6 +75,7 @@ Create frontend environment config from `.env.example`:
 ```bash
 VITE_APP_API_BASE_URL=/api/v1
 VITE_BYPASS_AUTH=false
+VITE_LOCAL_PREVIEW_ACCESS_TOKEN=
 ```
 
 Create backend environment config from `backend/.env.example`, then provide your Supabase, auth, email, and provider credentials locally. The backend reads `backend/.env.local` before `backend/.env`, while shell/Vercel-provided environment variables keep highest priority. Do not commit real `.env` files or production screenshots.
@@ -99,10 +100,12 @@ The default frontend URL is `http://localhost:5173`; the backend defaults to `ht
 
 ## Preview Mode
 
-For UI-only local screenshots or design review, you can run the frontend with auth bypass in dev mode:
+For UI-only local screenshots or design review, generate a temporary token and explicitly opt in on both the backend and frontend. The values must match; preview auth remains disabled when either flag or token is absent, and production always rejects it.
 
 ```bash
-VITE_BYPASS_AUTH=true npm run dev
+export LOCAL_PREVIEW_TOKEN="$(openssl rand -hex 32)"
+LOCAL_PREVIEW_AUTH_ENABLED=true LOCAL_PREVIEW_ACCESS_TOKEN="$LOCAL_PREVIEW_TOKEN" npm --prefix backend run dev
+VITE_BYPASS_AUTH=true VITE_LOCAL_PREVIEW_ACCESS_TOKEN="$LOCAL_PREVIEW_TOKEN" npm run dev
 ```
 
 Preview mode is useful for navigation and visual checks, but it is not a replacement for full backend, Supabase, auth, persistence, and usage verification.

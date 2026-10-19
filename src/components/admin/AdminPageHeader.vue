@@ -5,11 +5,13 @@
         <p class="admin-page-eyebrow">管理后台</p>
         <h1 class="admin-page-title">欢迎回来，{{ displayName }}</h1>
         <p class="admin-page-copy">
-          按当前角色权限加载可管理区块，避免后台入口触发无效请求。
+          管理注册用户的服务权限、角色和账户状态。
         </p>
       </div>
       <div class="admin-page-actions">
-        <AdminHeaderActionButton @click="$emit('go-home')">返回首页</AdminHeaderActionButton>
+        <slot name="actions">
+          <AdminHeaderActionButton @click="$emit('go-home')">返回首页</AdminHeaderActionButton>
+        </slot>
       </div>
     </div>
     <div v-if="accessScope.length" class="admin-page-scope">

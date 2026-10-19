@@ -19,6 +19,8 @@ import {
   DEFAULT_IMAGE_SIZE,
   DEFAULT_VIDEO_RATIO,
   DEFAULT_VIDEO_DURATION,
+  resolveChatModelKey,
+  resolveImageModelKey,
   resolveVideoModelKey,
   getVideoGenerationProfile,
   getVideoConnectionProfile,
@@ -71,7 +73,7 @@ export const getModelConfig = (modelKey) => {
 export const getModelSizeOptions = (modelKey, quality = 'standard') => {
   const model = IMAGE_MODELS.find(m => m.key === modelKey)
 
-  if (!model?.sizes || model.sizes.length === 0) return IMAGE_SIZE_OPTIONS
+  if (!model?.sizes || model.sizes.length === 0) return []
 
   // Convert sizes array to dropdown options | 转换 sizes 数组为下拉选项
   return model.sizes.map(size => {
@@ -86,7 +88,7 @@ export const getModelSizeOptions = (modelKey, quality = 'standard') => {
 export const getModelQualityOptions = (modelKey) => {
   const model = IMAGE_MODELS.find(m => m.key === modelKey)
   if (model) return model.qualities || []
-  return IMAGE_QUALITY_OPTIONS
+  return []
 }
 
 /**
@@ -206,6 +208,8 @@ export {
   getVideoGenerationProfile,
   getVideoConnectionProfile,
   resolveSeedanceGenerationType,
+  resolveChatModelKey,
+  resolveImageModelKey,
   resolveVideoModelKey
 }
 

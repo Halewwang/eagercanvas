@@ -19,22 +19,6 @@ export const generateImage = (data, options = {}) => {
   })
 }
 
-export const createImageGenerationRun = (data, options = {}) => {
-  const { timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
-
-  return apiRequest({
-    url: '/runs',
-    method: 'post',
-    data: {
-      type: 'image',
-      projectId: data?.projectId || null,
-      model: data?.model,
-      payload: data
-    },
-    timeout
-  })
-}
-
 export const getImageGenerationTask = (taskId, options = {}) => {
   const { timeout = IMAGE_REQUEST_TIMEOUT_MS, ...requestOptions } = options
 
@@ -45,16 +29,5 @@ export const getImageGenerationTask = (taskId, options = {}) => {
     silentErrorToast: true,
     silentNetworkErrorToast: true,
     ...requestOptions
-  })
-}
-
-export const removeBackground = (data, options = {}) => {
-  const { timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
-
-  return apiRequest({
-    url: '/images/remove-background',
-    method: 'post',
-    data,
-    timeout
   })
 }

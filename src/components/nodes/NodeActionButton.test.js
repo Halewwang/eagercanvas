@@ -13,7 +13,6 @@ const hoverActionsSource = existsSync(hoverActionsPath) ? readFileSync(hoverActi
 
 const configNodeUrls = [
   new URL('./LLMConfigNode.vue', import.meta.url),
-  new URL('./ImageConfigNode.vue', import.meta.url),
   new URL('./VideoConfigNode.vue', import.meta.url)
 ]
 

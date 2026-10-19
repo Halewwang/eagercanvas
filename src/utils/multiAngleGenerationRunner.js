@@ -2,16 +2,7 @@ import {
   buildMultiAngleCameraInput,
   buildMultiAngleCameraPrompt
 } from './multiAngleCamera.js'
-import { resolutionFromMultiAngleSize } from './multiAngleSizeOptions.js'
-
 const RESULT_FILE_TYPE = 'image/png'
-
-const computeRatioLabel = (width, height) => {
-  const gcd = (a, b) => (b ? gcd(b, a % b) : a)
-  if (!width || !height) return '1:1'
-  const divisor = gcd(width, height)
-  return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`
-}
 
 const createMeta = ({ cameraInput, prompt, model, azimuth, elevation, zoom }) => ({
   tool: 'multi-angle',
@@ -22,15 +13,6 @@ const createMeta = ({ cameraInput, prompt, model, azimuth, elevation, zoom }) =>
   prompt,
   model
 })
-
-const resolveResolution = (resolution, size) =>
-  resolution || resolutionFromMultiAngleSize(size)
-
-const resolveRatio = (ratio, size) => {
-  if (ratio) return ratio
-  const [width, height] = String(size || '1024x1024').split('x').map(Number)
-  return computeRatioLabel(width, height)
-}
 
 export const createMultiAngleGenerationContext = ({
   azimuth = 0,
@@ -54,37 +36,40 @@ export const createMultiAngleGenerationContext = ({
 
 export const createMultiAnglePendingPayload = ({
   context,
+  background,
   ratio,
   resolution,
   size
 } = {}) => ({
   targetMode: 'new',
-  size,
-  ratio,
-  resolution: resolveResolution(resolution, size),
+  ...(background ? { background } : {}),  ...(size ? { size } : {}),
+  ...(ratio ? { ratio } : {}),
+  ...(resolution ? { resolution } : {}),
   fileType: RESULT_FILE_TYPE,
   meta: context?.meta
 })
 
 export const createMultiAngleApplyPayload = ({
   context,
+  background,
   ratio,
   resolution,
   size,
   url
 } = {}) => ({
   targetMode: 'new',
-  url: String(url || '').trim(),
+  ...(background ? { background } : {}),  url: String(url || '').trim(),
   base64: '',
   fileType: RESULT_FILE_TYPE,
-  size,
-  ratio: resolveRatio(ratio, size),
-  resolution: resolveResolution(resolution, size),
+  ...(size ? { size } : {}),
+  ...(ratio ? { ratio } : {}),
+  ...(resolution ? { resolution } : {}),
   meta: context?.meta
 })
 
 export const runMultiAngleGeneration = async ({
   context,
+  background,
   imageGen,
   imageSource,
   model,
@@ -101,11 +86,9 @@ export const runMultiAngleGeneration = async ({
     model,
     prompt: context?.prompt || '',
     image: imageSource,
-    size,
-    ratio,
-    resolution: resolveResolution(resolution, size),
-    enable_sync_mode: true,
-    enable_base64_output: false
+    ...(background ? { background } : {}),    ...(size ? { size } : {}),
+    ...(ratio ? { ratio } : {}),
+    ...(resolution ? { resolution } : {})
   })
   const first = Array.isArray(generated) ? generated[0] : generated
   const nextUrl = String(first?.url || '').trim()

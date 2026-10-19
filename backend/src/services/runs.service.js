@@ -7,21 +7,16 @@ import {
   providerChatCompletionsStream,
   providerCreateVideo,
   providerGenerateImage,
-  providerImageStatus,
   providerVideoStatus
 } from './provider.service.js'
-import { get302RecordByRequestId, normalizeDashboardRecord } from './dashboard302.service.js'
-import { resolveActiveUserServiceCredential } from './service-access.service.js'
-import { buildRunProviderRequestOptions, resolveRunProviderAccess } from './run-provider-access.js'
+import { resolveRunProviderAccess } from './run-provider-access.js'
 import {
   buildImageGenerationAssets,
   buildVideoGenerationAssets,
   extractProviderVideoUrl,
-  markImageResultAssetsForClientPersistence,
   persistImageResultAssets,
   persistVideoResultAsset,
-  resolveVideoSourceNodeId,
-  shouldPersistImageResultAssetsBeforeResponse
+  resolveVideoSourceNodeId
 } from './run-assets.js'
 import {
   assertVideoTaskOwnership,
@@ -29,7 +24,6 @@ import {
   bindVideoTaskOwnership,
   findVideoRunContextByTask,
   resolveImageTaskContextByTask,
-  syncRunStatusFromImageTask,
   syncRunStatusFromVideoTask
 } from './run-task-records.js'
 import {
@@ -59,6 +53,18 @@ const runSchema = z.object({
   payload: z.any()
 })
 
+export const parseRunInput = (input) => {
+  const run = runSchema.parse(input)
+  if (run.type === 'video') return run
+  const model = run.type === 'chat' ? 'gpt-5.6-sol' : 'gpt-image-2'
+  for (const requested of [run.model, run.payload?.model, run.payload?.model_name]) {
+    if (requested && requested !== model) {
+      throw new HttpError(400, `Unsupported ${run.type} model: ${requested}`, 'UNSUPPORTED_MODEL')
+    }
+  }
+  return { ...run, model, payload: { ...run.payload, model } }
+}
+
 const extractProviderTaskId = (result = {}) => {
   const candidates = [
     result?.task_id,
@@ -85,8 +91,7 @@ const LOCAL_IMAGE_RUN_TASK_PREFIX = 'local-image-run:'
 const getImageRunModel = (payload = {}) =>
   String(payload.model || payload.payload?.model || payload.payload?.model_name || '').trim()
 
-export const isGptImageLiteImageRun = (payload = {}) =>
-  payload?.type === 'image' && getImageRunModel(payload).toLowerCase() === 'gpt-image-lite'
+export const isQueuedImageRun = (payload = {}) => payload?.type === 'image'
 
 export const buildLocalImageRunTaskId = (runId = '') => {
   const safeRunId = String(runId || '').trim()
@@ -109,185 +114,6 @@ const isCompletedImageStatus = (status = '') =>
 const isFailedImageStatus = (status = '') =>
   ['failed', 'error', 'cancelled', 'canceled', 'failure'].includes(String(status || '').toLowerCase())
 
-const enrichUsageWith302Record = async (providerResponse = {}, fallbackUsage = {}) => {
-  const requestId = extractProviderRequestId(providerResponse)
-  if (!requestId) {
-    return {
-      requestId: '',
-      usage: fallbackUsage
-    }
-  }
-
-  try {
-    const recordRsp = await get302RecordByRequestId(requestId)
-    const record = normalizeDashboardRecord(recordRsp?.data ?? recordRsp)
-    if (!record) {
-      return { requestId, usage: fallbackUsage }
-    }
-    return {
-      requestId,
-      usage: {
-        inputTokens: record.inputTokens || fallbackUsage.inputTokens || 0,
-        outputTokens: record.outputTokens || fallbackUsage.outputTokens || 0,
-        costUsd: Number.isFinite(record.costUsd) ? record.costUsd : (fallbackUsage.costUsd || 0),
-        rawUsage: record.rawUsage || fallbackUsage.rawUsage || null
-      }
-    }
-  } catch (error) {
-    console.warn('[usage] enrich from 302 record failed', error.message || error)
-    return {
-      requestId,
-      usage: fallbackUsage
-    }
-  }
-}
-
-const shouldClientPersistImageResultAssets = (payload = {}, providerResponse = {}) => {
-  const model = String(payload.model || payload.payload?.model || payload.payload?.model_name || '').trim().toLowerCase()
-  return model === 'gpt-image-lite' && !shouldPersistImageResultAssetsBeforeResponse(providerResponse)
-}
-
-const finalizeCompletedRun = async ({
-  userId,
-  run,
-  payload,
-  providerResponse,
-  providerAccess,
-  imageTaskId = '',
-  latencyMs = 0
-} = {}) => {
-  await supabase
-    .from('workflow_runs')
-    .update({ status: 'completed', finished_at: new Date().toISOString() })
-    .eq('id', run.id)
-
-  const baseUsage = extractUsageSnapshot(providerResponse)
-  const enrichedUsage = await enrichUsageWith302Record(providerResponse, baseUsage)
-  const imageCount = Array.isArray(providerResponse?.data) ? providerResponse.data.length : 0
-
-  await insertUsageEvent({
-    userId,
-    runId: run.id,
-    model: payload.model || payload.payload?.model,
-    apiName: providerAccess.apiName,
-    providerRequestId: enrichedUsage.requestId,
-    serviceCredentialId: providerAccess.serviceCredentialId,
-    upstreamTaskId: imageTaskId,
-    inputTokens: enrichedUsage.usage.inputTokens || 0,
-    outputTokens: enrichedUsage.usage.outputTokens || 0,
-    imageCount,
-    videoSeconds: payload.type === 'video' ? payload.payload?.seconds || 0 : 0,
-    latencyMs,
-    costUsd: enrichedUsage.usage.costUsd || 0,
-    estimatedCostUsd: baseUsage.costUsd || 0,
-    billedCostUsd: enrichedUsage.usage.costUsd || 0,
-    billingStatus: enrichedUsage.requestId ? 'billed' : 'estimated',
-    rawUsage: enrichedUsage.usage.rawUsage || providerResponse?.raw || null,
-    eventType: payload.type
-  })
-
-  if (payload.type === 'image') {
-    await upsertGeneratedMediaRecord({
-      userId,
-      runId: run.id,
-      projectId: payload.projectId,
-      runType: 'image',
-      model: payload.model || payload.payload?.model,
-      prompt: payload.payload?.prompt,
-      status: 'completed',
-      sourceNodeId: String(payload.payload?.sourceNodeId || '').trim(),
-      assets: buildImageGenerationAssets(providerResponse, String(payload.payload?.sourceNodeId || '').trim())
-    })
-  }
-}
-
-const queueCompletedRunFinalization = (params = {}) => {
-  waitUntil(finalizeCompletedRun(params).catch((error) => {
-    console.warn('[runs] completed run finalization failed', error?.message || error)
-  }))
-}
-
-const finalizeImageTaskResult = async ({
-  userId,
-  runId = '',
-  run = null,
-  providerAccess = {},
-  rawResult = {},
-  taskId = '',
-  sourceNodeId = ''
-} = {}) => {
-  const result = await persistImageResultAssets(rawResult)
-  await syncRunStatusFromImageTask({ userId, runId, taskResult: result })
-
-  if (!runId) return result
-
-  const status = String(result?.status || '').toLowerCase()
-  const hasAssets = Array.isArray(result?.data) && result.data.length > 0
-  if (!hasAssets || !['completed', 'success', 'succeed', 'succeeded', 'done', 'finished', ''].includes(status)) {
-    return result
-  }
-
-  const safeSourceNodeId = String(sourceNodeId || '').trim()
-  const baseUsage = extractUsageSnapshot(result)
-  const enrichedUsage = await enrichUsageWith302Record(result, baseUsage)
-  const usagePatch = {
-    input_tokens: enrichedUsage.usage.inputTokens || 0,
-    output_tokens: enrichedUsage.usage.outputTokens || 0,
-    image_count: result.data.length,
-    cost_usd: enrichedUsage.usage.costUsd || 0,
-    estimated_cost_usd: baseUsage.costUsd || 0,
-    billed_cost_usd: enrichedUsage.usage.costUsd || 0,
-    billing_status: enrichedUsage.requestId ? 'billed' : 'estimated',
-    provider_request_id: enrichedUsage.requestId || extractProviderTaskId(result) || taskId,
-    api_name: providerAccess.apiName || null,
-    service_credential_id: providerAccess.serviceCredentialId || null,
-    upstream_task_id: extractProviderTaskId(result) || taskId,
-    raw_usage: enrichedUsage.usage.rawUsage || result?.raw || null
-  }
-  const usageEvent = await updateUsageEventByRunId(runId, usagePatch)
-  if (!usageEvent) {
-    await insertUsageEvent({
-      userId,
-      runId,
-      model: run?.model || '',
-      apiName: providerAccess.apiName,
-      providerRequestId: usagePatch.provider_request_id,
-      serviceCredentialId: providerAccess.serviceCredentialId,
-      upstreamTaskId: usagePatch.upstream_task_id,
-      inputTokens: enrichedUsage.usage.inputTokens || 0,
-      outputTokens: enrichedUsage.usage.outputTokens || 0,
-      imageCount: result.data.length,
-      latencyMs: 0,
-      costUsd: enrichedUsage.usage.costUsd || 0,
-      estimatedCostUsd: baseUsage.costUsd || 0,
-      billedCostUsd: enrichedUsage.usage.costUsd || 0,
-      billingStatus: enrichedUsage.requestId ? 'billed' : 'estimated',
-      rawUsage: enrichedUsage.usage.rawUsage || result?.raw || null,
-      eventType: 'image'
-    })
-  }
-
-  await upsertGeneratedMediaRecord({
-    userId,
-    runId,
-    projectId: run?.project_id,
-    runType: 'image',
-    model: run?.model || '',
-    prompt: '',
-    status: 'completed',
-    sourceNodeId: safeSourceNodeId,
-    assets: buildImageGenerationAssets(result, safeSourceNodeId)
-  })
-
-  return result
-}
-
-const queueImageTaskResultFinalization = (params = {}) => {
-  waitUntil(finalizeImageTaskResult(params).catch((error) => {
-    console.warn('[runs] image task result finalization failed', error?.message || error)
-  }))
-}
-
 const finalizeQueuedImageRun = async ({
   userId,
   run,
@@ -298,22 +124,22 @@ const finalizeQueuedImageRun = async ({
   latencyMs = 0
 } = {}) => {
   const baseUsage = extractUsageSnapshot(providerResponse)
-  const enrichedUsage = await enrichUsageWith302Record(providerResponse, baseUsage)
+  const requestId = extractProviderRequestId(providerResponse)
   const imageCount = Array.isArray(providerResponse?.data) ? providerResponse.data.length : 0
   const usagePatch = {
     event_type: 'image',
-    input_tokens: enrichedUsage.usage.inputTokens || 0,
-    output_tokens: enrichedUsage.usage.outputTokens || 0,
+    input_tokens: baseUsage.inputTokens || 0,
+    output_tokens: baseUsage.outputTokens || 0,
     image_count: imageCount,
-    cost_usd: enrichedUsage.usage.costUsd || 0,
+    cost_usd: baseUsage.costUsd || 0,
     estimated_cost_usd: baseUsage.costUsd || 0,
-    billed_cost_usd: enrichedUsage.usage.costUsd || 0,
-    billing_status: enrichedUsage.requestId ? 'billed' : 'estimated',
-    provider_request_id: enrichedUsage.requestId || extractProviderTaskId(providerResponse) || imageTaskId,
+    billed_cost_usd: 0,
+    billing_status: 'estimated',
+    provider_request_id: requestId || extractProviderTaskId(providerResponse) || imageTaskId,
     api_name: providerAccess.apiName || null,
     service_credential_id: providerAccess.serviceCredentialId || null,
     upstream_task_id: extractProviderTaskId(providerResponse) || imageTaskId,
-    raw_usage: enrichedUsage.usage.rawUsage || providerResponse?.raw || null,
+    raw_usage: baseUsage.rawUsage || providerResponse?.raw || null,
     latency_ms: latencyMs
   }
 
@@ -327,17 +153,23 @@ const finalizeQueuedImageRun = async ({
       providerRequestId: usagePatch.provider_request_id,
       serviceCredentialId: providerAccess.serviceCredentialId,
       upstreamTaskId: usagePatch.upstream_task_id,
-      inputTokens: enrichedUsage.usage.inputTokens || 0,
-      outputTokens: enrichedUsage.usage.outputTokens || 0,
+      inputTokens: baseUsage.inputTokens || 0,
+      outputTokens: baseUsage.outputTokens || 0,
       imageCount,
       latencyMs,
-      costUsd: enrichedUsage.usage.costUsd || 0,
+      costUsd: baseUsage.costUsd || 0,
       estimatedCostUsd: baseUsage.costUsd || 0,
-      billedCostUsd: enrichedUsage.usage.costUsd || 0,
-      billingStatus: enrichedUsage.requestId ? 'billed' : 'estimated',
-      rawUsage: enrichedUsage.usage.rawUsage || providerResponse?.raw || null,
+      billedCostUsd: 0,
+      billingStatus: 'estimated',
+      rawUsage: baseUsage.rawUsage || providerResponse?.raw || null,
       eventType: 'image'
     })
+  }
+
+  providerResponse = await persistImageResultAssets(providerResponse, { persistInlineDataUrls: true })
+  const imageAssets = buildImageGenerationAssets(providerResponse, String(payload.payload?.sourceNodeId || '').trim())
+  if (imageAssets.length === 0) {
+    throw new HttpError(502, 'No persistable image output', 'NO_IMAGE_OUTPUT')
   }
 
   const mediaRecord = await upsertGeneratedMediaRecord({
@@ -349,7 +181,7 @@ const finalizeQueuedImageRun = async ({
     prompt: payload.payload?.prompt,
     status: 'completed',
     sourceNodeId: String(payload.payload?.sourceNodeId || '').trim(),
-    assets: buildImageGenerationAssets(providerResponse, String(payload.payload?.sourceNodeId || '').trim())
+    assets: imageAssets
   })
 
   if (!mediaRecord?.assets?.length) {
@@ -390,19 +222,13 @@ const markQueuedImageRunFailed = async ({
 
 const executeQueuedImageRun = async (params = {}) => {
   const {
-    providerRequestOptions,
     payload,
     imageTaskId,
     startedAt
   } = params
 
   try {
-    let providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
-    providerResponse = await persistImageResultAssets(providerResponse, { persistInlineDataUrls: true })
-    const imageAssets = buildImageGenerationAssets(providerResponse, String(payload.payload?.sourceNodeId || '').trim())
-    if (imageAssets.length === 0) {
-      throw new HttpError(502, 'No persistable image output', 'NO_IMAGE_OUTPUT')
-    }
+    const providerResponse = await providerGenerateImage(payload.payload)
 
     await finalizeQueuedImageRun({
       ...params,
@@ -420,14 +246,13 @@ const executeQueuedImageRun = async (params = {}) => {
   }
 }
 
-const queueImageLiteRunExecution = (params = {}) => {
+const queueImageRunExecution = (params = {}) => {
   waitUntil(executeQueuedImageRun(params))
 }
 
 export const createRun = async (userId, input) => {
-  const payload = runSchema.parse(input)
+  const payload = parseRunInput(input)
   const providerAccess = await resolveRunProviderAccess(userId, payload)
-  const providerRequestOptions = buildRunProviderRequestOptions(providerAccess)
 
   const startedAt = Date.now()
   const { data: run, error: runInsertError } = await supabase
@@ -445,7 +270,7 @@ export const createRun = async (userId, input) => {
   if (runInsertError) throw new HttpError(500, runInsertError.message, 'RUN_CREATE_FAILED')
 
   try {
-    if (isGptImageLiteImageRun(payload)) {
+    if (isQueuedImageRun(payload)) {
       const imageTaskId = buildLocalImageRunTaskId(run.id)
       await bindImageTaskOwnership({
         userId,
@@ -473,13 +298,12 @@ export const createRun = async (userId, input) => {
         eventType: 'image_task_created'
       })
 
-      queueImageLiteRunExecution({
+      queueImageRunExecution({
         userId,
         run,
         payload,
         providerAccess,
-        providerRequestOptions,
-        imageTaskId,
+            imageTaskId,
         startedAt
       })
 
@@ -490,29 +314,21 @@ export const createRun = async (userId, input) => {
           task_id: imageTaskId,
           status: 'running',
           run_id: run.id,
-          provider: 'derouter'
+          provider: 'enbrand'
         }
       }
     }
 
     let providerResponse
     if (payload.type === 'chat') {
-      providerResponse = await providerChatCompletions(payload.payload, providerRequestOptions)
-    } else if (payload.type === 'image') {
-      providerResponse = await providerGenerateImage(payload.payload, providerRequestOptions)
-      providerResponse = shouldClientPersistImageResultAssets(payload, providerResponse)
-        ? markImageResultAssetsForClientPersistence(providerResponse)
-        : await persistImageResultAssets(providerResponse)
+      providerResponse = await providerChatCompletions(payload.payload)
     } else {
-      providerResponse = await providerCreateVideo(payload.payload, providerRequestOptions)
+      providerResponse = await providerCreateVideo(payload.payload)
       providerResponse = await persistVideoResultAsset(providerResponse)
     }
 
     const latencyMs = Date.now() - startedAt
-    const isImageRun = payload.type === 'image'
     const isVideoRun = payload.type === 'video'
-    const imageTaskId = isImageRun ? extractProviderTaskId(providerResponse) : ''
-    const imageHasAssets = Array.isArray(providerResponse?.data) && providerResponse.data.length > 0
 
     if (isVideoRun) {
       const providerTaskId = extractProviderTaskId(providerResponse)
@@ -533,24 +349,24 @@ export const createRun = async (userId, input) => {
           .eq('id', run.id)
 
         const baseUsage = extractUsageSnapshot(providerResponse)
-        const enrichedUsage = await enrichUsageWith302Record(providerResponse, baseUsage)
+        const requestId = extractProviderRequestId(providerResponse)
         await insertUsageEvent({
           userId,
           runId: run.id,
           model: payload.model || payload.payload?.model,
           apiName: providerAccess.apiName,
-          providerRequestId: enrichedUsage.requestId || providerTaskId,
+          providerRequestId: requestId || providerTaskId,
           serviceCredentialId: providerAccess.serviceCredentialId,
           upstreamTaskId: providerTaskId,
-          inputTokens: enrichedUsage.usage.inputTokens || 0,
-          outputTokens: enrichedUsage.usage.outputTokens || 0,
+          inputTokens: baseUsage.inputTokens || 0,
+          outputTokens: baseUsage.outputTokens || 0,
           videoSeconds: payload.payload?.seconds || payload.payload?.duration || 0,
           latencyMs,
-          costUsd: enrichedUsage.usage.costUsd || 0,
+          costUsd: baseUsage.costUsd || 0,
           estimatedCostUsd: baseUsage.costUsd || 0,
-          billedCostUsd: enrichedUsage.usage.costUsd || 0,
-          billingStatus: enrichedUsage.requestId ? 'billed' : (providerTaskId ? 'pending' : 'estimated'),
-          rawUsage: enrichedUsage.usage.rawUsage || providerResponse?.raw || null,
+          billedCostUsd: 0,
+          billingStatus: providerTaskId ? 'pending' : 'estimated',
+          rawUsage: baseUsage.rawUsage || providerResponse?.raw || null,
           eventType: payload.type
         })
 
@@ -610,112 +426,33 @@ export const createRun = async (userId, input) => {
       }
     }
 
-    if (isImageRun && !imageHasAssets && imageTaskId) {
-      await bindImageTaskOwnership({
-        userId,
-        runId: run.id,
-        taskId: imageTaskId,
-        model: payload.model || payload.payload?.model,
-        sourceNodeId: String(payload.payload?.sourceNodeId || '').trim()
-      })
-
-      await supabase
-        .from('workflow_runs')
-        .update({ status: 'running', finished_at: null, error_msg: null })
-        .eq('id', run.id)
-
-      await insertUsageEvent({
-        userId,
-        runId: run.id,
-        model: payload.model || payload.payload?.model,
-        apiName: providerAccess.apiName,
-        providerRequestId: imageTaskId,
-        serviceCredentialId: providerAccess.serviceCredentialId,
-        upstreamTaskId: imageTaskId,
-        imageCount: 0,
-        latencyMs,
-        costUsd: 0,
-        estimatedCostUsd: 0,
-        billedCostUsd: 0,
-        billingStatus: 'pending',
-        rawUsage: providerResponse?.raw || null,
-        eventType: 'image_task_created'
-      })
-
-      return {
-        runId: run.id,
-        status: 'running',
-        result: {
-          ...providerResponse,
-          run_id: run.id
-        }
-      }
-    }
-
-    if (isImageRun && imageHasAssets) {
-      queueCompletedRunFinalization({
-        userId,
-        run,
-        payload,
-        providerResponse,
-        providerAccess,
-        imageTaskId,
-        latencyMs
-      })
-
-      return {
-        runId: run.id,
-        status: 'completed',
-        result: {
-          ...providerResponse,
-          run_id: run.id
-        }
-      }
-    }
-
     await supabase
       .from('workflow_runs')
       .update({ status: 'completed', finished_at: new Date().toISOString() })
       .eq('id', run.id)
 
     const baseUsage = extractUsageSnapshot(providerResponse)
-    const enrichedUsage = await enrichUsageWith302Record(providerResponse, baseUsage)
-    const imageCount = Array.isArray(providerResponse?.data) ? providerResponse.data.length : 0
+    const requestId = extractProviderRequestId(providerResponse)
 
     await insertUsageEvent({
       userId,
       runId: run.id,
       model: payload.model || payload.payload?.model,
       apiName: providerAccess.apiName,
-      providerRequestId: enrichedUsage.requestId,
+      providerRequestId: requestId,
       serviceCredentialId: providerAccess.serviceCredentialId,
-      upstreamTaskId: imageTaskId,
-      inputTokens: enrichedUsage.usage.inputTokens || 0,
-      outputTokens: enrichedUsage.usage.outputTokens || 0,
-      imageCount,
+      inputTokens: baseUsage.inputTokens || 0,
+      outputTokens: baseUsage.outputTokens || 0,
       videoSeconds: payload.type === 'video' ? payload.payload?.seconds || 0 : 0,
       latencyMs,
-      costUsd: enrichedUsage.usage.costUsd || 0,
+      costUsd: baseUsage.costUsd || 0,
       estimatedCostUsd: baseUsage.costUsd || 0,
-      billedCostUsd: enrichedUsage.usage.costUsd || 0,
-      billingStatus: enrichedUsage.requestId ? 'billed' : 'estimated',
-      rawUsage: enrichedUsage.usage.rawUsage || providerResponse?.raw || null,
+      billedCostUsd: 0,
+      billingStatus: 'estimated',
+      rawUsage: baseUsage.rawUsage || providerResponse?.raw || null,
       eventType: payload.type
     })
 
-    if (payload.type === 'image') {
-      await upsertGeneratedMediaRecord({
-        userId,
-        runId: run.id,
-        projectId: payload.projectId,
-        runType: 'image',
-        model: payload.model || payload.payload?.model,
-        prompt: payload.payload?.prompt,
-        status: 'completed',
-        sourceNodeId: String(payload.payload?.sourceNodeId || '').trim(),
-        assets: buildImageGenerationAssets(providerResponse, String(payload.payload?.sourceNodeId || '').trim())
-      })
-    }
 
     return {
       runId: run.id,
@@ -762,9 +499,8 @@ const getHeaderValue = (headers, ...names) => {
 }
 
 export const streamChatCompletion = async (userId, payload, { onEvent = () => {} } = {}) => {
-  const parsed = runSchema.parse({ type: 'chat', payload, model: payload.model })
-  const providerAccess = await resolveActiveUserServiceCredential(userId)
-  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
+  const parsed = parseRunInput({ type: 'chat', payload, model: payload.model })
+  const providerAccess = await resolveRunProviderAccess(userId, parsed)
 
   const startedAt = Date.now()
   const { data: run, error: runInsertError } = await supabase
@@ -788,7 +524,7 @@ export const streamChatCompletion = async (userId, payload, { onEvent = () => {}
   let doneSent = false
 
   try {
-    response = await providerChatCompletionsStream(parsed.payload, providerRequestOptions)
+    response = await providerChatCompletionsStream(parsed.payload)
     for await (const event of readChatCompletionSseStream(response)) {
       if (event.type === 'done') {
         onEvent(formatSseData('[DONE]'))
@@ -824,7 +560,6 @@ export const streamChatCompletion = async (userId, payload, { onEvent = () => {}
       }
     }
     const baseUsage = extractUsageSnapshot(providerResponse)
-    const enrichedUsage = await enrichUsageWith302Record(providerResponse, baseUsage)
 
     await supabase
       .from('workflow_runs')
@@ -836,16 +571,16 @@ export const streamChatCompletion = async (userId, payload, { onEvent = () => {}
       runId: run.id,
       model: parsed.model || parsed.payload?.model,
       apiName: providerAccess.apiName,
-      providerRequestId: enrichedUsage.requestId || requestId,
+      providerRequestId: requestId,
       serviceCredentialId: providerAccess.serviceCredentialId,
-      inputTokens: enrichedUsage.usage.inputTokens || 0,
-      outputTokens: enrichedUsage.usage.outputTokens || 0,
+      inputTokens: baseUsage.inputTokens || 0,
+      outputTokens: baseUsage.outputTokens || 0,
       latencyMs,
-      costUsd: enrichedUsage.usage.costUsd || 0,
+      costUsd: baseUsage.costUsd || 0,
       estimatedCostUsd: baseUsage.costUsd || 0,
-      billedCostUsd: enrichedUsage.usage.costUsd || 0,
-      billingStatus: enrichedUsage.requestId ? 'billed' : (requestId ? 'pending' : 'estimated'),
-      rawUsage: enrichedUsage.usage.rawUsage || providerResponse.raw,
+      billedCostUsd: 0,
+      billingStatus: 'estimated',
+      rawUsage: baseUsage.rawUsage || providerResponse.raw,
       eventType: parsed.type
     })
 
@@ -909,29 +644,28 @@ const getLocalImageRunTaskResult = async ({ userId, taskId, runId }) => {
 }
 
 export const getVideoTask = async (_userId, taskId) => {
+  const providerAccess = await resolveRunProviderAccess(_userId, { type: 'video' })
   await assertVideoTaskOwnership({ userId: _userId, taskId })
-  const providerAccess = await resolveActiveUserServiceCredential(_userId)
-  const providerRequestOptions = providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}
-  const rawResult = await providerVideoStatus(taskId, providerRequestOptions)
+  const rawResult = await providerVideoStatus(taskId)
   const result = await persistVideoResultAsset(rawResult)
   const { runId, sourceNodeId } = await findVideoRunContextByTask({ userId: _userId, taskId })
   await syncRunStatusFromVideoTask({ userId: _userId, runId, taskResult: result })
   const status = String(result?.status || '').toLowerCase()
   if (runId && ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished'].includes(status)) {
     const baseUsage = extractUsageSnapshot(result)
-    const enrichedUsage = await enrichUsageWith302Record(result, baseUsage)
+    const requestId = extractProviderRequestId(result)
     await updateUsageEventByRunId(runId, {
-      input_tokens: enrichedUsage.usage.inputTokens || 0,
-      output_tokens: enrichedUsage.usage.outputTokens || 0,
-      cost_usd: enrichedUsage.usage.costUsd || 0,
+      input_tokens: baseUsage.inputTokens || 0,
+      output_tokens: baseUsage.outputTokens || 0,
+      cost_usd: baseUsage.costUsd || 0,
       estimated_cost_usd: baseUsage.costUsd || 0,
-      billed_cost_usd: enrichedUsage.usage.costUsd || 0,
-      billing_status: enrichedUsage.requestId ? 'billed' : 'estimated',
-      provider_request_id: enrichedUsage.requestId || extractProviderTaskId(result) || taskId,
+      billed_cost_usd: 0,
+      billing_status: 'estimated',
+      provider_request_id: requestId || extractProviderTaskId(result) || taskId,
       api_name: providerAccess.apiName || null,
       service_credential_id: providerAccess.serviceCredentialId || null,
       upstream_task_id: extractProviderTaskId(result) || taskId,
-      raw_usage: enrichedUsage.usage.rawUsage || result?.raw || null
+      raw_usage: baseUsage.rawUsage || result?.raw || null
     })
 
     const run = await getRunById(_userId, runId).catch(() => null)
@@ -950,37 +684,13 @@ export const getVideoTask = async (_userId, taskId) => {
 }
 
 export const getImageTask = async (_userId, taskId) => {
+  await resolveRunProviderAccess(_userId, { type: 'image' })
   const imageRunContext = await resolveImageTaskContextByTask({ userId: _userId, taskId })
-  if (isLocalImageRunTaskId(taskId)) {
-    const runId = parseLocalImageRunTaskId(taskId)
-    return getLocalImageRunTaskResult({ userId: _userId, taskId, runId })
+  const localTask = isLocalImageRunTaskId(taskId)
+  const runId = localTask ? parseLocalImageRunTaskId(taskId) : imageRunContext.runId
+  const result = await getLocalImageRunTaskResult({ userId: _userId, taskId, runId })
+  if (!localTask && !['completed', 'failed'].includes(result.status)) {
+    throw new HttpError(410, 'Legacy upstream image tasks are no longer supported', 'IMAGE_TASK_RETIRED')
   }
-
-  const providerAccess = await resolveActiveUserServiceCredential(_userId)
-  const runId = imageRunContext.runId
-  const run = runId ? await getRunById(_userId, runId).catch(() => null) : null
-  const providerRequestOptions = {
-    ...(providerAccess.apiKey ? { apiKey: providerAccess.apiKey } : {}),
-    model: imageRunContext.model || run?.model || ''
-  }
-  const rawResult = await providerImageStatus(taskId, providerRequestOptions)
-  const result = markImageResultAssetsForClientPersistence(rawResult)
-  const status = String(result?.status || '').toLowerCase()
-  const hasAssets = Array.isArray(result?.data) && result.data.length > 0
-
-  if (hasAssets && ['completed', 'success', 'succeed', 'succeeded', 'done', 'finished', ''].includes(status)) {
-    queueImageTaskResultFinalization({
-      userId: _userId,
-      runId,
-      run,
-      providerAccess,
-      rawResult,
-      taskId,
-      sourceNodeId: imageRunContext.sourceNodeId
-    })
-  } else {
-    await syncRunStatusFromImageTask({ userId: _userId, runId, taskResult: result })
-  }
-
   return result
 }

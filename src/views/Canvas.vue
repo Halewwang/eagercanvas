@@ -268,7 +268,6 @@ const nodesFactory = useNodesFactory({ updateNodeInternals, viewport })
 
 // Custom node components | 自定义节点组件
 import TextNode from '@/components/nodes/TextNode.vue'
-import ImageConfigNode from '@/components/nodes/ImageConfigNode.vue'
 import VideoNode from '@/components/nodes/VideoNode.vue'
 import ImageNode from '@/components/nodes/ImageNode.vue'
 import VideoConfigNode from '@/components/nodes/VideoConfigNode.vue'
@@ -297,7 +296,6 @@ const { avatarInputRef, avatarInitial, triggerAvatarUpload, handleAvatarChange }
 // Register custom node types | 注册自定义节点类型
 const nodeTypes = {
   text: markRaw(TextNode),
-  imageConfig: markRaw(ImageConfigNode),
   video: markRaw(VideoNode),
   image: markRaw(ImageNode),
   videoConfig: markRaw(VideoConfigNode),

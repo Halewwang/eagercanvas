@@ -1,188 +1,64 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { env } from '../config/env.js'
 import { providerGenerateImage, providerImageStatus } from './provider.service.js'
 
-test('GPT Image 2 create returns async task without polling result endpoint', async () => {
+test('GPT Image 2 generation uses the isolated enbrand image endpoint', async () => {
   const originalFetch = global.fetch
+  const originalKey = env.openaiApiKey
   const requests = []
-
+  env.openaiApiKey = 'enbrand-test-key'
   global.fetch = async (url, init) => {
-    requests.push({
-      url: String(url),
-      method: init?.method || 'GET',
-      body: init?.body ? JSON.parse(init.body) : null
-    })
-
-    return new Response(
-      JSON.stringify({ task_id: 'gpt-task-1' }),
-      {
-        status: 200,
-        headers: { 'content-type': 'application/json' }
-      }
-    )
+    requests.push({ url: String(url), headers: init.headers, body: JSON.parse(init.body) })
+    return Response.json({ data: [{ b64_json: Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(192)]).toString('base64') }], usage: { total_tokens: 10 } })
   }
 
   try {
-    const result = await providerGenerateImage(
-      {
-        model: 'gpt-image-2',
-        prompt: 'A product shot',
-        ratio: '1:1',
-        resolution: '1k'
-      },
-      { apiKey: 'sk-test' }
-    )
-
-    assert.equal(result.task_id, 'gpt-task-1')
-    assert.equal(result.status, 'running')
+    const result = await providerGenerateImage({ model: 'gpt-image-2', prompt: 'A product shot', ratio: '1:1' }, { apiKey: 'old-302-key' })
+    assert.match(result.data[0].url, /^data:image\/png;base64,/)
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].url, 'https://api.enbrand.co/v1/images/generations')
+    assert.equal(requests[0].headers.Authorization, 'Bearer enbrand-test-key')
+    assert.equal(requests[0].body.model, 'gpt-image-2')
+    assert.equal(Object.hasOwn(requests[0].body, 'size'), false)
   } finally {
+    env.openaiApiKey = originalKey
     global.fetch = originalFetch
   }
-
-  assert.equal(requests.length, 1)
-  assert.match(requests[0].url, /\/v1\/images\/generations\?async=true$/)
-  assert.equal(requests[0].body.model, 'gpt-image-2')
-  assert.equal(requests[0].body.size, '1024x1024')
-  assert.equal(Object.hasOwn(requests[0].body, 'resolution'), false)
 })
 
-test('GPT Image 2 status treats provider result pending as processing', async () => {
+test('legacy upstream image tasks return gone without any provider polling', async () => {
   const originalFetch = global.fetch
   const requests = []
-
-  global.fetch = async (url) => {
+  global.fetch = async url => {
     requests.push(String(url))
-
-    return new Response(
-      JSON.stringify({ message: 'result pending' }),
-      {
-        status: 409,
-        headers: { 'content-type': 'application/json' }
-      }
-    )
+    throw new Error('Image polling must not contact the retired provider')
   }
-
   try {
-    const result = await providerImageStatus('gpt-task-1', { apiKey: 'sk-test', model: 'gpt-image-2' })
-    assert.equal(result.task_id, 'gpt-task-1')
-    assert.equal(result.status, 'processing')
-    assert.equal(result.message, '')
-  } finally {
-    global.fetch = originalFetch
-  }
-
-  assert.equal(requests.length, 1)
-  assert.match(requests[0], /\/v1\/async_result\?task_id=gpt-task-1$/)
-})
-
-test('GPT Image 2 status treats official err pending body as processing', async () => {
-  const originalFetch = global.fetch
-
-  global.fetch = async () => new Response(
-    JSON.stringify({
-      content_type: '',
-      data: '',
-      err: 'result pending',
-      status_code: 400
-    }),
-    {
-      status: 200,
-      headers: { 'content-type': 'application/json' }
+    for (const model of ['gpt-image-2', 'gemini-3-pro-image-preview', 'wavespeed-ai/ghibli', '']) {
+      await assert.rejects(providerImageStatus('legacy-image-task', { model, apiKey: 'old-302-key' }), error => {
+        assert.equal(error.status, 410)
+        assert.equal(error.code, 'LEGACY_IMAGE_TASK_UNSUPPORTED')
+        return true
+      })
     }
-  )
-
-  try {
-    const result = await providerImageStatus('gpt-task-1', { apiKey: 'sk-test', model: 'gpt-image-2' })
-    assert.equal(result.task_id, 'gpt-task-1')
-    assert.equal(result.status, 'processing')
-    assert.equal(result.message, '')
+    assert.deepEqual(requests, [])
+    await assert.rejects(providerImageStatus(''), { code: 'IMAGE_TASK_ID_REQUIRED' })
   } finally {
     global.fetch = originalFetch
   }
 })
 
-test('GPT Image 2 status returns failed task for terminal provider error body', async () => {
+test('image generation rejects retired model ids without using old provider credentials', async () => {
   const originalFetch = global.fetch
-
-  global.fetch = async () => new Response(
-    JSON.stringify({
-      content_type: '',
-      data: '',
-      err: 'GPT Image 2 generation failed',
-      status_code: 400
-    }),
-    {
-      status: 200,
-      headers: { 'content-type': 'application/json' }
-    }
-  )
-
+  let requested = false
+  global.fetch = async () => { requested = true; throw new Error('Retired image models must not be called') }
   try {
-    const result = await providerImageStatus('gpt-task-1', { apiKey: 'sk-test', model: 'gpt-image-2' })
-    assert.equal(result.task_id, 'gpt-task-1')
-    assert.equal(result.status, 'failed')
-    assert.equal(result.message, 'GPT Image 2 generation failed')
-  } finally {
-    global.fetch = originalFetch
-  }
-})
-
-test('GPT Image 2 status returns completed image from async result', async () => {
-  const originalFetch = global.fetch
-
-  global.fetch = async () => new Response(
-    JSON.stringify({
-      content_type: 'image/png',
-      data: 'https://file.302.ai/gpt/imgs/result.png',
-      err: '',
-      status_code: 200
-    }),
-    {
-      status: 200,
-      headers: { 'content-type': 'application/json' }
+    for (const model of ['gpt-image-lite', 'gemini-3.1-flash-image-preview', 'wavespeed-ai/ghibli', 'stable-image-core']) {
+      await assert.rejects(providerGenerateImage({ model, prompt: 'test' }, { apiKey: 'old-302-key' }), { code: 'UNSUPPORTED_IMAGE_MODEL' })
     }
-  )
-
-  try {
-    const result = await providerImageStatus('gpt-task-1', { apiKey: 'sk-test', model: 'gpt-image-2' })
-    assert.equal(result.status, 'completed')
-    assert.equal(result.data[0].url, 'https://file.302.ai/gpt/imgs/result.png')
-  } finally {
-    global.fetch = originalFetch
-  }
-})
-
-test('GPT Image 2 status returns completed image from nested task result wrapper', async () => {
-  const originalFetch = global.fetch
-
-  global.fetch = async () => new Response(
-    JSON.stringify({
-      code: 200,
-      data: {
-        id: 'gpt-task-1',
-        status: 'completed',
-        progress: 100,
-        cost: 0.05279,
-        result: {
-          images: [
-            {
-              url: ['https://file.302.ai/gpt/imgs/wrapped-result.png']
-            }
-          ]
-        }
-      }
-    }),
-    {
-      status: 200,
-      headers: { 'content-type': 'application/json' }
-    }
-  )
-
-  try {
-    const result = await providerImageStatus('gpt-task-1', { apiKey: 'sk-test', model: 'gpt-image-2' })
-    assert.equal(result.status, 'completed')
-    assert.equal(result.data[0].url, 'https://file.302.ai/gpt/imgs/wrapped-result.png')
+    assert.equal(requested, false)
   } finally {
     global.fetch = originalFetch
   }

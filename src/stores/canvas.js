@@ -20,7 +20,8 @@ import {
   getUndoHistoryState,
   pushCanvasHistoryState
 } from './canvasHistoryCore.js'
-import { createCanvasPersistenceSnapshots, createCanvasSnapshot } from './canvasSnapshots'
+import { createCanvasPersistenceSnapshots, createCanvasSnapshot, normalizeImageNodeParameters } from './canvasSnapshots'
+import { migrateLegacyImageConfigNodes } from './legacyImageConfig.js'
 import {
   CANVAS_SYNC_STATES,
   createSyncStatus,
@@ -28,7 +29,7 @@ import {
   deriveSyncStatusFromSaveResult,
   isConflictError
 } from './canvasSyncStatus'
-import { IMAGE_MODELS, VIDEO_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL } from '@/config/models'
+import { VIDEO_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL } from '@/config/models'
 import { notifier } from '@/utils/notifier'
 import { isLocalPreviewEnabled } from '@/utils/localPreview'
 import {
@@ -156,11 +157,12 @@ const addNode = (type, position = { x: 100, y: 100 }, data = {}, options = {}) =
     id,
     type,
     position,
-    defaultData: getDefaultNodeData(type),
+    defaultData: getDefaultNodeData(type === 'imageConfig' ? 'image' : type),
     data,
     now
   })
-  nodes.value = [...nodes.value, newNode]
+  const normalized = migrateLegacyImageConfigNodes({ nodes: [newNode] }).nodes[0]
+  nodes.value = [...nodes.value, normalizeImageNodeParameters(normalized)]
   if (options.saveHistory !== false) saveToHistory() // Save after adding node | 添加节点后保存
   return id
 }
@@ -554,16 +556,6 @@ const getDefaultNodeData = (type) => {
         content: '',
         label: '文本输入'
       }
-    case 'imageConfig': {
-      const imageModel = IMAGE_MODELS.find(m => m.key === DEFAULT_IMAGE_MODEL) || IMAGE_MODELS[0]
-      return {
-        prompt: '',
-        model: DEFAULT_IMAGE_MODEL,
-        size: imageModel?.defaultParams?.size || '1024x1024',
-        quality: imageModel?.defaultParams?.quality || 'standard',
-        label: '文生图'
-      }
-    }
     case 'videoConfig': {
       const videoModel = VIDEO_MODELS.find(m => m.key === DEFAULT_VIDEO_MODEL) || VIDEO_MODELS[0]
       return {
@@ -600,8 +592,6 @@ const getDefaultNodeData = (type) => {
       return {
         url: '',
         model: DEFAULT_IMAGE_MODEL,
-        size: '1024x1024',
-        quality: 'standard',
         label: '图片节点'
       }
     case 'llmConfig':
@@ -714,11 +704,9 @@ const initSampleData = () => {
     label: '文本输入'
   })
   
-  // Add image config node | 添加文生图配置节点
-  addNode('imageConfig', { x: 450, y: 150 }, {
-    prompt: '',
+  // Settings and generation live in the image capsule.
+  addNode('image', { x: 550, y: 150 }, {
     model: DEFAULT_IMAGE_MODEL,
-    size: '1024x1024',
     label: '文生图'
   })
   
@@ -789,10 +777,13 @@ const loadProject = (projectId) => {
     setCurrentProjectSession(projectId, projectVersion)
 
     // Restore nodes | 恢复节点
-    const sanitizedCanvas = stripRemovedNodes(canvasData.nodes || [], canvasData.edges || [])
+    const sanitizedCanvas = migrateLegacyImageConfigNodes({
+      ...stripRemovedNodes(canvasData.nodes || [], canvasData.edges || []),
+      groups: canvasData.groups || []
+    })
     nodes.value = sanitizedCanvas.nodes
     edges.value = sanitizedCanvas.edges
-    groups.value = normalizeGroups(canvasData.groups || [], nodes.value)
+    groups.value = normalizeGroups(sanitizedCanvas.groups, nodes.value)
     canvasViewport.value = canvasData.viewport || { x: 100, y: 50, zoom: 0.8 }
     
     // Normalize stale runtime state after page refresh.
@@ -815,7 +806,7 @@ const loadProject = (projectId) => {
         data.error = 'Task interrupted by page refresh. Please regenerate.'
       }
 
-      return { ...node, data }
+      return normalizeImageNodeParameters({ ...node, data })
     })
 
     // Update node ID counter | 更新节点ID计数器
@@ -1111,9 +1102,10 @@ const redo = () => {
  */
 const restoreState = (state) => {
   isRestoring = true
-  nodes.value = cloneCanvasData(state.nodes)
-  edges.value = cloneCanvasData(state.edges)
-  groups.value = cloneCanvasData(state.groups || [])
+  const restored = migrateLegacyImageConfigNodes(cloneCanvasData(state))
+  nodes.value = restored.nodes.map(normalizeImageNodeParameters)
+  edges.value = restored.edges
+  groups.value = restored.groups || []
   setTimeout(() => {
     isRestoring = false
   }, 100)

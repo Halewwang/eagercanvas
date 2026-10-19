@@ -225,7 +225,7 @@ test('image node linked create data preserves defaults and payload overrides', (
       size: '1536x1024',
       ratio: '3:2',
       loading: 1,
-      label: '4K Enhanced Image',
+      label: 'Enhanced Image',
       sourceConfigId: 'config-1',
       sourcePrompt: 'prompt',
       sourceRefImages: ['https://asset/a.png'],
@@ -243,7 +243,7 @@ test('image node linked create data preserves defaults and payload overrides', (
     previewUrl: '',
     base64: '',
     fileType: 'image/png',
-    label: '4K Enhanced Image',
+    label: 'Enhanced Image',
     loading: true,
     sourceConfigId: 'config-1',
     sourcePrompt: 'prompt',
@@ -367,7 +367,7 @@ test('image node nearest source config prefers explicit config before recursive 
   }), null)
 })
 
-test('image node enhancement request preserves source config priority and 4k request fields', () => {
+test('image node enhancement request preserves source config and enhancement instructions without output targets', () => {
   const request = getImageNodeEnhancementRequest({
     sourceConfig: {
       id: 'config-1',
@@ -408,15 +408,10 @@ test('image node enhancement request preserves source config priority and 4k req
   assert.deepEqual(request, {
     model: 'gpt-image-2',
     projectId: 'project-1',
-    prompt: 'Config prompt',
-    size: '3:2:4k',
-    quality: 'high',
-    ratio: '3:2',
-    aspect_ratio: '3:2',
-    resolution: '4k',
+    prompt: 'Enhance this image\n\nOriginal brief:\nConfig prompt',
     image: ['config-ref', 'self-image'],
     sourceConfigId: 'config-1',
-    sourcePrompt: 'Config prompt',
+    sourcePrompt: 'Enhance this image\n\nOriginal brief:\nConfig prompt',
     sourceRefImages: ['config-ref', 'self-image']
   })
 })
@@ -439,11 +434,6 @@ test('image node enhancement request falls back to self image defaults and retur
     model: 'local-model',
     projectId: 'project-2',
     prompt: 'Enhance default',
-    size: '1024x1024',
-    quality: 'standard',
-    ratio: '1:1',
-    aspect_ratio: '1:1',
-    resolution: '4k',
     image: ['self-image'],
     sourceConfigId: '',
     sourcePrompt: 'Enhance default',
@@ -526,18 +516,11 @@ test('image node tool save message maps shared save feedback modes to typed copy
 })
 
 test('image node tool save message presets keep per-tool copy out of the component', () => {
-  assert.deepEqual(getImageNodeToolSaveMessages('enhance-4k'), {
-    synced: '4K enhanced image created',
-    localOnly: '4K enhanced image saved in the current project',
-    temporary: '4K result is only shown temporarily. Please retry until it is saved.',
-    failed: 'Project save failed after 4K enhancement. Please retry save.'
-  })
-
-  assert.deepEqual(getImageNodeToolSaveMessages('remove-background'), {
-    synced: 'Background removed and linked',
-    localOnly: 'Background removed and saved in the current project',
-    temporary: 'Background removed, but the result is only shown temporarily. Please retry.',
-    failed: 'Background removed, but project save failed. Please retry save.'
+  assert.deepEqual(getImageNodeToolSaveMessages('enhance'), {
+    synced: 'Enhanced image created',
+    localOnly: 'Enhanced image saved in the current project',
+    temporary: 'Enhanced result is only shown temporarily. Please retry until it is saved.',
+    failed: 'Project save failed after enhancement. Please retry save.'
   })
 
   assert.deepEqual(getImageNodeToolSaveMessages('multi-angle-replace'), {
@@ -895,9 +878,6 @@ test('image node enhancement result patch preserves request lineage and persiste
     loading: false,
     shouldSave: true,
     fileType: 'image/png',
-    size: '2048x2048',
-    ratio: '1:1',
-    resolution: '4k',
     sourceConfigId: 'config-1',
     sourcePrompt: 'enhance prompt',
     sourceRefImages: ['https://asset/ref.png']
@@ -919,9 +899,6 @@ test('image node enhancement error patch preserves request lineage and fallback 
   }), {
     loading: false,
     error: 'Provider rejected the image',
-    size: '2048x1536',
-    ratio: '4:3',
-    resolution: '4k',
     sourceConfigId: 'config-2',
     sourcePrompt: 'restore details',
     sourceRefImages: ['https://asset/source.png']
@@ -929,57 +906,8 @@ test('image node enhancement error patch preserves request lineage and fallback 
 
   assert.equal(imageNodeData.getImageNodeEnhancementErrorPatch({
     request: {},
-    fallbackMessage: '4K enhancement failed'
-  }).error, '4K enhancement failed')
-})
-
-test('image node remove background result patch preserves persistence and display metadata', () => {
-  assert.equal(typeof imageNodeData.getImageNodeRemoveBackgroundResultPatch, 'function')
-  assert.deepEqual(imageNodeData.getImageNodeRemoveBackgroundResultPatch({
-    persistence: {
-      persistedUrl: 'https://cdn.example/no-bg.png',
-      displayUrl: 'https://cdn.example/no-bg.png',
-      persisted: true
-    },
-    defaults: {
-      size: '1536x1024',
-      ratio: '3:2',
-      resolution: '2k'
-    },
-    now: 13579
-  }), {
-    url: 'https://cdn.example/no-bg.png',
-    previewUrl: '',
-    base64: '',
-    persistStatus: 'saved',
-    persistError: '',
-    updatedAt: 13579,
-    size: '1536x1024',
-    ratio: '3:2',
-    resolution: '2k',
-    fileType: 'image/png'
-  })
-
-  assert.deepEqual(imageNodeData.getImageNodeRemoveBackgroundResultPatch({
-    persistence: {
-      displayUrl: 'blob:no-bg',
-      persisted: false,
-      persistError: 'Background removal persistence failed. Please retry.'
-    },
-    defaults: {},
-    now: 97531
-  }), {
-    url: '',
-    previewUrl: 'blob:no-bg',
-    base64: '',
-    persistStatus: 'pending',
-    persistError: 'Background removal persistence failed. Please retry.',
-    updatedAt: 97531,
-    size: '',
-    ratio: '',
-    resolution: '',
-    fileType: 'image/png'
-  })
+    fallbackMessage: 'Image enhancement failed'
+  }).error, 'Image enhancement failed')
 })
 
 test('image node upload save outcome preserves progress stage and feedback copy', () => {
@@ -1361,4 +1289,38 @@ test('image node replacement save message preserves silent synced and fallback c
     saveFeedback: { mode: 'unknown' },
     savedOk: true
   }), null)
+})
+
+
+test('enhancement carries the current node background into the image request', () => {
+  const request = getImageNodeEnhancementRequest({
+    localBackground: 'opaque',
+    currentNodeData: { background: 'auto', sourcePrompt: 'Keep the composition' },
+    displayImageUrl: 'reference.png',
+    defaultEnhancePrompt: 'Refine the details'
+  })
+  assert.equal(request.background, 'opaque')
+  assert.deepEqual(request.image, ['reference.png'])
+  assert.match(request.prompt, /Refine the details/)
+})
+
+
+test('linked image outputs retain the inherited background choice', () => {
+  const payload = { background: 'opaque' }
+  assert.equal(imageNodeData.getImageNodeLinkedCreateData({ payload }).background, 'opaque')
+  assert.equal(imageNodeData.getImageNodeToolLinkedCreatePatch({ payload }).background, 'opaque')
+  assert.equal(imageNodeData.getImageNodeToolLinkedResultPatch({ payload }).background, 'opaque')
+  assert.equal(imageNodeData.getImageNodeEnhancementResultPatch({ request: payload }).background, 'opaque')
+})
+
+test('image generation inputs prefer connected inputs and reuse saved sources only when disconnected', () => {
+  const data = { sourcePrompt: ' Saved brief ', prompt: 'Legacy brief', sourceRefImages: [' ref-a ', 'ref-a', '', 'ref-b'] }
+  const resolve = imageNodeData.resolveImageNodeGenerationInputs
+  assert.equal(typeof resolve, 'function')
+  assert.deepEqual(resolve({ resolved: { prompt: 'Connected brief', refImages: ['live-ref'] }, data }), { prompt: 'Connected brief', refImages: ['live-ref'] })
+  assert.deepEqual(resolve({ resolved: { prompt: '', refImages: ['live-ref'] }, data }), { prompt: 'Legacy brief', refImages: ['live-ref'] })
+  assert.deepEqual(resolve({ resolved: { prompt: '', refImages: ['live-ref'] }, data: { sourcePrompt: 'Older generated brief' } }), { prompt: '', refImages: ['live-ref'] })
+  assert.deepEqual(resolve({ resolved: { prompt: 'Connected brief', refImages: [] }, data }), { prompt: 'Connected brief', refImages: [] })
+  assert.deepEqual(resolve({ resolved: { prompt: '', refImages: [] }, data }), { prompt: 'Saved brief', refImages: ['ref-a', 'ref-b'] })
+  assert.deepEqual(resolve({ data: { sourcePrompt: ' ', prompt: ' Legacy brief ' } }), { prompt: 'Legacy brief', refImages: [] })
 })

@@ -1,12 +1,12 @@
 <template>
   <p class="text-xs text-white/55">
-    显示第 {{ userPageStart }}-{{ userPageEnd }} 条，共 {{ filteredUserCount }} 位用户
+    显示第 {{ userPageStart }}-{{ userPageEnd }} 条，共 {{ totalUsers }} 位用户
   </p>
 </template>
 
 <script setup>
 defineProps({
-  filteredUserCount: {
+  totalUsers: {
     type: Number,
     default: 0
   },

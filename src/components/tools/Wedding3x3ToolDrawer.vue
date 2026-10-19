@@ -24,7 +24,7 @@
                     <AutocompleteField v-model="form.mode" label="Mode" :options="WEDDING_3X3_MODE_OPTIONS" />
 
                     <div class="option-field">
-                      <span class="option-label">Structure Lock</span>
+                      <span class="option-label">Structure Guidance</span>
                       <div class="segment-control">
                         <button
                           type="button"
@@ -46,12 +46,7 @@
                     </div>
                   </div>
 
-                  <div class="field-grid">
-                    <label class="option-field option-field-full">
-                      <span class="option-label">Random Seed</span>
-                      <input v-model="form.randomSeed" class="text-input" type="text" placeholder="Optional" />
-                    </label>
-                  </div>
+                  <p class="section-note">Style and structure are prompt guidance; results may vary.</p>
                 </div>
               </section>
 
@@ -172,9 +167,9 @@
 
                 <div class="field-grid field-grid-two">
                   <AutocompleteField v-model="selectedModel" label="Model" :options="imageModelSelectOptions" />
-                  <AutocompleteField v-model="selectedQuality" label="Quality" :options="qualityOptions" />
-                  <AutocompleteField v-model="selectedRatio" label="Ratio" :options="ratioOptions" />
-                  <AutocompleteField v-model="selectedResolution" label="Resolution" :options="resolutionOptions" />
+                  <AutocompleteField v-if="qualityOptions.length" v-model="selectedQuality" label="Quality" :options="qualityOptions" />
+                  <AutocompleteField v-if="ratioOptions.length" v-model="selectedRatio" label="Ratio" :options="ratioOptions" />
+                  <AutocompleteField v-if="resolutionOptions.length" v-model="selectedResolution" label="Resolution" :options="resolutionOptions" />
                 </div>
               </section>
 
@@ -241,7 +236,7 @@ import {
   validateWedding3x3Config
 } from '@/utils/wedding3x3Builder'
 import { WEDDING_3X3_LIMITS } from '@/config/wedding3x3'
-import { getModelQualityOptions, getModelSizeOptions, imageModelOptions, DEFAULT_IMAGE_MODEL } from '@/stores/models'
+import { getModelConfig, getModelQualityOptions, getModelSizeOptions, imageModelOptions, DEFAULT_IMAGE_MODEL, resolveImageModelKey } from '@/stores/models'
 import { useImageGeneration } from '@/hooks/api/useImageApi.js'
 import { AutocompleteField, MultiAutocompleteField } from './ToolAutocompleteFields.js'
 import {
@@ -254,8 +249,6 @@ import {
   runWedding3x3Generation
 } from './Wedding3x3GenerationRunner.js'
 import {
-  getWedding3x3RatioOptions,
-  getWedding3x3ResolutionOptions,
   resolutionFromSizeKey,
   resolveWedding3x3SelectedSize
 } from './Wedding3x3GenerationOptions.js'
@@ -265,6 +258,10 @@ const props = defineProps({
   imageUrl: {
     type: String,
     default: ''
+  },
+  background: {
+    type: String,
+    default: 'auto'
   },
   model: {
     type: String,
@@ -284,7 +281,7 @@ const props = defineProps({
   },
   quality: {
     type: String,
-    default: 'standard'
+    default: 'auto'
   }
 })
 
@@ -297,7 +294,6 @@ const options = WEDDING_3X3_OPTIONS
 const form = reactive({
   mode: WEDDING_3X3_DEFAULT_MODE,
   lockStructure: true,
-  randomSeed: '',
   style: '',
   season: '',
   colorFamily: '',
@@ -320,7 +316,7 @@ const form = reactive({
 })
 
 const selectedModel = ref(DEFAULT_IMAGE_MODEL)
-const selectedQuality = ref('standard')
+const selectedQuality = ref('auto')
 const selectedRatio = ref('16:9')
 const selectedResolution = ref('1k')
 
@@ -333,35 +329,52 @@ const imageModelSelectOptions = computed(() =>
 
 const sizeOptions = computed(() => getModelSizeOptions(selectedModel.value, selectedQuality.value))
 
-const ratioOptions = computed(() => getWedding3x3RatioOptions(sizeOptions.value))
+const currentModelConfig = computed(() => getModelConfig(selectedModel.value))
+const ratioOptions = computed(() => (currentModelConfig.value?.ratios || []).map((ratio) => ({ key: ratio, label: ratio })))
 
-const resolutionOptions = computed(() => getWedding3x3ResolutionOptions(sizeOptions.value, selectedRatio.value))
+const resolutionOptions = computed(() => (currentModelConfig.value?.resolutions || []).map((item) => ({ key: item.key, label: item.label || item.key.toUpperCase() })))
 
 const selectedSize = computed(() =>
   resolveWedding3x3SelectedSize(sizeOptions.value, selectedRatio.value, selectedResolution.value, props.size)
 )
 
-const qualityOptions = computed(() => {
-  const options = getModelQualityOptions(selectedModel.value)
-  return options.length > 0 ? options : [{ key: 'standard', label: '标准' }]
-})
+const qualityOptions = computed(() => getModelQualityOptions(selectedModel.value))
+const generationParams = computed(() => ({
+  model: selectedModel.value,
+  ...(currentModelConfig.value?.backgrounds?.length ? {
+    background: currentModelConfig.value.backgrounds.some((item) => item.key === props.background)
+      ? props.background
+      : currentModelConfig.value.defaultParams?.background
+  } : {}),
+  ...(sizeOptions.value.some((item) => item.key === selectedSize.value) ? { size: selectedSize.value } : {}),
+  ...(ratioOptions.value.some((item) => item.key === selectedRatio.value) ? { ratio: selectedRatio.value } : {}),
+  ...(resolutionOptions.value.some((item) => item.key === selectedResolution.value) ? { resolution: selectedResolution.value } : {}),
+  ...(qualityOptions.value.some((item) => item.key === selectedQuality.value) ? { quality: selectedQuality.value } : {})
+}))
 
 watch(
   () => props.show,
   (visible) => {
     if (!visible) return
-    selectedModel.value = props.model || DEFAULT_IMAGE_MODEL
-    selectedQuality.value = props.quality || 'standard'
+    selectedModel.value = resolveImageModelKey(props.model)
+    selectedQuality.value = qualityOptions.value.some((item) => item.key === props.quality)
+      ? props.quality
+      : qualityOptions.value[0]?.key || 'auto'
     selectedRatio.value = '16:9'
     selectedResolution.value = '1k'
   },
   { immediate: true }
 )
 
-watch(selectedModel, () => {
+watch(selectedModel, (model) => {
+  const resolvedModel = resolveImageModelKey(model)
+  if (model !== resolvedModel) {
+    selectedModel.value = resolvedModel
+    return
+  }
   const nextQuality = qualityOptions.value.some((item) => item.key === selectedQuality.value)
     ? selectedQuality.value
-    : qualityOptions.value[0]?.key || 'standard'
+    : qualityOptions.value[0]?.key || 'auto'
   selectedQuality.value = nextQuality
   if (!ratioOptions.value.some((item) => item.key === selectedRatio.value)) {
     selectedRatio.value = ratioOptions.value.find((item) => item.key === '16:9')?.key || ratioOptions.value[0]?.key || '16:9'
@@ -396,8 +409,7 @@ const serializedVariables = computed(() => ({
   scene_type: form.sceneType,
   relationship_mode: form.relationshipMode,
   story_action: form.storyAction,
-  environment_flavor: form.environmentFlavor,
-  random_seed: form.randomSeed
+  environment_flavor: form.environmentFlavor
 }))
 
 const generatedJson = computed(() =>
@@ -405,13 +417,7 @@ const generatedJson = computed(() =>
     mode: form.mode,
     referenceImage: imageSource.value,
     variables: serializedVariables.value,
-    generation: {
-      model: selectedModel.value,
-      ratio: selectedRatio.value,
-      resolution: selectedResolution.value,
-      quality: selectedQuality.value,
-      size: selectedSize.value
-    },
+    generation: generationParams.value,
     lockStructure: form.lockStructure
   })
 )
@@ -440,11 +446,7 @@ const generateImage = async () => {
   const generationPayload = {
     output,
     imageSource: imageSource.value,
-    model: selectedModel.value,
-    size: selectedSize.value,
-    ratio: selectedRatio.value,
-    resolution: selectedResolution.value,
-    quality: selectedQuality.value
+    ...generationParams.value
   }
   emit('pending', createWedding3x3PendingPayload(generationPayload))
 

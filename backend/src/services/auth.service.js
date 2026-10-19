@@ -110,6 +110,12 @@ const ensureUserCanAccess = (user) => {
   if (user.deleted_at || user.status === 'deleted') {
     throw new HttpError(403, 'Account is deleted', 'ACCOUNT_DELETED')
   }
+  if (user.status === 'archiving') {
+    throw new HttpError(403, 'Account is being archived', 'ACCOUNT_ARCHIVING')
+  }
+  if (user.status === 'suspending') {
+    throw new HttpError(403, 'Account suspension is in progress', 'ACCOUNT_SUSPENDING')
+  }
   if (user.status === 'suspended') {
     throw new HttpError(403, 'Account is suspended', 'ACCOUNT_SUSPENDED')
   }

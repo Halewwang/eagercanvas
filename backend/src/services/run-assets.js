@@ -75,6 +75,15 @@ export const markImageResultAssetsForClientPersistence = (result = {}) => {
   }
 }
 
+const getImageFileDetails = (url = '') => {
+  const format = (url.match(/^data:image\/(png|jpe?g|webp);/i)?.[1] ||
+    url.split(/[?#]/)[0].match(/\.(png|jpe?g|webp)$/i)?.[1] || 'png').toLowerCase()
+  return {
+    extension: format === 'jpeg' ? 'jpg' : format,
+    mimeType: `image/${format === 'jpg' ? 'jpeg' : format}`
+  }
+}
+
 export const persistImageResultAssets = async (result = {}, options = {}) => {
   const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
   const persistDataUrl = options.persistDataUrl || persistDataUrlIfNeeded
@@ -87,7 +96,8 @@ export const persistImageResultAssets = async (result = {}, options = {}) => {
       const remoteUrl = String(entry?.url || '').trim()
       if (!remoteUrl) return entry
 
-      const fileName = `generated-${Date.now()}-${index}.png`
+      const { extension } = getImageFileDetails(remoteUrl)
+      const fileName = `generated-${Date.now()}-${index}.${extension}`
       if (isInlineDataUrl(remoteUrl)) {
         if (persistInlineDataUrls || shouldPersistInlineDataUrlBeforeResponse(remoteUrl)) {
           const persistedUrl = await persistDataUrl(remoteUrl, fileName)
@@ -195,12 +205,13 @@ export const buildImageGenerationAssets = (result = {}, sourceNodeId = '') =>
       const url = String(item?.url || '').trim()
       if (item?.transient === true) return null
       if (!url || isInlineDataUrl(url)) return null
+      const { extension, mimeType } = getImageFileDetails(url)
       return {
         kind: 'image',
         url,
         previewUrl: url,
-        fileName: `generated-${index + 1}.png`,
-        fileType: 'image/png',
+        fileName: `generated-${index + 1}.${extension}`,
+        fileType: mimeType,
         origin: 'generation',
         ...(sourceNodeId ? { sourceNodeId } : {})
       }

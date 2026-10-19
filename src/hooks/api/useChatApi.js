@@ -1,6 +1,6 @@
 import { onUnmounted, ref } from 'vue'
 import { streamChatCompletions } from '@/api'
-import { DEFAULT_CHAT_MODEL } from '@/config/models'
+import { resolveChatModelKey } from '@/config/models'
 import { useApiState } from './useApiState.js'
 
 /**
@@ -31,7 +31,7 @@ export const useChat = (options = {}) => {
 
         const resolvedModel = typeof options.model === 'function' ? options.model() : options.model
         for await (const chunk of streamChatCompletions(
-          { model: resolvedModel || DEFAULT_CHAT_MODEL, messages: msgList },
+          { model: resolveChatModelKey(resolvedModel), messages: msgList },
           abortController.signal
         )) {
           fullResponse += chunk

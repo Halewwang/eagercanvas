@@ -33,7 +33,7 @@ test('multi angle drawer delegates size ratio and resolution option logic to uti
   assert.ok(existsSync(sizeOptionsPath), 'multiAngleSizeOptions.js should exist')
   assert.match(
     drawerSource,
-    /import \{\s*getMultiAngleFilteredSizeOptions,\s*getMultiAngleResolutionOptions,\s*normalizeMultiAngleOptionList,\s*ratioFromMultiAngleSize,\s*resolutionFromMultiAngleSize\s*\} from '@\/utils\/multiAngleSizeOptions\.js'/s
+    /import \{\s*getMultiAngleFilteredSizeOptions,\s*normalizeMultiAngleOptionList,\s*ratioFromMultiAngleSize,\s*resolutionFromMultiAngleSize\s*\} from '@\/utils\/multiAngleSizeOptions\.js'/s
   )
   assert.doesNotMatch(drawerSource, /const ratioFromSizeKey = /)
   assert.doesNotMatch(drawerSource, /const resolutionFromSizeString = /)
@@ -49,4 +49,19 @@ test('multi angle drawer delegates scoped panel styles to a focused stylesheet',
   assert.doesNotMatch(drawerSource, /\.manual-slider::-webkit-slider-thumb/)
   assert.match(styleSource, /\.multi-angle-overlay\s*\{/)
   assert.match(styleSource, /\.manual-slider::-webkit-slider-thumb/)
+})
+
+
+test('multi angle output controls require actual model capabilities', () => {
+  assert.match(drawerSource, /v-if="normalizedRatioOptions\.length"/)
+  assert.match(drawerSource, /v-if="filteredResolutionOptions\.length"/)
+  assert.doesNotMatch(drawerSource, /return options\.length \? options :/)
+})
+
+
+test('multi angle describes approximate viewpoint guidance', () => {
+  assert.match(drawerSource, /Target Viewpoint/)
+  assert.match(drawerSource, /Viewpoint guidance; generated angles may vary\./)
+  assert.doesNotMatch(drawerSource, />Camera Control</)
+  assert.match(drawerSource, /background: props\.background/)
 })

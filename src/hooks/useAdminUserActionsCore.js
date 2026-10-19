@@ -1,4 +1,8 @@
-export const ADMIN_SERVICE_LIMIT_ERROR = '额度必须是非负数字'
+const readBooleanRef = (value) => Boolean(value?.value ?? value)
+
+export const canUseAdminDesktopMutation = (canUseDesktopActions, permission) => (
+  readBooleanRef(canUseDesktopActions) && readBooleanRef(permission)
+)
 
 export const setAdminActionLoading = (stateRef, userId, value) => {
   const key = String(userId || '').trim()
@@ -7,82 +11,21 @@ export const setAdminActionLoading = (stateRef, userId, value) => {
   return true
 }
 
-export const getAdminSelectedRole = (selectedRoles, user = {}) => {
-  return String(selectedRoles?.value?.[user.id] || '').trim()
-}
-
-export const getAdminDeleteUserConfirmMessage = (user = {}) => {
-  return `确认删除用户 ${user.email} 吗？删除后将禁用该账号访问。`
-}
-
-export const getAdminResetServiceConfirmMessage = (user = {}) => {
-  return `确认重置 ${user.email} 的服务凭证吗？历史消耗记录会保留。`
-}
-
-export const getAdminReconcileBillingSuccessMessage = (data = {}) => {
-  return `同步完成：${data?.matched || 0} 条已匹配，${data?.unmatched || 0} 条未匹配`
-}
-
-export const getAdminSuspendUserPromptMessage = () => '请输入暂停原因（可选）：'
-
-export const getAdminDisableServicePromptMessage = () => '请输入停用原因（可选）：'
-
-export const getAdminLimitCostPromptMessage = () => '请输入总额度（USD，0 表示不限制）：'
-
-export const getAdminLimitDailyCostPromptMessage = () => '请输入日额度（USD，0 表示不限制）：'
-
-export const getAdminManualServiceApiNamePromptMessage = () => '请输入服务商 API Key 名称（api_name）：'
-
-export const getAdminManualServiceApiKeyPromptMessage = () => '请输入完整服务商 API Key：'
-
-export const getAdminServiceLimitPayload = (user = {}, limitCostValue = 0, limitDailyCostValue = 0) => {
-  const limitCost = Number(limitCostValue || 0)
-  const limitDailyCost = Number(limitDailyCostValue || 0)
-
-  if (!Number.isFinite(limitCost) || !Number.isFinite(limitDailyCost) || limitCost < 0 || limitDailyCost < 0) {
-    return { ok: false, message: ADMIN_SERVICE_LIMIT_ERROR }
+export const buildAdminUserMutationPayload = ({ action = '', reason = '', confirmation = '', user = {} } = {}) => {
+  const safeReason = String(reason || '').trim()
+  if (!safeReason) return { ok: false, message: '请输入变更原因' }
+  if (action === 'archive' && String(confirmation || '').trim() !== String(user?.email || '').trim()) {
+    return { ok: false, message: '请输入完整用户邮箱确认删除' }
   }
-
-  return {
-    ok: true,
-    payload: {
-      limitCost,
-      limitDailyCost,
-      expiredOn: Number(user?.service?.expiredOn || 0)
-    }
-  }
+  return { ok: true, payload: { reason: safeReason } }
 }
 
-export const getAdminManualServiceCredentialPayload = (user = {}, apiNameValue = '', apiKeyValue = '') => {
-  const apiName = String(apiNameValue || '').trim()
-  const apiKey = String(apiKeyValue || '').trim()
-
-  if (!apiName) return { ok: false, message: '请输入服务商 API Key 名称' }
-  if (!apiKey) return { ok: false, message: '请输入完整服务商 API Key' }
-
-  return {
-    ok: true,
-    payload: {
-      apiName,
-      apiKey,
-      limitCost: Number(user?.service?.limitCost || 0),
-      limitDailyCost: Number(user?.service?.limitDailyCost || 0),
-      expiredOn: Number(user?.service?.expiredOn || 0),
-      replaceExisting: true
-    }
-  }
-}
-
-const noopAsync = async () => {}
-
-export const runAdminUsersAndLogsRefresh = ({ loadUsers = noopAsync, loadLogs = noopAsync } = {}) => {
-  return Promise.all([loadUsers(), loadLogs()])
-}
-
-export const runAdminBillingRefresh = ({
-  loadUsers = noopAsync,
-  loadUsage = noopAsync,
-  loadLogs = noopAsync
-} = {}) => {
-  return Promise.all([loadUsers(), loadUsage(), loadLogs()])
+export const canRunAdminUserMutation = ({ action, user, canUseDesktopActions, permissions = {}, isSelf = () => false } = {}) => {
+  if (!readBooleanRef(canUseDesktopActions) || !user?.id) return false
+  if (action === 'disable-service') return readBooleanRef(permissions.canDisableService) && user.status !== 'deleted'
+  if (isSelf(user)) return false
+  if (action === 'archive') return readBooleanRef(permissions.canArchiveUser)
+  if (action === 'restore') return readBooleanRef(permissions.canRestoreUser)
+  if (action === 'suspend' || action === 'resume') return readBooleanRef(permissions.canManageUserStatus)
+  return false
 }

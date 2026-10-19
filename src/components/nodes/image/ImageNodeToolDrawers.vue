@@ -3,6 +3,7 @@
     :show="showMultiAngle"
     :image-url="imageUrl"
     :model="model"
+    :background="background"
     :ratio="ratio"
     :size="size"
     :resolution="resolution"
@@ -17,6 +18,7 @@
     :show="showWedding3x3"
     :image-url="imageUrl"
     :model="model"
+    :background="background"
     :ratio="ratio"
     :size="size"
     :resolution="resolution"
@@ -38,6 +40,10 @@ defineProps({
   imageUrl: {
     type: String,
     default: ''
+  },
+  background: {
+    type: String,
+    default: 'auto'
   },
   model: {
     type: String,

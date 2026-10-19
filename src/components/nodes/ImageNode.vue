@@ -117,6 +117,7 @@
       v-model:show-wedding3x3="showWedding3x3Drawer"
       :image-url="displayImageUrl"
       :model="localImageModel"
+      :background="localBackground"
       :ratio="localImageRatio"
       :size="localImageSize"
       :resolution="localResolution"
@@ -177,8 +178,7 @@ import {
   getModelSizeOptions,
   imageModelOptions
 } from '@/stores/models'
-import { resolveGptImage2Size } from '@/config/models'
-import { useImageGeneration, useImageTools } from '@/hooks/api/useImageApi.js'
+import { useImageGeneration } from '@/hooks/api/useImageApi.js'
 import { useApiConfig } from '@/hooks/useApiConfig'
 import { getErrorMessage } from '@/utils'
 import { createImageNodeCropPayload } from '@/utils/imageCropOutput'
@@ -186,11 +186,11 @@ import { getImageDimensionsFromFile } from '@/utils/imageDimensions'
 import { isLocalPreviewEnabled } from '@/utils/localPreview'
 import { dataUrlToFile, persistImageUrl, uploadImageFile } from '@/utils/media'
 import {
-  getImageNodeRatioFromSizeKey,
   getImageNodeToolOptions
 } from '@/utils/imageNodeLayout'
 import {
   getImageNodeActiveInputKeys,
+  resolveImageNodeGenerationInputs,
   getImageNodeInputStatusList,
   getImageNodeSourceRefImages as buildSourceRefImages,
   getImageNodePersistencePatch as buildImagePersistencePatch,
@@ -215,7 +215,6 @@ import {
   getImageNodeToolLinkedCreatePatch,
   getImageNodeEnhancementResultPatch,
   getImageNodeEnhancementErrorPatch,
-  getImageNodeRemoveBackgroundResultPatch,
   getImageNodeGenerationSaveMessage,
   getImageNodeReplacementSaveMessage,
   getImageNodeReplacementPreviewPatch,
@@ -229,7 +228,6 @@ import {
   getImageNodeUploadSaveOutcome
 } from '@/utils/imageNodeData'
 import { edgeStrategy, resolveNodeInputs } from '@/services/edgeStrategy'
-import removeBgIcon from '@/assets/remove-bg-icon.svg'
 import cropIcon from '@/assets/crop-icon.svg'
 import cameraOrbitIcon from '@/assets/tools-icon.svg'
 
@@ -260,7 +258,6 @@ const {
 } = canvasStore
 const { isConfigured } = useApiConfig()
 const imageGen = useImageGeneration()
-const imageTools = useImageTools()
 
 const showCapsule = ref(false)
 const urlLoading = ref(false)
@@ -278,7 +275,6 @@ const {
   displayQualityControl,
   displayRatio,
   displayResolution,
-  findNearestSizeKey,
   formatDropdownOptions,
   imageModelDropdownOptions,
   imageSizeOptions,
@@ -310,7 +306,7 @@ const {
   getModelSizeOptions,
   imageModelOptions,
   nodeId: () => props.id,
-  resolveGptImage2Size,
+  naturalSize: () => previewNaturalSize.value,
   updateNode
 })
 const {
@@ -336,7 +332,7 @@ const validationMessage = ref('')
 const imageActionLoading = ref('')
 const toolActionLoading = ref('')
 const MAX_UPLOAD_SIZE_BYTES = 150 * 1024 * 1024
-const DEFAULT_ENHANCE_PROMPT = 'Enhance this image to 4K while preserving composition, style, and details.'
+const DEFAULT_ENHANCE_PROMPT = 'Improve clarity and fine detail while preserving the image composition, style, proportions, and lighting.'
 const isLocalPreviewMode = computed(() => isLocalPreviewEnabled())
 const {
   progressBarStyle,
@@ -455,6 +451,7 @@ const {
   flushSave,
   getDefaults: () => ({
     model: localImageModel.value,
+    background: localBackground.value,
     quality: localImageQuality.value,
     ratio: localImageRatio.value,
     resolution: localResolution.value,
@@ -470,6 +467,9 @@ const displayImageUrl = computed(() => String(props.data?.previewUrl || props.da
 const { downloadPreviewImage } = useImageNodePreviewDownload({
   getLabel: () => props.data?.label,
   getSourceUrl: () => displayImageUrl.value
+})
+watch(displayImageUrl, () => {
+  previewNaturalSize.value = { width: 0, height: 0 }
 })
 const hasDisplayImage = computed(() => !!displayImageUrl.value)
 const isCanvasInteracting = computed(() => isCanvasZooming.value || isNodeDragging.value)
@@ -498,11 +498,6 @@ const {
   isConfigured,
   localBackground,
   localImageModel,
-  localImageQuality,
-  localImageRatio,
-  localImageSize,
-  localOutputFormat,
-  localResolution,
   messageApi: () => window.$message,
   nodeId: () => props.id,
   projectSaveState,
@@ -513,7 +508,6 @@ const {
   updateNode
 })
 const toolOptionIcons = {
-  'remove-background': removeBgIcon,
   crop: cropIcon,
   'multi-angle': cameraOrbitIcon
 }
@@ -618,26 +612,17 @@ const {
   currentProjectId,
   defaultEnhancePrompt: DEFAULT_ENHANCE_PROMPT,
   defaultImageModel: DEFAULT_IMAGE_MODEL,
-  defaultImageSize: DEFAULT_IMAGE_SIZE,
   displayImageUrl,
   edges,
-  findNearestSizeKey,
-  flushSave,
   getErrorMessage,
   getImageNodeEnhancementErrorPatch,
   getImageNodeEnhancementRequest,
   getImageNodeEnhancementResultPatch,
-  getImageNodeRatioFromSizeKey,
-  getImageNodeRemoveBackgroundResultPatch,
   getImageNodeToolSaveMessages,
   getNearestImageNodeSourceConfig,
   imageGen,
-  imageTools,
   localImageModel,
-  localImageQuality,
-  localImageRatio,
-  localImageSize,
-  localResolution,
+  localBackground,
   messageApi: () => window.$message,
   nodeId: () => props.id,
   nodes,
@@ -661,18 +646,14 @@ const capsuleStyle = {
   transformOrigin: 'top center'
 }
 const isImageBusy = computed(() => !!props.data?.loading || imageGen.loading.value || !!imageActionLoading.value)
-const isToolBusy = computed(() => imageTools.loading.value || !!toolActionLoading.value)
+const isToolBusy = computed(() => !!toolActionLoading.value)
 
 onUnmounted(() => {
   stopCropInteraction()
 })
 
 function getConnectedInputs() {
-  const resolved = resolvedImageInputs.value
-  return {
-    prompt: resolved.prompt,
-    refImages: resolved.refImages
-  }
+  return resolveImageNodeGenerationInputs({ resolved: resolvedImageInputs.value, data: props.data })
 }
 
 const activeImageInputSet = computed(() => {

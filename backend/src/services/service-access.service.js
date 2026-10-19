@@ -1,239 +1,39 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
-import { env } from '../config/env.js'
+import { randomUUID } from 'node:crypto'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
-import { create302ApiKey, get302RuntimeApiKeyByName, update302ApiKey } from './dashboard302.service.js'
+import { assertAccountMayReceiveServiceMutation } from './admin-access-policy.js'
+import { sanitizeAdminAuditContext } from './admin-audit-sanitizer.js'
 
 const CREDENTIAL_TABLE = 'user_service_credentials'
-
-const isMissingRelation = (error) => {
-  const msg = String(error?.message || '').toLowerCase()
-  return msg.includes('relation') && msg.includes('does not exist')
-}
-
-const toNumber = (value) => {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
-const last4 = (value = '') => {
-  const raw = String(value || '').trim()
-  return raw ? raw.slice(-4) : ''
-}
-
-const normalizeApiKey = (value = '') => String(value || '').trim().replace(/^Bearer\s+/i, '').trim()
-
-const apiKeyFingerprint = (value = '') => {
-  const safeKey = normalizeApiKey(value)
-  if (!safeKey) return ''
-  return `sha256:${createHash('sha256').update(safeKey).digest('hex').slice(0, 12)}`
-}
-
-const getCredentialEncryptionKey = () => {
-  const secret = String(env.serviceCredentialEncryptionKey || '').trim()
-  if (!secret) {
-    throw new HttpError(500, 'SERVICE_CREDENTIAL_ENCRYPTION_KEY is not configured', 'SERVICE_CREDENTIAL_ENCRYPTION_NOT_CONFIGURED')
-  }
-  return createHash('sha256').update(secret).digest()
-}
-
-const encryptServiceApiKey = (apiKey = '') => {
-  const safeKey = normalizeApiKey(apiKey)
-  if (!safeKey) return ''
-  const iv = randomBytes(12)
-  const cipher = createCipheriv('aes-256-gcm', getCredentialEncryptionKey(), iv)
-  const encrypted = Buffer.concat([cipher.update(safeKey, 'utf8'), cipher.final()])
-  const tag = cipher.getAuthTag()
-  return [
-    'v1',
-    iv.toString('base64url'),
-    tag.toString('base64url'),
-    encrypted.toString('base64url')
-  ].join('.')
-}
-
-const decryptServiceApiKey = (encrypted = '') => {
-  const raw = String(encrypted || '').trim()
-  if (!raw) return ''
-  const [version, ivValue, tagValue, encryptedValue] = raw.split('.')
-  if (version !== 'v1' || !ivValue || !tagValue || !encryptedValue) return ''
-  const decipher = createDecipheriv('aes-256-gcm', getCredentialEncryptionKey(), Buffer.from(ivValue, 'base64url'))
-  decipher.setAuthTag(Buffer.from(tagValue, 'base64url'))
-  return Buffer.concat([
-    decipher.update(Buffer.from(encryptedValue, 'base64url')),
-    decipher.final()
-  ]).toString('utf8')
-}
-
-const assertManualApiKeyIsAssignable = (apiKey = '') => {
-  const safeKey = normalizeApiKey(apiKey)
-  if (!safeKey) throw new HttpError(400, 'apiKey is required', 'INVALID_API_KEY')
-
-  const fingerprint = apiKeyFingerprint(safeKey)
-  const reserved = [
-    env.dashboard302ApiKey,
-    env.providerApiKey
-  ].map(apiKeyFingerprint).filter(Boolean)
-
-  if (reserved.includes(fingerprint)) {
-    throw new HttpError(400, 'Management provider keys cannot be assigned to a user service credential.', 'SERVICE_API_KEY_RESERVED')
-  }
-
-  return safeKey
-}
-
-const runtimeUnavailableMessage = (providerApiName = '') =>
-  `Runtime API key is unavailable for provider_api_name ${String(providerApiName || '').trim()}`
-
-const normalizeDashboardAttempts = (attempts = []) => {
-  const list = Array.isArray(attempts) ? attempts : []
-  return list.map((attempt = {}) => {
-    const authFingerprint = String(attempt.authFingerprint || '').trim().slice(0, 80)
-    return {
-      method: String(attempt.method || '').trim(),
-      path: String(attempt.path || '').trim(),
-      baseHost: String(attempt.baseHost || '').trim(),
-      status: Number(attempt.status || 0) || 0,
-      message: String(attempt.message || '').slice(0, 160),
-      authSource: String(attempt.authSource || '').trim(),
-      ...(authFingerprint ? { authFingerprint } : {})
-    }
-  })
-}
-
-const summarizeDashboardAttempts = (attempts = []) => {
-  const list = normalizeDashboardAttempts(attempts)
-  if (!list.length) return ''
-  return list
-    .map((attempt) => [
-      attempt.method,
-      attempt.path,
-      attempt.baseHost,
-      attempt.status,
-      attempt.message,
-      attempt.authSource ? `via ${attempt.authSource}` : '',
-      attempt.authFingerprint ? `fp ${attempt.authFingerprint}` : ''
-    ].filter((item) => item !== undefined && item !== null && String(item).trim() !== '').join(' '))
-    .join('; ')
-}
-
-const summarizeCredentialFailure = (error = {}, fallback = 'Service credential creation failed') => {
-  const base = String(error?.message || fallback).trim() || fallback
-  const attempts = summarizeDashboardAttempts(error?.dashboard302Attempts)
-  return (attempts ? `${base} | attempts: ${attempts}` : base).slice(0, 500)
-}
-
-const isDashboardProviderConfigError = (error = {}) =>
-  [
-    'DASHBOARD_302_NOT_CONFIGURED',
-    'DASHBOARD_302_SYSTEM_PERMISSION_REQUIRED'
-  ].includes(String(error?.code || ''))
-
-const buildProviderConfigError = (error = {}) => {
-  const message = '302 管理 API Key 未配置或缺少系统权限，无法自动开通服务。请在生产环境 DASHBOARD_302_API_KEY 配置具备系统权限的 302 API Key 后重试。'
-  const configError = new HttpError(503, message, 'SERVICE_ACCESS_PROVIDER_CONFIG_INVALID')
-  const providerAttempts = normalizeDashboardAttempts(error?.dashboard302Attempts)
-  configError.exposeDetails = true
-  configError.metadata = {
-    failure: summarizeCredentialFailure(error, message),
-    ...(providerAttempts.length ? { providerAttempts } : {})
-  }
-  return configError
-}
-
 const serviceLabelMap = {
   not_enabled: '未开通',
   active: '已开通',
-  disabled: '已停用',
-  create_failed: '创建失败',
+  disabled: '已暂停',
+  create_failed: '未开通',
   deleted: '已删除'
 }
 
-export const buildProviderApiName = (userId) => {
-  const compact = String(userId || '').replace(/-/g, '').trim().toLowerCase()
-  if (!compact) throw new HttpError(400, 'userId is required', 'INVALID_USER_ID')
-  return `eager_user_${compact.slice(0, 16)}`
-}
-
-const buildInternalName = (providerApiName) => `svc_${providerApiName}`
-
-const maskServiceIdentifier = (providerApiName = '') => {
-  const raw = String(providerApiName || '').trim()
-  if (!raw) return ''
-  return `svc_****${raw.slice(-3)}`
+const isMissingRelation = (error) => {
+  const message = String(error?.message || '').toLowerCase()
+  return message.includes('relation') && message.includes('does not exist')
 }
 
 export const formatServiceCredentialForAdmin = (credential = null) => {
-  if (!credential) {
-    return {
-      serviceStatus: 'not_enabled',
-      serviceLabel: serviceLabelMap.not_enabled,
-      serviceIdentifier: '',
-      apiKeyLast4: '',
-      limitCost: 0,
-      limitDailyCost: 0,
-      expiredOn: 0,
-      createdAt: null,
-      disabledAt: null,
-      deletedAt: null,
-      lastError: ''
-    }
-  }
-
-  const status = String(credential.status || 'not_enabled')
+  const status = credential?.status === 'create_failed' ? 'not_enabled' : String(credential?.status || 'not_enabled')
   return {
-    id: credential.id,
+    ...(credential?.id ? { id: credential.id } : {}),
     serviceStatus: status,
     serviceLabel: serviceLabelMap[status] || status,
-    serviceIdentifier: maskServiceIdentifier(credential.provider_api_name),
-    apiKeyLast4: String(credential.api_key_last4 || ''),
-    limitCost: toNumber(credential.limit_cost),
-    limitDailyCost: toNumber(credential.limit_daily_cost),
-    expiredOn: Number(credential.expired_on || 0),
-    createdAt: credential.created_at || null,
-    disabledAt: credential.disabled_at || null,
-    deletedAt: credential.deleted_at || null,
-    lastError: String(credential.last_error || '')
+    createdAt: credential?.created_at || null,
+    disabledAt: credential?.disabled_at || null,
+    deletedAt: credential?.deleted_at || null
   }
 }
-
-const createAdminLog = async (client, { operatorUserId, targetUserId, action, metadata = {} }) => {
-  const { error } = await client.from('admin_operation_logs').insert({
-    operator_user_id: operatorUserId || null,
-    target_user_id: targetUserId || null,
-    action,
-    metadata
-  })
-  if (error && !isMissingRelation(error)) {
-    throw new HttpError(500, error.message, 'ADMIN_AUDIT_WRITE_FAILED')
-  }
-}
-
-const latestCredentialQuery = (client, userId) =>
-  client
-    .from(CREDENTIAL_TABLE)
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-const activeCredentialQuery = (client, userId) =>
-  client
-    .from(CREDENTIAL_TABLE)
-    .select('*')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
 
 const listUserCredentials = async (client, userId) => {
-  const { data, error } = await client
-    .from(CREDENTIAL_TABLE)
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+  const { data, error } = await client.from(CREDENTIAL_TABLE)
+    .select('id,user_id,status,created_at,disabled_at,deleted_at')
+    .eq('user_id', userId).order('created_at', { ascending: false })
   if (error) {
     if (isMissingRelation(error)) return []
     throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_QUERY_FAILED')
@@ -241,485 +41,139 @@ const listUserCredentials = async (client, userId) => {
   return Array.isArray(data) ? data : []
 }
 
-const findCredentialByProviderApiName = async (client, providerApiName = '') => {
-  const safeName = String(providerApiName || '').trim()
-  if (!safeName) return null
-  const { data, error } = await client
-    .from(CREDENTIAL_TABLE)
-    .select('*')
-    .eq('provider_api_name', safeName)
-    .maybeSingle()
-  if (error) {
-    if (isMissingRelation(error)) return null
-    throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_QUERY_FAILED')
-  }
-  return data || null
-}
-
 const getUserForServiceMutation = async (client, userId) => {
-  const { data, error } = await client
-    .from('users')
-    .select('id,status,deleted_at')
-    .eq('id', userId)
-    .maybeSingle()
+  const { data, error } = await client.from('users').select('id,status,deleted_at').eq('id', userId).maybeSingle()
   if (error) throw new HttpError(500, error.message, 'USER_QUERY_FAILED')
   if (!data) throw new HttpError(404, 'User not found', 'USER_NOT_FOUND')
-  if (data.deleted_at || data.status === 'deleted') {
-    throw new HttpError(400, 'Deleted users cannot be enabled for service access.', 'USER_DELETED')
-  }
+  assertAccountMayReceiveServiceMutation({ status: data.status, deletedAt: data.deleted_at })
   return data
 }
 
-const buildUniqueProviderApiName = (userId, credentials = []) => {
-  const base = buildProviderApiName(userId)
-  const used = new Set(credentials.map((item) => String(item.provider_api_name || '').trim()).filter(Boolean))
-  if (!used.has(base)) return base
-  return `${base}_${Date.now().toString(36)}`
-}
-
-const normalizeProviderCreateResult = (result = {}, providerApiName = '') => {
-  const payload = result?.data && typeof result.data === 'object' ? result.data : result
-  return {
-    providerApiName: String(payload?.api_name || payload?.apiName || providerApiName || '').trim(),
-    apiKey: String(payload?.api_key || payload?.apiKey || payload?.key || '').trim()
+const throwServiceMutationLeaseError = (error) => {
+  const message = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ')
+  if (message.includes('ARCHIVED_ACCOUNT_IMMUTABLE')) {
+    throw new HttpError(409, 'Restore the archived account before changing service access', 'ARCHIVED_ACCOUNT_IMMUTABLE')
   }
-}
-
-const resolveCreatedRuntimeApiKey = async (getRuntimeApiKeyByName, providerApiName, createdApiKey = '') => {
-  const fallbackApiKey = String(createdApiKey || '').trim()
-  try {
-    const runtimeApiKey = await getRuntimeApiKeyByName(providerApiName, {
-      throwOnMissing: !fallbackApiKey,
-      ...(fallbackApiKey ? { fallbackApiKey } : {})
-    })
-    return runtimeApiKey || fallbackApiKey
-  } catch (error) {
-    if (fallbackApiKey) return fallbackApiKey
-    throw error
+  if (message.includes('ACCOUNT_MUTATION_IN_PROGRESS')) {
+    throw new HttpError(409, 'Another account mutation is in progress', 'ACCOUNT_MUTATION_IN_PROGRESS')
   }
+  if (message.includes('TARGET_USER_NOT_FOUND')) throw new HttpError(404, 'User not found', 'USER_NOT_FOUND')
+  throw new HttpError(500, error?.message || 'Unable to reserve account mutation', 'ACCOUNT_MUTATION_LEASE_FAILED')
 }
 
-const activateExistingCredential = async (client, credential, apiKey, operatorUserId, ip, userAgent, metadata = {}) => {
-  const { data, error } = await client
-    .from(CREDENTIAL_TABLE)
-    .update({
-      status: 'active',
-      api_key_last4: last4(apiKey),
-      disabled_at: null,
-      deleted_at: null,
-      last_error: null
-    })
-    .eq('id', credential.id)
-    .select('*')
-    .single()
-  if (error) throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_UPDATE_FAILED')
-
-  await createAdminLog(client, {
-    operatorUserId,
-    targetUserId: credential.user_id,
-    action: 'admin.service_access.activate',
-    metadata: {
-      serviceIdentifier: maskServiceIdentifier(data.provider_api_name),
-      ip: String(ip || ''),
-      userAgent: String(userAgent || ''),
-      ...metadata
-    }
+const withServiceMutationLease = async (client, userId, deps, operation) => {
+  if (deps.serviceMutationToken || typeof client.rpc !== 'function') return operation(deps)
+  const serviceMutationToken = randomUUID()
+  const { error: beginError } = await client.rpc('admin_begin_service_mutation', {
+    p_target_user_id: userId,
+    p_mutation_token: serviceMutationToken
   })
-
-  return { ok: true, serviceCredential: formatServiceCredentialForAdmin(data) }
+  if (beginError) throwServiceMutationLeaseError(beginError)
+  let result
+  let operationError
+  try {
+    result = await operation({ ...deps, serviceMutationToken })
+  } catch (error) {
+    operationError = error
+  }
+  const { error: endError } = await client.rpc('admin_end_service_mutation', {
+    p_target_user_id: userId,
+    p_mutation_token: serviceMutationToken
+  })
+  if (endError) {
+    if (operationError) operationError.serviceMutationReleaseError = endError
+    else throw new HttpError(500, endError.message || 'Unable to release account mutation', 'ACCOUNT_MUTATION_RELEASE_FAILED')
+  }
+  if (operationError) throw operationError
+  return result
 }
 
-const updateCredentialLastError = async (client, credentialId, message) => {
-  if (!credentialId) return
-  await client
-    .from(CREDENTIAL_TABLE)
-    .update({ last_error: String(message || '').slice(0, 500) })
-    .eq('id', credentialId)
+const createServiceAuditLog = async (client, { userId, operatorUserId, action, reason, ip, userAgent, requestId }) => {
+  const { error } = await client.from('admin_operation_logs').insert({
+    operator_user_id: operatorUserId || null,
+    target_user_id: userId,
+    action,
+    metadata: sanitizeAdminAuditContext({ reason, ip, userAgent, requestId })
+  })
+  if (error) throw new HttpError(500, error.message, 'ADMIN_AUDIT_WRITE_FAILED')
 }
 
 export const getUserServiceStatus = async (userId, deps = {}) => {
-  const client = deps.supabaseClient || supabase
   const safeUserId = String(userId || '').trim()
   if (!safeUserId) return 'not_enabled'
-  const { data: activeCredential, error: activeError } = await activeCredentialQuery(client, safeUserId)
-  if (activeError) {
-    if (isMissingRelation(activeError)) return 'not_enabled'
-    throw new HttpError(500, activeError.message, 'SERVICE_CREDENTIAL_QUERY_FAILED')
-  }
-  if (activeCredential) return activeCredential.status || 'active'
-
-  const { data, error } = await latestCredentialQuery(client, safeUserId)
-  if (error) {
-    if (isMissingRelation(error)) return 'not_enabled'
-    throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_QUERY_FAILED')
-  }
-  return data?.status || 'not_enabled'
+  const credentials = await listUserCredentials(deps.supabaseClient || supabase, safeUserId)
+  return (credentials.find((item) => item.status === 'active') || credentials[0])?.status || 'not_enabled'
 }
 
-export const createUserServiceCredential = async ({
-  userId,
-  operatorUserId,
-  limitCost = 0,
-  limitDailyCost = 0,
-  expiredOn = 0,
-  ip = '',
-  userAgent = ''
-}, deps = {}) => {
-  const client = deps.supabaseClient || supabase
-  const createProviderApiKey = deps.createProviderApiKey || create302ApiKey
-  const getRuntimeApiKeyByName = deps.getRuntimeApiKeyByName || get302RuntimeApiKeyByName
-  const safeUserId = String(userId || '').trim()
-  if (!safeUserId) throw new HttpError(400, 'userId is required', 'INVALID_USER_ID')
-
-  await getUserForServiceMutation(client, safeUserId)
-  const credentials = await listUserCredentials(client, safeUserId)
-  const active = credentials.find((item) => String(item.status || '') === 'active')
-  if (active) {
-    return {
-      ok: true,
-      alreadyActive: true,
-      serviceCredential: formatServiceCredentialForAdmin(active)
-    }
-  }
-
-  const failed = credentials.find((item) => String(item.status || '') === 'create_failed' && String(item.provider_api_name || '').trim())
-  if (failed) {
-    const restoredApiKey = await getRuntimeApiKeyByName(failed.provider_api_name)
-    if (restoredApiKey) {
-      return activateExistingCredential(client, failed, restoredApiKey, operatorUserId, ip, userAgent, { restored: true })
-    }
-  }
-
-  const providerApiName = buildUniqueProviderApiName(safeUserId, credentials)
-  let attemptedProviderApiName = providerApiName
-  const payload = {
-    api_name: providerApiName,
-    allow_save_logs: false,
-    allow_custom_model: false,
-    allow_manage_key: false,
-    limit_cost: Number(limitCost || 0),
-    limit_daily_cost: Number(limitDailyCost || 0),
-    expired_on: Number(expiredOn || 0)
-  }
-
-  let created
-  let runtimeApiKey = ''
-  try {
-    created = normalizeProviderCreateResult(await createProviderApiKey(payload), providerApiName)
-    attemptedProviderApiName = created.providerApiName || providerApiName
-    runtimeApiKey = await resolveCreatedRuntimeApiKey(getRuntimeApiKeyByName, attemptedProviderApiName, created.apiKey)
-    if (!runtimeApiKey) {
-      throw new Error(runtimeUnavailableMessage(attemptedProviderApiName))
-    }
-  } catch (error) {
-    if (!created && isDashboardProviderConfigError(error)) {
-      throw buildProviderConfigError(error)
-    }
-    const failed = {
-      user_id: safeUserId,
-      provider: '302ai',
-      internal_name: buildInternalName(attemptedProviderApiName),
-      provider_api_name: attemptedProviderApiName,
-      status: 'create_failed',
-      limit_cost: Number(limitCost || 0),
-      limit_daily_cost: Number(limitDailyCost || 0),
-      expired_on: Number(expiredOn || 0),
-      created_by: operatorUserId || null,
-      last_error: summarizeCredentialFailure(error)
-    }
-    await client.from(CREDENTIAL_TABLE).insert(failed)
-    const serviceError = new HttpError(502, '服务开通失败，请稍后重试。', 'SERVICE_ACCESS_CREATE_FAILED')
-    serviceError.metadata = {
-      providerApiName: maskServiceIdentifier(attemptedProviderApiName),
-      failure: failed.last_error
-    }
-    throw serviceError
-  }
-
-  const insertPayload = {
-    user_id: safeUserId,
-    provider: '302ai',
-    internal_name: buildInternalName(created.providerApiName || providerApiName),
-    provider_api_name: created.providerApiName || providerApiName,
-    api_key_last4: last4(runtimeApiKey || created.apiKey),
-    api_key_encrypted: null,
-    status: 'active',
-    limit_cost: Number(limitCost || 0),
-    limit_daily_cost: Number(limitDailyCost || 0),
-    expired_on: Number(expiredOn || 0),
-    created_by: operatorUserId || null
-  }
-
-  const { data, error } = await client
-    .from(CREDENTIAL_TABLE)
-    .insert(insertPayload)
-    .select('*')
-    .single()
-  if (error) throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_INSERT_FAILED')
-
-  await createAdminLog(client, {
-    operatorUserId,
-    targetUserId: safeUserId,
-    action: 'admin.service_access.activate',
-    metadata: { serviceIdentifier: maskServiceIdentifier(data.provider_api_name), ip: String(ip || ''), userAgent: String(userAgent || '') }
-  })
-
-  return { ok: true, serviceCredential: formatServiceCredentialForAdmin(data) }
-}
-
-export const createManualUserServiceCredential = async ({
-  userId,
-  operatorUserId,
-  apiName,
-  apiKey,
-  limitCost = 0,
-  limitDailyCost = 0,
-  expiredOn = 0,
-  replaceExisting = true,
-  ip = '',
-  userAgent = ''
-}, deps = {}) => {
+export const createUserServiceCredential = async ({ userId, operatorUserId, ip = '', userAgent = '', requestId = '' }, deps = {}) => {
   const client = deps.supabaseClient || supabase
   const safeUserId = String(userId || '').trim()
-  const safeApiName = String(apiName || '').trim()
   if (!safeUserId) throw new HttpError(400, 'userId is required', 'INVALID_USER_ID')
-  if (!safeApiName) throw new HttpError(400, 'apiName is required', 'INVALID_API_NAME')
-  const safeApiKey = assertManualApiKeyIsAssignable(apiKey)
-
+  if (!deps.serviceMutationToken && typeof client.rpc === 'function') {
+    return withServiceMutationLease(client, safeUserId, deps, (leasedDeps) => createUserServiceCredential({
+      userId: safeUserId, operatorUserId, ip, userAgent, requestId
+    }, leasedDeps))
+  }
   await getUserForServiceMutation(client, safeUserId)
   const credentials = await listUserCredentials(client, safeUserId)
-  const active = credentials.find((item) => String(item.status || '') === 'active')
-  if (active && !replaceExisting) {
-    throw new HttpError(409, 'User already has an active service credential.', 'SERVICE_ALREADY_ACTIVE')
-  }
+  const active = credentials.find((item) => item.status === 'active')
+  if (active) return { ok: true, alreadyActive: true, serviceCredential: formatServiceCredentialForAdmin(active) }
 
-  const existingByApiName = await findCredentialByProviderApiName(client, safeApiName)
-  if (existingByApiName && String(existingByApiName.user_id || '') !== safeUserId) {
-    throw new HttpError(409, 'API key is already assigned to another user service credential.', 'SERVICE_API_KEY_ALREADY_ASSIGNED')
+  const latest = credentials[0]
+  const mutation = {
+    status: 'active', disabled_at: null, deleted_at: null, last_error: null,
+    api_key_last4: null, api_key_encrypted: null, limit_cost: 0, limit_daily_cost: 0, expired_on: 0
   }
-  if (active && existingByApiName && existingByApiName.id !== active.id) {
-    throw new HttpError(409, 'API key is already present on another credential for this user. Disable the active service first.', 'SERVICE_API_KEY_ALREADY_ASSIGNED')
-  }
-
-  const mutationPayload = {
-    user_id: safeUserId,
-    provider: '302ai',
-    internal_name: buildInternalName(safeApiName),
-    provider_api_name: safeApiName,
-    api_key_last4: last4(safeApiKey),
-    api_key_encrypted: encryptServiceApiKey(safeApiKey),
-    status: 'active',
-    limit_cost: Number(limitCost || 0),
-    limit_daily_cost: Number(limitDailyCost || 0),
-    expired_on: Number(expiredOn || 0),
-    disabled_at: null,
-    deleted_at: null,
-    created_by: operatorUserId || null,
-    last_error: null
-  }
-
-  const target = active || existingByApiName
-  let data
-  if (target?.id) {
-    const { data: updated, error } = await client
-      .from(CREDENTIAL_TABLE)
-      .update(mutationPayload)
-      .eq('id', target.id)
-      .select('*')
-      .single()
-    if (error) throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_UPDATE_FAILED')
-    data = updated
-  } else {
-    const { data: inserted, error } = await client
-      .from(CREDENTIAL_TABLE)
-      .insert(mutationPayload)
-      .select('*')
-      .single()
-    if (error) throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_INSERT_FAILED')
-    data = inserted
-  }
-
-  await createAdminLog(client, {
-    operatorUserId,
-    targetUserId: safeUserId,
-    action: 'admin.service_access.manual_bind',
-    metadata: {
-      serviceIdentifier: maskServiceIdentifier(data.provider_api_name),
-      apiKeyFingerprint: apiKeyFingerprint(safeApiKey),
-      replaced: Boolean(target?.id),
-      ip: String(ip || ''),
-      userAgent: String(userAgent || '')
-    }
-  })
-
+  const identifier = `shared_${randomUUID()}`
+  const query = latest
+    ? client.from(CREDENTIAL_TABLE).update(mutation).eq('id', latest.id)
+    : client.from(CREDENTIAL_TABLE).insert({
+      ...mutation, user_id: safeUserId, provider: 'shared',
+      internal_name: identifier, provider_api_name: identifier, created_by: operatorUserId || null
+    })
+  const { data, error } = await query.select('*').single()
+  if (error) throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_UPDATE_FAILED')
+  await createServiceAuditLog(client, { userId: safeUserId, operatorUserId, action: 'admin.service_access.activate', ip, userAgent, requestId })
   return { ok: true, serviceCredential: formatServiceCredentialForAdmin(data) }
-}
-
-const resolveActiveUserServiceCredentialRecord = async (safeUserId, client) => {
-  const { data: activeCredential, error: activeError } = await activeCredentialQuery(client, safeUserId)
-  if (activeError) {
-    if (isMissingRelation(activeError)) {
-      throw new HttpError(403, '当前账号尚未开通生成服务，请联系管理员。', 'SERVICE_NOT_ENABLED')
-    }
-    throw new HttpError(500, activeError.message, 'SERVICE_CREDENTIAL_QUERY_FAILED')
-  }
-  if (activeCredential) return activeCredential
-
-  const { data, error } = await latestCredentialQuery(client, safeUserId)
-  if (error) {
-    if (isMissingRelation(error)) {
-      throw new HttpError(403, '当前账号尚未开通生成服务，请联系管理员。', 'SERVICE_NOT_ENABLED')
-    }
-    throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_QUERY_FAILED')
-  }
-  if (!data) throw new HttpError(403, '当前账号尚未开通生成服务，请联系管理员。', 'SERVICE_NOT_ENABLED')
-  if (data.status === 'disabled' || data.status === 'deleted') {
-    throw new HttpError(403, '当前账号的生成服务已停用，请联系管理员。', 'SERVICE_DISABLED')
-  }
-  throw new HttpError(503, '服务凭证暂时不可用，请联系管理员。', 'SERVICE_CREDENTIAL_UNAVAILABLE')
 }
 
 export const resolveActiveUserServiceAccess = async (userId, deps = {}) => {
   const client = deps.supabaseClient || supabase
   const safeUserId = String(userId || '').trim()
   if (!safeUserId) throw new HttpError(401, 'Missing authenticated user', 'UNAUTHORIZED')
-
-  const data = await resolveActiveUserServiceCredentialRecord(safeUserId, client)
-
-  return {
-    serviceCredentialId: data.id,
-    apiName: data.provider_api_name
+  const { data: user, error } = await client.from('users').select('id,status,deleted_at').eq('id', safeUserId).maybeSingle()
+  if (error) throw new HttpError(500, error.message, 'USER_QUERY_FAILED')
+  if (!user || user.deleted_at || user.status === 'deleted') throw new HttpError(403, 'Account is deleted', 'ACCOUNT_DELETED')
+  if (user.status !== 'active') throw new HttpError(403, 'Account is suspended', 'ACCOUNT_SUSPENDED')
+  const credentials = await listUserCredentials(client, safeUserId)
+  const active = credentials.find((item) => item.status === 'active')
+  if (active) return { serviceCredentialId: active.id }
+  if (credentials[0]?.status === 'disabled' || credentials[0]?.status === 'deleted') {
+    throw new HttpError(403, '当前账号的生成服务已暂停，请联系管理员。', 'SERVICE_DISABLED')
   }
+  throw new HttpError(403, '当前账号尚未开通生成服务，请联系管理员。', 'SERVICE_NOT_ENABLED')
 }
 
-export const resolveActiveUserServiceCredential = async (userId, deps = {}) => {
+export const disableUserServiceCredential = async ({
+  userId, operatorUserId, reason = '', ip = '', userAgent = '', requestId = '', lifecycleMutation = false
+}, deps = {}) => {
   const client = deps.supabaseClient || supabase
-  const getRuntimeApiKeyByName = deps.getRuntimeApiKeyByName || get302RuntimeApiKeyByName
-  const safeUserId = String(userId || '').trim()
-  if (!safeUserId) throw new HttpError(401, 'Missing authenticated user', 'UNAUTHORIZED')
-
-  const data = await resolveActiveUserServiceCredentialRecord(safeUserId, client)
-
-  const storedApiKey = decryptServiceApiKey(data.api_key_encrypted)
-  if (storedApiKey) {
-    return {
-      serviceCredentialId: data.id,
-      apiName: data.provider_api_name,
-      apiKey: storedApiKey
-    }
-  }
-
-  const apiKey = await getRuntimeApiKeyByName(data.provider_api_name)
-  if (!apiKey) {
-    const message = runtimeUnavailableMessage(data.provider_api_name)
-    await updateCredentialLastError(client, data.id, message)
-    const error = new HttpError(503, '服务凭证暂时不可用，请联系管理员。', 'SERVICE_CREDENTIAL_UNAVAILABLE')
-    error.metadata = {
-      providerApiName: maskServiceIdentifier(data.provider_api_name),
-      failure: message
-    }
-    throw error
-  }
-
-  return {
-    serviceCredentialId: data.id,
-    apiName: data.provider_api_name,
-    apiKey
-  }
-}
-
-export const disableUserServiceCredential = async ({ userId, operatorUserId, reason = '', ip = '', userAgent = '' }, deps = {}) => {
-  const client = deps.supabaseClient || supabase
-  const updateProviderApiKey = deps.updateProviderApiKey || update302ApiKey
   const safeUserId = String(userId || '').trim()
   if (!safeUserId) throw new HttpError(400, 'userId is required', 'INVALID_USER_ID')
-
-  const credentials = await listUserCredentials(client, safeUserId)
-  const active = credentials.find((item) => String(item.status || '') === 'active')
-  if (!active) return { ok: true, serviceCredential: formatServiceCredentialForAdmin(credentials[0] || null) }
-
-  const now = new Date().toISOString()
-  const { data, error } = await client
-    .from(CREDENTIAL_TABLE)
-    .update({ status: 'disabled', disabled_at: now, last_error: null })
-    .eq('id', active.id)
-    .select('*')
-    .single()
-  if (error) throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_DISABLE_FAILED')
-
-  try {
-    await updateProviderApiKey(active.provider_api_name, {
-      api_name: active.provider_api_name,
-      limit_cost: 0,
-      limit_daily_cost: 0,
-      expired_on: 1,
-      allow_save_logs: false,
-      allow_custom_model: false,
-      allow_manage_key: false
-    })
-  } catch (error) {
-    await client.from(CREDENTIAL_TABLE).update({ last_error: String(error?.message || error).slice(0, 500) }).eq('id', active.id)
+  if (!lifecycleMutation && !deps.serviceMutationToken && typeof client.rpc === 'function') {
+    return withServiceMutationLease(client, safeUserId, deps, (leasedDeps) => disableUserServiceCredential({
+      userId: safeUserId, operatorUserId, reason, ip, userAgent, requestId
+    }, leasedDeps))
   }
-
-  await createAdminLog(client, {
-    operatorUserId,
-    targetUserId: safeUserId,
-    action: 'admin.service_access.disable',
-    metadata: { reason: String(reason || ''), ip: String(ip || ''), userAgent: String(userAgent || '') }
-  })
-
-  return { ok: true, serviceCredential: formatServiceCredentialForAdmin(data) }
-}
-
-export const resetUserServiceCredential = async ({ userId, operatorUserId, ip = '', userAgent = '' }, deps = {}) => {
-  await disableUserServiceCredential({ userId, operatorUserId, reason: 'reset', ip, userAgent }, deps)
-  const result = await createUserServiceCredential({ userId, operatorUserId, ip, userAgent }, deps)
-  const client = deps.supabaseClient || supabase
-  await createAdminLog(client, {
-    operatorUserId,
-    targetUserId: userId,
-    action: 'admin.service_access.reset',
-    metadata: { ip: String(ip || ''), userAgent: String(userAgent || '') }
-  })
-  return result
-}
-
-export const updateUserServiceLimits = async ({ userId, operatorUserId, limitCost = 0, limitDailyCost = 0, expiredOn = 0, ip = '', userAgent = '' }, deps = {}) => {
-  const client = deps.supabaseClient || supabase
-  const updateProviderApiKey = deps.updateProviderApiKey || update302ApiKey
-  const credentials = await listUserCredentials(client, userId)
-  const active = credentials.find((item) => String(item.status || '') === 'active')
-  if (!active) throw new HttpError(403, '当前账号尚未开通生成服务，请联系管理员。', 'SERVICE_NOT_ENABLED')
-
-  await updateProviderApiKey(active.provider_api_name, {
-    api_name: active.provider_api_name,
-    limit_cost: Number(limitCost || 0),
-    limit_daily_cost: Number(limitDailyCost || 0),
-    expired_on: Number(expiredOn || 0),
-    allow_save_logs: false,
-    allow_custom_model: false,
-    allow_manage_key: false
-  })
-
-  const { data, error } = await client
-    .from(CREDENTIAL_TABLE)
-    .update({
-      limit_cost: Number(limitCost || 0),
-      limit_daily_cost: Number(limitDailyCost || 0),
-      expired_on: Number(expiredOn || 0),
-      last_error: null
-    })
-    .eq('id', active.id)
-    .select('*')
-    .single()
-  if (error) throw new HttpError(500, error.message, 'SERVICE_LIMIT_UPDATE_FAILED')
-
-  await createAdminLog(client, {
-    operatorUserId,
-    targetUserId: userId,
-    action: 'admin.service_access.update_limits',
-    metadata: { limitCost: Number(limitCost || 0), limitDailyCost: Number(limitDailyCost || 0), expiredOn: Number(expiredOn || 0), ip, userAgent }
-  })
-
-  return { ok: true, serviceCredential: formatServiceCredentialForAdmin(data) }
+  if (!lifecycleMutation) await getUserForServiceMutation(client, safeUserId)
+  const credentials = await listUserCredentials(client, safeUserId)
+  const active = credentials.filter((item) => item.status === 'active')
+  if (!active.length) return { ok: true, serviceCredential: formatServiceCredentialForAdmin(credentials[0]) }
+  const disabledAt = new Date().toISOString()
+  const { data, error } = await client.from(CREDENTIAL_TABLE)
+    .update({ status: 'disabled', disabled_at: disabledAt, last_error: null })
+    .eq('user_id', safeUserId).eq('status', 'active').select('*')
+  if (error) throw new HttpError(500, error.message, 'SERVICE_CREDENTIAL_DISABLE_FAILED')
+  await createServiceAuditLog(client, { userId: safeUserId, operatorUserId, action: 'admin.service_access.disable', reason, ip, userAgent, requestId })
+  return { ok: true, serviceCredential: formatServiceCredentialForAdmin(data?.[0] || { ...active[0], status: 'disabled', disabled_at: disabledAt }) }
 }

@@ -212,3 +212,32 @@ test('buildVideoGenerationAssets prefers source node id from provider result met
     }
   ])
 })
+
+for (const [mime, extension] of [['jpeg', 'jpg'], ['webp', 'webp']]) {
+  test(`persisted ${mime} output keeps its MIME and extension in storage and media assets`, async () => {
+    const dataUrl = `data:image/${mime};base64,aW1hZ2U=`
+    const result = await persistImageResultAssets({ data: [{ url: dataUrl }] }, {
+      persistInlineDataUrls: true,
+      persistDataUrl: async (url, fileName) => {
+        assert.equal(url, dataUrl)
+        assert.ok(fileName.endsWith(`.${extension}`))
+        return `https://storage.example.com/${fileName}`
+      }
+    })
+    const assets = buildImageGenerationAssets(result, 'source-image')
+    assert.equal(assets[0].fileName, `generated-1.${extension}`)
+    assert.equal(assets[0].fileType, `image/${mime}`)
+    assert.equal(assets[0].sourceNodeId, 'source-image')
+  })
+}
+
+test('existing JPEG and WebP asset URLs keep their file types when a query string is present', () => {
+  const assets = buildImageGenerationAssets({ data: [
+    { url: 'https://storage.example.com/generated.jpeg?download=image.png' },
+    { url: 'https://storage.example.com/generated.webp?download=image.png' }
+  ] })
+  assert.deepEqual(assets.map(asset => [asset.fileName, asset.fileType]), [
+    ['generated-1.jpg', 'image/jpeg'],
+    ['generated-2.webp', 'image/webp']
+  ])
+})

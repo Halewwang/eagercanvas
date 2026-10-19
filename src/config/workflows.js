@@ -2,11 +2,7 @@
  * Workflow Templates Configuration | 工作流模板配置
  * 预设工作流模板，支持一键添加到画布
  */
-import product01 from '@/assets/product01.jpg'
 import workflowCover1 from '@/assets/workflow01.jpeg'
-import workflowCover2 from '@/assets/workflow02.jpeg'
-import scene01 from '@/assets/scene01.jpeg'
-import shot01 from '@/assets/shot01.jpeg'
 
 // Multi-angle prompts | 多角度提示词模板
 export const MULTI_ANGLE_PROMPTS = {
@@ -62,7 +58,7 @@ export const WORKFLOW_TEMPLATES = [
       let nodeIdCounter = 0
       const getNodeId = () => `workflow_node_${Date.now()}_${nodeIdCounter++}`
       
-      // 主角色图：提示词 + 文生图配置
+      // 主角色图：提示词 + 图片节点
       const characterTextId = getNodeId()
       nodes.push({
         id: characterTextId,
@@ -74,19 +70,7 @@ export const WORKFLOW_TEMPLATES = [
         }
       })
       
-      const characterConfigId = getNodeId()
-      nodes.push({
-        id: characterConfigId,
-        type: 'imageConfig',
-        position: { x: startPosition.x + nodeSpacing, y: startPosition.y + rowSpacing * 1.5 },
-        data: {
-          label: '主角色图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2048x2048'
-        }
-      })
-      
-      // 主角色图结果节点（空白图片节点）
+      // 主角色图（在图片胶囊中设置并生成）
       const characterImageId = getNodeId()
       nodes.push({
         id: characterImageId,
@@ -94,23 +78,15 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + nodeSpacing * 2, y: startPosition.y + rowSpacing * 1.5 },
         data: {
           url: '',
-          label: '角色图结果'
+          label: '角色图结果',
+          model: 'gpt-image-2'
         }
       })
       
-      // 连线：角色提示词 → 角色图配置
+      // 连线：角色提示词 → 主角色图
       edges.push({
-        id: `edge_${characterTextId}_${characterConfigId}`,
+        id: `edge_${characterTextId}_${characterImageId}`,
         source: characterTextId,
-        target: characterConfigId,
-        sourceHandle: 'right',
-        targetHandle: 'left'
-      })
-      
-      // 连线：角色图配置 → 角色图结果
-      edges.push({
-        id: `edge_${characterConfigId}_${characterImageId}`,
-        source: characterConfigId,
         target: characterImageId,
         sourceHandle: 'right',
         targetHandle: 'left'
@@ -137,20 +113,19 @@ export const WORKFLOW_TEMPLATES = [
         })
         currentX += nodeSpacing
         
-        // 图片配置节点
+        // 图片生成节点
         const configNodeId = getNodeId()
         nodes.push({
           id: configNodeId,
-          type: 'imageConfig',
+          type: 'image',
           position: { x: currentX, y: angleY },
           data: {
             label: `${angleConfig.label} (${angleConfig.english})`,
-            model: 'gemini-3.1-flash-image-preview',
-            size: '2048x2048'
+            model: 'gpt-image-2'
           }
         })
         
-        // 连线：提示词 → 配置
+        // 连线：提示词 → 图片
         edges.push({
           id: `edge_${textNodeId}_${configNodeId}`,
           source: textNodeId,
@@ -161,7 +136,7 @@ export const WORKFLOW_TEMPLATES = [
           targetHandle: 'left'
         })
         
-        // 连线：角色图结果 → 角度配置（参考图）
+        // 连线：角色图结果 → 角度图片（参考图）
         edges.push({
           id: `edge_${characterImageId}_${configNodeId}`,
           source: characterImageId,
@@ -182,7 +157,6 @@ export const WORKFLOW_TEMPLATES = [
     description: '根据产品信息和图片，生成模特图、侧面展示图、俯瞰展示图',
     icon: 'ShoppingOutline',
     category: 'ecommerce',
-    cover: workflowCover2,
     // 节点配置
     createNodes: (startPosition) => {
       const colSpacing = 500  // 列间距
@@ -277,12 +251,11 @@ export const WORKFLOW_TEMPLATES = [
       const modelConfigId = getNodeId()
       nodes.push({
         id: modelConfigId,
-        type: 'imageConfig',
+        type: 'image',
         position: { x: startPosition.x + colSpacing * 2, y: startPosition.y },
         data: {
           label: '生成模特图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2048x2048'
+          model: 'gpt-image-2'
         }
       })
       
@@ -290,12 +263,11 @@ export const WORKFLOW_TEMPLATES = [
       const sideConfigId = getNodeId()
       nodes.push({
         id: sideConfigId,
-        type: 'imageConfig',
+        type: 'image',
         position: { x: startPosition.x + colSpacing * 2, y: startPosition.y + rowSpacing },
         data: {
           label: '侧面展示图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2048x2048'
+          model: 'gpt-image-2'
         }
       })
       
@@ -303,12 +275,11 @@ export const WORKFLOW_TEMPLATES = [
       const topConfigId = getNodeId()
       nodes.push({
         id: topConfigId,
-        type: 'imageConfig',
+        type: 'image',
         position: { x: startPosition.x + colSpacing * 2, y: startPosition.y + rowSpacing * 2 },
         data: {
           label: '俯瞰展示图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2048x2048'
+          model: 'gpt-image-2'
         }
       })
       
@@ -316,12 +287,11 @@ export const WORKFLOW_TEMPLATES = [
       const explodedConfigId = getNodeId()
       nodes.push({
         id: explodedConfigId,
-        type: 'imageConfig',
+        type: 'image',
         position: { x: startPosition.x + colSpacing * 2, y: startPosition.y + rowSpacing * 3 },
         data: {
           label: '拆解图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2048x2048'
+          model: 'gpt-image-2'
         }
       })
       
@@ -452,7 +422,6 @@ export const WORKFLOW_TEMPLATES = [
     description: '根据角色描述生成一致性角色形象，后续多角度图依赖正面图保持一致性',
     icon: 'PersonOutline',
     category: 'drama',
-    cover: shot01,
     createNodes: (startPosition) => {
       const colSpacing = 400
       const rowSpacing = 280
@@ -499,19 +468,6 @@ export const WORKFLOW_TEMPLATES = [
         }
       })
       
-      // 正面全身生成配置
-      const frontConfigId = getNodeId()
-      nodes.push({
-        id: frontConfigId,
-        type: 'imageConfig',
-        position: { x: startPosition.x + colSpacing * 2, y: startPosition.y },
-        data: {
-          label: '生成正面全身图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '1440x2560'
-        }
-      })
-      
       // 正面全身图结果（作为后续生成的参考）
       const frontResultId = getNodeId()
       nodes.push({
@@ -520,7 +476,8 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 3, y: startPosition.y },
         data: {
           url: '',
-          label: '正面角色图（参考基准）'
+          label: '正面角色图（参考基准）',
+          model: 'gpt-image-2'
         }
       })
       
@@ -561,51 +518,48 @@ export const WORKFLOW_TEMPLATES = [
         }
       })
       
-      // 侧面生成配置
+      // 侧面图片生成节点
       const sideConfigId = getNodeId()
       nodes.push({
         id: sideConfigId,
-        type: 'imageConfig',
+        type: 'image',
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing },
         data: {
           label: '侧面半身图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2048x2048'
+          model: 'gpt-image-2'
         }
       })
       
-      // 表情特写生成配置
+      // 表情特写图片生成节点
       const closeupConfigId = getNodeId()
       nodes.push({
         id: closeupConfigId,
-        type: 'imageConfig',
+        type: 'image',
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing * 2 },
         data: {
           label: '表情特写图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2048x2048'
+          model: 'gpt-image-2'
         }
       })
       
-      // 背面生成配置
+      // 背面图片生成节点
       const backConfigId = getNodeId()
       nodes.push({
         id: backConfigId,
-        type: 'imageConfig',
+        type: 'image',
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing * 3 },
         data: {
           label: '背面全身图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '1440x2560'
+          model: 'gpt-image-2'
         }
       })
       
       // ========== 连线：第一阶段 ==========
       // 角色描述 → 正面生成
       edges.push({
-        id: `edge_${characterDescId}_${frontConfigId}`,
+        id: `edge_${characterDescId}_${frontResultId}`,
         source: characterDescId,
-        target: frontConfigId,
+        target: frontResultId,
         type: 'promptOrder',
         data: { promptOrder: 1 },
         sourceHandle: 'right',
@@ -613,9 +567,9 @@ export const WORKFLOW_TEMPLATES = [
       })
       // 风格参考 → 正面生成
       edges.push({
-        id: `edge_${styleRefId}_${frontConfigId}`,
+        id: `edge_${styleRefId}_${frontResultId}`,
         source: styleRefId,
-        target: frontConfigId,
+        target: frontResultId,
         type: 'imageOrder',
         data: { imageOrder: 1 },
         sourceHandle: 'right',
@@ -623,23 +577,14 @@ export const WORKFLOW_TEMPLATES = [
       })
       // 正面提示词 → 正面生成
       edges.push({
-        id: `edge_${frontPromptId}_${frontConfigId}`,
+        id: `edge_${frontPromptId}_${frontResultId}`,
         source: frontPromptId,
-        target: frontConfigId,
+        target: frontResultId,
         type: 'promptOrder',
         data: { promptOrder: 2 },
         sourceHandle: 'right',
         targetHandle: 'left'
       })
-      // 正面生成 → 正面结果
-      edges.push({
-        id: `edge_${frontConfigId}_${frontResultId}`,
-        source: frontConfigId,
-        target: frontResultId,
-        sourceHandle: 'right',
-        targetHandle: 'left'
-      })
-      
       // ========== 连线：第二阶段（依赖正面图） ==========
       // 正面结果 → 侧面生成（作为参考图）
       edges.push({
@@ -710,7 +655,6 @@ export const WORKFLOW_TEMPLATES = [
     description: '先生成基础场景，再基于基础场景生成多时段变体，保持场景一致性',
     icon: 'ImageOutline',
     category: 'drama',
-    cover: scene01,
     createNodes: (startPosition) => {
       const colSpacing = 400
       const rowSpacing = 260
@@ -745,19 +689,6 @@ export const WORKFLOW_TEMPLATES = [
         }
       })
       
-      // 基础场景生成配置
-      const baseConfigId = getNodeId()
-      nodes.push({
-        id: baseConfigId,
-        type: 'imageConfig',
-        position: { x: startPosition.x + colSpacing * 2, y: startPosition.y },
-        data: {
-          label: '生成基础场景',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2560x1440'
-        }
-      })
-      
       // 基础场景结果（作为后续生成的参考）
       const baseResultId = getNodeId()
       nodes.push({
@@ -766,7 +697,8 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 3, y: startPosition.y },
         data: {
           url: '',
-          label: '基础场景图（参考基准）'
+          label: '基础场景图（参考基准）',
+          model: 'gpt-image-2'
         }
       })
       
@@ -807,51 +739,48 @@ export const WORKFLOW_TEMPLATES = [
         }
       })
       
-      // 傍晚生成配置
+      // 傍晚图片生成节点
       const eveningConfigId = getNodeId()
       nodes.push({
         id: eveningConfigId,
-        type: 'imageConfig',
+        type: 'image',
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing },
         data: {
           label: '傍晚场景',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2560x1440'
+          model: 'gpt-image-2'
         }
       })
       
-      // 夜晚生成配置
+      // 夜晚图片生成节点
       const nightConfigId = getNodeId()
       nodes.push({
         id: nightConfigId,
-        type: 'imageConfig',
+        type: 'image',
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing * 2 },
         data: {
           label: '夜晚场景',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2560x1440'
+          model: 'gpt-image-2'
         }
       })
       
-      // 雨天生成配置
+      // 雨天图片生成节点
       const rainConfigId = getNodeId()
       nodes.push({
         id: rainConfigId,
-        type: 'imageConfig',
+        type: 'image',
         position: { x: startPosition.x + colSpacing * 4 + 100, y: startPosition.y + rowSpacing * 3 },
         data: {
           label: '雨天场景',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2560x1440'
+          model: 'gpt-image-2'
         }
       })
       
       // ========== 连线：第一阶段 ==========
       // 场景描述 → 基础场景生成
       edges.push({
-        id: `edge_${sceneDescId}_${baseConfigId}`,
+        id: `edge_${sceneDescId}_${baseResultId}`,
         source: sceneDescId,
-        target: baseConfigId,
+        target: baseResultId,
         type: 'promptOrder',
         data: { promptOrder: 1 },
         sourceHandle: 'right',
@@ -859,23 +788,14 @@ export const WORKFLOW_TEMPLATES = [
       })
       // 基础提示词 → 基础场景生成
       edges.push({
-        id: `edge_${basePromptId}_${baseConfigId}`,
+        id: `edge_${basePromptId}_${baseResultId}`,
         source: basePromptId,
-        target: baseConfigId,
+        target: baseResultId,
         type: 'promptOrder',
         data: { promptOrder: 2 },
         sourceHandle: 'right',
         targetHandle: 'left'
       })
-      // 基础场景生成 → 基础场景结果
-      edges.push({
-        id: `edge_${baseConfigId}_${baseResultId}`,
-        source: baseConfigId,
-        target: baseResultId,
-        sourceHandle: 'right',
-        targetHandle: 'left'
-      })
-      
       // ========== 连线：第二阶段（依赖基础场景图） ==========
       // 基础场景结果 → 各时段生成（作为参考图）
       const variantConfigs = [eveningConfigId, nightConfigId, rainConfigId]
@@ -1007,21 +927,8 @@ export const WORKFLOW_TEMPLATES = [
 2. 包含：外貌特征、服装、表情、姿态、背景色
 3. 使用绘本水彩风格描述
 4. 适合儿童绘本的可爱形象`,
-          model: 'gemini-2.5-flash-lite',
+          model: 'gpt-5.6-sol',
           outputFormat: 'text'
-        }
-      })
-      
-      // 主角色1图像配置
-      const character1ConfigId = getNodeId()
-      nodes.push({
-        id: character1ConfigId,
-        type: 'imageConfig',
-        position: { x: startPosition.x + colSpacing * 3, y: startPosition.y - rowSpacing * 1.5 },
-        data: {
-          label: '主角色1设计图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2048x2048'
         }
       })
       
@@ -1045,7 +952,8 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 4, y: startPosition.y - rowSpacing * 1.5 },
         data: {
           url: '',
-          label: '角色1参考图'
+          label: '角色1参考图',
+          model: 'gpt-image-2'
         }
       })
       
@@ -1061,19 +969,6 @@ export const WORKFLOW_TEMPLATES = [
         }
       })
       
-      // 主角色2图像配置
-      const character2ConfigId = getNodeId()
-      nodes.push({
-        id: character2ConfigId,
-        type: 'imageConfig',
-        position: { x: startPosition.x + colSpacing * 3, y: startPosition.y - rowSpacing * 0.5 },
-        data: {
-          label: '主角色2设计图',
-          model: 'gemini-3.1-flash-image-preview',
-          size: '2048x2048'
-        }
-      })
-      
       // 主角色2图像结果
       const character2ImageId = getNodeId()
       nodes.push({
@@ -1082,7 +977,8 @@ export const WORKFLOW_TEMPLATES = [
         position: { x: startPosition.x + colSpacing * 4, y: startPosition.y - rowSpacing * 0.5 },
         data: {
           url: '',
-          label: '角色2参考图'
+          label: '角色2参考图',
+          model: 'gpt-image-2'
         }
       })
       
@@ -1110,7 +1006,7 @@ export const WORKFLOW_TEMPLATES = [
 3. 画面描述要具体，便于图像生成
 4. 配文简洁，适合幼儿阅读（每页不超过30字）
 5. 保持角色特征一致性`,
-          model: 'gpt-4o',
+          model: 'gpt-5.6-sol',
           outputFormat: 'text'
         }
       })
@@ -1175,20 +1071,19 @@ export const WORKFLOW_TEMPLATES = [
           }
         })
         
-        // 页面图像配置
+        // 页面图片节点
         const pageConfigId = getNodeId()
         nodes.push({
           id: pageConfigId,
-          type: 'imageConfig',
+          type: 'image',
           position: { x: startPosition.x + colSpacing * 4, y: pageY },
           data: {
             label: `第${pageNum}页插图`,
-            model: 'gemini-3.1-flash-image-preview',
-            size: '2048x2048'
+            model: 'gpt-image-2'
           }
         })
         
-        // 连线：页面提示词 → 页面配置
+        // 连线：页面提示词 → 页面图片
         edges.push({
           id: `edge_${pagePromptId}_${pageConfigId}`,
           source: pagePromptId,
@@ -1199,7 +1094,7 @@ export const WORKFLOW_TEMPLATES = [
           targetHandle: 'left'
         })
         
-        // 连线：角色1参考图 → 页面配置
+        // 连线：角色1参考图 → 页面图片
         edges.push({
           id: `edge_${character1ImageId}_${pageConfigId}_ref`,
           source: character1ImageId,
@@ -1210,7 +1105,7 @@ export const WORKFLOW_TEMPLATES = [
           targetHandle: 'left'
         })
         
-        // 连线：角色2参考图 → 页面配置（部分页面）
+        // 连线：角色2参考图 → 页面图片（部分页面）
         if (index >= 2) {
           edges.push({
             id: `edge_${character2ImageId}_${pageConfigId}_ref`,
@@ -1247,42 +1142,24 @@ export const WORKFLOW_TEMPLATES = [
         targetHandle: 'left'
       })
       
-      // 角色1提示词 → 角色1配置
+      // 角色1提示词 → 角色1图片
       edges.push({
-        id: `edge_${character1PromptId}_${character1ConfigId}`,
+        id: `edge_${character1PromptId}_${character1ImageId}`,
         source: character1PromptId,
-        target: character1ConfigId,
-        type: 'promptOrder',
-        data: { promptOrder: 1 },
-        sourceHandle: 'right',
-        targetHandle: 'left'
-      })
-      
-      // 角色1配置 → 角色1图像
-      edges.push({
-        id: `edge_${character1ConfigId}_${character1ImageId}`,
-        source: character1ConfigId,
         target: character1ImageId,
-        sourceHandle: 'right',
-        targetHandle: 'left'
-      })
-      
-      // 角色2提示词 → 角色2配置
-      edges.push({
-        id: `edge_${character2PromptId}_${character2ConfigId}`,
-        source: character2PromptId,
-        target: character2ConfigId,
         type: 'promptOrder',
         data: { promptOrder: 1 },
         sourceHandle: 'right',
         targetHandle: 'left'
       })
       
-      // 角色2配置 → 角色2图像
+      // 角色2提示词 → 角色2图片
       edges.push({
-        id: `edge_${character2ConfigId}_${character2ImageId}`,
-        source: character2ConfigId,
+        id: `edge_${character2PromptId}_${character2ImageId}`,
+        source: character2PromptId,
         target: character2ImageId,
+        type: 'promptOrder',
+        data: { promptOrder: 1 },
         sourceHandle: 'right',
         targetHandle: 'left'
       })

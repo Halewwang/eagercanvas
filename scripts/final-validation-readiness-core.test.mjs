@@ -74,8 +74,8 @@ test('assessFinalValidationReadiness accepts non-placeholder real validation inp
       JWT_ACCESS_SECRET: 'access-secret-with-enough-length',
       JWT_REFRESH_SECRET: 'refresh-secret-with-enough-length',
       RESEND_API_KEY: 're_123456',
-      PROVIDER_API_KEY: 'sk-provider',
-      DASHBOARD_302_API_KEY: 'sk-dashboard'
+      OPENAI_API_KEY: 'sk-enbrand',
+      PROVIDER_API_KEY: 'sk-provider'
     }
   })
 
@@ -91,8 +91,11 @@ test('buildFinalValidationEnvTemplates creates non-secret local env skeletons', 
   assert.match(result.frontendContent, /VITE_APP_API_BASE_URL=http:\/\/127\.0\.0\.1:8787\/api\/v1/)
   assert.match(result.frontendContent, /VITE_BYPASS_AUTH=false/)
   assert.match(result.backendContent, /SUPABASE_URL=https:\/\/rzfsyezidhgyikehucrh\.supabase\.co/)
+  assert.match(result.backendContent, /OPENAI_API_BASE_URL=https:\/\/api\.enbrand\.co\/v1/)
+  assert.match(result.backendContent, /OPENAI_API_KEY=REPLACE_WITH_OPENAI_API_KEY/)
+  assert.match(result.backendContent, /ADMIN_LIFECYCLE_MUTATIONS_ENABLED=false/)
   assert.match(result.backendContent, /PROVIDER_API_BASE_URL=https:\/\/api\.302ai\.cn/)
-  assert.match(result.backendContent, /DASHBOARD_302_API_BASE_URL=https:\/\/api\.302ai\.cn/)
+  assert.doesNotMatch(result.backendContent, /DASHBOARD_302_|ISSUE_ALERT_|SERVICE_CREDENTIAL_ENCRYPTION_KEY|BILLING_SYNC_/)
   assert.match(result.backendContent, /SUPABASE_SERVICE_ROLE_KEY=REPLACE_WITH_SUPABASE_SERVICE_ROLE_KEY/)
   assert.doesNotMatch(result.backendContent, /sb_publishable_|eyJhbGci|sk-[A-Za-z0-9]/)
 })
@@ -157,4 +160,9 @@ test('buildFinalValidationRunbook includes final validation steps when ready', (
   ])
   assert.match(runbook.steps.find((step) => step.id === 'backend').command, /npm --prefix backend run dev/)
   assert.match(runbook.steps.find((step) => step.id === 'final-gates').command, /npm run check && npm run build/)
+})
+
+test('video credentials alone do not make text and image validation ready', () => {
+  const result = assessFinalValidationReadiness({ backendEnv: { PROVIDER_API_KEY: 'video-key', DASHBOARD_302_API_KEY: 'dashboard-key' } })
+  assert.equal(result.checks.find(c => c.id === 'provider-api-key').status, 'fail')
 })

@@ -9,6 +9,7 @@ import { pinia } from '@/stores/pinia'
 import { translateLabel, WORKFLOW_NAME_MAP } from '@/config/labels'
 import { notifier } from '@/utils/notifier'
 import { edgeStrategy } from '@/services/edgeStrategy'
+import { migrateLegacyImageConfigNodes } from '@/stores/legacyImageConfig.js'
 
 export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
   const canvasStore = useCanvasStore(pinia)
@@ -35,7 +36,7 @@ export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
     const center = getViewportCenter()
     const startPosition = { x: center.x - 300, y: center.y - 200 }
     
-    const { nodes: newNodes, edges: newEdges } = workflow.createNodes(startPosition, options)
+    const { nodes: newNodes, edges: newEdges } = migrateLegacyImageConfigNodes(workflow.createNodes(startPosition, options))
     
     // Add nodes to canvas | 将节点添加到画布
     newNodes.forEach(node => {
@@ -83,7 +84,7 @@ export const useNodesFactory = ({ updateNodeInternals, viewport } = {}) => {
   }
   
   /**
-   * Create manual prompt chain (Text -> ImageConfig)
+   * Create manual prompt chain (Text -> Image)
    * 创建手动提示词链
    */
   const createPromptChain = async (content, position) => {

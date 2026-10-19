@@ -1,4 +1,3 @@
-import { env } from '../config/env.js'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/http.js'
 import { extractProviderVideoUrl } from './run-assets.js'
@@ -16,7 +15,7 @@ export const bindVideoTaskOwnership = async ({ userId, runId, taskId, sourceNode
     }
   })
   if (error) {
-    console.warn('[video] bind task ownership failed', error.message)
+    throw new HttpError(500, error.message, 'TASK_OWNERSHIP_BIND_FAILED')
   }
 }
 
@@ -97,10 +96,6 @@ export const assertVideoTaskOwnership = async ({ userId, taskId }) => {
   }
 
   if (!Array.isArray(data) || data.length === 0) {
-    if (env.nodeEnv !== 'production') {
-      console.warn('[video] task ownership record missing in non-production', { userId, taskId })
-      return
-    }
     throw new HttpError(404, 'Video task not found', 'VIDEO_TASK_NOT_FOUND')
   }
 }

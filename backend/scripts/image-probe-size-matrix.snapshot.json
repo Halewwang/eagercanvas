@@ -1,0 +1,156 @@
+{
+  "capturedAt": "2026-10-19T10:48:03.747Z",
+  "source": "backend/src/services/gpt-image-2-size.js",
+  "sizes": [
+    {
+      "ratio": "1:1",
+      "resolution": "1k",
+      "size": "1024x1024"
+    },
+    {
+      "ratio": "1:1",
+      "resolution": "2k",
+      "size": "2048x2048"
+    },
+    {
+      "ratio": "1:1",
+      "resolution": "4k",
+      "size": "2880x2880"
+    },
+    {
+      "ratio": "3:2",
+      "resolution": "1k",
+      "size": "1536x1024"
+    },
+    {
+      "ratio": "3:2",
+      "resolution": "2k",
+      "size": "3072x2048"
+    },
+    {
+      "ratio": "3:2",
+      "resolution": "4k",
+      "size": "3520x2352"
+    },
+    {
+      "ratio": "2:3",
+      "resolution": "1k",
+      "size": "1024x1536"
+    },
+    {
+      "ratio": "2:3",
+      "resolution": "2k",
+      "size": "2048x3072"
+    },
+    {
+      "ratio": "2:3",
+      "resolution": "4k",
+      "size": "2352x3520"
+    },
+    {
+      "ratio": "4:3",
+      "resolution": "1k",
+      "size": "1152x864"
+    },
+    {
+      "ratio": "4:3",
+      "resolution": "2k",
+      "size": "2304x1728"
+    },
+    {
+      "ratio": "4:3",
+      "resolution": "4k",
+      "size": "3312x2496"
+    },
+    {
+      "ratio": "3:4",
+      "resolution": "1k",
+      "size": "864x1152"
+    },
+    {
+      "ratio": "3:4",
+      "resolution": "2k",
+      "size": "1728x2304"
+    },
+    {
+      "ratio": "3:4",
+      "resolution": "4k",
+      "size": "2496x3312"
+    },
+    {
+      "ratio": "4:5",
+      "resolution": "1k",
+      "size": "896x1120"
+    },
+    {
+      "ratio": "4:5",
+      "resolution": "2k",
+      "size": "1792x2240"
+    },
+    {
+      "ratio": "4:5",
+      "resolution": "4k",
+      "size": "2576x3216"
+    },
+    {
+      "ratio": "5:4",
+      "resolution": "1k",
+      "size": "1120x896"
+    },
+    {
+      "ratio": "5:4",
+      "resolution": "2k",
+      "size": "2240x1792"
+    },
+    {
+      "ratio": "5:4",
+      "resolution": "4k",
+      "size": "3216x2576"
+    },
+    {
+      "ratio": "16:9",
+      "resolution": "1k",
+      "size": "1280x720"
+    },
+    {
+      "ratio": "16:9",
+      "resolution": "2k",
+      "size": "2560x1440"
+    },
+    {
+      "ratio": "16:9",
+      "resolution": "4k",
+      "size": "3840x2160"
+    },
+    {
+      "ratio": "9:16",
+      "resolution": "1k",
+      "size": "720x1280"
+    },
+    {
+      "ratio": "9:16",
+      "resolution": "2k",
+      "size": "1440x2560"
+    },
+    {
+      "ratio": "9:16",
+      "resolution": "4k",
+      "size": "2160x3840"
+    },
+    {
+      "ratio": "21:9",
+      "resolution": "1k",
+      "size": "1680x720"
+    },
+    {
+      "ratio": "21:9",
+      "resolution": "2k",
+      "size": "3360x1440"
+    },
+    {
+      "ratio": "21:9",
+      "resolution": "4k",
+      "size": "3840x1648"
+    }
+  ]
+}

@@ -68,5 +68,5 @@ export const resolveWedding3x3SelectedSize = (
   const sameRatio = (sizeOptions || []).find((item) => ratioFromSizeKey(item?.key) === selectedRatio)
   if (sameRatio?.key) return sameRatio.key
 
-  return sizeOptions?.[0]?.key || fallbackSize || '1024x1024'
+  return sizeOptions?.some((item) => item.key === fallbackSize) ? fallbackSize : sizeOptions?.[0]?.key || ''
 }

@@ -6,13 +6,11 @@ import { test } from 'node:test'
 const drawerUrl = new URL('./Wedding3x3ToolDrawer.vue', import.meta.url)
 const fieldModuleUrl = new URL('./ToolAutocompleteFields.js', import.meta.url)
 const generationOptionsModuleUrl = new URL('./Wedding3x3GenerationOptions.js', import.meta.url)
-const asyncImageResultModuleUrl = new URL('./Wedding3x3AsyncImageResult.js', import.meta.url)
 const previewActionsModuleUrl = new URL('./Wedding3x3PreviewActions.js', import.meta.url)
 const generationRunnerModuleUrl = new URL('./Wedding3x3GenerationRunner.js', import.meta.url)
 const styleModuleUrl = new URL('./Wedding3x3ToolDrawer.css', import.meta.url)
 const fieldModulePath = fileURLToPath(fieldModuleUrl)
 const generationOptionsModulePath = fileURLToPath(generationOptionsModuleUrl)
-const asyncImageResultModulePath = fileURLToPath(asyncImageResultModuleUrl)
 const previewActionsModulePath = fileURLToPath(previewActionsModuleUrl)
 const generationRunnerModulePath = fileURLToPath(generationRunnerModuleUrl)
 const styleModulePath = fileURLToPath(styleModuleUrl)
@@ -70,23 +68,16 @@ test('wedding 3x3 drawer delegates generation option derivation to a focused mod
   assert.ok(existsSync(generationOptionsModulePath), 'Wedding3x3GenerationOptions.js should exist')
   assert.match(
     drawerSource,
-    /import \{\s*getWedding3x3RatioOptions,\s*getWedding3x3ResolutionOptions,\s*resolutionFromSizeKey,\s*resolveWedding3x3SelectedSize\s*\} from '\.\/Wedding3x3GenerationOptions\.js'/s
+    /import \{\s*resolutionFromSizeKey,\s*resolveWedding3x3SelectedSize\s*\} from '\.\/Wedding3x3GenerationOptions\.js'/s
   )
   assert.doesNotMatch(drawerSource, /const ratioFromSizeKey = /)
   assert.doesNotMatch(drawerSource, /const resolutionFromSizeKey = /)
 })
 
-test('wedding 3x3 drawer delegates async image result parsing and polling to a focused module', () => {
-  assert.ok(existsSync(asyncImageResultModulePath), 'Wedding3x3AsyncImageResult.js should exist')
+test('wedding 3x3 uses the standard image generator without retired provider task polling', () => {
   const generationRunnerSource = readGenerationRunnerSource()
-
-  assert.match(generationRunnerSource, /from '\.\/Wedding3x3AsyncImageResult\.js'/)
-  assert.doesNotMatch(drawerSource, /from '\.\/Wedding3x3AsyncImageResult\.js'/)
-  assert.doesNotMatch(drawerSource, /const ASYNC_IMAGE_MODELS = /)
-  assert.doesNotMatch(drawerSource, /const isAsyncImageModel = /)
-  assert.doesNotMatch(drawerSource, /const extractImageTaskId = /)
-  assert.doesNotMatch(drawerSource, /const extractGeneratedImageUrl = /)
-  assert.doesNotMatch(drawerSource, /const waitForAsyncImageResult = /)
+  assert.match(generationRunnerSource, /imageGen\.generate\(request\)/)
+  assert.doesNotMatch(generationRunnerSource, /createImageGenerationRun|getImageGenerationTask|AsyncImageResult/)
 })
 
 test('wedding 3x3 drawer delegates preview copy and download actions to a focused module', () => {
@@ -124,4 +115,17 @@ test('wedding 3x3 drawer delegates scoped panel styles to a focused stylesheet',
   assert.doesNotMatch(drawerSource, /:deep\(\.autocomplete-option\)/)
   assert.match(styleModuleSource, /\.wedding-overlay\s*\{/)
   assert.match(styleModuleSource, /:deep\(\.autocomplete-option\)/)
+})
+
+
+test('wedding output controls require actual model capabilities', () => {
+  for (const name of ['qualityOptions', 'ratioOptions', 'resolutionOptions']) {
+    assert.ok(drawerSource.includes(`v-if="${name}.length"`))
+  }
+})
+
+test('theme set exposes prompt guidance without a reproducibility control', () => {
+  assert.doesNotMatch(drawerSource, /Random Seed|randomSeed|random_seed: form\./)
+  assert.match(drawerSource, /Structure Guidance/)
+  assert.match(drawerSource, /Style and structure are prompt guidance; results may vary\./)
 })

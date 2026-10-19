@@ -1,23 +1,29 @@
+export const getLocalPreviewAccessToken = (env = import.meta.env || {}) =>
+  String(env?.VITE_LOCAL_PREVIEW_ACCESS_TOKEN || '').trim()
+
 export const isLocalPreviewEnabled = (env = import.meta.env || {}) => {
-  return Boolean(env?.DEV && String(env?.VITE_BYPASS_AUTH || '').trim().toLowerCase() === 'true')
+  return Boolean(
+    env?.DEV &&
+    String(env?.VITE_BYPASS_AUTH || '').trim().toLowerCase() === 'true' &&
+    getLocalPreviewAccessToken(env)
+  )
 }
 
-const LOCAL_PREVIEW_ADMIN_PERMISSIONS = [
-  'admin.dashboard.read',
+export const resolveLocalPreviewAccessToken = (storedToken = '', env = import.meta.env || {}) => {
+  const token = String(storedToken || '').trim()
+  if (token) return token
+  return isLocalPreviewEnabled(env) ? getLocalPreviewAccessToken(env) : ''
+}
+
+export const LOCAL_PREVIEW_ADMIN_PERMISSIONS = [
   'admin.user.read',
   'admin.user.role.update',
   'admin.user.status.update',
-  'admin.usage.read_all',
+  'admin.user.delete',
+  'admin.user.restore',
   'admin.audit.read',
-  'admin.issue.read',
-  'admin.issue.export',
-  'admin.issue.update',
-  'admin.issue.notify',
   'admin.service_access.activate',
-  'admin.service_access.disable',
-  'admin.service_access.reset',
-  'admin.service_access.update_limits',
-  'admin.billing.reconcile'
+  'admin.service_access.disable'
 ]
 
 export const getLocalPreviewAdminSession = () => ({

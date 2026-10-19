@@ -2,12 +2,11 @@ import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import express from 'express'
 import helmet from 'helmet'
-import { randomUUID } from 'crypto'
 import { apiRouter } from './routes/index.js'
 import { env } from './config/env.js'
 import { errorMiddleware } from './middleware/error.js'
 import { rateLimit } from './middleware/rate-limit.js'
-import { createRequestObserver } from './middleware/request-observer.js'
+import { normalizeTrustedRequestId } from './middleware/request-id.js'
 
 export const app = express()
 
@@ -56,12 +55,10 @@ app.use(express.json({ limit: '10mb' }))
 app.use(cookieParser())
 app.use(rateLimit)
 app.use((req, res, next) => {
-  const requestId = req.headers['x-request-id'] || randomUUID()
-  req.requestId = String(requestId)
+  req.requestId = normalizeTrustedRequestId(req.headers['x-request-id'])
   res.setHeader('x-request-id', req.requestId)
   next()
 })
-app.use(createRequestObserver())
 
 app.use('/api/v1', apiRouter)
 

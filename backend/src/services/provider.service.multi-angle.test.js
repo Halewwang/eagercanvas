@@ -3,61 +3,33 @@ import test from 'node:test'
 
 import { providerGenerateImage } from './provider.service.js'
 
-test('Multi angle sends camera prompt without unsupported provider parameters', async () => {
+test('Multi angle uses GPT Image 2 edits with camera instructions only in its prompt', async () => {
   const originalFetch = global.fetch
   const requests = []
-
   global.fetch = async (url, init) => {
-    requests.push({
-      url: String(url),
-      method: init?.method || 'GET',
-      headers: init?.headers || {},
-      body: init?.body ? JSON.parse(init.body) : null
-    })
-
-    return new Response(
-      JSON.stringify({
-        data: {
-          images: [
-            { url: 'https://example.com/generated.png' }
-          ]
-        }
-      }),
-      {
-        status: 200,
-        headers: {
-          'content-type': 'application/json'
-        }
-      }
-    )
+    requests.push({ url: String(url), body: init.body })
+    return Response.json({ data: [{ url: 'https://example.com/generated.png' }] })
   }
 
+  const prompt = 'Camera view parameters only. horizontal_angle=270. vertical_angle=6. zoom=5.2. Preserve existing image content; only adjust camera viewpoint.'
   try {
-    const result = await providerGenerateImage(
-      {
-        tool: 'multi-angle',
-        model: 'gemini-3.1-flash-image-preview',
-        image: 'https://example.com/source.png',
-        prompt: 'Camera view parameters only. horizontal_angle=270. vertical_angle=6. zoom=5.2. Preserve existing image content; only adjust camera viewpoint.',
-        horizontal_angle: 270,
-        vertical_angle: 6,
-        zoom: 5.2
-      },
-      { apiKey: 'sk-test' }
-    )
-
+    const result = await providerGenerateImage({
+      tool: 'multi-angle',
+      model: 'gpt-image-2',
+      image: 'data:image/png;base64,aW1hZ2U=',
+      prompt,
+      horizontal_angle: 270,
+      vertical_angle: 6,
+      zoom: 5.2
+    }, { openaiApiKey: 'enbrand-test-key' })
     assert.equal(result.data[0].url, 'https://example.com/generated.png')
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].url, 'https://api.enbrand.co/v1/images/edits')
+    assert.equal(requests[0].body.get('model'), 'gpt-image-2')
+    assert.equal(requests[0].body.get('prompt'), prompt)
+    assert.equal(requests[0].body.getAll('image[]').length, 1)
+    for (const field of ['tools', 'horizontal_angle', 'vertical_angle', 'zoom']) assert.equal(requests[0].body.has(field), false)
   } finally {
     global.fetch = originalFetch
   }
-
-  assert.equal(requests.length, 1)
-  assert.match(requests[0].url, /\/ws\/api\/v3\/google\/nano-banana-2\/edit$/)
-  assert.equal(requests[0].body.model, undefined)
-  assert.equal(requests[0].body.prompt, 'Camera view parameters only. horizontal_angle=270. vertical_angle=6. zoom=5.2. Preserve existing image content; only adjust camera viewpoint.')
-  assert.deepEqual(requests[0].body.images, ['https://example.com/source.png'])
-  assert.equal(Object.hasOwn(requests[0].body, 'tools'), false)
-  assert.equal(Object.hasOwn(requests[0].body, 'horizontal_angle'), false)
-  assert.equal(Object.hasOwn(requests[0].body, 'vertical_angle'), false)
-  assert.equal(Object.hasOwn(requests[0].body, 'zoom'), false)
 })

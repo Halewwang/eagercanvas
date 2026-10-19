@@ -1,24 +1,6 @@
 import { DelegatingProviderAdapter } from './delegating.adapter.js'
-import { HttpError } from '../../utils/http.js'
-import { callProvider, callProviderMultipart } from './http-client.js'
-import { normalizeImageResponse } from './image-response.js'
-import { extensionFromMimeType, fetchBinaryFromSource } from './media-source.js'
-import {
-  buildGptImage2AsyncResultPath,
-  buildGptImage2RootAsyncResultPath,
-  buildGptImage2RequestBody,
-  extractGptImage2TaskId,
-  isGptImage2PendingResult
-} from '../gpt-image-2-size.js'
-
-const pickFirstImageInput = (payload = {}) => {
-  if (typeof payload.image === 'string') return payload.image
-  if (Array.isArray(payload.image) && payload.image.length > 0) return payload.image[0]
-  if (Array.isArray(payload.images) && payload.images.length > 0) return payload.images[0]
-  if (typeof payload.first_frame_image === 'string') return payload.first_frame_image
-  if (typeof payload.image_url === 'string') return payload.image_url
-  return ''
-}
+import { callProvider } from './http-client.js'
+import { pickFirstImageInput } from './image-request.js'
 
 const OPENAI_VIDEO_SIZE_BY_RATIO = {
   '16:9': '1280x720',
@@ -138,47 +120,6 @@ const normalizeOpenAiVideoStatus = (data = {}) => {
   return status || 'processing'
 }
 
-const getGptImage2InputImages = (payload = {}) => {
-  const inputImages = Array.isArray(payload.images)
-    ? payload.images.filter(Boolean)
-    : []
-  const firstImage = pickFirstImageInput(payload)
-  if (!inputImages.length && firstImage) {
-    inputImages.push(firstImage)
-  }
-  return inputImages
-}
-
-const appendGptImage2MultipartImages = async (formData, images = []) => {
-  for (let index = 0; index < images.length; index += 1) {
-    const source = String(images[index] || '').trim()
-    if (!source) continue
-
-    const { mimeType, buffer } = await fetchBinaryFromSource(source)
-    const fileName = `image-${index + 1}.${extensionFromMimeType(mimeType)}`
-    const blob = new Blob([buffer], { type: mimeType || 'image/png' })
-    formData.append('image', blob, fileName)
-  }
-}
-
-const normalizeGptImage2CreateResult = (rawTask) => {
-  const taskId = extractGptImage2TaskId(rawTask)
-  if (taskId) {
-    return {
-      ...rawTask,
-      task_id: taskId,
-      status: 'running',
-      raw: rawTask
-    }
-  }
-
-  const normalized = normalizeImageResponse(rawTask)
-  if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
-    throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
-  }
-  return normalized
-}
-
 export const createOpenAiVideo = async (payload = {}, requestOptions = {}) => {
   const model = String(payload.model_name || payload.model || '').trim()
   const prompt = String(payload.prompt || '').trim()
@@ -217,30 +158,6 @@ export const createOpenAiVideo = async (payload = {}, requestOptions = {}) => {
   }
 }
 
-export const createGptImage2Image = async (payload = {}, requestOptions = {}) => {
-  const requestOptionsWithTimeout = {
-    ...requestOptions,
-    timeoutMs: Math.max(Number(requestOptions?.timeoutMs || 0), 1800000)
-  }
-  const body = buildGptImage2RequestBody(payload)
-  const inputImages = getGptImage2InputImages(payload)
-
-  if (inputImages.length > 0) {
-    const formData = new FormData()
-    for (const [key, value] of Object.entries(body)) {
-      if (value !== undefined && value !== null && String(value).trim() !== '') {
-        formData.append(key, String(value))
-      }
-    }
-    await appendGptImage2MultipartImages(formData, inputImages.slice(0, 16))
-    const rawTask = await callProviderMultipart('/v1/images/edits?async=true', formData, 'POST', requestOptionsWithTimeout)
-    return normalizeGptImage2CreateResult(rawTask)
-  }
-
-  const rawTask = await callProvider('/v1/images/generations?async=true', body, 'POST', requestOptionsWithTimeout)
-  return normalizeGptImage2CreateResult(rawTask)
-}
-
 export const pollOpenAiVideoTaskStatus = async (taskId, requestOptions = {}) => {
   const normalizedTaskId = normalizeOpenAiVideoTaskId(taskId)
   const raw = await callProvider(`/openai/v1/videos/${normalizedTaskId}`, null, 'GET', requestOptions)
@@ -267,120 +184,11 @@ export const pollOpenAiVideoTaskStatus = async (taskId, requestOptions = {}) => 
   }
 }
 
-export const pollGptImage2TaskStatus = async (taskId, requestOptions = {}) => {
-  const safeTaskId = String(taskId || '').trim()
-  if (!safeTaskId) return null
-
-  let current
-  const statusPaths = [
-    buildGptImage2AsyncResultPath(safeTaskId),
-    buildGptImage2RootAsyncResultPath(safeTaskId)
-  ]
-  try {
-    let lastError
-    for (const path of statusPaths) {
-      try {
-        current = await callProvider(path, null, 'GET', requestOptions)
-        break
-      } catch (error) {
-        lastError = error
-        const message = String(error?.message || '').toLowerCase()
-        const status = Number(error?.status || 0)
-        const routeMissing = status === 404 || /cannot\s+get|not found|unknown endpoint|unsupported route/.test(message)
-        if (!routeMissing || path === statusPaths[statusPaths.length - 1]) {
-          throw error
-        }
-      }
-    }
-    if (!current && lastError) throw lastError
-  } catch (error) {
-    if (isGptImage2PendingResult({
-      status: error?.status,
-      message: error?.message,
-      error: error?.message
-    })) {
-      return {
-        task_id: safeTaskId,
-        status: 'processing',
-        message: '',
-        raw: {
-          status: error?.status,
-          message: error?.message
-        }
-      }
-    }
-    throw error
-  }
-
-  const statusCode = Number(current?.status_code || current?.statusCode || 0)
-  const err = String(current?.err || current?.error || current?.message || '').trim()
-  const isPending = isGptImage2PendingResult(current)
-  if ((err && !isPending) || (statusCode && statusCode >= 400 && !isPending)) {
-    const message = err || 'GPT Image 2 generation failed'
-    return {
-      task_id: safeTaskId,
-      status: 'failed',
-      message,
-      error: {
-        code: 'IMAGE_GENERATION_FAILED',
-        message
-      },
-      raw: current
-    }
-  }
-
-  const normalized = normalizeImageResponse(current)
-  if (Array.isArray(normalized.data) && normalized.data.length > 0) {
-    return {
-      ...normalized,
-      task_id: safeTaskId,
-      status: 'completed',
-      raw: current
-    }
-  }
-
-  const dataUrl = String(current?.data || '').trim()
-  if (/^https?:\/\//i.test(dataUrl) || /^data:image\//i.test(dataUrl)) {
-    return {
-      ...current,
-      task_id: safeTaskId,
-      status: 'completed',
-      data: [{ url: dataUrl }],
-      raw: current
-    }
-  }
-
-  if (isPending) {
-    return {
-      task_id: safeTaskId,
-      status: 'processing',
-      message: '',
-      raw: current
-    }
-  }
-
-  return {
-    task_id: safeTaskId,
-    status: 'processing',
-    message: '',
-    raw: current
-  }
-}
-
-export const pollOpenAiTaskStatus = async (taskId, requestOptions = {}) => {
-  if (isOpenAiVideoModel(requestOptions?.model) || isOpenAiVideoTaskId(taskId)) {
-    return pollOpenAiVideoTaskStatus(taskId, requestOptions)
-  }
-
-  return pollGptImage2TaskStatus(taskId, requestOptions)
-}
-
 export class OpenAiProviderAdapter extends DelegatingProviderAdapter {
   constructor(operations = {}) {
     super({
-      imageGeneration: createGptImage2Image,
       videoGeneration: createOpenAiVideo,
-      pollTaskStatus: pollOpenAiTaskStatus,
+      pollTaskStatus: pollOpenAiVideoTaskStatus,
       ...operations
     })
   }

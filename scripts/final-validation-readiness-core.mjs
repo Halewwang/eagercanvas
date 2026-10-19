@@ -44,8 +44,7 @@ const JWT_REFRESH_PLACEHOLDER = 'REPLACE_WITH_ANOTHER_24_RANDOM_CHARS'
 export const buildFinalValidationEnvTemplates = ({
   frontendApiBaseUrl = 'http://127.0.0.1:8787/api/v1',
   supabaseUrl = 'https://rzfsyezidhgyikehucrh.supabase.co',
-  providerApiBaseUrl = 'https://api.302ai.cn',
-  dashboard302ApiBaseUrl = 'https://api.302ai.cn'
+  providerApiBaseUrl = 'https://api.302ai.cn'
 } = {}) => ({
   frontendPath: '.env.local',
   backendPath: 'backend/.env.local',
@@ -60,6 +59,8 @@ export const buildFinalValidationEnvTemplates = ({
     'PORT=8787',
     'NODE_ENV=development',
     'FRONTEND_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://localhost:5173,http://127.0.0.1:5173',
+    '# Enable only after migration 016 and the account lifecycle checks pass.',
+    'ADMIN_LIFECYCLE_MUTATIONS_ENABLED=false',
     '',
     `SUPABASE_URL=${supabaseUrl}`,
     'SUPABASE_SERVICE_ROLE_KEY=REPLACE_WITH_SUPABASE_SERVICE_ROLE_KEY',
@@ -71,17 +72,13 @@ export const buildFinalValidationEnvTemplates = ({
     '',
     'RESEND_API_KEY=REPLACE_WITH_RESEND_API_KEY',
     'RESEND_FROM_EMAIL=onboarding@resend.dev',
-    'ISSUE_ALERT_ENABLED=false',
-    'ISSUE_ALERT_EMAILS=wh896794@gmail.com',
-    'ISSUE_ALERT_MIN_SEVERITY=p1',
-    'ISSUE_ALERT_COOLDOWN_MINUTES=60',
-    'ISSUE_ALERT_EVIDENCE_DELAY_SECONDS=0',
-    'ISSUE_ALERT_MAX_PER_HOUR=10',
     '',
+    'OPENAI_API_BASE_URL=https://api.enbrand.co/v1',
+    'OPENAI_API_KEY=REPLACE_WITH_OPENAI_API_KEY',
+    '',
+    '# Shared video runtime credential.',
     `PROVIDER_API_BASE_URL=${providerApiBaseUrl}`,
     'PROVIDER_API_KEY=REPLACE_WITH_PROVIDER_API_KEY',
-    `DASHBOARD_302_API_BASE_URL=${dashboard302ApiBaseUrl}`,
-    'DASHBOARD_302_API_KEY=REPLACE_WITH_302_SYSTEM_PERMISSION_API_KEY',
     '',
     'RATE_LIMIT_PER_MINUTE=120',
     'AUTH_CODE_COOLDOWN_SEC=60',
@@ -147,9 +144,9 @@ export const buildFinalValidationRunbook = ({ readiness } = {}) => {
     },
     {
       id: 'usage-ledger',
-      title: 'Verify usage and billing reconciliation',
-      command: 'Manual admin/usage flow',
-      evidence: 'usage_events records the run and provider_billing_records or dashboard reconciliation data is visible.'
+      title: 'Verify local usage and service authorization',
+      command: 'Manual user/service management flow',
+      evidence: 'usage_events records the run; active service permits text/image/video, while disabled service and suspended accounts reject generation and polling.'
     },
     {
       id: 'manual-regression',
@@ -227,9 +224,9 @@ export const assessFinalValidationReadiness = ({
       value: backendEnv.RESEND_API_KEY,
       reason: 'RESEND_API_KEY is required for email/code auth validation.'
     }),
-    hasRealValue(backendEnv.PROVIDER_API_KEY) && hasRealValue(backendEnv.DASHBOARD_302_API_KEY)
-      ? pass('provider-api-key', 'Provider and dashboard API keys')
-      : fail('provider-api-key', 'Provider and dashboard API keys', 'PROVIDER_API_KEY and DASHBOARD_302_API_KEY are required for provider workflow and usage validation.')
+    hasRealValue(backendEnv.OPENAI_API_KEY) && hasRealValue(backendEnv.PROVIDER_API_KEY)
+      ? pass('provider-api-key', 'Shared model API keys')
+      : fail('provider-api-key', 'Shared model API keys', 'OPENAI_API_KEY is required for text/image validation; PROVIDER_API_KEY is required for video validation.')
   ]
 
   const failedChecks = checks.filter((check) => check.status === 'fail').length

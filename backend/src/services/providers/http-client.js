@@ -1,5 +1,6 @@
 import { env } from '../../config/env.js'
 import { HttpError } from '../../utils/http.js'
+import { normalizeProviderVisibleMessage } from '../../utils/provider-visible-message.js'
 import { attachProviderResponseMetadata } from '../provider-response-metadata.js'
 
 const parseProviderBases = () => {
@@ -55,18 +56,6 @@ const buildHeaders = (extra = {}, requestOptions = {}) => {
   }
 }
 
-const buildAuthHeaders = (extra = {}, requestOptions = {}) => {
-  const apiKey = resolveApiKey(requestOptions)
-  if (!apiKey) {
-    throw new HttpError(500, 'PROVIDER_API_KEY is not configured', 'PROVIDER_NOT_CONFIGURED')
-  }
-
-  return {
-    Authorization: `Bearer ${apiKey}`,
-    ...extra
-  }
-}
-
 const parseProviderResponse = async (response) => {
   const text = await response.text()
   if (!text) return null
@@ -93,7 +82,7 @@ const extractProviderErrorMessage = (data, status) => {
   ]
 
   const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
-  return found ? String(found).trim() : `Provider request failed: ${status}`
+  return normalizeProviderVisibleMessage(found, `模型服务商请求失败：${status}`)
 }
 
 const callProviderWithBase = async (base, path, body, method = 'POST', requestOptions = {}) => {
@@ -120,30 +109,6 @@ const callProviderWithBase = async (base, path, body, method = 'POST', requestOp
   }
 }
 
-const callProviderMultipartWithBase = async (base, path, formData, method = 'POST', requestOptions = {}) => {
-  const controller = new AbortController()
-  const timeoutMs = Number(requestOptions?.timeoutMs || env.providerTimeoutMs || 90000)
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const response = await fetch(buildProviderUrl(base, path), {
-      method,
-      headers: buildAuthHeaders({}, requestOptions),
-      body: method === 'GET' ? undefined : formData,
-      signal: controller.signal
-    })
-    const data = await parseProviderResponse(response)
-
-    if (!response.ok) {
-      const message = extractProviderErrorMessage(data, response.status)
-      throw new HttpError(response.status, message, 'PROVIDER_ERROR')
-    }
-
-    return attachProviderResponseMetadata(data || {}, response)
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 export const callProvider = async (path, body, method = 'POST', requestOptions = {}) => {
   if (!providerBases.length) {
     throw new HttpError(500, 'PROVIDER_API_BASE_URL is not configured', 'PROVIDER_NOT_CONFIGURED')
@@ -153,76 +118,6 @@ export const callProvider = async (path, body, method = 'POST', requestOptions =
   for (const base of providerBases) {
     try {
       return await callProviderWithBase(base, path, body, method, requestOptions)
-    } catch (error) {
-      lastError = error
-      const status = Number(error?.status || 0)
-      const retryableHttp = status === 429 || status >= 500
-      const retryableNetwork = error?.name === 'AbortError' || !status
-      if (!retryableHttp && !retryableNetwork) {
-        throw error
-      }
-    }
-  }
-
-  throw lastError || new HttpError(502, 'Provider request failed', 'PROVIDER_ERROR')
-}
-
-const callProviderStreamWithBase = async (base, path, body, method = 'POST', requestOptions = {}) => {
-  const controller = new AbortController()
-  const timeoutMs = Number(requestOptions?.timeoutMs || env.providerTimeoutMs || 90000)
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const response = await fetch(buildProviderUrl(base, path), {
-      method,
-      headers: buildHeaders({}, requestOptions),
-      body: method === 'GET' ? undefined : JSON.stringify(body),
-      signal: requestOptions?.signal || controller.signal
-    })
-
-    if (!response.ok) {
-      const data = await parseProviderResponse(response)
-      const message = extractProviderErrorMessage(data, response.status)
-      throw new HttpError(response.status, message, 'PROVIDER_ERROR')
-    }
-
-    return response
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-export const callProviderStream = async (path, body, method = 'POST', requestOptions = {}) => {
-  if (!providerBases.length) {
-    throw new HttpError(500, 'PROVIDER_API_BASE_URL is not configured', 'PROVIDER_NOT_CONFIGURED')
-  }
-
-  let lastError
-  for (const base of providerBases) {
-    try {
-      return await callProviderStreamWithBase(base, path, body, method, requestOptions)
-    } catch (error) {
-      lastError = error
-      const status = Number(error?.status || 0)
-      const retryableHttp = status === 429 || status >= 500
-      const retryableNetwork = error?.name === 'AbortError' || !status
-      if (!retryableHttp && !retryableNetwork) {
-        throw error
-      }
-    }
-  }
-
-  throw lastError || new HttpError(502, 'Provider stream request failed', 'PROVIDER_ERROR')
-}
-
-export const callProviderMultipart = async (path, formData, method = 'POST', requestOptions = {}) => {
-  if (!providerBases.length) {
-    throw new HttpError(500, 'PROVIDER_API_BASE_URL is not configured', 'PROVIDER_NOT_CONFIGURED')
-  }
-
-  let lastError
-  for (const base of providerBases) {
-    try {
-      return await callProviderMultipartWithBase(base, path, formData, method, requestOptions)
     } catch (error) {
       lastError = error
       const status = Number(error?.status || 0)

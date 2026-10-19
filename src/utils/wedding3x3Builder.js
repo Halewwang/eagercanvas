@@ -306,13 +306,14 @@ export const buildWedding3x3Json = ({
     reference_image: trimString(referenceImage),
     lock_structure: !!lockStructure,
     variables: safeVariables,
-    generation: {
+    generation: Object.fromEntries(Object.entries({
       model: trimString(generation.model),
+      background: trimString(generation.background),
       ratio: trimString(generation.ratio),
       resolution: trimString(generation.resolution),
       quality: trimString(generation.quality),
       size: trimString(generation.size)
-    },
+    }).filter(([, value]) => value)),
     output: {
       prompt,
       debug: {

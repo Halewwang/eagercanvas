@@ -854,3 +854,7 @@ test('canvas renders lifecycle loading and recoverable error UI', () => {
   assert.match(overlay, /role="alert"/)
   assert.match(overlay, /prefers-reduced-motion/)
 })
+
+test('canvas uses the image capsule without a separate image configuration card', () => {
+  assert.doesNotMatch(canvasSource, /ImageConfigNode|imageConfig:\s*markRaw/)
+})

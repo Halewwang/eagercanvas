@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
 
-import {
+const runnerSource = readFileSync(new URL('./Wedding3x3GenerationRunner.js', import.meta.url), 'utf8')
+  .replace("from '@/config/models'", `from '${new URL('../../config/models.js', import.meta.url).href}'`)
+const {
   createWedding3x3ApplyPayload,
   createWedding3x3PendingPayload,
   runWedding3x3Generation
-} from './Wedding3x3GenerationRunner.js'
+} = await import(`data:text/javascript;base64,${Buffer.from(runnerSource).toString('base64')}`)
 
 const baseOutput = {
   output: {
@@ -72,7 +75,7 @@ test('wedding 3x3 generation runner builds apply payloads with the generated ima
   )
 })
 
-test('wedding 3x3 generation runner uses synchronous image generation for non async models', async () => {
+test('wedding 3x3 generation runner uses synchronous GPT image generation', async () => {
   const calls = []
   const url = await runWedding3x3Generation({
     ...baseRunInput,
@@ -94,52 +97,24 @@ test('wedding 3x3 generation runner uses synchronous image generation for non as
       ratio: '3:2',
       aspect_ratio: '3:2',
       resolution: '2k',
-      quality: 'high',
-      enable_sync_mode: true,
-      enable_base64_output: false
+      quality: 'high'
     }
   ])
 })
 
-test('wedding 3x3 generation runner polls async image task results when no immediate url is returned', async () => {
+test('wedding 3x3 replaces retired models and uses the normal image generation path', async () => {
   const calls = []
   const url = await runWedding3x3Generation({
     ...baseRunInput,
     model: 'gemini-3.1-flash-image-preview',
-    createRun: async (payload) => {
-      calls.push(['create', payload])
-      return { result: { task_id: 'task-123' } }
-    },
-    getTask: async (taskId, options) => {
-      calls.push(['task', taskId, options])
-      return { status: 'completed', data: [{ url: 'https://cdn.example.com/async.png' }] }
-    },
-    pollOptions: {
-      attempts: 1,
-      intervalMs: 1,
-      sleep: async () => {}
-    }
+    imageGen: { generate: async (payload) => {
+      calls.push(payload)
+      return [{ url: 'https://cdn.example.com/result.png' }]
+    } }
   })
-
-  assert.equal(url, 'https://cdn.example.com/async.png')
-  assert.deepEqual(calls, [
-    [
-      'create',
-      {
-        model: 'gemini-3.1-flash-image-preview',
-        prompt: 'A structured wedding product prompt',
-        image: 'https://cdn.example.com/reference.png',
-        size: '2048x1365',
-        ratio: '3:2',
-        aspect_ratio: '3:2',
-        resolution: '2k',
-        quality: 'high',
-        enable_sync_mode: false,
-        enable_base64_output: false
-      }
-    ],
-    ['task', 'task-123', { timeout: 45000 }]
-  ])
+  assert.equal(url, 'https://cdn.example.com/result.png')
+  assert.equal(calls[0].model, 'gpt-image-2')
+  assert.equal(Object.hasOwn(calls[0], 'enable_sync_mode'), false)
 })
 
 test('wedding 3x3 generation runner rejects empty model output', async () => {
@@ -152,4 +127,15 @@ test('wedding 3x3 generation runner rejects empty model output', async () => {
     }),
     /No image output from model/
   )
+})
+
+test('wedding 3x3 keeps its prompt and reference without inventing output controls', async () => {
+  const calls = []
+  await runWedding3x3Generation({
+    imageSource: 'reference.png', model: 'gpt-image-2', output: baseOutput, background: 'opaque',
+    imageGen: { generate: async (request) => { calls.push(request); return [{ url: 'result.png' }] } }
+  })
+  assert.deepEqual(calls[0], {
+    model: 'gpt-image-2', prompt: baseOutput.output.prompt, image: 'reference.png', background: 'opaque'
+  })
 })

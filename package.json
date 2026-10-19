@@ -8,7 +8,7 @@
     "dev:api": "npm --prefix backend run dev",
     "test:frontend": "find src -name '*.test.js' -not -name '* 2.js' -print0 | xargs -0 node --test",
     "test:backend": "find backend/src -name '*.test.js' -print0 | xargs -0 node --test",
-    "test:tools": "node --test scripts/*.test.mjs",
+    "test:tools": "node --test scripts/*.test.mjs backend/scripts/*.test.mjs",
     "lint": "eslint src --ext .js,.vue",
     "check:maintenance": "node scripts/check-maintenance.mjs",
     "check:validation-readiness": "node scripts/check-final-validation-readiness.mjs",

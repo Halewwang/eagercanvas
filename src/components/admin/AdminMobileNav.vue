@@ -3,8 +3,8 @@
     <AdminMicroButton
       v-for="item in navItems"
       :key="`mobile-${item.key}`"
-      :active="activeSection === item.key"
-      @click="$emit('select-section', item.key)"
+      :active="activeSection === item.routeName"
+      @click="$emit('select-section', item.routeName)"
     >
       {{ item.label }}
     </AdminMicroButton>

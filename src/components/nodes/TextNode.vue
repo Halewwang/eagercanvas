@@ -66,7 +66,7 @@ import { TextOutline } from '@/icons/coolicons'
 import { useCanvasStore } from '@/stores/canvas'
 import { pinia } from '@/stores/pinia'
 import { useChat } from '@/hooks/api/useChatApi.js'
-import { chatModelOptions, DEFAULT_CHAT_MODEL } from '@/stores/models'
+import { chatModelOptions, DEFAULT_CHAT_MODEL, resolveChatModelKey } from '@/stores/models'
 import { getErrorMessage } from '@/utils'
 
 const props = defineProps({
@@ -84,7 +84,7 @@ const showCapsule = ref(false)
 const isGenerating = ref(false)
 const showErrorModal = ref(false)
 const content = ref(props.data?.content || '')
-const localChatModel = ref(props.data?.model || 'gemini-2.5-flash')
+const localChatModel = ref(resolveChatModelKey(props.data?.model))
 const isSelected = computed(() => !!props.selected || !!props.data?.selected)
 const showNodeCapsule = computed(() => !props.data?.suppressCapsule && (showCapsule.value || isSelected.value))
 const showHandles = computed(() => showCapsule.value || isSelected.value)
@@ -116,7 +116,7 @@ const textInputStatusList = computed(() => [
     active: hasIncomingImage.value
   }
 ])
-const VISION_ANALYSIS_MODEL = 'gemini-2.5-flash'
+const VISION_ANALYSIS_MODEL = DEFAULT_CHAT_MODEL
 const IMAGE_JSON_SCHEMA = {
   summary: 'short description of the image',
   scene: 'environment and setting',
@@ -162,7 +162,7 @@ watch(() => props.data?.content, (newVal) => {
   if (newVal !== content.value) content.value = newVal || ''
 })
 watch(() => props.data?.model, (newVal) => {
-  if (newVal && newVal !== localChatModel.value) localChatModel.value = newVal
+  localChatModel.value = resolveChatModelKey(newVal)
 })
 watch(() => props.data?.error, (newVal) => {
   showErrorModal.value = !!newVal
@@ -189,8 +189,8 @@ const updateContent = () => {
 }
 
 const setChatModel = (key) => {
-  localChatModel.value = key
-  updateNode(props.id, { model: key })
+  localChatModel.value = resolveChatModelKey(key)
+  updateNode(props.id, { model: localChatModel.value })
 }
 
 const buildImageAnalysisPrompt = () => [

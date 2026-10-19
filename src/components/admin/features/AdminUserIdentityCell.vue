@@ -1,20 +1,13 @@
 <template>
   <td class="admin-user-identity-cell px-3 py-4">
-    <div class="admin-user-identity-stack">
+    <button type="button" class="admin-user-identity-stack text-left" @click="emit('open-detail')">
       <p class="admin-user-name">{{ user.displayName || '-' }}</p>
       <p class="admin-user-email">{{ user.email }}</p>
       <div class="admin-user-id-line">
         <span class="admin-user-id-value">ID: {{ user.id }}</span>
       </div>
-      <div class="admin-user-api-line">
-        <span class="admin-user-api-prefix">API:</span>
-        <span class="admin-user-service-id">{{ user.service?.serviceIdentifier || '尚未开通' }}</span>
-      </div>
       <div class="admin-user-service-state">
         <span>{{ serviceStatusLabel(user.service?.serviceStatus) }}</span>
-        <span v-if="user.service?.apiKeyLast4" class="admin-user-key-last4">
-          Key 尾号 {{ user.service?.apiKeyLast4 }}
-        </span>
       </div>
       <div class="admin-user-meta-group">
         <AdminUserIdentityMeta
@@ -24,12 +17,14 @@
           :user="user"
         />
       </div>
-    </div>
+    </button>
   </td>
 </template>
 
 <script setup>
 import AdminUserIdentityMeta from './AdminUserIdentityMeta.vue'
+
+const emit = defineEmits(['open-detail'])
 
 const {
   roleLabel,
@@ -68,10 +63,18 @@ const {
 
 .admin-user-identity-stack {
   display: flex;
-  min-height: 138px;
+  min-height: 108px;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  width: 100%;
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.admin-user-identity-stack:focus-visible {
+  outline: 2px solid rgba(103, 232, 249, 0.8);
+  outline-offset: 2px;
 }
 
 .admin-user-name {
@@ -103,34 +106,6 @@ const {
   line-height: 1.4;
 }
 
-.admin-user-api-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  min-width: 0;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.admin-user-api-prefix {
-  flex: 0 0 auto;
-  color: rgba(255, 255, 255, 0.32);
-  font-weight: 600;
-}
-
-.admin-user-service-id {
-  min-width: 0;
-  max-width: 168px;
-  overflow: hidden;
-  color: rgba(255, 255, 255, 0.46);
-  font-size: 11px;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .admin-user-service-state {
   display: flex;
   align-items: center;
@@ -140,11 +115,6 @@ const {
   color: rgba(255, 255, 255, 0.5);
   font-size: 11px;
   line-height: 1.45;
-}
-
-.admin-user-key-last4 {
-  color: rgba(255, 255, 255, 0.68);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .admin-user-meta-group {

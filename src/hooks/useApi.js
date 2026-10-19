@@ -5,12 +5,12 @@
 
 import { useApiConfig } from './useApiConfig'
 import { useChat } from './api/useChatApi.js'
-import { useImageGeneration, useImageTools } from './api/useImageApi.js'
+import { useImageGeneration } from './api/useImageApi.js'
 import { useVideoGeneration } from './api/useVideoApi.js'
 
 export { useApiState } from './api/useApiState.js'
 export { useChat } from './api/useChatApi.js'
-export { useImageGeneration, useImageTools } from './api/useImageApi.js'
+export { useImageGeneration } from './api/useImageApi.js'
 export { useVideoGeneration } from './api/useVideoApi.js'
 
 /**
@@ -20,8 +20,7 @@ export const useApi = () => {
   const config = useApiConfig()
   const chat = useChat()
   const image = useImageGeneration()
-  const imageTools = useImageTools()
   const videoGen = useVideoGeneration()
 
-  return { config, chat, image, imageTools, video: videoGen }
+  return { config, chat, image, video: videoGen }
 }

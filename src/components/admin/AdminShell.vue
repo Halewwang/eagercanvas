@@ -1,10 +1,10 @@
 <template>
-  <div :class="['admin-shell min-h-screen overflow-x-hidden px-3 py-4 md:px-6 md:py-6', shellClass]">
+  <div :class="['admin-shell min-h-screen overflow-x-hidden px-4 py-4 md:px-6 md:py-6', shellClass]">
     <div :class="['admin-frame w-full rounded-[20px] border border-white/10', frameClass]">
       <div class="admin-layout relative">
         <slot name="sidebar" />
 
-        <main :class="['admin-main w-full min-w-0 p-5 md:p-7 lg:pl-[260px]', mainClass]">
+        <main :class="['admin-main w-full min-w-0 p-4 md:p-6 lg:pl-[260px]', mainClass]">
           <slot />
         </main>
       </div>

@@ -38,11 +38,6 @@ export const useImageNodeGeneration = ({
   isConfigured,
   localBackground,
   localImageModel,
-  localImageQuality,
-  localImageRatio,
-  localImageSize,
-  localOutputFormat,
-  localResolution,
   messageApi = getDefaultMessageApi,
   nodeId,
   projectSaveState,
@@ -122,8 +117,9 @@ export const useImageNodeGeneration = ({
 
     const { prompt, refImages } = getConnectedInputs()
     const selfImage = readReactiveValue(displayImageUrl)
-    const mergedRefs = [...refImages]
-    if (selfImage) mergedRefs.unshift(selfImage)
+    const mergedRefs = selfImage
+      ? [selfImage, ...refImages.filter((image) => image !== selfImage)]
+      : [...refImages]
 
     if (!prompt && mergedRefs.length === 0) {
       dispatchMessage(messageApi, {
@@ -136,21 +132,12 @@ export const useImageNodeGeneration = ({
     writeReactiveValue(imageActionLoading, mode)
     updateNode(readReactiveValue(nodeId), getImageNodeActionPendingPatch(), { persist: false })
     try {
-      const outputFormat = readReactiveValue(localOutputFormat)
       const generationPrompt = prompt || 'Generate a polished visual based on this reference.'
       const result = await imageGen.generate({
         model: readReactiveValue(localImageModel),
         projectId: readReactiveValue(currentProjectId),
         prompt: generationPrompt,
-        size: readReactiveValue(localImageSize),
-        quality: readReactiveValue(localImageQuality),
         background: readReactiveValue(localBackground),
-        output_format: outputFormat,
-        output_compression: ['jpeg', 'webp'].includes(String(outputFormat).toLowerCase()) ? 100 : undefined,
-        moderation: 'auto',
-        ratio: readReactiveValue(localImageRatio),
-        aspect_ratio: readReactiveValue(localImageRatio),
-        resolution: readReactiveValue(localResolution),
         sourceNodeId: readReactiveValue(nodeId),
         image: mergedRefs
       })
@@ -164,12 +151,7 @@ export const useImageNodeGeneration = ({
       const resultMetadata = {
         loading: false,
         model: readReactiveValue(localImageModel),
-        size: readReactiveValue(localImageSize),
-        quality: readReactiveValue(localImageQuality),
         background: readReactiveValue(localBackground),
-        output_format: readReactiveValue(localOutputFormat),
-        ratio: readReactiveValue(localImageRatio),
-        resolution: readReactiveValue(localResolution),
         sourcePrompt: generationPrompt,
         sourceRefImages,
         error: ''

@@ -150,7 +150,7 @@
             <p class="home-tab-copy">
               Prompt + reference +
               <br />
-              1K / 2K / 4K
+              image refinement
             </p>
             <div class="home-tab-line" />
           </div>
@@ -194,8 +194,8 @@
             </p>
             <ul class="home-module-list">
               <li>Reference image input</li>
-              <li>Flexible ratios with 1K / 2K / 4K output</li>
-              <li>Remove Background, Crop, and Multi-Angle tools</li>
+              <li>Linked revisions on the canvas</li>
+              <li>Crop, Multi-Angle, and Theme Set tools</li>
             </ul>
             <div class="home-model-icons">
               <img :src="moduleImageModelIcon" alt="" class="home-model-icon" />

@@ -1,54 +1,54 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { providerChatCompletionsStream } from './provider.service.js'
+import { providerChatCompletions, providerChatCompletionsStream } from './provider.service.js'
 
-test('provider chat stream requests provider SSE with stream enabled', async () => {
+const options = { openaiApiKey: 'enbrand-test-key', apiKey: 'old-302-key' }
+const completed = {
+  id: 'response-test', status: 'completed',
+  output: [{ content: [{ type: 'output_text', text: 'Hi' }] }],
+  usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 }
+}
+
+test('provider text calls use enbrand Responses and fixed GPT 5.6 sol without storage', async () => {
   const originalFetch = global.fetch
   const requests = []
-
   global.fetch = async (url, init) => {
-    requests.push({
-      url: String(url),
-      method: init?.method || 'GET',
-      headers: init?.headers || {},
-      body: init?.body ? JSON.parse(init.body) : null
-    })
-
-    return new Response(
-      new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'))
-          controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
-          controller.close()
-        }
-      }),
-      {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' }
-      }
-    )
+    requests.push({ url: String(url), body: JSON.parse(init.body), headers: init.headers })
+    return Response.json(completed)
   }
-
   try {
-    const response = await providerChatCompletionsStream(
-      {
-        model: 'gemini-2.5-flash',
-        messages: [{ role: 'user', content: 'hello' }],
-        stream: false
-      },
-      { apiKey: 'sk-test' }
-    )
-
-    assert.equal(response.ok, true)
-    assert.equal(response.headers.get('content-type'), 'text/event-stream')
+    const result = await providerChatCompletions({ model: 'retired-model', messages: [{ role: 'user', content: 'hello' }] }, options)
+    assert.equal(result.choices[0].message.content, 'Hi')
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].url, 'https://api.enbrand.co/v1/responses')
+    assert.equal(requests[0].headers.Authorization, 'Bearer enbrand-test-key')
+    assert.equal(requests[0].body.model, 'gpt-5.6-sol')
+    assert.equal(requests[0].body.store, false)
+    assert.equal(requests[0].body.stream, false)
   } finally {
     global.fetch = originalFetch
   }
+})
 
-  assert.equal(requests.length, 1)
-  assert.match(requests[0].url, /\/v1\/chat\/completions$/)
-  assert.equal(requests[0].method, 'POST')
-  assert.equal(requests[0].body.stream, true)
-  assert.equal(requests[0].body.stream_options.include_usage, true)
+test('provider text streams translate Responses events into the existing chat SSE contract', async () => {
+  const originalFetch = global.fetch
+  let request
+  global.fetch = async (url, init) => {
+    request = { url: String(url), body: JSON.parse(init.body) }
+    return new Response(`event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: completed })}\n\n`, {
+      headers: { 'content-type': 'text/event-stream' }
+    })
+  }
+  try {
+    const response = await providerChatCompletionsStream({ messages: [{ role: 'user', content: 'hello' }] }, options)
+    const body = await response.text()
+    assert.match(body, /"delta":\{"content":"Hi"\}/)
+    assert.match(body, /data: \[DONE\]/)
+    assert.equal(request.url, 'https://api.enbrand.co/v1/responses')
+    assert.equal(request.body.stream, true)
+    assert.equal(request.body.store, false)
+  } finally {
+    global.fetch = originalFetch
+  }
 })

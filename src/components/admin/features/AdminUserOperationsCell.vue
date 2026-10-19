@@ -1,214 +1,98 @@
 <template>
-  <td v-if="showUserActions || canManageRoles || canManageUserStatus" class="admin-user-operations-cell px-3 py-4">
-    <AdminEditorCard class="admin-user-operations-card">
-      <AdminEditorBlock
-        v-if="showUserActions"
-        class="admin-user-operations-section admin-user-operations-service"
-      >
-        <div class="admin-user-operations-labeled-row">
-          <p class="text-[11px] text-white/45">服务</p>
-          <div class="admin-user-operations-action-slot">
-            <AdminUserServiceActivationAction
-              :can-activate-service="canActivateService"
-              :service-loading="serviceLoading"
-              :user="user"
-              @activate-service="emit('activate-service', $event)"
-              @bind-manual-service="emit('bind-manual-service', $event)"
-            />
-            <AdminUserServiceActiveActions
-              :can-disable-service="canDisableService"
-              :can-reset-service="canResetService"
-              :can-update-service-limits="canUpdateServiceLimits"
-              :service-loading="serviceLoading"
-              :user="user"
-              @disable-service="emit('disable-service', $event)"
-              @reset-service="emit('reset-service', $event)"
-              @update-service-limits="emit('update-service-limits', $event)"
-            />
-          </div>
-        </div>
-      </AdminEditorBlock>
-      <div
-        v-if="canManageRoles || canManageUserStatus"
-        class="admin-user-operations-account"
-      >
-        <AdminUserRoleActions
-          :can-manage-roles="canManageRoles"
-          :is-self="isSelf"
-          :role-options="roleOptions"
-          :saving="saving"
-          :selected-roles="selectedRoles"
-          :user="user"
-          @save-roles="emit('save-roles', $event)"
-          @update-role-selection="forwardRoleSelection"
-        />
-        <AdminUserStatusActions
-          :can-manage-user-status="canManageUserStatus"
-          :deleting="deleting"
-          :is-self="isSelf"
-          :status-loading="statusLoading"
-          :user="user"
-          @activate-user="emit('activate-user', $event)"
-          @delete-user="emit('delete-user', $event)"
-          @suspend-user="emit('suspend-user', $event)"
-        />
+  <td class="admin-user-operations-cell px-3 py-4">
+    <NPopover
+      v-model:show="menuVisible"
+      trigger="click"
+      placement="bottom-end"
+      :show-arrow="false"
+      raw
+      @update:show="focusMenu"
+    >
+      <template #trigger>
+        <button
+          ref="triggerRef"
+          type="button"
+          class="admin-user-operations-trigger"
+          aria-label="用户操作"
+          title="用户操作"
+          aria-haspopup="true"
+          :aria-expanded="menuVisible"
+          @keydown.esc.stop.prevent="closeMenu"
+        >
+          <EllipsisHorizontalOutline aria-hidden="true" />
+        </button>
+      </template>
+      <div ref="menuRef" class="admin-user-operations-menu" @keydown.esc.stop.prevent="closeMenu" @click="menuVisible = false">
+        <section class="admin-operation-group">
+          <p class="admin-operation-group-label">详情与角色</p>
+          <AdminMicroButton icon="detail" block @click="emit('open-detail')">查看详情</AdminMicroButton>
+          <AdminMicroButton v-if="canManageRoles && !isSelf(user)" icon="settings" block @click="emit('open-role-detail')">管理角色</AdminMicroButton>
+        </section>
+        <section v-if="canActivateService || canDisableService" class="admin-operation-group">
+          <p class="admin-operation-group-label">模型服务</p>
+          <AdminMicroButton v-if="canActivateService && user.service?.serviceStatus !== 'active'" icon="play" block :disabled="!desktopActionsEnabled || !!serviceLoading[user.id] || user.status === 'deleted'" @click="emit('activate-service', user)">{{ user.service?.serviceStatus === 'disabled' ? '恢复服务' : '开通服务' }}</AdminMicroButton>
+          <AdminMicroButton v-if="canDisableService && user.service?.serviceStatus === 'active'" icon="pause" block :disabled="!desktopActionsEnabled || !!serviceLoading[user.id] || user.status === 'deleted'" @click="emit('disable-service', user)">暂停服务</AdminMicroButton>
+        </section>
+        <section v-if="!isSelf(user)" class="admin-operation-group">
+          <p class="admin-operation-group-label">账户状态</p>
+          <AdminMicroButton v-if="canManageUserStatus && user.status === 'active'" icon="pause" block :disabled="!desktopActionsEnabled || !!statusLoading[user.id]" @click="emit('suspend-user', user)">暂停用户</AdminMicroButton>
+          <AdminMicroButton v-if="canManageUserStatus && user.status === 'suspended'" icon="play" block :disabled="!desktopActionsEnabled || !!statusLoading[user.id]" @click="emit('activate-user', user)">恢复状态</AdminMicroButton>
+          <AdminMicroButton v-if="canArchiveUser && user.status !== 'deleted'" icon="trash" tone="danger" block :disabled="!desktopActionsEnabled || !!deleting[user.id]" @click="emit('delete-user', user)">删除账户</AdminMicroButton>
+          <AdminMicroButton v-if="canRestoreUser && user.status === 'deleted'" icon="play" block :disabled="!desktopActionsEnabled || !!statusLoading[user.id]" @click="emit('restore-user', user)">恢复已删除账户</AdminMicroButton>
+        </section>
       </div>
-    </AdminEditorCard>
+    </NPopover>
   </td>
 </template>
 
 <script setup>
-import AdminEditorBlock from '@/components/admin/AdminEditorBlock.vue'
-import AdminEditorCard from '@/components/admin/AdminEditorCard.vue'
-import AdminUserRoleActions from './AdminUserRoleActions.vue'
-import AdminUserServiceActivationAction from './AdminUserServiceActivationAction.vue'
-import AdminUserServiceActiveActions from './AdminUserServiceActiveActions.vue'
-import AdminUserStatusActions from './AdminUserStatusActions.vue'
+import { inject, nextTick, ref } from 'vue'
+import { NPopover } from 'naive-ui'
+import AdminMicroButton from '@/components/admin/AdminMicroButton.vue'
+import { ADMIN_DESKTOP_ACTIONS_KEY } from '@/hooks/useAdminDesktopOnly'
+import { EllipsisHorizontalOutline } from '@/icons/coolicons'
 
 const emit = defineEmits([
-  'activate-service',
-  'activate-user',
-  'bind-manual-service',
-  'delete-user',
-  'disable-service',
-  'reset-service',
-  'save-roles',
-  'suspend-user',
-  'update-role-selection',
-  'update-service-limits'
+  'activate-service', 'activate-user', 'delete-user', 'disable-service',
+  'open-detail', 'open-role-detail', 'restore-user', 'suspend-user'
 ])
 
-defineProps({
-  canActivateService: {
-    type: Boolean,
-    default: false
-  },
-  canDisableService: {
-    type: Boolean,
-    default: false
-  },
-  canManageRoles: {
-    type: Boolean,
-    default: false
-  },
-  canManageUserStatus: {
-    type: Boolean,
-    default: false
-  },
-  canResetService: {
-    type: Boolean,
-    default: false
-  },
-  canUpdateServiceLimits: {
-    type: Boolean,
-    default: false
-  },
-  deleting: {
-    type: Object,
-    default: () => ({})
-  },
-  isSelf: {
-    type: Function,
-    required: true
-  },
-  roleOptions: {
-    type: Array,
-    default: () => []
-  },
-  saving: {
-    type: Object,
-    default: () => ({})
-  },
-  selectedRoles: {
-    type: Object,
-    default: () => ({})
-  },
-  serviceLoading: {
-    type: Object,
-    default: () => ({})
-  },
-  showUserActions: {
-    type: Boolean,
-    default: false
-  },
-  statusLoading: {
-    type: Object,
-    default: () => ({})
-  },
-  user: {
-    type: Object,
-    default: () => ({})
-  }
-})
-
-const forwardRoleSelection = (userId, role) => {
-  emit('update-role-selection', userId, role)
+const menuVisible = ref(false)
+const triggerRef = ref(null)
+const menuRef = ref(null)
+const focusMenu = async (show) => {
+  if (!show) return
+  await nextTick()
+  menuRef.value?.querySelector('button:not(:disabled)')?.focus()
 }
+const closeMenu = () => {
+  menuVisible.value = false
+  triggerRef.value?.focus()
+}
+
+const desktopActionsEnabled = inject(ADMIN_DESKTOP_ACTIONS_KEY, ref(false))
+
+defineProps({
+  canActivateService: { type: Boolean, default: false },
+  canArchiveUser: { type: Boolean, default: false },
+  canDisableService: { type: Boolean, default: false },
+  canManageRoles: { type: Boolean, default: false },
+  canManageUserStatus: { type: Boolean, default: false },
+  canRestoreUser: { type: Boolean, default: false },
+  deleting: { type: Object, default: () => ({}) },
+  isSelf: { type: Function, required: true },
+  serviceLoading: { type: Object, default: () => ({}) },
+  statusLoading: { type: Object, default: () => ({}) },
+  user: { type: Object, default: () => ({}) }
+})
 </script>
 
 <style scoped>
-.admin-user-operations-cell {
-  min-width: 280px;
-  width: 28%;
-}
-
-.admin-user-operations-card {
-  display: grid;
-  min-width: 240px;
-  min-height: 138px;
-  gap: 8px;
-  padding: 9px;
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.admin-user-operations-account {
-  min-width: 0;
-}
-
-.admin-user-operations-service {
-  gap: 0;
-}
-
-.admin-user-operations-account {
-  display: grid;
-  gap: 8px;
-}
-
-.admin-user-operations-card :deep(.admin-user-action-row) {
-  gap: 6px;
-}
-
-.admin-user-operations-card :deep(.admin-user-action-row .ui-micro-btn) {
-  width: 100%;
-  justify-content: center;
-}
-
-.admin-user-operations-card :deep(.admin-editor-block) {
-  gap: 7px;
-}
-
-.admin-user-operations-labeled-row {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.admin-user-operations-action-slot {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.admin-user-operations-action-slot :deep(.admin-editor-main) {
-  width: 100%;
-  min-width: 92px;
-}
-
-.admin-user-operations-action-slot :deep(.admin-user-action-row) {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-  align-items: center;
-}
+.admin-user-operations-cell { position: relative; width: 56px; min-width: 56px; }
+.admin-user-operations-trigger { width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; list-style: none; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.78); }
+.admin-user-operations-trigger svg { width: 18px; height: 18px; }
+.admin-user-operations-menu { display: grid; width: min(288px, calc(100vw - 32px)); max-height: 70vh; overflow-y: auto; border: 1px solid rgba(255,255,255,.12); border-radius: 14px; background: #171719; box-shadow: 0 18px 45px rgba(0,0,0,.38); }
+.admin-operation-group { display: grid; gap: 6px; padding: 8px; border-top: 1px solid rgba(255,255,255,.08); }
+.admin-operation-group:first-child { border-top: 0; }
+.admin-operation-group-label { min-width: 0; color: rgba(255,255,255,.45); font-size: 11px; }
 </style>

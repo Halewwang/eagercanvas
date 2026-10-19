@@ -6,6 +6,7 @@
         :src="imageUrl"
         :alt="alt"
         class="module-image"
+        :class="{ 'module-image-crop': cropActive }"
         @load="$emit('image-load', $event)"
       />
       <div v-else class="module-image-preview-placeholder">
@@ -76,8 +77,12 @@ defineEmits(['image-load', 'crop-drag-start', 'crop-resize-start'])
 .module-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: calc(var(--module-radius) - var(--module-inset));
+}
+
+.module-image-crop {
+  object-fit: cover;
 }
 
 .module-image-preview-placeholder {

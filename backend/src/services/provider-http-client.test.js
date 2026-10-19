@@ -5,20 +5,20 @@ import { buildProviderUrl } from './providers/http-client.js'
 
 test('provider http client preserves provider base url normalization', () => {
   assert.equal(
-    buildProviderUrl('https://provider.test/v1', '/v1/chat/completions'),
-    'https://provider.test/v1/chat/completions'
+    buildProviderUrl('https://provider.test/v1', '/v1/responses'),
+    'https://provider.test/v1/responses'
   )
   assert.equal(
-    buildProviderUrl('https://provider.test/v1', '/v1beta/models/gemini:generateContent'),
-    'https://provider.test/v1beta/models/gemini:generateContent'
+    buildProviderUrl('https://provider.test/v1', '/v1beta/models/example'),
+    'https://provider.test/v1beta/models/example'
   )
   assert.equal(
-    buildProviderUrl('https://provider.test/v1beta', '/v1beta/models/gemini:generateContent'),
-    'https://provider.test/v1beta/models/gemini:generateContent'
+    buildProviderUrl('https://provider.test/v1beta', '/v1beta/models/example'),
+    'https://provider.test/v1beta/models/example'
   )
   assert.equal(
-    buildProviderUrl('https://provider.test/v1beta', '/v1/images/generations'),
-    'https://provider.test/v1/images/generations'
+    buildProviderUrl('https://provider.test/v1beta', '/v1/videos'),
+    'https://provider.test/v1/videos'
   )
   assert.equal(
     buildProviderUrl('https://provider.test/root/', 'custom/path'),

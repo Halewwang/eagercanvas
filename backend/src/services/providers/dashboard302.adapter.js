@@ -1,12 +1,6 @@
 import { DelegatingProviderAdapter } from './delegating.adapter.js'
 import { HttpError } from '../../utils/http.js'
 import { callProvider, callProviderWithFallback } from './http-client.js'
-import { extractPredictionMeta, normalizeImageResponse } from './image-response.js'
-import {
-  isPendingPredictionStatus,
-  normalizePredictionTaskStatus,
-  pollPredictionResult
-} from './prediction-result.js'
 import { extractTaskId, extractVideoUrl } from './video-response.js'
 import {
   buildKlingO1Request,
@@ -24,120 +18,6 @@ export {
   isKlingTaskId,
   isTopazVideoEnhancePayload
 } from './dashboard302-video-helpers.js'
-
-const isGeminiImagePreviewModel = (model = '') => {
-  const safe = String(model || '').trim().toLowerCase()
-  return (
-    safe.includes('gemini-3.1-flash-image-preview') ||
-    safe.includes('gemini-3-pro-image-preview') ||
-    safe.includes('nano-banana-2') ||
-    safe.includes('nano-banana-pro')
-  )
-}
-
-const normalizeGeminiImageResolution = (value = '') => {
-  const safe = String(value || '1k').trim().toLowerCase()
-  return ['1k', '2k', '4k'].includes(safe) ? safe : '1k'
-}
-
-const normalizeImageGenerationResult = async (rawResponse, { syncMode = true, requestOptions = {} } = {}) => {
-  let raw = rawResponse
-  let normalized = normalizeImageResponse(raw)
-  if (Array.isArray(normalized.data) && normalized.data.length > 0) {
-    return normalized
-  }
-
-  const prediction = extractPredictionMeta(raw)
-  if (prediction.id && isPendingPredictionStatus(prediction.status)) {
-    if (!syncMode) {
-      return {
-        task_id: prediction.id,
-        status: prediction.status || 'created',
-        raw
-      }
-    }
-
-    raw = await pollPredictionResult(prediction.id, 20, 3000, requestOptions)
-    normalized = normalizeImageResponse(raw)
-  }
-
-  if (!Array.isArray(normalized.data) || normalized.data.length === 0) {
-    throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
-  }
-  return normalized
-}
-
-export const createWavespeedImage = async (payload = {}, requestOptions = {}) => {
-  const model = String(payload.model_name || payload.model || '').trim()
-  if (!model) {
-    throw new HttpError(400, 'Image model is required', 'IMAGE_MODEL_REQUIRED')
-  }
-
-  const {
-    model: _model,
-    model_name: _modelName,
-    quality: _quality,
-    style: _style,
-    ...restPayload
-  } = payload
-  const body = {
-    ...restPayload,
-    prompt: String(payload.prompt || '').trim(),
-    size: payload.size || '1024x1024',
-    enable_sync_mode: payload.enable_sync_mode ?? true,
-    enable_base64_output: payload.enable_base64_output ?? false
-  }
-
-  const raw = await callProvider(`/ws/api/v3/${model}`, body, 'POST', requestOptions)
-  return normalizeImageGenerationResult(raw, {
-    syncMode: body.enable_sync_mode !== false,
-    requestOptions
-  })
-}
-
-export const createGeminiImagePreview = async (payload = {}, requestOptions = {}) => {
-  const model = String(payload.model_name || payload.model || '').trim().toLowerCase()
-  const isGeminiPro =
-    model.includes('gemini-3-pro-image-preview') ||
-    model.includes('nano-banana-pro')
-  const endpointBase = isGeminiPro
-    ? '/ws/api/v3/google/nano-banana-pro'
-    : '/ws/api/v3/google/nano-banana-2'
-  const resolution = normalizeGeminiImageResolution(payload.resolution)
-  const syncMode = isGeminiPro && resolution === '4k'
-    ? false
-    : payload.enable_sync_mode ?? true
-  const images = Array.isArray(payload.images)
-    ? payload.images.filter(Boolean)
-    : []
-  const body = {
-    prompt: String(payload.prompt || '').trim(),
-    aspect_ratio: String(payload.aspect_ratio || payload.ratio || '1:1').trim(),
-    resolution,
-    enable_sync_mode: syncMode,
-    enable_base64_output: payload.enable_base64_output ?? false
-  }
-  if (typeof payload.callback === 'string' && payload.callback.trim()) {
-    body.callback = payload.callback.trim()
-  }
-  if (images.length > 0) {
-    body.images = images
-  }
-
-  const endpoint = images.length > 0
-    ? `${endpointBase}/edit`
-    : `${endpointBase}/text-to-image`
-  const raw = await callProvider(endpoint, body, 'POST', requestOptions)
-  return normalizeImageGenerationResult(raw, { syncMode, requestOptions })
-}
-
-export const createDashboard302Image = async (payload = {}, requestOptions = {}) => {
-  const model = String(payload.model_name || payload.model || '').trim()
-  if (isGeminiImagePreviewModel(model)) {
-    return createGeminiImagePreview(payload, requestOptions)
-  }
-  return createWavespeedImage(payload, requestOptions)
-}
 
 export const createKlingVideo = async (payload = {}, requestOptions = {}) => {
   const model = String(payload.model_name || payload.model || '').trim()
@@ -220,7 +100,7 @@ export const createKlingVideo = async (payload = {}, requestOptions = {}) => {
     }
   }
 
-  throw new HttpError(400, 'Unsupported Dashboard302 video model', 'UNSUPPORTED_VIDEO_MODEL')
+  throw new HttpError(400, '不支持的模型服务商视频模型', 'UNSUPPORTED_VIDEO_MODEL')
 }
 
 export const createTopazVideoEnhance = async (payload = {}, requestOptions = {}) => {
@@ -274,7 +154,7 @@ export const createDashboard302Video = async (payload = {}, requestOptions = {})
     return createKlingVideo(payload, requestOptions)
   }
 
-  throw new HttpError(400, 'Unsupported Dashboard302 video model', 'UNSUPPORTED_VIDEO_MODEL')
+  throw new HttpError(400, '不支持的模型服务商视频模型', 'UNSUPPORTED_VIDEO_MODEL')
 }
 
 export const pollTopazTaskStatus = async (taskId, requestOptions = {}) => {
@@ -331,7 +211,7 @@ export const pollKlingTaskStatus = async (taskId, requestOptions = {}) => {
   }
 }
 
-export const pollDashboard302PredictionStatus = async (taskId, requestOptions = {}) => {
+export const pollDashboard302VideoStatus = async (taskId, requestOptions = {}) => {
   const safeTaskId = String(taskId || '').trim()
   if (!safeTaskId) return null
 
@@ -343,16 +223,14 @@ export const pollDashboard302PredictionStatus = async (taskId, requestOptions = 
     return pollKlingTaskStatus(safeTaskId, requestOptions)
   }
 
-  const raw = await callProvider(`/ws/api/v3/predictions/${safeTaskId}/result`, null, 'GET', requestOptions)
-  return normalizePredictionTaskStatus(safeTaskId, raw)
+  throw new HttpError(400, 'Unsupported video task id', 'UNSUPPORTED_VIDEO_TASK')
 }
 
 export class Dashboard302ProviderAdapter extends DelegatingProviderAdapter {
   constructor(operations = {}) {
     super({
-      imageGeneration: createDashboard302Image,
       videoGeneration: createDashboard302Video,
-      pollTaskStatus: pollDashboard302PredictionStatus,
+      pollTaskStatus: pollDashboard302VideoStatus,
       ...operations
     })
   }

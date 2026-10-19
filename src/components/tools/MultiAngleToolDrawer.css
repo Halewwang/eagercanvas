@@ -69,6 +69,13 @@
   margin-bottom: 14px;
 }
 
+.section-note {
+  margin: -6px 0 12px;
+  color: #8d95a3;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .section-title {
   color: #e7eaef;
   font-size: 11px;

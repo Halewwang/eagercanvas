@@ -22,7 +22,7 @@
           <button class="capsule-select">{{ displayBackground }}</button>
         </BaseDropdown>
 
-        <BaseDropdown v-if="formatOptions.length > 0" :options="formatOptions" compact @select="$emit('selectFormat', $event)">
+        <BaseDropdown v-if="formatOptions.length > 1" :options="formatOptions" compact @select="$emit('selectFormat', $event)">
           <button class="capsule-select">{{ displayFormat }}</button>
         </BaseDropdown>
       </div>

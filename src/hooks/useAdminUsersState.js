@@ -1,26 +1,10 @@
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { getAdminUsers } from '@/api/admin'
 import { getErrorMessage } from '@/utils'
-import {
-  getAdminActiveServiceUserCount,
-  getAdminFilteredUsers,
-  getAdminNotEnabledActiveUsers,
-  getAdminOfficialUsageSummary,
-  getAdminPagedUsers,
-  getAdminPendingBillingUserCount,
-  getAdminServiceActivationRate,
-  getAdminTopSpenders,
-  getAdminTotalUserPages,
-  getAdminUserPageEnd,
-  getAdminUserPageStart,
-  getAdminUserStats,
-  getAdminVisibleUserPages,
-  getClampedAdminUserPage
-} from '@/utils/adminUsersData'
-import { getAdminSelectedRoleMap } from './useAdminUsersStateCore.js'
+import { getAdminVisibleUserPages } from '@/utils/adminUsersData'
+import { requestAdminUsersPage } from './useAdminUsersStateCore.js'
 
-const DEFAULT_USER_PAGE_SIZE = 10
-
+const DEFAULT_USER_PAGE_SIZE = 25
 const getWindowMessageApi = () => (typeof window === 'undefined' ? null : window.$message)
 
 export const useAdminUsersState = ({
@@ -30,82 +14,100 @@ export const useAdminUsersState = ({
   userPageSize = DEFAULT_USER_PAGE_SIZE
 }) => {
   const users = ref([])
-  const userSearchQuery = ref('')
-  const userStatusFilter = ref('all')
-  const userPage = ref(1)
-  const selectedRoles = ref({})
+  const query = ref({
+    page: 1,
+    limit: userPageSize,
+    search: '',
+    status: '',
+    serviceStatus: '',
+    role: ''
+  })
+  const pagination = ref({ page: 1, limit: userPageSize, total: 0, totalPages: 1 })
   const loadingUsers = ref(false)
 
-  const userStats = computed(() => getAdminUserStats(users.value))
-  const topSpenders = computed(() => getAdminTopSpenders(users.value))
-  const officialUsageSummary = computed(() => getAdminOfficialUsageSummary(users.value))
-  const notEnabledActiveUsers = computed(() => getAdminNotEnabledActiveUsers(users.value))
-  const pendingBillingUsers = computed(() => getAdminPendingBillingUserCount(users.value))
-  const activeServiceUsers = computed(() => getAdminActiveServiceUserCount(users.value))
-  const serviceActivationRate = computed(() => getAdminServiceActivationRate(users.value))
-  const filteredUsers = computed(() => getAdminFilteredUsers(users.value, {
-    query: userSearchQuery.value,
-    statusFilter: userStatusFilter.value
+  const userSearchQuery = computed({
+    get: () => query.value.search,
+    set: (value) => { query.value.search = String(value || '') }
+  })
+  const filterRef = (key) => computed({
+    get: () => query.value[key] || 'all',
+    set: (value) => { query.value[key] = value === 'all' ? '' : String(value || '') }
+  })
+  const userStatusFilter = filterRef('status')
+  const userServiceStatusFilter = filterRef('serviceStatus')
+  const userRoleFilter = filterRef('role')
+  const userPage = computed({
+    get: () => query.value.page,
+    set: (value) => { query.value.page = Math.max(1, Number(value) || 1) }
+  })
+
+  const totalUserPages = computed(() => pagination.value.totalPages)
+  const userPageStart = computed(() => pagination.value.total ? ((pagination.value.page - 1) * pagination.value.limit) + 1 : 0)
+  const userPageEnd = computed(() => Math.min(pagination.value.total, pagination.value.page * pagination.value.limit))
+  const visibleUserPages = computed(() => getAdminVisibleUserPages({
+    currentPage: userPage.value,
+    totalPages: totalUserPages.value
   }))
-  const totalUserPages = computed(() => getAdminTotalUserPages(filteredUsers.value, userPageSize))
-  const pagedUsers = computed(() => getAdminPagedUsers(filteredUsers.value, { page: userPage.value, pageSize: userPageSize }))
-  const userPageStart = computed(() => getAdminUserPageStart(filteredUsers.value, { page: userPage.value, pageSize: userPageSize }))
-  const userPageEnd = computed(() => getAdminUserPageEnd(filteredUsers.value, { page: userPage.value, pageSize: userPageSize }))
-  const visibleUserPages = computed(() => getAdminVisibleUserPages({ currentPage: userPage.value, totalPages: totalUserPages.value }))
 
-  const setUserPage = (page) => {
-    userPage.value = getClampedAdminUserPage(page, totalUserPages.value)
-  }
-
-  const updateRoleSelection = (userId, role) => {
-    selectedRoles.value = { ...selectedRoles.value, [userId]: role }
-  }
-
-  watch([userSearchQuery, userStatusFilter], () => {
-    userPage.value = 1
-  })
-
-  watch(filteredUsers, () => {
-    if (userPage.value > totalUserPages.value) {
-      userPage.value = totalUserPages.value
-    }
-  })
+  let searchTimer = null
+  let requestSequence = 0
 
   const loadUsers = async () => {
     if (!canReadUsers.value) return
+    const requestId = ++requestSequence
     loadingUsers.value = true
     try {
-      const rsp = await fetchUsers()
-      const list = Array.isArray(rsp?.data) ? rsp.data : []
-      users.value = list
-      selectedRoles.value = getAdminSelectedRoleMap(list)
+      const result = await requestAdminUsersPage(fetchUsers, query.value)
+      if (requestId !== requestSequence) return
+      const page = result.page
+      users.value = page.items
+      pagination.value = page.pagination
+      query.value.page = result.queryPage
     } catch (error) {
-      if (!error?.__handled) getMessageApi()?.error(getErrorMessage(error, '加载用户列表失败'))
+      if (requestId === requestSequence && !error?.__handled) {
+        getMessageApi()?.error(getErrorMessage(error, '加载用户列表失败'))
+      }
     } finally {
-      loadingUsers.value = false
+      if (requestId === requestSequence) loadingUsers.value = false
     }
   }
 
+  const setUserPage = async (page) => {
+    userPage.value = Math.min(Math.max(1, Number(page) || 1), totalUserPages.value)
+    await loadUsers()
+  }
+
+  watch([userStatusFilter, userServiceStatusFilter, userRoleFilter], () => {
+    requestSequence += 1
+    userPage.value = 1
+    void loadUsers()
+  })
+  watch(userSearchQuery, () => {
+    requestSequence += 1
+    userPage.value = 1
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => void loadUsers(), 250)
+  })
+
+  onUnmounted(() => {
+    requestSequence += 1
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = null
+  })
+
   return {
-    activeServiceUsers,
-    filteredUsers,
     loadUsers,
     loadingUsers,
-    notEnabledActiveUsers,
-    officialUsageSummary,
-    pagedUsers,
-    pendingBillingUsers,
-    selectedRoles,
-    serviceActivationRate,
+    pagination,
+    query,
     setUserPage,
-    topSpenders,
     totalUserPages,
-    updateRoleSelection,
     userPage,
     userPageEnd,
     userPageStart,
+    userRoleFilter,
     userSearchQuery,
-    userStats,
+    userServiceStatusFilter,
     userStatusFilter,
     users,
     visibleUserPages

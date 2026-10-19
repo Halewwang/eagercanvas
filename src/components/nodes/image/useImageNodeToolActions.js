@@ -22,8 +22,7 @@ const dispatchMessage = (messageApi, message) => {
 
 const getDefaultErrorMessage = (error, fallback) => error?.message || fallback
 
-const getEnhancedFileName = () => `enhanced-4k-${Date.now()}.png`
-const getRemoveBackgroundFileName = () => `remove-bg-${Date.now()}.png`
+const getEnhancedFileName = () => `enhanced-${Date.now()}.png`
 
 export const useImageNodeToolActions = ({
   activeTool,
@@ -34,26 +33,17 @@ export const useImageNodeToolActions = ({
   currentProjectId,
   defaultEnhancePrompt,
   defaultImageModel,
-  defaultImageSize,
   displayImageUrl,
   edges,
-  findNearestSizeKey,
-  flushSave,
   getErrorMessage = getDefaultErrorMessage,
   getImageNodeEnhancementErrorPatch,
   getImageNodeEnhancementRequest,
   getImageNodeEnhancementResultPatch,
-  getImageNodeRatioFromSizeKey,
-  getImageNodeRemoveBackgroundResultPatch,
   getImageNodeToolSaveMessages,
   getNearestImageNodeSourceConfig,
   imageGen,
-  imageTools,
   localImageModel,
-  localImageQuality,
-  localImageRatio,
-  localImageSize,
-  localResolution,
+  localBackground,
   messageApi = getDefaultMessageApi,
   nodeId,
   nodes,
@@ -86,37 +76,29 @@ export const useImageNodeToolActions = ({
       currentNodeData: readReactiveValue(currentData),
       displayImageUrl: readReactiveValue(displayImageUrl),
       localImageModel: readReactiveValue(localImageModel),
-      localImageQuality: readReactiveValue(localImageQuality),
-      localImageRatio: readReactiveValue(localImageRatio),
-      localImageSize: readReactiveValue(localImageSize),
+      localBackground: readReactiveValue(localBackground),
       projectId: readReactiveValue(currentProjectId),
       defaultImageModel,
-      defaultImageSize,
-      defaultEnhancePrompt,
-      findNearestSizeKey,
-      getRatioFromSizeKey: getImageNodeRatioFromSizeKey
+      defaultEnhancePrompt
     })
   }
 
-  const handleEnhanceTo4k = async () => {
+  const handleEnhance = async () => {
     const request = buildEnhancementRequest()
     if (!request) {
       dispatchMessage(messageApi, {
         type: 'warning',
-        text: 'No reusable prompt or reference chain found for 4K enhancement'
+        text: 'No reusable prompt or reference chain found for image enhancement'
       })
       return
     }
 
-    writeReactiveValue(toolActionLoading, 'enhance-4k')
+    writeReactiveValue(toolActionLoading, 'enhance')
     const newNodeId = createLinkedImageNode({
       loading: true,
-      label: '4K Enhanced Image',
+      label: 'Enhanced Image',
       model: request.model,
-      size: request.size,
-      quality: request.quality,
-      ratio: request.ratio,
-      resolution: request.resolution,
+      ...(request.background ? { background: request.background } : {}),
       sourceConfigId: request.sourceConfigId,
       sourcePrompt: request.sourcePrompt,
       sourceRefImages: request.sourceRefImages
@@ -146,70 +128,16 @@ export const useImageNodeToolActions = ({
         saveFeedback,
         saveState,
         persisted: persistence.persisted,
-        messages: getImageNodeToolSaveMessages('enhance-4k')
+        messages: getImageNodeToolSaveMessages('enhance')
       })
     } catch (err) {
-      const message = getErrorMessage(err, '4K enhancement failed')
+      const message = getErrorMessage(err, 'Image enhancement failed')
       await updateLinkedImageNode(newNodeId, getImageNodeEnhancementErrorPatch({
         message,
         request,
-        fallbackMessage: '4K enhancement failed'
+        fallbackMessage: 'Image enhancement failed'
       }))
       dispatchMessage(messageApi, { type: 'error', text: message })
-    } finally {
-      writeReactiveValue(toolActionLoading, '')
-    }
-  }
-
-  const handleRemoveBackground = async () => {
-    const source = readReactiveValue(displayImageUrl)
-    if (!source) return
-
-    writeReactiveValue(toolActionLoading, 'remove-background')
-    try {
-      const result = await imageTools.removeBg({
-        image: source,
-        size: 'full',
-        format: 'png',
-        channels: 'rgba',
-        crop: false,
-        despill: false
-      })
-      const persistence = await resolveImagePersistence(
-        result?.url,
-        getRemoveBackgroundFileName(),
-        'Background removal persistence failed. Please retry.'
-      )
-      const data = readReactiveValue(currentData) || {}
-
-      createLinkedImageNode(getImageNodeRemoveBackgroundResultPatch({
-        persistence,
-        defaults: {
-          size: data.size || readReactiveValue(localImageSize),
-          ratio: data.ratio || readReactiveValue(localImageRatio),
-          resolution: data.resolution || readReactiveValue(localResolution)
-        }
-      }))
-      if (!persistence.persisted) {
-        dispatchMessage(messageApi, {
-          type: 'warning',
-          text: 'Background removed, but the result is only shown temporarily. Please retry.'
-        })
-        return
-      }
-      const savedOk = await flushSave()
-      const saveState = readReactiveValue(projectSaveState) || {}
-      const saveFeedback = resolveImageSaveFeedback(savedOk)
-      showImageToolSaveMessage({
-        saveFeedback,
-        saveState,
-        messages: getImageNodeToolSaveMessages('remove-background')
-      })
-    } catch (err) {
-      dispatchMessage(messageApi, {
-        type: 'error',
-        text: err?.message || 'Background removal failed'
-      })
     } finally {
       writeReactiveValue(toolActionLoading, '')
     }
@@ -245,16 +173,12 @@ export const useImageNodeToolActions = ({
       triggerUpload()
       return
     }
-    if (key === 'remove-background') {
-      await handleRemoveBackground()
-      return
-    }
     if (key === 'crop') {
       await startCropMode()
       return
     }
-    if (key === 'enhance-4k') {
-      await handleEnhanceTo4k()
+    if (key === 'enhance') {
+      await handleEnhance()
       return
     }
     if (key === 'multi-angle') {
@@ -269,8 +193,7 @@ export const useImageNodeToolActions = ({
   return {
     applyCrop,
     buildEnhancementRequest,
-    handleEnhanceTo4k,
-    handleRemoveBackground,
+    handleEnhance,
     handleToolAction
   }
 }
