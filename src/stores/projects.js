@@ -46,6 +46,7 @@ const TOMBSTONE_KEY_PREFIX = 'ai-canvas-projects-deleted'
 const BYPASS_AUTH_IN_DEV = isLocalPreviewEnabled()
 let offlineDraftSyncInFlight = null
 let projectListRequestToken = 0
+const projectListRequests = new Map()
 
 export const projects = ref([])
 export const projectsLoadState = ref({
@@ -64,10 +65,7 @@ const createReadOnlyProjectError = () => {
   return error
 }
 
-const getUserScopedKey = (prefix) => {
-  const { user, isAuthenticated } = useAuthStore()
-  if (!isAuthenticated.value) return ''
-  const userId = user.value?.id
+const getUserScopedKey = (prefix, userId = getCurrentUserId()) => {
   return userId ? `${prefix}:${userId}` : ''
 }
 
@@ -77,8 +75,7 @@ const getCurrentUserId = () => {
   return String(user.value?.id || '').trim()
 }
 
-const getDraftStorage = () => {
-  const userId = getCurrentUserId()
+const getDraftStorage = (userId = getCurrentUserId()) => {
   return userId ? getCanvasDraftStorage(userId) : null
 }
 
@@ -139,8 +136,8 @@ const loadProjectCanvasDraft = (id) => loadProjectCanvasDraftRecord(id)?.canvasD
 
 const isRemoteSyncedDraft = (draftRecord) => draftRecord?.remoteSynced === true
 
-const removeProjectCanvasDraft = async (id) => {
-  const storage = getDraftStorage()
+const removeProjectCanvasDraft = async (id, userId = getCurrentUserId()) => {
+  const storage = getDraftStorage(userId)
   if (!storage) return
   try {
     await storage.deleteDraft(id)
@@ -162,6 +159,7 @@ const saveLocalCache = () => {
 }
 
 const loadLocalCache = async () => {
+  const userId = getCurrentUserId()
   const storageKey = getUserScopedKey(STORAGE_KEY_PREFIX)
   const legacyStorageKey = getUserScopedKey(LEGACY_STORAGE_KEY_PREFIX)
   if (!storageKey) return []
@@ -178,6 +176,7 @@ const loadLocalCache = async () => {
 
       const migrated = []
       for (const project of legacyParsed.filter((project) => project?.id)) {
+        if (userId !== getCurrentUserId()) return []
         if (project.canvasData) {
           await saveProjectCanvasDraft(project.id, project.canvasData, {
             draftUpdatedAt: project.updatedAt || new Date().toISOString(),
@@ -214,8 +213,8 @@ const loadLocalCache = async () => {
   }
 }
 
-const loadDeleteTombstones = () => {
-  const storageKey = getUserScopedKey(TOMBSTONE_KEY_PREFIX)
+const loadDeleteTombstones = (userId = getCurrentUserId()) => {
+  const storageKey = getUserScopedKey(TOMBSTONE_KEY_PREFIX, userId)
   if (!storageKey) return new Set()
   try {
     const raw = localStorage.getItem(storageKey)
@@ -227,8 +226,8 @@ const loadDeleteTombstones = () => {
   }
 }
 
-const saveDeleteTombstones = (tombstones) => {
-  const storageKey = getUserScopedKey(TOMBSTONE_KEY_PREFIX)
+const saveDeleteTombstones = (tombstones, userId = getCurrentUserId()) => {
+  const storageKey = getUserScopedKey(TOMBSTONE_KEY_PREFIX, userId)
   if (!storageKey) return
   try {
     const values = Array.from(tombstones || []).filter(Boolean)
@@ -242,11 +241,11 @@ const saveDeleteTombstones = (tombstones) => {
   }
 }
 
-const rememberDeletedProject = (id) => {
+const rememberDeletedProject = (id, userId = getCurrentUserId()) => {
   if (!id) return
-  const tombstones = loadDeleteTombstones()
+  const tombstones = loadDeleteTombstones(userId)
   tombstones.add(id)
-  saveDeleteTombstones(tombstones)
+  saveDeleteTombstones(tombstones, userId)
 }
 
 const forgetDeletedProject = (id) => {
@@ -323,6 +322,7 @@ export const loadProjects = async ({
   commitAfter = null
 } = {}) => {
   const requestToken = ++projectListRequestToken
+  const requestUserId = getCurrentUserId()
   const { isAuthenticated } = useAuthStore()
   if (!isAuthenticated.value) {
     projects.value = []
@@ -336,16 +336,27 @@ export const loadProjects = async ({
   }
   let projectListActivation = null
   if (!BYPASS_AUTH_IN_DEV) {
-    let requestPromise
-    try {
-      requestPromise = apiListProjects({ workspaceId })
-    } catch (error) {
-      requestPromise = Promise.reject(error)
+    const explicitWorkspaceId = String(workspaceId || '').trim()
+    const requestKey = explicitWorkspaceId ? JSON.stringify([requestUserId, explicitWorkspaceId]) : ''
+    let requestPromise = requestKey ? projectListRequests.get(requestKey) : null
+    if (!requestPromise) {
+      try {
+        requestPromise = Promise.resolve(apiListProjects({ workspaceId }))
+      } catch (error) {
+        requestPromise = Promise.reject(error)
+      }
+      if (requestKey) {
+        const trackedRequest = requestPromise.finally(() => {
+          if (projectListRequests.get(requestKey) === trackedRequest) projectListRequests.delete(requestKey)
+        })
+        requestPromise = trackedRequest
+        projectListRequests.set(requestKey, trackedRequest)
+      }
     }
     projectListActivation = captureProjectListActivation({ requestPromise, commitAfter })
   }
-  await hydrateCanvasDraftCache()
   const localDrafts = await loadLocalCache()
+  if (requestUserId !== getCurrentUserId()) return projects.value
   if (BYPASS_AUTH_IN_DEV) {
     if (requestToken !== projectListRequestToken) return projects.value
     projects.value = sortProjectsByActivity(localDrafts).map((project) => ({ ...project, readState: 'local-only' }))
@@ -362,15 +373,12 @@ export const loadProjects = async ({
     if (activationResult.error) throw activationResult.error
     const response = activationResult.response
     if (requestToken !== projectListRequestToken) return projects.value
+    if (requestUserId !== getCurrentUserId()) return projects.value
     const tombstones = loadDeleteTombstones()
     const remote = (response?.data || [])
       .map(mapProjectFromApi)
       .filter((project) => !tombstones.has(project.id))
     projects.value = sortProjectsByActivity(mergeRemoteWithLocalDrafts(remote, localDrafts))
-    const nextTombstones = new Set(
-      Array.from(tombstones).filter((id) => !remote.some((project) => project.id === id))
-    )
-    saveDeleteTombstones(nextTombstones)
     saveLocalCache()
     projectsLoadState.value = {
       source: 'remote',
@@ -381,6 +389,7 @@ export const loadProjects = async ({
     return projects.value
   } catch (error) {
     if (requestToken !== projectListRequestToken) return projects.value
+    if (requestUserId !== getCurrentUserId()) return projects.value
     if (error?.code === PROJECT_LIST_ACTIVATION_FAILED) {
       throw error.cause || error
     }
@@ -413,14 +422,19 @@ export const loadProjects = async ({
 export const loadCachedProjects = async () => {
   const { isAuthenticated } = useAuthStore()
   if (!isAuthenticated.value) return []
+  const requestUserId = getCurrentUserId()
+  const requestToken = projectListRequestToken
   await hydrateCanvasDraftCache()
   const localDrafts = await loadLocalCache()
+  if (requestUserId !== getCurrentUserId() || requestToken !== projectListRequestToken) return projects.value
   if (!localDrafts.length) return []
+  const tombstones = loadDeleteTombstones()
   const cachedProjects = localDrafts.map((project) => ({
     ...project,
     remoteSynced: isRemoteSyncedDraft(loadProjectCanvasDraftRecord(project.id))
   }))
   projects.value = sortProjectsByActivity(mergeCachedProjectSummaries(cachedProjects, projects.value))
+    .filter((project) => !tombstones.has(project.id))
   projectsLoadState.value = {
     source: 'local-cache',
     reason: 'immediate-canvas-cache',
@@ -804,6 +818,10 @@ export const syncOfflineCanvasDrafts = async () => {
 
     const storage = getDraftStorage()
     if (!storage) return summary
+    const requestUserId = getCurrentUserId()
+    const canApplyProject = (id) => requestUserId === getCurrentUserId()
+      && !loadDeleteTombstones().has(id)
+      && projects.value.some((project) => project.id === id)
 
     const draftRecords = await storage.hydrate()
     let changed = false
@@ -811,7 +829,7 @@ export const syncOfflineCanvasDrafts = async () => {
     for (const draftRecord of draftRecords) {
       const projectId = String(draftRecord?.projectId || '')
       const project = projects.value.find((item) => item.id === projectId)
-      if (!project) {
+      if (!project || !canApplyProject(projectId)) {
         summary.skipped += 1
         continue
       }
@@ -825,9 +843,20 @@ export const syncOfflineCanvasDrafts = async () => {
         project,
         draftRecord,
         patchProject: apiPatchProject,
-        saveDraft: (id, record) => saveProjectCanvasDraft(id, record.canvasData, record),
-        publishRemoteSynced: (message) => canvasBroadcast.publishRemoteSynced(message)
+        saveDraft: async (id, record) => {
+          if (!canApplyProject(id)) return false
+          const saved = await saveProjectCanvasDraft(id, record.canvasData, record)
+          if (loadDeleteTombstones(requestUserId).has(id)) await storage.deleteDraft(id)
+          return saved
+        },
+        publishRemoteSynced: (message) => {
+          if (canApplyProject(message.projectId)) canvasBroadcast.publishRemoteSynced(message)
+        }
       })
+      if (!canApplyProject(projectId)) {
+        summary.skipped += 1
+        continue
+      }
 
       if (result.status === CANVAS_SYNC_STATES.synced) summary.synced += 1
       else if (result.status === CANVAS_SYNC_STATES.localPersisted) summary.preserved += 1
@@ -882,21 +911,24 @@ export const getProjectCanvas = (id) => {
 }
 
 export const deleteProject = async (id) => {
+  const requestUserId = getCurrentUserId()
   const project = projects.value.find((p) => p.id === id)
   if (isProjectReadOnly(project)) {
     throw createReadOnlyProjectError()
   }
   if (BYPASS_AUTH_IN_DEV) {
     projects.value = projects.value.filter((p) => p.id !== id)
-    await removeProjectCanvasDraft(id)
-    saveLocalCache()
+    await removeProjectCanvasDraft(id, requestUserId)
+    if (requestUserId === getCurrentUserId()) saveLocalCache()
     return
   }
   await apiDeleteProject(id)
-  rememberDeletedProject(id)
-  projects.value = projects.value.filter((p) => p.id !== id)
-  await removeProjectCanvasDraft(id)
-  saveLocalCache()
+  rememberDeletedProject(id, requestUserId)
+  if (requestUserId === getCurrentUserId()) {
+    projects.value = projects.value.filter((p) => p.id !== id)
+  }
+  await removeProjectCanvasDraft(id, requestUserId)
+  if (requestUserId === getCurrentUserId()) saveLocalCache()
 }
 
 export const duplicateProject = async (id) => {

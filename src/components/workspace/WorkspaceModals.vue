@@ -20,6 +20,25 @@
   </BaseModal>
 
   <BaseModal
+    :show="showBulkDelete"
+    title="Delete selected projects"
+    :description="`Permanently delete ${bulkDeleteCount} selected projects?`"
+    size="sm"
+    :close-on-overlay="!bulkDeleting"
+    :close-on-escape="!bulkDeleting"
+    :show-close="!bulkDeleting"
+    @update:show="$emit('update:showBulkDelete', $event)"
+  >
+    <BaseModalCopy>This cannot be undone. Team members will lose access, and templates published from these projects will also be removed.</BaseModalCopy>
+    <template #footer>
+      <BaseModalActions>
+        <BaseButton variant="ghost" :disabled="bulkDeleting" @click="$emit('update:showBulkDelete', false)">Cancel</BaseButton>
+        <BaseButton variant="danger" :loading="bulkDeleting" @click="$emit('confirmBulkDelete')">Delete {{ bulkDeleteCount }} projects</BaseButton>
+      </BaseModalActions>
+    </template>
+  </BaseModal>
+
+  <BaseModal
     :show="showDelete"
     title="Delete project"
     description="This action permanently removes the project from your workspace."
@@ -158,6 +177,9 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  showBulkDelete: Boolean,
+  bulkDeleting: Boolean,
+  bulkDeleteCount: { type: Number, default: 0 },
   showTemplatePreview: {
     type: Boolean,
     default: false
@@ -215,6 +237,7 @@ const props = defineProps({
 const emit = defineEmits([
   'update:showRename',
   'update:showDelete',
+  'update:showBulkDelete',
   'update:showTemplatePreview',
   'update:showCopyToWorkspace',
   'update:showShareUser',
@@ -223,6 +246,7 @@ const emit = defineEmits([
   'update:shareEmail',
   'confirmRename',
   'confirmDelete',
+  'confirmBulkDelete',
   'confirmCopyToWorkspace',
   'confirmShareUser',
   'closeTemplatePreview',

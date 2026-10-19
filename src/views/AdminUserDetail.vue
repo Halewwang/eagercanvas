@@ -1,50 +1,58 @@
 <template>
-  <div class="grid grid-cols-4 gap-4 pb-8 md:grid-cols-8 xl:grid-cols-12">
-    <header class="col-span-full flex flex-wrap items-start justify-between gap-3">
+  <div class="admin-user-detail">
+    <header class="admin-detail-header">
       <div>
-        <button type="button" class="text-xs text-cyan-100/70" @click="leaveDetail">← 返回用户列表</button>
-        <h1 class="mt-2 text-2xl font-semibold text-white">{{ displayName }}</h1>
-        <p class="mt-1 text-sm text-white/50">{{ user?.email ?? '--' }}</p>
+        <AdminMicroButton icon="prev" @click="leaveDetail">返回用户列表</AdminMicroButton>
+        <h1>{{ displayName }}</h1>
+        <p>{{ user?.email ?? '--' }}</p>
       </div>
-      <button type="button" class="rounded-lg bg-white/5 px-3 py-2 text-xs text-white/70" :disabled="loading" @click="refreshDetail">刷新</button>
+      <AdminMicroButton icon="refresh" :disabled="loading" @click="refreshDetail">{{ loading ? '刷新中…' : '刷新用户' }}</AdminMicroButton>
     </header>
 
-    <p v-if="error" class="col-span-full rounded-xl border border-red-300/20 bg-red-300/5 p-3 text-sm text-red-100">{{ error }}</p>
-    <nav class="col-span-full flex gap-2 overflow-x-auto border-b border-white/10" aria-label="用户详情标签">
+    <p v-if="error" class="rounded-xl border border-red-300/20 bg-red-300/5 p-3 text-sm text-red-100" role="alert">{{ error }}</p>
+    <nav class="admin-detail-tabs" aria-label="用户详情标签">
       <button
         v-for="tab in tabs"
         :key="tab.key"
         type="button"
-        class="whitespace-nowrap border-b-2 px-3 py-2 text-sm"
-        :class="activeTab === tab.key ? 'border-cyan-300 text-white' : 'border-transparent text-white/45'"
+        class="admin-detail-tab"
+        :class="{ 'is-active': activeTab === tab.key }"
+        :aria-pressed="activeTab === tab.key"
         @click="activeTab = tab.key"
       >{{ tab.label }}</button>
     </nav>
 
-    <section v-if="activeTab === 'summary'" class="col-span-full grid grid-cols-4 gap-4 md:grid-cols-8 xl:grid-cols-12">
-      <article v-for="item in summaryItems" :key="item.label" class="col-span-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:col-span-4 xl:col-span-3">
-        <p class="text-xs text-white/40">{{ item.label }}</p>
-        <p class="mt-2 break-words text-sm font-semibold text-white">{{ item.value }}</p>
-      </article>
+    <section v-if="activeTab === 'summary'" aria-labelledby="admin-summary-title">
+      <h2 id="admin-summary-title" class="admin-detail-section-title">账户摘要</h2>
+      <dl class="admin-detail-summary">
+        <div v-for="item in summaryItems" :key="item.label" class="admin-detail-summary-item">
+          <dt>{{ item.label }}</dt>
+          <dd>{{ item.value }}</dd>
+        </div>
+      </dl>
     </section>
 
-    <section v-else-if="activeTab === 'roles'" class="col-span-full rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+    <section v-else-if="activeTab === 'roles'" class="admin-detail-panel" aria-labelledby="admin-roles-title">
+      <h2 id="admin-roles-title" class="admin-detail-section-title">用户角色</h2>
+      <p class="admin-detail-note">查看并调整此账户的管理权限。</p>
       <AdminRoleMultiSelect
         v-model="selectedRoles"
         :disabled="!isDesktop || !canMutateRoles || savingRoles"
         :is-super-admin-operator="isSuperAdminOperator"
       />
-      <AdminDesktopOnlyAction :desktop-enabled="isDesktop" class="mt-3">
+      <p v-if="isSelfTarget" class="admin-detail-note">不能修改当前登录账户的角色。</p>
+      <p v-else-if="!canMutateRoles" class="admin-detail-note">当前权限仅支持查看此账户的角色。</p>
+      <AdminDesktopOnlyAction :desktop-enabled="isDesktop" class="admin-detail-save">
         <template #default="{ disabled }">
-          <button
+          <AdminMicroButton
             v-if="canManageRoles"
-            type="button"
-            class="rounded-lg bg-cyan-300/15 px-3 py-2 text-xs text-cyan-50"
+            icon="save"
+            tone="primary"
             :disabled="disabled || !canMutateRoles || savingRoles"
             @click="saveRoles"
           >
-            保存角色
-          </button>
+            {{ savingRoles ? '保存中…' : '保存角色' }}
+          </AdminMicroButton>
         </template>
       </AdminDesktopOnlyAction>
     </section>
@@ -55,7 +63,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AdminDesktopOnlyAction } from '@/components/admin'
+import { AdminDesktopOnlyAction, AdminMicroButton } from '@/components/admin'
 import { AdminRoleMultiSelect } from '@/components/admin/features'
 import { resolveAdminUserDetailTarget } from '@/hooks/adminAccessNavigation'
 import { useAdminDesktopOnly } from '@/hooks/useAdminDesktopOnly'
@@ -128,3 +136,23 @@ watch(() => detailTarget.value.activeTab, (tab) => { activeTab.value = tab })
 watch(userId, () => void refreshDetail())
 onMounted(refreshDetail)
 </script>
+
+<style scoped>
+.admin-user-detail { display: grid; min-width: 0; gap: 20px; padding-bottom: 32px; }
+.admin-detail-header { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 16px; }
+.admin-detail-header h1 { margin-top: 16px; color: rgba(255,255,255,.96); font-size: 24px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.admin-detail-header p { margin-top: 6px; color: rgba(255,255,255,.5); font-size: 13px; overflow-wrap: anywhere; }
+.admin-detail-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-detail-tab { min-height: 32px; border: 1px solid transparent; border-radius: 10px; padding: 6px 14px; color: rgba(255,255,255,.5); font-size: 13px; }
+.admin-detail-tab.is-active { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.08); color: rgba(255,255,255,.94); }
+.admin-detail-tab:focus-visible { outline: 2px solid rgba(255,255,255,.55); outline-offset: 2px; }
+.admin-detail-section-title { color: rgba(255,255,255,.94); font-size: 15px; font-weight: 600; }
+.admin-detail-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; margin-top: 12px; }
+.admin-detail-panel, .admin-detail-summary-item { min-width: 0; border: 1px solid rgba(255,255,255,.1); border-radius: 16px; padding: 18px; background: rgba(255,255,255,.025); }
+.admin-detail-summary-item dt { color: rgba(255,255,255,.43); font-size: 12px; }
+.admin-detail-summary-item dd { margin-top: 8px; color: rgba(255,255,255,.94); font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.admin-detail-note { margin-top: 6px; color: rgba(255,255,255,.5); font-size: 12px; line-height: 1.5; }
+.admin-detail-panel :deep(.admin-role-multi-select) { margin-top: 16px; }
+.admin-detail-save { margin-top: 18px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 16px; }
+.admin-detail-save :deep(button) { justify-self: start; }
+</style>

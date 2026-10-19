@@ -77,12 +77,15 @@ test('captured project response cannot commit before activation', async () => {
   assert.deepEqual(committedProjects, [{ id: 'p1' }])
 })
 
-test('projects store starts and captures the remote request before cache hydration', () => {
-  const activationIndex = projectsStoreSource.indexOf('captureProjectListActivation({')
-  const hydrationIndex = projectsStoreSource.indexOf('await hydrateCanvasDraftCache()', activationIndex)
-  const localCacheIndex = projectsStoreSource.indexOf('await loadLocalCache()', activationIndex)
+test('project list starts the cloud request before reading lightweight cached metadata', () => {
+  const listStart = projectsStoreSource.indexOf('export const loadProjects = async')
+  const listEnd = projectsStoreSource.indexOf('export const loadCachedProjects = async')
+  const listBranch = projectsStoreSource.slice(listStart, listEnd)
+  const activationIndex = listBranch.indexOf('captureProjectListActivation({')
+  const localCacheIndex = listBranch.indexOf('await loadLocalCache()', activationIndex)
 
   assert.notEqual(activationIndex, -1)
-  assert.ok(activationIndex < hydrationIndex)
+  assert.notEqual(localCacheIndex, -1)
   assert.ok(activationIndex < localCacheIndex)
+  assert.doesNotMatch(listBranch, /hydrateCanvasDraftCache/)
 })

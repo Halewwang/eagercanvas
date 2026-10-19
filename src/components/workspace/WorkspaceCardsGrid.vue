@@ -8,8 +8,9 @@
       v-for="item in items"
       :key="item.id"
       class="project-card"
-      @pointerenter="$emit('projectIntent', item)"
-      @focusin="$emit('projectIntent', item)"
+      :class="{ 'project-card--selected': selectionMode && selectedIds.includes(item.id) }"
+      @pointerenter="!selectionMode && $emit('projectIntent', item)"
+      @focusin="!selectionMode && $emit('projectIntent', item)"
       @click="activeSection === 'featured' && $emit('primaryClick', item)"
     >
       <button
@@ -18,16 +19,29 @@
         type="button"
         :aria-label="`Open ${item.name || 'project'}`"
         :aria-busy="openingProjectId === item.id"
+        :tabindex="selectionMode ? -1 : 0"
+        :aria-hidden="selectionMode ? true : undefined"
+        :disabled="selectionMode && !canSelectProject(item)"
         @click="$emit('primaryClick', item)"
       />
 
+      <label v-if="selectionMode" class="project-selection" @click.stop>
+        <input
+          type="checkbox"
+          :aria-label="`Select ${item.name || 'project'}`"
+          :checked="selectedIds.includes(item.id)"
+          :disabled="selectionBusy || !canSelectProject(item)"
+          @change="$emit('toggleProject', item.id)"
+        />
+        <span v-if="!canSelectProject(item)">View only</span>
+      </label>
       <div class="card-media" :class="{ 'project-media': activeSection !== 'featured' }">
         <div v-if="showOwnerAvatar(item, activeSection)" class="owner-avatar" title="Shared by">
           <img v-if="item.ownerAvatarUrl" :src="item.ownerAvatarUrl" alt="owner avatar" />
           <span v-else>{{ getOwnerInitial(item) }}</span>
         </div>
         <template v-if="item.thumbnail || item.cover || item.coverUrl">
-          <img :src="item.thumbnail || item.cover || item.coverUrl" :alt="item.title || item.name" />
+          <img :src="item.thumbnail || item.cover || item.coverUrl" :alt="item.title || item.name" loading="lazy" decoding="async" />
         </template>
         <template v-else-if="activeSection === 'featured' && item.canvasData">
           <WorkspaceTemplateCanvasPreview
@@ -56,16 +70,17 @@
                 <span v-for="badge in projectBadges(item)" :key="badge" class="badge">{{ badge }}</span>
               </div>
             </div>
-            <div class="project-menu-action" @click.stop>
-              <BaseDropdown
+            <div v-if="!selectionMode" class="project-menu-action" @click.stop>
+              <NDropdown
                 placement="bottom-end"
-                :options="projectMenuOptions(item)"
+                trigger="click"
+                :options="dropdownOptions(item)"
                 @select="(key) => $emit('projectMenuSelect', key, item)"
               >
-                <button class="menu-btn project-menu-btn" type="button">
+                <button class="menu-btn project-menu-btn" type="button" :aria-label="`Actions for ${item.name || 'project'}`">
                   <NIcon :size="16"><EllipsisHorizontalOutline /></NIcon>
                 </button>
-              </BaseDropdown>
+              </NDropdown>
             </div>
           </div>
         </template>
@@ -93,10 +108,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { NIcon } from 'naive-ui'
+import { computed, h } from 'vue'
+import { NDropdown, NIcon } from 'naive-ui'
 import { BookmarkOutline, EllipsisHorizontalOutline } from '@/icons/coolicons'
-import { BaseDropdown } from '@/components/ui'
 import WorkspaceTemplateCanvasPreview from './WorkspaceTemplateCanvasPreview.vue'
 
 const props = defineProps({
@@ -131,15 +145,26 @@ const props = defineProps({
   openingProjectId: {
     type: String,
     default: ''
-  }
+  },
+  selectionMode: Boolean,
+  selectionBusy: Boolean,
+  selectedIds: { type: Array, default: () => [] },
+  canSelectProject: { type: Function, default: () => false }
 })
 
 defineEmits([
   'primaryClick',
   'projectIntent',
   'projectMenuSelect',
-  'favoriteTemplate'
+  'favoriteTemplate',
+  'toggleProject'
 ])
+
+const dropdownOptions = (item) => props.projectMenuOptions(item).map((option) => ({
+  ...option,
+  icon: option.icon ? () => h(NIcon, { size: 15 }, () => h(option.icon)) : undefined,
+  props: option.key === 'delete' ? { style: { color: '#ffb9b9' } } : undefined
+}))
 
 const resolvedEmptyStateTitle = computed(() => {
   if (props.emptyStateTitle) return props.emptyStateTitle
@@ -244,6 +269,33 @@ const projectBadges = (item = {}) => {
 .project-card-primary-action:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.78);
   outline-offset: 3px;
+}
+
+.project-card--selected .card-media {
+  border-color: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.project-selection {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 6px;
+  background: rgba(10, 10, 10, 0.8);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
+}
+
+.project-selection input {
+  width: 20px;
+  height: 20px;
+  accent-color: #fff;
+  color-scheme: dark;
 }
 
 .card-media {

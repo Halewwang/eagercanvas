@@ -54,6 +54,9 @@ const toggleRole = (role, checked) => {
   grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
   gap: 8px;
   min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
 }
 
 .admin-role-option {
@@ -66,12 +69,22 @@ const toggleRole = (role, checked) => {
   padding: 6px 9px;
   color: rgba(255, 255, 255, 0.72);
   font-size: 12px;
+  cursor: pointer;
 }
 
 .admin-role-option:has(input:checked) {
-  border-color: rgba(103, 232, 249, 0.34);
-  background: rgba(34, 211, 238, 0.08);
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.09);
   color: white;
+}
+
+.admin-role-option input {
+  accent-color: #e5e5e5;
+}
+
+.admin-role-option:has(input:focus-visible) {
+  outline: 2px solid rgba(255, 255, 255, 0.55);
+  outline-offset: 2px;
 }
 
 .admin-role-option:has(input:disabled) {

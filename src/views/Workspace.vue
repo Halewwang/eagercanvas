@@ -32,7 +32,17 @@
         :description="sectionDescription"
         @back-home="router.push('/')"
         @create-project="createBlankProject"
-      />
+      >
+        <template #actions>
+          <button
+            v-if="activeSection === 'projects' && eligibleItems.length && !selectionMode"
+            type="button"
+            class="project-selection-button"
+            :disabled="workspaceSwitching"
+            @click="startSelection"
+          >Select projects</button>
+        </template>
+      </WorkspaceHeader>
 
       <WorkspaceInboxPanel
         v-if="activeSection === 'inbox'"
@@ -60,6 +70,15 @@
       />
 
       <template v-else>
+        <div v-if="selectionMode" class="project-selection-toolbar" aria-label="Project selection">
+          <span role="status">{{ selectedItems.length }} selected</span>
+          <div class="project-selection-actions">
+            <button type="button" :disabled="deletingProjects || workspaceSwitching" @click="selectAll">Select all in this list ({{ eligibleItems.length }})</button>
+            <button type="button" :disabled="deletingProjects || !selectedItems.length" @click="clearSelection">Clear</button>
+            <button type="button" class="project-selection-delete" :disabled="deletingProjects || !selectedItems.length || workspaceSwitching" @click="openBulkDelete">Delete selected ({{ selectedItems.length }})</button>
+            <button type="button" :disabled="deletingProjects" @click="cancelSelection">Cancel</button>
+          </div>
+        </div>
         <div v-if="activeSection === 'featured'" class="template-tabs">
           <button
             v-for="tab in templateTabs"
@@ -89,10 +108,15 @@
           :empty-state-title="cardsEmptyStateTitle"
           :empty-state-copy="cardsEmptyStateCopy"
           :opening-project-id="openingProjectId"
+          :selection-mode="selectionMode"
+          :selection-busy="deletingProjects"
+          :selected-ids="selectedIds"
+          :can-select-project="canDeleteWorkspaceProject"
           @primary-click="handlePrimaryClick"
           @project-intent="preloadCanvasView"
           @project-menu-select="handleProjectMenuSelect"
           @favorite-template="toggleFavoriteTemplate"
+          @toggle-project="toggleProject"
         />
       </template>
     </main>
@@ -100,6 +124,7 @@
     <WorkspaceModals
       v-model:show-rename="showRenameModal"
       v-model:show-delete="showDeleteModal"
+      v-model:show-bulk-delete="showDeleteConfirmation"
       v-model:show-template-preview="showTemplatePreviewModal"
       v-model:show-copy-to-workspace="showCopyWorkspaceModal"
       v-model:show-share-user="showShareUserModal"
@@ -107,6 +132,8 @@
       v-model:copy-workspace-id="copyWorkspaceId"
       v-model:share-email="shareEmail"
       :delete-target-name="deleteTargetName"
+      :bulk-delete-count="bulkDeleteCount"
+      :bulk-deleting="deletingProjects"
       :copy-target-name="copyTargetName"
       :copy-workspace-options="teamCopyWorkspaces"
       :copy-loading="copyLoading"
@@ -115,6 +142,7 @@
       :preview-template="previewTemplate"
       @confirm-rename="confirmRename"
       @confirm-delete="confirmDelete"
+      @confirm-bulk-delete="confirmBulkDelete"
       @confirm-copy-to-workspace="confirmCopyToWorkspace"
       @confirm-share-user="confirmShareUser"
       @close-template-preview="closeTemplatePreview"
@@ -221,6 +249,7 @@ import { useAuthStore } from '@/stores/auth'
 import { notifier } from '@/utils/notifier'
 import { useAvatarUpload } from '@/hooks/useAvatarUpload'
 import { preloadCanvasView } from '@/router/viewLoaders.js'
+import { canDeleteWorkspaceProject, useWorkspaceProjectSelection } from '@/hooks/useWorkspaceProjectSelection.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -403,6 +432,40 @@ const sectionItems = computed(() => {
   if (!showsCardsGrid.value) return []
   return projects.value.filter((project) => getWorkspaceProjectSectionKey(project) === 'projects')
 })
+
+const {
+  eligibleItems,
+  selectedIds,
+  selectedItems,
+  selectionMode,
+  deleting: deletingProjects,
+  showDeleteConfirmation,
+  startSelection,
+  toggleProject,
+  selectAll,
+  clearSelection,
+  cancelSelection,
+  requestDelete,
+  deleteSelected
+} = useWorkspaceProjectSelection({
+  items: computed(() => activeSection.value === 'projects' ? sectionItems.value : []),
+  scope: computed(() => `${isAuthenticated.value ? user.value?.id || '' : ''}:${currentWorkspace.value?.id || ''}:${activeSection.value}`),
+  getUserId: () => isAuthenticated.value ? String(user.value?.id || '') : '',
+  deleteProject
+})
+const bulkDeleteCount = ref(0)
+const openBulkDelete = () => {
+  bulkDeleteCount.value = selectedItems.value.length
+  requestDelete()
+}
+const confirmBulkDelete = async () => {
+  if (deletingProjects.value || !showDeleteConfirmation.value) return
+  const result = await deleteSelected()
+  if (result.deleted) notifier.success(`${result.deleted} projects deleted`)
+  if (result.failed.length) {
+    notifier.warning(`${result.failed.length} projects could not be deleted. ${getErrorMessage(result.failed[0].error, 'Review the remaining selection and retry.')}`)
+  }
+}
 
 const settingsProjects = computed(() => projects.value.filter((project) => (
   project.accessMode === 'team' &&
@@ -641,6 +704,10 @@ const createBlankProject = async () => {
 }
 
 const handlePrimaryClick = async (item) => {
+  if (selectionMode.value) {
+    toggleProject(item.id)
+    return
+  }
   if (activeSection.value !== 'projects' && activeSection.value !== 'shared') {
     openTemplatePreview(item)
     return
@@ -1115,10 +1182,8 @@ onMounted(async () => {
       notifier.error(getErrorMessage(error, 'Invite link is invalid or expired'))
     }
   }
-  await Promise.all([
-    loadWorkspaceProjects(),
-    loadWorkspaceSurfaces()
-  ])
+  void loadWorkspaceSurfaces()
+  await loadWorkspaceProjects()
   scheduleCanvasPreload()
 })
 
@@ -1141,6 +1206,33 @@ onBeforeUnmount(() => {
 .workspace-main {
   padding: 28px;
 }
+
+.project-selection-button,
+.project-selection-actions button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(12, 12, 12, 0.9);
+  color: inherit;
+  font-size: 13px;
+}
+
+.project-selection-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.project-selection-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.project-selection-actions .project-selection-delete { color: #ffb9b9; border-color: rgba(255, 185, 185, 0.3); }
+.project-selection-button:disabled,
+.project-selection-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+.project-selection-button:focus-visible,
+.project-selection-actions button:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.8); outline-offset: 3px; }
 
 .template-tabs {
   display: flex;

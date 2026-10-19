@@ -5,6 +5,7 @@
       <p>{{ description }}</p>
     </div>
     <div class="header-actions">
+      <slot name="actions" />
       <WorkspaceActionPill @click="$emit('backHome')">
         <template #icon>
           <NIcon :size="15"><GridOutline /></NIcon>
@@ -79,6 +80,7 @@ defineEmits(['backHome', 'createProject'])
 
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-self: flex-start;
   gap: 8px;
   align-items: flex-start;

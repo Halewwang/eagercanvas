@@ -52,6 +52,7 @@ const controlClasses = computed(() => ({
 }
 
 .ui-select-input {
+  color-scheme: dark;
   appearance: none;
   padding-right: 36px;
   background-image:
@@ -59,6 +60,11 @@ const controlClasses = computed(() => ({
   background-repeat: no-repeat;
   background-position: right 14px center;
   background-size: 12px 12px;
+}
+
+.ui-select-input :deep(option) {
+  background: #202124;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .ui-select-input:focus {

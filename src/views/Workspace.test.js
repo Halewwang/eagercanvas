@@ -253,7 +253,7 @@ test('workspace view delegates project and template cards to a focused component
   assert.doesNotMatch(workspaceSource, /\.project-card\s*\{/)
   assert.doesNotMatch(workspaceSource, /\.project-meta-row\s*\{/)
 
-  assert.match(cardsGridSource, /import \{ BaseDropdown \} from '@\/components\/ui'/)
+  assert.match(cardsGridSource, /import \{ NDropdown, NIcon \} from 'naive-ui'/)
   assert.match(cardsGridSource, /import WorkspaceTemplateCanvasPreview from '\.\/WorkspaceTemplateCanvasPreview\.vue'/)
   assert.match(cardsGridSource, /<section class="cards-grid"/)
   assert.match(cardsGridSource, /:class="`cards-grid--\$\{activeSection\}`"/)
@@ -263,7 +263,7 @@ test('workspace view delegates project and template cards to a focused component
   assert.doesNotMatch(cardsGridSource, /\$emit\('createProject'\)/)
   assert.match(cardsGridSource, /v-for="item in items"/)
   assert.match(cardsGridSource, /@click="\$emit\('primaryClick', item\)"/)
-  assert.match(cardsGridSource, /:options="projectMenuOptions\(item\)"/)
+  assert.match(cardsGridSource, /:options="dropdownOptions\(item\)"/)
   assert.match(cardsGridSource, /@select="\(key\) => \$emit\('projectMenuSelect', key, item\)"/)
   assert.doesNotMatch(cardsGridSource, /class="card-actions"/)
   assert.match(cardsGridSource, /activeSection === 'featured' && item\.canvasData/)
@@ -608,7 +608,7 @@ test('workspace cloud surfaces fail softly while project list stays cloud author
   assert.doesNotMatch(workspaceSource, /loadCurrentWorkspace/)
   assert.match(workspaceSource, /Promise\.all\(\[\s*\(async \(\) => \{[\s\S]*loadPendingWorkspaceInvites\(\)/)
   assert.match(workspaceSource, /loadTemplatesForActiveScope\(\{ preferCache: true \}\)/)
-  assert.match(workspaceSource, /await Promise\.all\(\[\s*loadWorkspaceProjects\(\),\s*loadWorkspaceSurfaces\(\)\s*\]\)/)
+  assert.match(workspaceSource, /void loadWorkspaceSurfaces\(\)\s*await loadWorkspaceProjects\(\)\s*scheduleCanvasPreload\(\)/)
 })
 
 test('workspace project list does not render browser local cache as authoritative data', () => {
