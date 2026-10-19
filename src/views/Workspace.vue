@@ -34,13 +34,11 @@
         @create-project="createBlankProject"
       >
         <template #actions>
-          <button
+          <WorkspaceActionPill
             v-if="activeSection === 'projects' && eligibleItems.length && !selectionMode"
-            type="button"
-            class="project-selection-button"
             :disabled="workspaceSwitching"
             @click="startSelection"
-          >Select projects</button>
+          >Select projects</WorkspaceActionPill>
         </template>
       </WorkspaceHeader>
 
@@ -73,10 +71,13 @@
         <div v-if="selectionMode" class="project-selection-toolbar" aria-label="Project selection">
           <span role="status">{{ selectedItems.length }} selected</span>
           <div class="project-selection-actions">
-            <button type="button" :disabled="deletingProjects || workspaceSwitching" @click="selectAll">Select all in this list ({{ eligibleItems.length }})</button>
-            <button type="button" :disabled="deletingProjects || !selectedItems.length" @click="clearSelection">Clear</button>
-            <button type="button" class="project-selection-delete" :disabled="deletingProjects || !selectedItems.length || workspaceSwitching" @click="openBulkDelete">Delete selected ({{ selectedItems.length }})</button>
-            <button type="button" :disabled="deletingProjects" @click="cancelSelection">Cancel</button>
+            <WorkspaceActionPill class="project-bulk-action" :disabled="deletingProjects || workspaceSwitching" @click="selectAll">Select all in this list ({{ eligibleItems.length }})</WorkspaceActionPill>
+            <WorkspaceActionPill class="project-bulk-action" :disabled="deletingProjects || !selectedItems.length" @click="clearSelection">Clear</WorkspaceActionPill>
+            <WorkspaceActionPill class="project-bulk-action" variant="danger" :disabled="deletingProjects || !selectedItems.length || workspaceSwitching" @click="openBulkDelete">
+              <template #icon><TrashOutline class="project-selection-icon" aria-hidden="true" /></template>
+              Delete selected ({{ selectedItems.length }})
+            </WorkspaceActionPill>
+            <WorkspaceActionPill class="project-bulk-action" :disabled="deletingProjects" @click="cancelSelection">Cancel</WorkspaceActionPill>
           </div>
         </div>
         <div v-if="activeSection === 'featured'" class="template-tabs">
@@ -226,6 +227,7 @@ import {
   updateProjectPermission
 } from '@/stores/projects'
 import WorkspaceCardsGrid from '@/components/workspace/WorkspaceCardsGrid.vue'
+import WorkspaceActionPill from '@/components/workspace/WorkspaceActionPill.vue'
 import WorkspaceHeader from '@/components/workspace/WorkspaceHeader.vue'
 import WorkspaceInboxPanel from '@/components/workspace/WorkspaceInboxPanel.vue'
 import WorkspaceLoadingGrid from '@/components/workspace/WorkspaceLoadingGrid.vue'
@@ -1200,22 +1202,12 @@ onBeforeUnmount(() => {
     #0d0e10;
   color: #f0f1f3;
   display: grid;
-  grid-template-columns: 272px 1fr;
+  grid-template-columns: 272px minmax(0, 1fr);
 }
 
 .workspace-main {
+  min-width: 0;
   padding: 28px;
-}
-
-.project-selection-button,
-.project-selection-actions button {
-  min-height: 38px;
-  padding: 8px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
-  background: rgba(12, 12, 12, 0.9);
-  color: inherit;
-  font-size: 13px;
 }
 
 .project-selection-toolbar {
@@ -1228,11 +1220,8 @@ onBeforeUnmount(() => {
 }
 
 .project-selection-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.project-selection-actions .project-selection-delete { color: #ffb9b9; border-color: rgba(255, 185, 185, 0.3); }
-.project-selection-button:disabled,
-.project-selection-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
-.project-selection-button:focus-visible,
-.project-selection-actions button:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.8); outline-offset: 3px; }
+.project-bulk-action { width: auto; }
+.project-selection-icon { width: 14px; height: 14px; }
 
 .template-tabs {
   display: flex;
@@ -1299,7 +1288,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 900px) {
   .workspace-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

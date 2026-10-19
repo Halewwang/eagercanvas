@@ -39,7 +39,7 @@ defineEmits(['click'])
   transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
 }
 
-.workspace-action-pill:hover {
+.workspace-action-pill:not(:disabled):hover {
   border-color: rgba(255, 255, 255, 0.28);
   background: rgba(18, 18, 18, 0.96);
 }
@@ -50,17 +50,29 @@ defineEmits(['click'])
   color: #0d0e10;
 }
 
-.workspace-action-pill--primary:hover {
+.workspace-action-pill--primary:not(:disabled):hover {
   border-color: #fff;
   background: rgba(255, 255, 255, 0.92);
   color: #0d0e10;
 }
 
-.workspace-action-pill:focus,
-.workspace-action-pill:focus-visible {
-  outline: none;
-  box-shadow: none;
+.workspace-action-pill--danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--primary-foreground);
 }
+
+.workspace-action-pill--danger:not(:disabled):hover {
+  border-color: var(--danger-hover);
+  background: var(--danger-hover);
+}
+
+.workspace-action-pill:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+
+.workspace-action-pill:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .workspace-action-pill-label {
   font-size: 13px;

@@ -25,16 +25,15 @@
         @click="$emit('primaryClick', item)"
       />
 
-      <label v-if="selectionMode" class="project-selection" @click.stop>
-        <input
-          type="checkbox"
+      <div v-if="selectionMode" class="project-selection" @click.stop>
+        <BaseCheckbox
           :aria-label="`Select ${item.name || 'project'}`"
-          :checked="selectedIds.includes(item.id)"
+          :model-value="selectedIds.includes(item.id)"
           :disabled="selectionBusy || !canSelectProject(item)"
-          @change="$emit('toggleProject', item.id)"
+          @update:model-value="$emit('toggleProject', item.id)"
         />
         <span v-if="!canSelectProject(item)">View only</span>
-      </label>
+      </div>
       <div class="card-media" :class="{ 'project-media': activeSection !== 'featured' }">
         <div v-if="showOwnerAvatar(item, activeSection)" class="owner-avatar" title="Shared by">
           <img v-if="item.ownerAvatarUrl" :src="item.ownerAvatarUrl" alt="owner avatar" />
@@ -75,6 +74,8 @@
                 placement="bottom-end"
                 trigger="click"
                 :options="dropdownOptions(item)"
+                :theme-overrides="projectMenuTheme"
+                class="project-dropdown"
                 @select="(key) => $emit('projectMenuSelect', key, item)"
               >
                 <button class="menu-btn project-menu-btn" type="button" :aria-label="`Actions for ${item.name || 'project'}`">
@@ -110,6 +111,7 @@
 <script setup>
 import { computed, h } from 'vue'
 import { NDropdown, NIcon } from 'naive-ui'
+import { BaseCheckbox } from '@/components/ui'
 import { BookmarkOutline, EllipsisHorizontalOutline } from '@/icons/coolicons'
 import WorkspaceTemplateCanvasPreview from './WorkspaceTemplateCanvasPreview.vue'
 
@@ -160,10 +162,38 @@ defineEmits([
   'toggleProject'
 ])
 
+const projectMenuTheme = {
+  color: 'rgba(20, 20, 20, 0.98)',
+  borderRadius: '20px',
+  padding: '8px',
+  fontSizeMedium: '14px',
+  optionHeightMedium: '40px',
+  optionTextColor: 'var(--text)',
+  optionTextColorHover: 'var(--text)',
+  optionTextColorActive: 'var(--text)',
+  optionColorHover: 'rgba(255, 255, 255, 0.12)',
+  optionColorActive: 'rgba(255, 255, 255, 0.12)',
+  dividerColor: 'rgba(255, 255, 255, 0.12)',
+  peers: {
+    Popover: {
+      boxShadow: '0 10px 24px rgba(0, 0, 0, 0.18)'
+    }
+  }
+}
+
 const dropdownOptions = (item) => props.projectMenuOptions(item).map((option) => ({
   ...option,
   icon: option.icon ? () => h(NIcon, { size: 15 }, () => h(option.icon)) : undefined,
-  props: option.key === 'delete' ? { style: { color: '#ffb9b9' } } : undefined
+  props: option.key === 'delete' ? {
+    ...option.props,
+    style: {
+      ...option.props?.style,
+      '--n-option-text-color': '#ffb9b9',
+      '--n-option-text-color-hover': '#ffb9b9',
+      '--n-prefix-color': '#ff9f9f',
+      '--n-option-color-hover': 'rgba(255, 99, 99, 0.12)'
+    }
+  } : option.props
 }))
 
 const resolvedEmptyStateTitle = computed(() => {
@@ -208,12 +238,12 @@ const projectBadges = (item = {}) => {
 <style scoped>
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 22px;
 }
 
 .cards-grid--featured {
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
   gap: 28px;
 }
 
@@ -289,13 +319,6 @@ const projectBadges = (item = {}) => {
   background: rgba(10, 10, 10, 0.8);
   color: rgba(255, 255, 255, 0.65);
   font-size: 12px;
-}
-
-.project-selection input {
-  width: 20px;
-  height: 20px;
-  accent-color: #fff;
-  color-scheme: dark;
 }
 
 .card-media {
@@ -511,10 +534,9 @@ const projectBadges = (item = {}) => {
   color: #fff;
 }
 
-.menu-btn:focus,
 .menu-btn:focus-visible {
-  outline: none;
-  box-shadow: none;
+  background: var(--surface-2);
+  box-shadow: var(--ring);
 }
 
 .card-body p {
@@ -567,6 +589,16 @@ const projectBadges = (item = {}) => {
 .project-menu-action {
   position: relative;
   z-index: 3;
+}
+
+:global(.project-dropdown) {
+  min-width: 192px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+}
+
+:global(.project-dropdown .n-dropdown-option-body::before) {
+  border-radius: 14px;
 }
 
 @media (prefers-reduced-motion: reduce) {

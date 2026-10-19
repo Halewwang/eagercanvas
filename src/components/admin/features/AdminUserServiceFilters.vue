@@ -8,22 +8,13 @@
       />
     </AdminFilterField>
     <AdminFilterField class="col-span-2 md:col-span-2 xl:col-span-2" label="服务状态">
-      <AdminControlField tag="select" :value="serviceStatusFilter" @change="emitValue('update:serviceStatusFilter', $event)">
-        <option value="all">全部</option><option value="active">已启用</option><option value="disabled">已暂停</option><option value="not_enabled">未开通</option>
-      </AdminControlField>
+      <BaseSelect :model-value="serviceStatusFilter" :options="serviceStatusOptions" aria-label="服务状态" @update:model-value="emit('update:serviceStatusFilter', $event)" />
     </AdminFilterField>
     <AdminFilterField class="col-span-2 md:col-span-2 xl:col-span-2" label="角色">
-      <AdminControlField tag="select" :value="roleFilter" @change="emitValue('update:roleFilter', $event)">
-        <option value="all">全部</option><option value="super_admin">超级管理员</option><option value="admin">管理员</option><option value="ops">运维</option><option value="support">客服</option><option value="user">普通用户</option>
-      </AdminControlField>
+      <BaseSelect :model-value="roleFilter" :options="roleOptions" aria-label="角色" @update:model-value="emit('update:roleFilter', $event)" />
     </AdminFilterField>
     <AdminFilterField class="col-span-2 md:col-span-2 xl:col-span-2" label="状态筛选">
-      <AdminControlField tag="select" :value="statusFilter" @change="updateStatusFilter">
-        <option value="all">全部</option>
-        <option value="active">正常</option>
-        <option value="suspended">已暂停</option>
-        <option value="deleted">已删除</option>
-      </AdminControlField>
+      <BaseSelect :model-value="statusFilter" :options="statusOptions" aria-label="状态筛选" @update:model-value="emit('update:statusFilter', $event)" />
     </AdminFilterField>
     <AdminUserServiceFilterSummary
       class="col-span-full"
@@ -37,6 +28,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { BaseSelect } from '@/components/ui'
 import AdminControlField from '@/components/admin/AdminControlField.vue'
 import AdminFilterField from '@/components/admin/AdminFilterField.vue'
 import AdminMicroButton from '@/components/admin/AdminMicroButton.vue'
@@ -74,20 +66,35 @@ const props = defineProps({
   }
 })
 
+const serviceStatusOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'active', label: '已启用' },
+  { value: 'disabled', label: '已暂停' },
+  { value: 'not_enabled', label: '未开通' }
+]
+const roleOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'super_admin', label: '超级管理员' },
+  { value: 'admin', label: '管理员' },
+  { value: 'ops', label: '运维' },
+  { value: 'support', label: '客服' },
+  { value: 'user', label: '普通用户' }
+]
+const statusOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'active', label: '正常' },
+  { value: 'suspended', label: '已暂停' },
+  { value: 'deleted', label: '已删除' }
+]
+
 const hasActiveFilters = computed(() => Boolean(props.searchQuery) || [
   props.statusFilter,
   props.serviceStatusFilter,
   props.roleFilter
 ].some((value) => value !== 'all'))
 
-const emitValue = (name, event) => emit(name, event.target.value)
-
 const updateSearchQuery = (event) => {
   emit('update:searchQuery', String(event.target.value || ''))
-}
-
-const updateStatusFilter = (event) => {
-  emit('update:statusFilter', event.target.value)
 }
 
 const clearFilters = () => {

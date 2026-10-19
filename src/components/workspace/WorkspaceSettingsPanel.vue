@@ -6,17 +6,11 @@
           <h2>Workspace settings</h2>
           <p>Rename this team workspace and adjust its avatar source.</p>
         </div>
-        <button type="submit" class="settings-primary">Save</button>
+        <BaseButton native-type="submit" size="sm">Save</BaseButton>
       </div>
       <div class="settings-fields">
-        <label>
-          <span>Name</span>
-          <input :value="editName" class="settings-input" autocomplete="off" @input="emit('update:editName', $event.target.value)" />
-        </label>
-        <label>
-          <span>Avatar URL</span>
-          <input :value="editAvatarUrl" class="settings-input" autocomplete="off" @input="emit('update:editAvatarUrl', $event.target.value)" />
-        </label>
+        <BaseInput :model-value="editName" label="Name" autocomplete="off" @update:model-value="emit('update:editName', $event)" />
+        <BaseInput :model-value="editAvatarUrl" label="Avatar URL" autocomplete="off" @update:model-value="emit('update:editAvatarUrl', $event)" />
       </div>
     </form>
 
@@ -75,11 +69,14 @@
                   <strong>{{ member.displayName || member.email || member.userId }}</strong>
                   <span>{{ member.effectivePermission }} effective access</span>
                 </div>
-                <select :value="roleValue(member)" class="role-select" :disabled="savingPermission" @change="changeRole(member, $event.target.value)">
-                  <option value="owner">Owner</option>
-                  <option value="editor">Editor</option>
-                  <option value="viewer">Viewer</option>
-                </select>
+                <BaseSelect
+                  :model-value="roleValue(member)"
+                  class="role-select"
+                  :options="roleOptions"
+                  :disabled="savingPermission"
+                  :aria-label="`Permission for ${member.displayName || member.email || member.userId}`"
+                  @update:model-value="changeRole(member, $event)"
+                />
               </div>
             </div>
           </template>
@@ -91,6 +88,8 @@
 </template>
 
 <script setup>
+import { BaseButton, BaseInput, BaseSelect } from '@/components/ui'
+
 const props = defineProps({
   currentWorkspace: {
     type: Object,
@@ -133,6 +132,12 @@ const emit = defineEmits([
   'update:editName',
   'update:editAvatarUrl'
 ])
+
+const roleOptions = [
+  { label: 'Owner', value: 'owner' },
+  { label: 'Editor', value: 'editor' },
+  { label: 'Viewer', value: 'viewer' }
+]
 
 const roleValue = (member = {}) => {
   if (member.userId && member.userId === props.permissionDetail?.ownerUserId) return 'owner'
@@ -213,43 +218,11 @@ const changeRole = (member, role) => {
   gap: 14px;
 }
 
-.settings-fields label,
 .member-main {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.settings-fields label > span {
-  color: rgba(236, 238, 244, 0.72);
-  font-size: 12px;
-}
-
-.settings-input,
-.role-select {
-  height: 38px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #f7f7f8;
-  font-size: 13px;
-}
-
-.settings-input {
-  min-width: 0;
-  padding: 0 11px;
-}
-
-.settings-primary {
-  height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.92);
-  border-radius: 8px;
-  background: #fff;
-  color: #0d0e10;
-  padding: 0 13px;
-  cursor: pointer;
-  font-size: 13px;
 }
 
 .member-list,
@@ -330,7 +303,7 @@ const changeRole = (member, role) => {
 
 .role-select {
   width: 112px;
-  padding: 0 9px;
+  flex-shrink: 0;
 }
 
 .settings-empty {

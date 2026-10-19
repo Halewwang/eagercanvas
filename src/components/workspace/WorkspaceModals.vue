@@ -63,19 +63,16 @@
   >
     <div class="project-action-stack">
       <BaseModalCopy>Copy "{{ copyTargetName }}" into a team workspace.</BaseModalCopy>
-      <label class="select-field">
+      <div class="select-field">
         <span>Team workspace</span>
-        <select :value="copyWorkspaceId" @change="$emit('update:copyWorkspaceId', $event.target.value)">
-          <option value="" disabled>Select team</option>
-          <option
-            v-for="workspace in copyWorkspaceOptions"
-            :key="workspace.id"
-            :value="workspace.id"
-          >
-            {{ workspace.name }}
-          </option>
-        </select>
-      </label>
+        <BaseSelect
+          :model-value="copyWorkspaceId"
+          :options="copyWorkspaceOptions.map((workspace) => ({ label: workspace.name, value: workspace.id }))"
+          placeholder="Select team"
+          aria-label="Team workspace"
+          @update:model-value="$emit('update:copyWorkspaceId', $event)"
+        />
+      </div>
     </div>
     <template #footer>
       <BaseModalActions>
@@ -164,7 +161,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { BaseButton, BaseInput, BaseModal, BaseModalActions, BaseModalCopy } from '@/components/ui'
+import { BaseButton, BaseInput, BaseModal, BaseModalActions, BaseModalCopy, BaseSelect } from '@/components/ui'
 import WorkspaceTemplateCanvasPreview from './WorkspaceTemplateCanvasPreview.vue'
 import { getWorkspaceTemplateNodeCount } from '@/utils/workspaceTemplatePreview'
 
@@ -282,16 +279,6 @@ const templateNodeCount = computed(() => getWorkspaceTemplateNodeCount(props.pre
 .select-field span {
   color: var(--text-muted);
   font-size: 13px;
-}
-
-.select-field select {
-  height: 44px;
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  padding: 0 14px;
-  outline: none;
 }
 
 .template-preview {

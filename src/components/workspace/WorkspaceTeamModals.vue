@@ -32,13 +32,13 @@
           @update:model-value="$emit('update:createName', $event)"
         />
 
-        <label class="slug-field">
+        <div class="slug-field">
           <span>URL Slug</span>
           <div class="slug-preview">
-            <input :value="generatedSlug" readonly aria-label="URL Slug" />
-            <span class="slug-check">✓</span>
+            <BaseInput :model-value="generatedSlug" readonly aria-label="URL Slug" />
+            <span class="slug-check" aria-hidden="true">✓</span>
           </div>
-        </label>
+        </div>
 
         <div v-if="createdInviteUrl" class="generated-link">
           <span>Invite link · 7 days</span>
@@ -132,19 +132,16 @@
       <p class="modal-copy">
         You will return to your personal workspace. If you own team projects, choose a team member to manage them.
       </p>
-      <label class="select-field">
+      <div class="select-field">
         <span>Transfer to</span>
-        <select :value="transferToUserId" @change="$emit('update:transferToUserId', $event.target.value)">
-          <option value="">Select member</option>
-          <option
-            v-for="member in transferMembers"
-            :key="member.userId"
-            :value="member.userId"
-          >
-            {{ member.displayName || member.email || member.userId }}
-          </option>
-        </select>
-      </label>
+        <BaseSelect
+          :model-value="transferToUserId"
+          :options="transferMemberOptions"
+          placeholder="Select member"
+          aria-label="Transfer to"
+          @update:model-value="$emit('update:transferToUserId', $event)"
+        />
+      </div>
     </div>
     <template #footer>
       <BaseModalActions>
@@ -179,7 +176,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { BaseButton, BaseInput, BaseModal, BaseModalActions } from '@/components/ui'
+import { BaseButton, BaseInput, BaseModal, BaseModalActions, BaseSelect } from '@/components/ui'
 
 const props = defineProps({
   showCreate: Boolean,
@@ -258,6 +255,14 @@ const emit = defineEmits([
 
 const createAvatarInputRef = ref(null)
 const editAvatarInputRef = ref(null)
+
+const transferMemberOptions = computed(() => [
+  { label: 'Select member', value: '' },
+  ...props.transferMembers.map((member) => ({
+    label: member.displayName || member.email || member.userId,
+    value: member.userId
+  }))
+])
 
 const generatedSlug = computed(() => {
   const slug = String(props.createName || '')
@@ -366,28 +371,15 @@ const handleAvatarFile = (event, target = 'create') => {
 }
 
 .slug-preview {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  height: 44px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface);
-  padding: 0 12px;
-}
-
-.slug-preview input {
-  width: 100%;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  outline: none;
-  font: inherit;
+  position: relative;
 }
 
 .slug-check {
-  color: #8b80ff;
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
   font-weight: 700;
 }
 
@@ -420,16 +412,6 @@ const handleAvatarFile = (event, target = 'create') => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.select-field select {
-  height: 44px;
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  padding: 0 14px;
-  outline: none;
 }
 
 @media (max-width: 640px) {

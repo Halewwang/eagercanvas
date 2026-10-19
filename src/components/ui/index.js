@@ -1,6 +1,8 @@
 export { default as BaseButton } from './BaseButton.vue'
 export { default as BaseDropdown } from './BaseDropdown.vue'
 export { default as BaseInput } from './BaseInput.vue'
+export { default as BaseSelect } from './BaseSelect.vue'
+export { default as BaseCheckbox } from './BaseCheckbox.vue'
 export { default as BaseModal } from './BaseModal.vue'
 export { default as BaseModalActions } from './BaseModalActions.vue'
 export { default as BaseModalCopy } from './BaseModalCopy.vue'

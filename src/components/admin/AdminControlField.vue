@@ -1,17 +1,11 @@
 <template>
-  <component :is="tag" :class="controlClasses">
-    <slot />
-  </component>
+  <input :class="controlClasses">
 </template>
 
 <script setup>
 import { computed } from 'vue'
 
 const props = defineProps({
-  tag: {
-    type: String,
-    default: 'input'
-  },
   variant: {
     type: String,
     default: 'text'
@@ -20,8 +14,7 @@ const props = defineProps({
 
 const controlClasses = computed(() => ({
   'ui-text-input': props.variant !== 'number',
-  'ui-number-input': props.variant === 'number',
-  'ui-select-input': props.tag === 'select'
+  'ui-number-input': props.variant === 'number'
 }))
 </script>
 
@@ -49,27 +42,6 @@ const controlClasses = computed(() => ({
   color: rgba(255, 255, 255, 0.9);
   font-size: 13px;
   line-height: 1.3;
-}
-
-.ui-select-input {
-  color-scheme: dark;
-  appearance: none;
-  padding-right: 36px;
-  background-image:
-    url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='rgba(255,255,255,0.62)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 14px center;
-  background-size: 12px 12px;
-}
-
-.ui-select-input :deep(option) {
-  background: #202124;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.ui-select-input:focus {
-  background-image:
-    url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='rgba(255,255,255,0.86)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 .ui-text-input:focus,
