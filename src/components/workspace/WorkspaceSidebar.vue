@@ -37,11 +37,6 @@
             <img v-if="user?.avatarUrl" :src="user.avatarUrl" alt="user avatar" />
             <span v-else>{{ avatarInitial }}</span>
           </button>
-          <span class="sidebar-user-divider" aria-hidden="true"></span>
-          <div class="sidebar-usage-meter" aria-live="polite">
-            <span class="sidebar-usage-calls">{{ usageCallsLabel }}</span>
-            <span class="sidebar-usage-cost">{{ usageCostLabel }}</span>
-          </div>
           <BaseDropdown :options="accountMenuOptions" placement="top-end" compact @select="handleAccountMenuSelect">
             <button class="sidebar-settings-btn" type="button" title="Account menu" aria-label="Account menu">
               <NIcon :size="18"><SettingsOutline /></NIcon>
@@ -66,7 +61,7 @@ import { LogOutOutline, SettingsOutline, WindowSidebarOutline } from '@/icons/co
 import { BaseDropdown } from '@/components/ui'
 import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 
-const props = defineProps({
+defineProps({
   workspaceBrand: {
     type: String,
     default: 'Shared Workspace'
@@ -90,14 +85,6 @@ const props = defineProps({
   avatarInitial: {
     type: String,
     default: ''
-  },
-  usageSummary: {
-    type: Object,
-    default: null
-  },
-  usageLoading: {
-    type: Boolean,
-    default: false
   },
   currentWorkspace: {
     type: Object,
@@ -135,32 +122,6 @@ const accountMenuOptions = computed(() => [
   { key: 'divider', type: 'divider' },
   { key: 'logout', label: 'Logout', icon: LogOutOutline, danger: true }
 ])
-
-const formatCompactNumber = (value) => {
-  const numericValue = Number(value || 0)
-  if (!Number.isFinite(numericValue)) return '0'
-  return new Intl.NumberFormat('en', {
-    notation: numericValue >= 10000 ? 'compact' : 'standard',
-    maximumFractionDigits: numericValue >= 10000 ? 1 : 0
-  }).format(numericValue)
-}
-
-const formatUsageCost = (value) => {
-  const numericValue = Number(value || 0)
-  if (!Number.isFinite(numericValue) || numericValue <= 0) return '0.0000'
-  if (numericValue < 1) return numericValue.toFixed(4)
-  return numericValue.toFixed(2)
-}
-
-const usageCallsLabel = computed(() => {
-  if (props.usageLoading && !props.usageSummary) return 'Loading usage'
-  return `${formatCompactNumber(props.usageSummary?.totalCalls)} calls`
-})
-
-const usageCostLabel = computed(() => {
-  if (props.usageLoading && !props.usageSummary) return 'Fetching cost'
-  return `$${formatUsageCost(props.usageSummary?.totalCostUsd)} used`
-})
 
 const handleAccountMenuSelect = (key) => {
   if (key === 'admin') {
@@ -240,10 +201,10 @@ const handleAccountMenuSelect = (key) => {
 }
 
 .sidebar-user-row {
-  display: grid;
-  grid-template-columns: 30px 1px minmax(0, 1fr) 30px;
+  display: flex;
   align-items: center;
-  column-gap: 12px;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
 }
 
@@ -273,41 +234,6 @@ const handleAccountMenuSelect = (key) => {
 .sidebar-profile-btn:hover {
   border-color: rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.1);
-}
-
-.sidebar-user-divider {
-  width: 1px;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
-}
-
-.sidebar-usage-meter {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  line-height: 1.15;
-}
-
-.sidebar-usage-calls,
-.sidebar-usage-cost {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-usage-calls {
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.sidebar-usage-cost {
-  color: rgba(236, 238, 244, 0.48);
-  font-size: 10px;
-  font-weight: 500;
 }
 
 .sidebar-settings-btn {

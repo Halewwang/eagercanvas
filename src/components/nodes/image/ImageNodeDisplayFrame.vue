@@ -15,9 +15,13 @@
       </div>
       <ImageNodeCropOverlay
         v-if="cropActive"
+        :export-mode="cropExportMode"
+        :busy="cropBusy"
         :mask-styles="cropMaskStyles"
         :box-style="cropBoxStyle"
         :handles="cropHandles"
+        @apply="$emit('crop-apply')"
+        @cancel="$emit('crop-cancel')"
         @drag-start="$emit('crop-drag-start', $event)"
         @resize-start="(handle, event) => $emit('crop-resize-start', handle, event)"
       />
@@ -37,6 +41,8 @@ defineProps({
     type: String,
     default: 'Image'
   },
+  cropExportMode: Boolean,
+  cropBusy: Boolean,
   cropActive: {
     type: Boolean,
     default: false
@@ -55,14 +61,13 @@ defineProps({
   }
 })
 
-defineEmits(['image-load', 'crop-drag-start', 'crop-resize-start'])
+defineEmits(['image-load', 'crop-drag-start', 'crop-resize-start', 'crop-apply', 'crop-cancel'])
 </script>
 
 <style scoped>
 .module-image-shell {
   width: 100%;
   height: 100%;
-  padding: var(--module-inset);
   background: #050505;
 }
 
@@ -75,6 +80,7 @@ defineEmits(['image-load', 'crop-drag-start', 'crop-resize-start'])
 }
 
 .module-image {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;

@@ -91,3 +91,16 @@ test('image node preview download skips empty sources', async () => {
   assert.equal(await previewDownload.downloadPreviewImage(), null)
   assert.deepEqual(calls, [])
 })
+
+test('local export downloads its PNG blob without fetching or changing the source', () => {
+  const calls = []
+  const previewDownload = useImageNodePreviewDownload({
+    createObjectUrl: (blob) => { calls.push(['blob', blob]); return 'blob:local-export' },
+    fetchFn: () => { throw new Error('Local export must not fetch') },
+    revokeObjectUrl: (url) => calls.push(['revoke', url]),
+    setTimeoutFn: (callback) => callback(),
+    triggerDownload: (href, filename) => calls.push(['download', href, filename])
+  })
+  assert.deepEqual(previewDownload.downloadImageBlob('local-png', 'crop.png'), { filename: 'crop.png', href: 'blob:local-export', source: 'blob' })
+  assert.deepEqual(calls, [['blob', 'local-png'], ['download', 'blob:local-export', 'crop.png'], ['revoke', 'blob:local-export']])
+})

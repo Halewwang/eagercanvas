@@ -126,17 +126,6 @@ export const useImageNodeModelControls = ({
     placeholderValue: 'auto',
     placeholderLabel: 'Quality'
   }))
-  const backgroundDropdownOptions = computed(() => getImageNodeAdvancedDropdownOptions({
-    enabled: showAdvancedCapsuleParams.value,
-    items: currentImageModelConfig.value?.backgrounds
-  }))
-  const displayBackgroundControl = computed(() => getImageNodeControlDisplayLabel({
-    enabled: showAdvancedCapsuleParams.value,
-    options: backgroundDropdownOptions.value,
-    value: localBackground.value,
-    placeholderValue: 'auto',
-    placeholderLabel: 'Background'
-  }))
   const formatDropdownOptions = computed(() => getImageNodeAdvancedDropdownOptions({
     enabled: showAdvancedCapsuleParams.value,
     items: currentImageModelConfig.value?.outputFormats
@@ -149,9 +138,9 @@ export const useImageNodeModelControls = ({
     placeholderLabel: 'Format'
   }))
   const stageStyle = computed(() => getImageNodeStageStyle({
-    ...(readOption(naturalSize)?.width && readOption(naturalSize)?.height
-      ? { size: `${readOption(naturalSize).width}x${readOption(naturalSize).height}` }
-      : { ratio: localImageRatio.value, size: localImageSize.value })
+    ratio: localImageRatio.value,
+    size: localImageSize.value,
+    naturalSize: readOption(naturalSize)
   }))
   const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
 
@@ -230,19 +219,12 @@ export const useImageNodeModelControls = ({
     updateNode(readNodeId(), { quality })
   }
 
-  const setBackground = (background) => {
-    localBackground.value = background
-    updateNode(readNodeId(), { background })
-  }
-
   const setOutputFormat = (format) => {
     localOutputFormat.value = format
     updateNode(readNodeId(), { output_format: format })
   }
 
   return {
-    backgroundDropdownOptions,
-    displayBackgroundControl,
     displayFormatControl,
     displayImageModel,
     displayQualityControl,
@@ -263,7 +245,6 @@ export const useImageNodeModelControls = ({
     qualityDropdownOptions,
     ratioDropdownOptions,
     resolutionDropdownOptions,
-    setBackground,
     setImageModel,
     setImageQuality,
     setImageRatio,

@@ -2,40 +2,46 @@
   <div class="capsule-menu absolute left-1/2 z-[1200]" :style="capsuleStyle">
     <div class="capsule-inner" :class="{ 'capsule-inner-selected': selected }">
       <div class="capsule-group">
-        <BaseDropdown :options="imageModelOptions" compact @select="$emit('selectModel', $event)">
+        <NDropdown :options="imageModelOptions" trigger="click" size="small" @select="$emit('selectModel', $event)">
           <button class="capsule-select">{{ displayImageModel }}</button>
-        </BaseDropdown>
+        </NDropdown>
 
-        <BaseDropdown v-if="ratioOptions.length > 0" :options="ratioOptions" compact @select="$emit('selectRatio', $event)">
+        <NDropdown v-if="ratioOptions.length > 0" :options="ratioOptions" trigger="click" size="small" @select="$emit('selectRatio', $event)">
           <button class="capsule-select">{{ displayRatio }}</button>
-        </BaseDropdown>
+        </NDropdown>
 
-        <BaseDropdown v-if="resolutionOptions.length > 0" :options="resolutionOptions" compact @select="$emit('selectResolution', $event)">
+        <NDropdown v-if="resolutionOptions.length > 0" :options="resolutionOptions" trigger="click" size="small" @select="$emit('selectResolution', $event)">
           <button class="capsule-select capsule-resolution">{{ displayResolution }}</button>
-        </BaseDropdown>
+        </NDropdown>
 
-        <BaseDropdown v-if="qualityOptions.length > 0" :options="qualityOptions" compact @select="$emit('selectQuality', $event)">
+        <NDropdown v-if="qualityOptions.length > 0" :options="qualityOptions" trigger="click" size="small" @select="$emit('selectQuality', $event)">
           <button class="capsule-select">{{ displayQuality }}</button>
-        </BaseDropdown>
+        </NDropdown>
 
-        <BaseDropdown v-if="backgroundOptions.length > 0" :options="backgroundOptions" compact @select="$emit('selectBackground', $event)">
-          <button class="capsule-select">{{ displayBackground }}</button>
-        </BaseDropdown>
-
-        <BaseDropdown v-if="formatOptions.length > 1" :options="formatOptions" compact @select="$emit('selectFormat', $event)">
+        <NDropdown v-if="formatOptions.length > 1" :options="formatOptions" trigger="click" size="small" @select="$emit('selectFormat', $event)">
           <button class="capsule-select">{{ displayFormat }}</button>
-        </BaseDropdown>
+        </NDropdown>
+        <NDropdown v-if="hasDisplayImage" :options="exportRatioOptions" trigger="click" size="small" :disabled="toolBusy || localExportBusy || !imageDimensionsReady" @select="$emit('selectExportRatio', $event)">
+          <button class="capsule-select" :disabled="toolBusy || localExportBusy || !imageDimensionsReady" title="Crop locally for PNG export; keep the original image unchanged">
+            {{ exportRatio ? `Export ratio ${exportRatio}` : 'Export ratio' }}
+          </button>
+        </NDropdown>
+        <NDropdown v-if="hasDisplayImage" :options="exportSizeOptions" trigger="click" size="small" :disabled="toolBusy || localExportBusy" @select="$emit('exportImage', $event)">
+          <button class="capsule-select" :disabled="toolBusy || localExportBusy" title="Download PNG locally at the selected size; keep the original image unchanged">
+            {{ localExportBusy ? 'Exporting…' : 'Export PNG' }}
+          </button>
+        </NDropdown>
       </div>
 
       <div class="capsule-divider" />
 
       <div class="capsule-group">
-        <BaseDropdown :options="toolOptions" compact @select="$emit('toolAction', $event)">
-          <button class="capsule-select capsule-tool-trigger" :disabled="!hasDisplayImage || toolBusy">
+        <NDropdown v-if="toolOptions.length > 0" :options="toolOptions" :disabled="toolBusy" trigger="click" size="small" @select="$emit('toolAction', $event)">
+          <button class="capsule-select capsule-tool-trigger" :disabled="toolBusy">
             <img :src="toolsIcon" alt="" class="capsule-tool-icon" />
             <span>Tools</span>
           </button>
-        </BaseDropdown>
+        </NDropdown>
         <button class="capsule-icon" :disabled="!hasDisplayImage" title="Preview" @click="$emit('preview')">
           <n-icon :size="14"><ExpandOutline /></n-icon>
         </button>
@@ -65,8 +71,7 @@
 </template>
 
 <script setup>
-import { NIcon } from 'naive-ui'
-import { BaseDropdown } from '@/components/ui'
+import { NDropdown, NIcon } from 'naive-ui'
 import {
   CloseCircleOutline,
   CopyOutline,
@@ -115,14 +120,6 @@ defineProps({
     type: String,
     default: ''
   },
-  backgroundOptions: {
-    type: Array,
-    default: () => []
-  },
-  displayBackground: {
-    type: String,
-    default: ''
-  },
   formatOptions: {
     type: Array,
     default: () => []
@@ -131,11 +128,16 @@ defineProps({
     type: String,
     default: ''
   },
+  exportRatioOptions: { type: Array, default: () => [] },
+  exportSizeOptions: { type: Array, default: () => [] },
+  exportRatio: { type: String, default: '' },
+  localExportBusy: Boolean,
   toolOptions: {
     type: Array,
     default: () => []
   },
   hasDisplayImage: Boolean,
+  imageDimensionsReady: Boolean,
   toolBusy: Boolean,
   imageBusy: Boolean
 })
@@ -145,8 +147,9 @@ defineEmits([
   'selectRatio',
   'selectResolution',
   'selectQuality',
-  'selectBackground',
   'selectFormat',
+  'selectExportRatio',
+  'exportImage',
   'toolAction',
   'preview',
   'duplicate',

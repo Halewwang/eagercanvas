@@ -21,3 +21,9 @@ test('user detail preserves self and super administrator role protection', () =>
   assert.match(detail, /保存角色/)
   assert.doesNotMatch(detail, /key: '(usage|credentials|audit)'/)
 })
+
+test('user listing uses compact cards with direct actions and keeps filtering, paging and confirmations', () => {
+  assert.match(users, /<AdminUserCard\b/)
+  assert.doesNotMatch(users, /<AdminTableShell|<AdminPageHeader/)
+  for (const component of ['AdminUserServiceFilters', 'AdminUserServicePagination', 'AdminUserMutationDialog']) assert.match(users, new RegExp(`<${component}\\b`))
+})

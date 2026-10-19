@@ -141,23 +141,23 @@ test('image node crop stage metrics preserve cover-scale frame math', () => {
     stageStyle: { width: '420px', height: '236px' },
     naturalSize: { width: 1920, height: 1080 }
   }), {
-    frameWidth: 396,
-    frameHeight: 212,
+    frameWidth: 420,
+    frameHeight: 236,
     naturalWidth: 1920,
     naturalHeight: 1080,
-    scale: 0.20625,
+    scale: 0.21875,
     offsetX: 0,
-    offsetY: -5.375
+    offsetY: -0.125
   })
 
   assert.deepEqual(getImageNodeCropStageMetrics({
     stageStyle: { width: '320px', height: '320px' },
     naturalSize: { width: 0, height: 0 }
   }), {
-    frameWidth: 296,
-    frameHeight: 296,
-    naturalWidth: 296,
-    naturalHeight: 296,
+    frameWidth: 320,
+    frameHeight: 320,
+    naturalWidth: 320,
+    naturalHeight: 320,
     scale: 1,
     offsetX: 0,
     offsetY: 0
@@ -685,4 +685,60 @@ test('image node upload progress style preserves stage colors and width clamp', 
     width: '72%',
     background: '#c46a5c'
   })
+})
+
+
+test('loaded images keep their exact aspect ratio in an edge-to-edge frame', () => {
+  const style = getImageNodeStageStyle({ naturalSize: { width: 1920, height: 1080 } })
+  assert.equal(style.width, '420px')
+  assert.equal(style.height, '236.25px')
+  const metrics = getImageNodeCropStageMetrics({ stageStyle: style, naturalSize: { width: 1920, height: 1080 } })
+  assert.equal(metrics.frameWidth, 420)
+  assert.equal(metrics.frameHeight, 236.25)
+  assert.deepEqual(getImageNodeCropSourceRect({ cropRect: { x: 0, y: 0, width: 420, height: 236.25 }, metrics }), { x: 0, y: 0, width: 1920, height: 1080 })
+})
+
+test('export crop ratios start centered and keep proportions through corner resizing', () => {
+  const metrics = { frameWidth: 360, frameHeight: 240 }
+  const rect = getImageNodeInitialCropRect({ metrics, fillRatio: 1, aspectRatio: '16:9' })
+  assert.deepEqual(rect, { x: 0, y: 18.75, width: 360, height: 202.5 })
+  for (const handle of ['nw', 'ne', 'sw', 'se']) {
+    const resized = getImageNodeCropInteractionRect({
+      interaction: { type: 'resize', handle, startRect: rect, startPointerX: 0, startPointerY: 0 },
+      pointer: { x: handle.includes('w') ? 80 : -80, y: 0 },
+      metrics,
+      aspectRatio: '16:9'
+    })
+    assert.equal(resized.width / resized.height, 16 / 9)
+    assert.ok(resized.x >= 0 && resized.y >= 0)
+    assert.ok(resized.x + resized.width <= 360 && resized.y + resized.height <= 240)
+  }
+  const bounded = getImageNodeCropInteractionRect({
+    interaction: { type: 'resize', handle: 'se', startRect: rect, startPointerX: 0, startPointerY: 0 },
+    pointer: { x: 1000, y: 1000 }, metrics, aspectRatio: '16:9'
+  })
+  assert.equal(bounded.width / bounded.height, 16 / 9)
+  assert.ok(bounded.x + bounded.width <= 360 && bounded.y + bounded.height <= 240)
+})
+
+test('dragging a locked export crop preserves its ratio in very narrow image frames', () => {
+  const metrics = { frameWidth: 46, frameHeight: 462 }
+  const rect = getImageNodeInitialCropRect({ metrics, aspectRatio: '16:9', fillRatio: 1 })
+  const dragged = getImageNodeCropInteractionRect({ interaction: { type: 'drag', startRect: rect }, pointer: { x: 100, y: 100 }, metrics, aspectRatio: '16:9' })
+  assert.equal(dragged.width, rect.width)
+  assert.equal(dragged.height, rect.height)
+  assert.equal(dragged.width / dragged.height, 16 / 9)
+  assert.ok(dragged.x + dragged.width <= metrics.frameWidth && dragged.y + dragged.height <= metrics.frameHeight)
+})
+
+test('free crop minimum dimensions stay inside very thin image frames while dragging and resizing', () => {
+  const metrics = { frameWidth: 23, frameHeight: 460 }
+  const startRect = getImageNodeInitialCropRect({ metrics })
+  for (const type of ['drag', 'resize']) {
+    const rect = getImageNodeCropInteractionRect({ interaction: { type, handle: 'se', startRect }, pointer: { x: 100, y: 100 }, metrics })
+    assert.ok(rect.width > 0 && rect.height > 0)
+    assert.ok(rect.x >= 0 && rect.y >= 0)
+    assert.ok(rect.x + rect.width <= metrics.frameWidth)
+    assert.ok(rect.y + rect.height <= metrics.frameHeight)
+  }
 })

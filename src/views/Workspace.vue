@@ -7,8 +7,6 @@
       :is-authenticated="isAuthenticated"
       :user="user"
       :avatar-initial="avatarInitial"
-      :usage-summary="sidebarUsageSummary"
-      :usage-loading="usageSummaryLoading"
       :current-workspace="currentWorkspace"
       :workspaces="workspaces"
       :pending-invites="pendingWorkspaceInvites"
@@ -222,7 +220,6 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useAuthStore } from '@/stores/auth'
 import { notifier } from '@/utils/notifier'
 import { useAvatarUpload } from '@/hooks/useAvatarUpload'
-import { getUsageSummary } from '@/api/usage'
 import { preloadCanvasView } from '@/router/viewLoaders.js'
 
 const router = useRouter()
@@ -277,8 +274,6 @@ const activeTemplateScope = ref('community')
 const showProfileModal = ref(false)
 const profileDisplayName = ref('')
 const profileSaving = ref(false)
-const usageSummary = ref(null)
-const usageSummaryLoading = ref(false)
 const workspaceSwitching = ref(false)
 const openingProjectId = ref('')
 const workspaceInboxLoading = ref(false)
@@ -393,8 +388,6 @@ const workspaceBrand = computed(() => getWorkspaceBrand({
   user: user.value,
   currentWorkspace: currentWorkspace.value
 }))
-
-const sidebarUsageSummary = computed(() => usageSummary.value)
 
 const sectionTitle = computed(() => getWorkspaceSectionTitle(activeSection.value, { currentWorkspace: currentWorkspace.value }))
 
@@ -522,28 +515,7 @@ const handleProjectMenuSelect = async (key, project) => {
 
 const handleLogout = async () => {
   await logout()
-  usageSummary.value = null
   await router.push('/')
-}
-
-const loadSidebarUsageSummary = async () => {
-  if (!isAuthenticated.value) {
-    usageSummary.value = null
-    return
-  }
-
-  usageSummaryLoading.value = true
-  try {
-    const response = await getUsageSummary(undefined, undefined, {
-      silentErrorToast: true,
-      silentNetworkErrorToast: true
-    })
-    usageSummary.value = response?.data || response || null
-  } catch {
-    usageSummary.value = null
-  } finally {
-    usageSummaryLoading.value = false
-  }
 }
 
 const refreshWorkspaceInbox = async () => {
@@ -1134,9 +1106,6 @@ watch(
 
 onMounted(async () => {
   await bootstrapAuth()
-  if (isAuthenticated.value) {
-    void loadSidebarUsageSummary()
-  }
   const inviteToken = String(route.params?.token || '').trim()
   if (inviteToken) {
     try {

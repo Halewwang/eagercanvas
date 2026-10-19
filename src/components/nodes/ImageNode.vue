@@ -14,20 +14,24 @@
       :display-resolution="displayResolution"
       :quality-options="qualityDropdownOptions"
       :display-quality="displayQualityControl"
-      :background-options="backgroundDropdownOptions"
-      :display-background="displayBackgroundControl"
       :format-options="formatDropdownOptions"
       :display-format="displayFormatControl"
+      :export-ratio-options="IMAGE_EXPORT_RATIO_OPTIONS"
+      :export-size-options="IMAGE_EXPORT_SIZE_OPTIONS"
+      :export-ratio="localExportCropActive ? localExportRatio : ''"
+      :local-export-busy="localExportBusy"
       :tool-options="toolDropdownOptions"
       :has-display-image="hasDisplayImage"
-      :tool-busy="isToolBusy"
+      :image-dimensions-ready="imageDimensionsReady"
+      :tool-busy="isToolBusy || localExportBusy"
       :image-busy="isImageBusy"
       @select-model="setImageModel"
       @select-ratio="setImageRatio"
       @select-resolution="setResolution"
       @select-quality="setImageQuality"
-      @select-background="setBackground"
       @select-format="setOutputFormat"
+      @select-export-ratio="startLocalExportCrop"
+      @export-image="downloadLocalImage"
       @tool-action="handleToolAction"
       @preview="openPreviewModal"
       @duplicate="handleDuplicate"
@@ -59,12 +63,16 @@
           :image-url="canvasDisplayImageUrl"
           :alt="data.label || 'Image'"
           :crop-active="activeTool === 'crop'"
+          :crop-export-mode="localExportCropActive"
+          :crop-busy="localExportBusy || isToolBusy"
           :crop-mask-styles="cropMaskStyles"
           :crop-box-style="cropBoxStyle"
           :crop-handles="cropHandles"
           @image-load="handlePreviewImageLoad"
           @crop-drag-start="startCropDrag"
           @crop-resize-start="startCropResize"
+          @crop-apply="handleApplyImageCrop"
+          @crop-cancel="cancelCropMode"
         />
 
         <ImageNodeLoadingState v-else-if="urlLoading" />
@@ -160,6 +168,7 @@ import { useImageNodeProgressState } from './image/useImageNodeProgressState.js'
 import { useImageNodeReplacement } from './image/useImageNodeReplacement.js'
 import { useImageNodeToolActions } from './image/useImageNodeToolActions.js'
 import { useImageNodeToolDrawerResults } from './image/useImageNodeToolDrawerResults.js'
+import { IMAGE_EXPORT_RATIO_OPTIONS, IMAGE_EXPORT_SIZE_OPTIONS, useImageNodeLocalExport } from './image/useImageNodeLocalExport.js'
 import { useImageNodePreviewDownload } from './image/useImageNodePreviewDownload.js'
 import { useImageNodeUploadLifecycle } from './image/useImageNodeUploadLifecycle.js'
 import { useImageNodeUploadPersistence } from './image/useImageNodeUploadPersistence.js'
@@ -237,7 +246,7 @@ const props = defineProps({
   selected: Boolean
 })
 
-const { updateNodeInternals } = useVueFlow()
+const { updateNodeInternals, viewport } = useVueFlow()
 const canvasStore = useCanvasStore(pinia)
 const {
   currentProjectId,
@@ -268,8 +277,6 @@ const showHandles = computed(() => showCapsule.value || isSelected.value)
 const uploadInputRef = ref(null)
 const uploadInputId = `image-upload-${String(props.id || 'node')}`
 const {
-  backgroundDropdownOptions,
-  displayBackgroundControl,
   displayFormatControl,
   displayImageModel,
   displayQualityControl,
@@ -289,7 +296,6 @@ const {
   qualityDropdownOptions,
   ratioDropdownOptions,
   resolutionDropdownOptions,
-  setBackground,
   setImageModel,
   setImageQuality,
   setImageRatio,
@@ -464,14 +470,16 @@ const {
   updateNodeInternals
 })
 const displayImageUrl = computed(() => String(props.data?.previewUrl || props.data?.url || props.data?.base64 || '').trim())
-const { downloadPreviewImage } = useImageNodePreviewDownload({
+const { downloadImageBlob, downloadPreviewImage, getPreviewDownloadFilename } = useImageNodePreviewDownload({
   getLabel: () => props.data?.label,
   getSourceUrl: () => displayImageUrl.value
 })
+const hasDisplayImage = computed(() => !!displayImageUrl.value)
+const imageDimensionsReady = computed(() => previewNaturalSize.value.width > 0 && previewNaturalSize.value.height > 0)
 watch(displayImageUrl, () => {
   previewNaturalSize.value = { width: 0, height: 0 }
+  cancelCropMode()
 })
-const hasDisplayImage = computed(() => !!displayImageUrl.value)
 const isCanvasInteracting = computed(() => isCanvasZooming.value || isNodeDragging.value)
 const { canvasDisplayImageUrl } = useImageNodeCanvasPreview({
   activeTool: () => activeTool.value,
@@ -564,8 +572,27 @@ const {
   },
   hasDisplayImage: () => hasDisplayImage.value,
   naturalSize: () => previewNaturalSize.value,
-  onApply: () => applyCrop(),
-  stageStyle: () => stageStyle.value
+  onApply: () => handleApplyImageCrop(),
+  stageStyle: () => stageStyle.value,
+  viewportZoom: () => viewport.value.zoom
+})
+const {
+  downloadLocalImage,
+  localExportBusy,
+  localExportCropActive,
+  localExportRatio,
+  startEditingCrop,
+  startLocalExportCrop
+} = useImageNodeLocalExport({
+  activeTool,
+  cancelCropMode,
+  cropRect,
+  cropStageMetrics,
+  displayImageUrl,
+  downloadImageBlob,
+  getFileName: getPreviewDownloadFilename,
+  hasNaturalDimensions: imageDimensionsReady,
+  startCropMode
 })
 const {
   handleMultiAngleApply,
@@ -634,7 +661,7 @@ const {
   showImageToolSaveMessage,
   showMultiAngleDrawer,
   showWedding3x3Drawer,
-  startCropMode,
+  startCropMode: startEditingCrop,
   toolActionLoading,
   triggerUpload,
   updateLinkedImageNode,
@@ -676,6 +703,8 @@ const handleDelete = () => {
   clearLocalPreviewUrl()
   removeNode(props.id)
 }
+
+const handleApplyImageCrop = () => localExportCropActive.value ? downloadLocalImage() : applyCrop()
 
 const handleDuplicate = () => {
   const newId = duplicateNode(props.id)
@@ -723,7 +752,7 @@ const closeValidationModal = () => {
   background: #0f0f0f;
   isolation: isolate;
   --module-radius: 24px;
-  --module-inset: 12px;
+  --module-inset: 0px;
   border-radius: var(--module-radius);
 }
 

@@ -1,5 +1,7 @@
 # Dashboard 与模型迁移整合版本
 
+> 后续界面调整见[浏览器反馈修复](browser-feedback-2026-10-19.md)：本地裁切/尺寸导出、Background 移除、用户卡片及侧栏清理。本文保留首轮整合上线的验收范围。
+
 本次 main 版本同时包含 Dashboard 精简、统一服务权限、文字/图片网关迁移和旧画布兼容。生产部署验收以 API health 的 releaseCommit 与远端 main 提交一致为准；实际提交、部署 ID 和最终健康检查保存在本地 output/main-release-2026-10-19，附件不纳入 Git。
 
 ## 用户与服务管理

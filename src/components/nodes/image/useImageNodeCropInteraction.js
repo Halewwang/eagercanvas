@@ -7,6 +7,8 @@ import {
   getImageNodeInitialCropRect
 } from '@/utils/imageNodeLayout'
 
+let cancelActiveCrop = null
+
 const getDefaultWindow = () => (typeof window === 'undefined' ? null : window)
 
 const readOption = (source) => {
@@ -23,9 +25,11 @@ export const useImageNodeCropInteraction = ({
   nextTickFn = nextTick,
   onApply = () => {},
   removeWindowEventListener = (type, handler) => getDefaultWindow()?.removeEventListener(type, handler),
-  stageStyle = () => ({})
+  stageStyle = () => ({}),
+  viewportZoom = () => 1
 } = {}) => {
   const activeTool = ref('')
+  const cropAspectRatio = ref('')
   const cropHandles = ['nw', 'ne', 'sw', 'se']
   const cropRect = ref({ x: 0, y: 0, width: 0, height: 0 })
   const cropInteraction = ref(null)
@@ -41,7 +45,7 @@ export const useImageNodeCropInteraction = ({
   }))
 
   const initializeCropRect = () => {
-    const nextRect = getImageNodeInitialCropRect({ metrics: cropStageMetrics.value })
+    const nextRect = getImageNodeInitialCropRect({ metrics: cropStageMetrics.value, aspectRatio: cropAspectRatio.value, fillRatio: cropAspectRatio.value ? 1 : 0.72 })
     if (nextRect) cropRect.value = nextRect
     return nextRect
   }
@@ -57,28 +61,34 @@ export const useImageNodeCropInteraction = ({
   }
 
   const cancelCropMode = () => {
+    if (cancelActiveCrop === cancelCropMode) cancelActiveCrop = null
     activeTool.value = ''
+    cropAspectRatio.value = ''
     cropInteraction.value = null
     removePointerListeners()
     removeWindowEventListener('keydown', handleCropKeydown)
   }
 
   function handleCropKeydown(event) {
-    if (activeTool.value !== 'crop') return
+    if (activeTool.value !== 'crop' || event.defaultPrevented || event.target?.closest?.('[role="menu"]')) return
     if (event.key === 'Escape') {
       event.preventDefault()
       cancelCropMode()
       return
     }
     if (event.key === 'Enter') {
+      if (event.target?.closest?.('button, a, input, textarea, select, [role="menuitem"]')) return
       event.preventDefault()
       onApply()
     }
   }
 
-  const startCropMode = async () => {
+  const startCropMode = async (aspectRatio = '') => {
     if (!readOption(hasDisplayImage)) return
+    if (cancelActiveCrop && cancelActiveCrop !== cancelCropMode) cancelActiveCrop()
+    cancelActiveCrop = cancelCropMode
     closePreviewModal()
+    cropAspectRatio.value = aspectRatio
     activeTool.value = 'crop'
     await nextTickFn()
     initializeCropRect()
@@ -89,6 +99,7 @@ export const useImageNodeCropInteraction = ({
       type: 'drag',
       startPointerX: event.clientX,
       startPointerY: event.clientY,
+      pointerScale: 1 / Math.max(0.01, Number(readOption(viewportZoom)) || 1),
       startRect: { ...cropRect.value }
     }
     addWindowEventListener('mousemove', onCropPointerMove)
@@ -101,6 +112,7 @@ export const useImageNodeCropInteraction = ({
       handle,
       startPointerX: event.clientX,
       startPointerY: event.clientY,
+      pointerScale: 1 / Math.max(0.01, Number(readOption(viewportZoom)) || 1),
       startRect: { ...cropRect.value }
     }
     addWindowEventListener('mousemove', onCropPointerMove)
@@ -113,9 +125,13 @@ export const useImageNodeCropInteraction = ({
 
     const nextRect = getImageNodeCropInteractionRect({
       interaction: current,
-      pointer: { x: event.clientX, y: event.clientY },
+      pointer: {
+        x: current.startPointerX + (event.clientX - current.startPointerX) * current.pointerScale,
+        y: current.startPointerY + (event.clientY - current.startPointerY) * current.pointerScale
+      },
       metrics: cropStageMetrics.value,
-      minSize: minCropSize
+      minSize: minCropSize,
+      aspectRatio: cropAspectRatio.value
     })
     if (nextRect) cropRect.value = nextRect
   }
@@ -129,15 +145,13 @@ export const useImageNodeCropInteraction = ({
   })
 
   if (getCurrentInstance()) {
-    onUnmounted(() => {
-      removePointerListeners()
-      removeWindowEventListener('keydown', handleCropKeydown)
-    })
+    onUnmounted(cancelCropMode)
   }
 
   return {
     activeTool,
     cancelCropMode,
+    cropAspectRatio,
     cropBoxStyle,
     cropHandles,
     cropInteraction,

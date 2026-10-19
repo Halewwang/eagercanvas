@@ -1,35 +1,81 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { after } from 'node:test'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+import { createSSRApp, h, ref } from 'vue'
+import { renderToString } from '@vue/server-renderer'
+import { createServer } from 'vite'
+import vue from '@vitejs/plugin-vue'
 
-const source = readFileSync(new URL('./AdminUserOperationsCell.vue', import.meta.url), 'utf8')
+const server = await createServer({
+  configFile: false,
+  plugins: [vue()],
+  resolve: { alias: { '@': fileURLToPath(new URL('../../../', import.meta.url)) } },
+  server: { middlewareMode: true },
+  css: { postcss: { plugins: [] } },
+  optimizeDeps: { noDiscovery: true },
+  appType: 'custom'
+})
+after(() => server.close())
+const { default: Operations } = await server.ssrLoadModule('/src/components/admin/features/AdminUserOperationsCell.vue')
+const { default: UserCard } = await server.ssrLoadModule('/src/components/admin/features/AdminUserCard.vue')
+const { ADMIN_DESKTOP_ACTIONS_KEY } = await server.ssrLoadModule('/src/hooks/useAdminDesktopOnly.js')
 
-test('user operation menu is compact, neutral, grouped, and icon-led', () => {
-  assert.match(source, /aria-label="用户操作"/)
-  assert.match(source, /EllipsisHorizontalOutline/)
-  for (const label of ['详情与角色', '模型服务', '账户状态']) assert.match(source, new RegExp(label))
-  assert.doesNotMatch(source, /rgb\(15,22,36\)|AdminRoleMultiSelect|保存角色/)
+const render = async ({ user = {}, desktop = true, self = false, permissions = true, ...props } = {}) => {
+  const app = createSSRApp({
+    render: () => h(Operations, {
+      user: { id: 'fixture-user', status: 'active', service: { serviceStatus: 'not_enabled' }, ...user },
+      isSelf: () => self,
+      canActivateService: permissions,
+      canDisableService: permissions,
+      canManageRoles: permissions,
+      canManageUserStatus: permissions,
+      canArchiveUser: permissions,
+      canRestoreUser: permissions,
+      ...props
+    })
+  })
+  app.provide(ADMIN_DESKTOP_ACTIONS_KEY, ref(desktop))
+  return renderToString(app)
+}
+const buttons = (html) => [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)]
+  .map(([, attributes, content]) => ({ disabled: /\bdisabled\b/.test(attributes), text: content.replace(/<[^>]*>/g, '').trim() }))
+
+
+test('user actions are visible without opening a more menu', async () => {
+  const html = await render()
+  assert.doesNotMatch(html, /aria-haspopup|用户操作|<td/)
+  assert.deepEqual(buttons(html).map(({ text }) => text), ['查看详情', '管理角色', '开通服务', '暂停账户', '删除账户'])
 })
 
-test('user operation mutations preserve the desktop-only guard', () => {
-  assert.match(source, /ADMIN_DESKTOP_ACTIONS_KEY/)
-  assert.match(source, /:disabled="!desktopActionsEnabled \|\|/)
+test('service and account actions reflect paused and deleted states', async () => {
+  const paused = buttons(await render({ user: { status: 'suspended', service: { serviceStatus: 'disabled' } } }))
+  assert.deepEqual(paused.map(({ text }) => text), ['查看详情', '管理角色', '恢复服务', '恢复账户', '删除账户'])
+  const deleted = buttons(await render({ user: { status: 'deleted', service: { serviceStatus: 'active' } } }))
+  assert.ok(deleted.some(({ text }) => text === '恢复已删除账户'))
+  assert.ok(!deleted.some(({ text }) => text === '删除账户' || text === '暂停账户'))
+  assert.equal(deleted.find(({ text }) => text === '暂停服务').disabled, true)
 })
 
-test('role management entry excludes the signed-in user', () => {
-  assert.match(source, /v-if="canManageRoles && !isSelf\(user\)"/)
+test('permissions and self protection exclude forbidden actions', async () => {
+  assert.deepEqual(buttons(await render({ permissions: false })).map(({ text }) => text), ['查看详情'])
+  assert.deepEqual(buttons(await render({ self: true })).map(({ text }) => text), ['查看详情', '开通服务'])
 })
 
-test('operation menu escapes table clipping through the installed popover and supports keyboard dismissal', () => {
-  assert.match(source, /<NPopover[\s\S]*?trigger="click"[\s\S]*?placement="bottom-end"/)
-  assert.match(source, /<button[\s\S]*?type="button"[\s\S]*?aria-label="用户操作"/)
-  assert.match(source, /@keydown\.esc\.stop\.prevent="closeMenu"/)
-  assert.doesNotMatch(source, /<details|<summary|position: absolute|:to="false"/)
+test('mobile users and pending mutations cannot submit account or service changes', async () => {
+  const mobile = buttons(await render({ desktop: false }))
+  assert.ok(mobile.filter(({ text }) => !['查看详情', '管理角色'].includes(text)).every(({ disabled }) => disabled))
+  const pending = buttons(await render({ serviceLoading: { 'fixture-user': true }, statusLoading: { 'fixture-user': true }, deleting: { 'fixture-user': true } }))
+  assert.ok(pending.filter(({ text }) => !['查看详情', '管理角色'].includes(text)).every(({ disabled }) => disabled))
 })
 
-test('paused service has a clear recovery action and the user header only describes account management', () => {
-  assert.match(source, /user\.service\?\.serviceStatus === 'disabled' \? '恢复服务' : '开通服务'/)
-  const header = readFileSync(new URL('./AdminUserServiceHeader.vue', import.meta.url), 'utf8')
-  assert.match(header, /服务权限、角色和账户状态/)
-  assert.doesNotMatch(header, /官方消耗|待处理事项/)
+
+test('user cards expose identity and all permission states without showing the raw identifier', async () => {
+  const html = await renderToString(createSSRApp({
+    render: () => h(UserCard, {
+      user: { id: 'private-fixture-id', displayName: 'Fixture', email: 'fixture@example.invalid', status: 'suspended', roles: ['support'], service: { serviceStatus: 'disabled' } }
+    })
+  }))
+  for (const value of ['Fixture', 'fixture@example.invalid', '服务已暂停', '已暂停', '客服', '最近登录']) assert.ok(html.includes(value))
+  assert.doesNotMatch(html, /private-fixture-id|<td/)
 })

@@ -13,12 +13,18 @@
         @mousedown.stop.prevent="$emit('resize-start', handle, $event)"
       />
     </div>
-    <div class="crop-inline-tip">Enter apply · Esc cancel</div>
+    <div class="crop-inline-actions" @mousedown.stop>
+      <span>{{ exportMode ? 'Local export · original unchanged' : 'Edit crop' }}</span>
+      <button :disabled="busy" @click.stop="$emit('apply')">{{ exportMode ? 'Download PNG ↵' : 'Apply crop ↵' }}</button>
+      <button :disabled="busy" @click.stop="$emit('cancel')">Cancel Esc</button>
+    </div>
   </div>
 </template>
 
 <script setup>
 defineProps({
+  exportMode: Boolean,
+  busy: Boolean,
   maskStyles: {
     type: Object,
     default: () => ({
@@ -38,7 +44,7 @@ defineProps({
   }
 })
 
-defineEmits(['drag-start', 'resize-start'])
+defineEmits(['drag-start', 'resize-start', 'apply', 'cancel'])
 </script>
 
 <style scoped>
@@ -121,7 +127,7 @@ defineEmits(['drag-start', 'resize-start'])
   cursor: nwse-resize;
 }
 
-.crop-inline-tip {
+.crop-inline-actions {
   position: absolute;
   right: 12px;
   bottom: 12px;
@@ -132,6 +138,22 @@ defineEmits(['drag-start', 'resize-start'])
   color: #f3f4f6;
   font-size: 11px;
   letter-spacing: 0.02em;
-  pointer-events: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+}
+
+.crop-inline-actions button {
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: #242424;
+}
+
+.crop-inline-actions button:disabled {
+  opacity: 0.5;
 }
 </style>

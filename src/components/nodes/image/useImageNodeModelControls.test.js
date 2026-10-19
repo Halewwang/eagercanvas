@@ -141,7 +141,8 @@ test('image node model controls expose capsule options and display labels from l
   assert.deepEqual(controls.ratioDropdownOptions.value.map((item) => item.key), ['1:1', '16:9'])
   assert.deepEqual(controls.resolutionDropdownOptions.value.map((item) => item.key), ['1k', '2k'])
   assert.equal(controls.displayQualityControl.value, 'Standard')
-  assert.equal(controls.displayBackgroundControl.value, 'Background')
+  assert.equal(controls.displayBackgroundControl, undefined)
+  assert.equal(controls.setBackground, undefined)
   assert.equal(controls.displayFormatControl.value, 'Format')
 })
 
@@ -253,7 +254,7 @@ test('empty image capabilities do not recreate parameter controls from saved val
     data: { model: 'gpt-image-2', ratio: '16:9', size: '4096x2304', resolution: '4k', quality: 'high', background: 'transparent', output_format: 'jpeg' },
     config: { sizes: [], ratios: [], resolutions: [], qualities: [], backgrounds: [], outputFormats: [], defaultParams: {}, showAdvancedCapsuleParams: true }
   })
-  for (const name of ['imageSizeOptions', 'ratioDropdownOptions', 'resolutionDropdownOptions', 'qualityDropdownOptions', 'backgroundDropdownOptions', 'formatDropdownOptions']) {
+  for (const name of ['imageSizeOptions', 'ratioDropdownOptions', 'resolutionDropdownOptions', 'qualityDropdownOptions', 'formatDropdownOptions']) {
     assert.deepEqual(controls[name].value, [], name)
   }
 })

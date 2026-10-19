@@ -25,6 +25,10 @@ const STAGE_SIZE_BY_RATIO = {
 }
 
 const getSizeParts = (sizeKey) => String(sizeKey || '').split('x').map(Number)
+const readCropAspectRatio = (value) => {
+  const [width, height] = String(value || '').split(':').map(Number)
+  return width > 0 && height > 0 ? width / height : 0
+}
 const clampPercent = (value) => Math.max(0, Math.min(100, Number(value) || 0))
 
 export const getImageNodeProgressPercent = (progress = 0) => Math.round(Number(progress) || 0)
@@ -312,11 +316,13 @@ export const getImageNodeStageSize = ({ ratio = '', size = '' } = {}) => {
   }
 }
 
-export const getImageNodeStageStyle = (options = {}) => {
-  const size = getImageNodeStageSize(options)
+export const getImageNodeStageStyle = ({ naturalSize = {}, ...options } = {}) => {
+  const width = Number(naturalSize?.width) || 0
+  const height = Number(naturalSize?.height) || 0
+  const size = getImageNodeStageSize(width > 0 && height > 0 ? { size: `${width}x${height}` } : options)
   return {
     width: `${size.width}px`,
-    height: `${size.height}px`
+    height: `${width > 0 && height > 0 ? size.width * height / width : size.height}px`
   }
 }
 
@@ -403,8 +409,8 @@ export const getImageNodeCropStageMetrics = ({
   stageStyle = {},
   naturalSize = {}
 } = {}) => {
-  const frameWidth = Math.max(1, (Number.parseFloat(stageStyle?.width) || 0) - 24)
-  const frameHeight = Math.max(1, (Number.parseFloat(stageStyle?.height) || 0) - 24)
+  const frameWidth = Math.max(1, Number.parseFloat(stageStyle?.width) || 0)
+  const frameHeight = Math.max(1, Number.parseFloat(stageStyle?.height) || 0)
   const naturalWidth = Number(naturalSize?.width) || frameWidth
   const naturalHeight = Number(naturalSize?.height) || frameHeight
   const scale = Math.max(frameWidth / naturalWidth, frameHeight / naturalHeight)
@@ -424,12 +430,19 @@ export const getImageNodeCropStageMetrics = ({
 
 export const getImageNodeInitialCropRect = ({
   metrics = {},
-  fillRatio = 0.72
+  fillRatio = 0.72,
+  aspectRatio = ''
 } = {}) => {
   const frameWidth = Number(metrics?.frameWidth) || 0
   const frameHeight = Number(metrics?.frameHeight) || 0
   if (!frameWidth || !frameHeight) return null
 
+  const ratio = readCropAspectRatio(aspectRatio)
+  if (ratio) {
+    const width = Math.min(frameWidth, frameHeight * ratio) * fillRatio
+    const height = width / ratio
+    return { x: (frameWidth - width) / 2, y: (frameHeight - height) / 2, width, height }
+  }
   const width = Math.round(frameWidth * fillRatio)
   const height = Math.round(frameHeight * fillRatio)
   return {
@@ -447,8 +460,8 @@ export const normalizeImageNodeCropRect = ({
 } = {}) => {
   const maxWidth = Number(metrics?.frameWidth) || 0
   const maxHeight = Number(metrics?.frameHeight) || 0
-  const width = Math.max(minSize, Math.min(Number(rect?.width) || 0, maxWidth))
-  const height = Math.max(minSize, Math.min(Number(rect?.height) || 0, maxHeight))
+  const width = Math.min(maxWidth, Math.max(minSize, Number(rect?.width) || 0))
+  const height = Math.min(maxHeight, Math.max(minSize, Number(rect?.height) || 0))
   const x = Math.max(0, Math.min(Number(rect?.x) || 0, Math.max(0, maxWidth - width)))
   const y = Math.max(0, Math.min(Number(rect?.y) || 0, Math.max(0, maxHeight - height)))
   return { x, y, width, height }
@@ -458,7 +471,8 @@ export const getImageNodeCropInteractionRect = ({
   interaction = null,
   pointer = {},
   metrics = {},
-  minSize = 48
+  minSize = 48,
+  aspectRatio = ''
 } = {}) => {
   if (!interaction) return null
 
@@ -475,13 +489,30 @@ export const getImageNodeCropInteractionRect = ({
         height: Number(startRect?.height) || 0
       },
       metrics,
-      minSize
+      minSize: readCropAspectRatio(aspectRatio) ? 0 : minSize
     })
   }
 
   if (interaction?.type !== 'resize') return null
 
   const handle = String(interaction?.handle || '')
+  const ratio = readCropAspectRatio(aspectRatio)
+  if (ratio) {
+    const west = handle.includes('w')
+    const north = handle.includes('n')
+    const anchorX = Number(startRect.x || 0) + (west ? Number(startRect.width || 0) : 0)
+    const anchorY = Number(startRect.y || 0) + (north ? Number(startRect.height || 0) : 0)
+    const maxWidth = Math.min(
+      west ? anchorX : Number(metrics.frameWidth || 0) - anchorX,
+      (north ? anchorY : Number(metrics.frameHeight || 0) - anchorY) * ratio
+    )
+    const widthDelta = west ? -deltaX : deltaX
+    const heightDelta = (north ? -deltaY : deltaY) * ratio
+    const delta = Math.abs(widthDelta) >= Math.abs(heightDelta) ? widthDelta : heightDelta
+    const width = Math.min(maxWidth, Math.max(minSize, minSize * ratio, Number(startRect.width || 0) + delta))
+    const height = width / ratio
+    return { x: west ? anchorX - width : anchorX, y: north ? anchorY - height : anchorY, width, height }
+  }
   const nextRect = {
     x: Number(startRect?.x) || 0,
     y: Number(startRect?.y) || 0,

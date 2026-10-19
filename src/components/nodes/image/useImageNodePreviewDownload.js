@@ -67,6 +67,13 @@ export const useImageNodePreviewDownload = ({
     baseUrl: getBaseUrl()
   })
 
+  const downloadImageBlob = (blob, filename) => {
+    const objectUrl = createObjectUrl(blob)
+    triggerDownload(objectUrl, filename)
+    setTimeoutFn(() => revokeObjectUrl(objectUrl), 1000)
+    return { filename, href: objectUrl, source: 'blob' }
+  }
+
   const downloadPreviewImage = async () => {
     const sourceUrl = String(getSourceUrl() || '').trim()
     if (!sourceUrl) return null
@@ -77,14 +84,7 @@ export const useImageNodePreviewDownload = ({
       if (!response?.ok) throw new Error(`Download failed: ${response?.status || 'unknown'}`)
 
       const blob = await response.blob()
-      const objectUrl = createObjectUrl(blob)
-      triggerDownload(objectUrl, filename)
-      setTimeoutFn(() => revokeObjectUrl(objectUrl), 1000)
-      return {
-        filename,
-        href: objectUrl,
-        source: 'blob'
-      }
+      return downloadImageBlob(blob, filename)
     } catch {
       triggerDownload(sourceUrl, filename)
       return {
@@ -96,6 +96,7 @@ export const useImageNodePreviewDownload = ({
   }
 
   return {
+    downloadImageBlob,
     downloadPreviewImage,
     getPreviewDownloadFilename
   }
