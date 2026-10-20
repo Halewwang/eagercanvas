@@ -46,6 +46,49 @@ test('local image export uses natural crop coordinates and scales its longest ed
   assert.deepEqual([result.width, result.height], [2048, 1024])
 })
 
+test('saved ratio centers the crop in decoded original pixels and exports at 4K', async () => {
+  const h = createHarness({ width: 3000, height: 2000 })
+  const result = await exportImageLocally({ ...h.options, aspectRatio: '1:1', maxEdge: 4096 })
+  assert.deepEqual([result.width, result.height], [4096, 4096])
+  assert.deepEqual(h.draws, [[h.img, 500, 0, 2000, 2000, 0, 0, 4096, 4096]])
+  assert.deepEqual(h.cleanups, [true])
+})
+
+test('local ratio crops keep landscape and portrait exports centered', async () => {
+  for (const [aspectRatio, output, sourceRect] of [
+    ['16:9', [4096, 2304], [0, 156.25, 3000, 1687.5]],
+    ['2:3', [2731, 4096], [(3000 - 2000 * 2 / 3) / 2, 0, 2000 * 2 / 3, 2000]]
+  ]) {
+    const h = createHarness({ width: 3000, height: 2000 })
+    const result = await exportImageLocally({ ...h.options, aspectRatio, maxEdge: 4096 })
+    assert.deepEqual([result.width, result.height], output)
+    for (const [index, value] of h.draws[0].slice(1, 5).entries()) {
+      assert.ok(Math.abs(value - sourceRect[index]) < 1e-9)
+    }
+  }
+})
+
+test('interactive crop takes precedence over saved export ratio', async () => {
+  const h = createHarness()
+  const result = await exportImageLocally({
+    ...h.options,
+    aspectRatio: '1:1',
+    cropRect: { x: 100, y: 50, width: 500, height: 250 },
+    maxEdge: 2048
+  })
+  assert.deepEqual([result.width, result.height], [2048, 1024])
+  assert.deepEqual(h.draws, [[h.img, 100, 50, 500, 250, 0, 0, 2048, 1024]])
+})
+
+test('local image export rejects invalid aspect ratios before loading', async () => {
+  for (const aspectRatio of ['auto', '1:0', '0:1', '-1:1', '1:2:3', 'Infinity:1', 'NaN:1', 1, null]) {
+    await assert.rejects(() => exportImageLocally({
+      source: 'source', aspectRatio,
+      loadImageElement: () => { throw new Error('must not load') }
+    }), /Invalid export ratio/)
+  }
+})
+
 test('local image export preserves portrait proportions and rounds only destination pixels', async () => {
   const h = createHarness({ width: 1000, height: 3000 })
   const result = await exportImageLocally({ ...h.options, maxEdge: 1024 })

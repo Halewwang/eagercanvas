@@ -18,11 +18,11 @@
       :display-format="displayFormatControl"
       :export-ratio-options="IMAGE_EXPORT_RATIO_OPTIONS"
       :export-size-options="IMAGE_EXPORT_SIZE_OPTIONS"
-      :export-ratio="localExportCropActive ? localExportRatio : ''"
+      :export-ratio="localExportRatio"
+      :export-size="localExportSize"
       :local-export-busy="localExportBusy"
       :tool-options="toolDropdownOptions"
       :has-display-image="hasDisplayImage"
-      :image-dimensions-ready="imageDimensionsReady"
       :tool-busy="isToolBusy || localExportBusy"
       :image-busy="isImageBusy"
       @select-model="setImageModel"
@@ -31,7 +31,8 @@
       @select-quality="setImageQuality"
       @select-format="setOutputFormat"
       @select-export-ratio="startLocalExportCrop"
-      @export-image="downloadLocalImage"
+      @select-export-size="setLocalExportSize"
+      @export-image="downloadLocalImage()"
       @tool-action="handleToolAction"
       @preview="openPreviewModal"
       @duplicate="handleDuplicate"
@@ -103,7 +104,8 @@
       :max-zoom="PREVIEW_MAX_ZOOM"
       :canvas-style="previewCanvasStyle"
       :image-style="previewImageStyle"
-      @download="downloadPreviewImage"
+      :download-busy="localExportBusy"
+      @download="downloadLocalImage()"
       @zoom-out="zoomOutPreview"
       @reset-zoom="resetPreviewZoom"
       @zoom-in="zoomInPreview"
@@ -470,7 +472,7 @@ const {
   updateNodeInternals
 })
 const displayImageUrl = computed(() => String(props.data?.previewUrl || props.data?.url || props.data?.base64 || '').trim())
-const { downloadImageBlob, downloadPreviewImage, getPreviewDownloadFilename } = useImageNodePreviewDownload({
+const { downloadImageBlob, getPreviewDownloadFilename } = useImageNodePreviewDownload({
   getLabel: () => props.data?.label,
   getSourceUrl: () => displayImageUrl.value
 })
@@ -581,6 +583,8 @@ const {
   localExportBusy,
   localExportCropActive,
   localExportRatio,
+  localExportSize,
+  setLocalExportSize,
   startEditingCrop,
   startLocalExportCrop
 } = useImageNodeLocalExport({
@@ -589,10 +593,13 @@ const {
   cropRect,
   cropStageMetrics,
   displayImageUrl,
+  data: () => props.data,
   downloadImageBlob,
   getFileName: getPreviewDownloadFilename,
   hasNaturalDimensions: imageDimensionsReady,
-  startCropMode
+  nodeId: () => props.id,
+  startCropMode,
+  updateNode
 })
 const {
   handleMultiAngleApply,

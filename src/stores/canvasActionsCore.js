@@ -5,17 +5,24 @@ export const createCanvasNode = ({
   defaultData = {},
   data = {},
   now = Date.now()
-}) => ({
-  id,
-  type,
-  position,
-  data: {
-    ...defaultData,
-    ...data,
-    createdAt: data.createdAt || now,
-    updatedAt: data.updatedAt || now
+}) => {
+  const nodeData = { ...defaultData, ...data }
+  const isEmptyImage = ['image', 'imageConfig'].includes(type) &&
+    !['url', 'previewUrl', 'base64', 'sourceUrl', 'src', 'dataUrl', 'assetId', 'assetUrl'].some(key => nodeData[key]) &&
+    !Object.values(nodeData.assetUrls || {}).some(Boolean)
+
+  return {
+    id,
+    type,
+    position,
+    data: {
+      ...(isEmptyImage ? { exportRatio: '1:1', exportSize: 1024 } : {}),
+      ...nodeData,
+      createdAt: data.createdAt || now,
+      updatedAt: data.updatedAt || now
+    }
   }
-})
+}
 
 export const updateCanvasNodeData = (nodes = [], id, data = {}) =>
   nodes.map((node) => (node.id === id ? { ...node, data: { ...node.data, ...data } } : node))

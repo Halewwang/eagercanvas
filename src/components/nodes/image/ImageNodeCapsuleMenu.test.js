@@ -45,10 +45,29 @@ test('image capsule hides an empty Tools menu and disables tools while processin
 })
 
 
-test('image capsule exposes local export controls only when an image exists', async () => {
-  const html = await render({ hasDisplayImage: true, exportRatio: '16:9' })
-  assert.match(html, /Export ratio 16:9/)
-  assert.match(html, /Export PNG/)
+test('empty image nodes expose selectable local parameters as their current values', async () => {
+  const html = await render({ exportRatio: '1:1', exportSize: 4096 })
+  assert.match(html, /aria-label="Image ratio 1:1"[^>]*>\s*1:1\s*<\/button>/)
+  assert.match(html, /aria-label="Image size 4K"[^>]*>\s*4K\s*<\/button>/)
+  const ratioButton = html.match(/<button([^>]*aria-label="Image ratio 1:1"[^>]*)>/)[1]
+  assert.doesNotMatch(ratioButton, /\bdisabled\b/)
+  assert.doesNotMatch(html, /Export ratio|Export PNG/)
+  assert.doesNotMatch(html, /aria-label="Download PNG"/)
+})
+
+test('existing images keep current parameter values and provide a separate local download action', async () => {
+  const html = await render({ hasDisplayImage: true, exportRatio: '16:9', exportSize: 2048 })
+  assert.match(html, />\s*16:9\s*<\/button>/)
+  assert.match(html, />\s*2K\s*<\/button>/)
+  assert.match(html, /aria-label="Download PNG"/)
   assert.match(html, /keep the original image unchanged/)
-  assert.doesNotMatch(await render(), />Export ratio|>Export PNG/)
+  const busyHtml = await render({ hasDisplayImage: true, exportRatio: '1:1', exportSize: 4096, localExportBusy: true })
+  for (const name of ['Image ratio 1:1', 'Image size 4K', 'Download PNG']) {
+    assert.match(busyHtml.match(new RegExp(`<button([^>]*aria-label="${name}"[^>]*)>`))[1], /\bdisabled\b/)
+  }
+})
+
+test('unconfigured imported images display original ratio and size explicitly', async () => {
+  const html = await render({ hasDisplayImage: true, exportRatio: '', exportSize: 0 })
+  assert.equal([...html.matchAll(/>\s*Original\s*<\/button>/g)].length, 2)
 })

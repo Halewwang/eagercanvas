@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 import { createCanvasPersistenceSnapshots, createCanvasSnapshot, normalizeImageNodeParameters } from './canvasSnapshots.js'
+import { createCanvasNode, duplicateCanvasNode } from './canvasActionsCore.js'
 
 test('canvas persistence snapshots preserve local transient media while pruning remote payloads in one node traversal', () => {
   const visits = []
@@ -129,6 +130,42 @@ test('old image generation controls are removed while media metadata and referen
   const video = { type: 'video', data }
   assert.equal(normalizeImageNodeParameters(video), video)
   assert.equal(data.quality, 'high', 'normalization must not mutate the source')
+})
+
+test('image export settings survive serialization, load normalization and duplication independently of removed generation controls', () => {
+  const emptyImage = createCanvasNode({ id: 'empty', type: 'image', position: { x: 0, y: 0 }, now: 100 })
+  const originalImage = createCanvasNode({
+    id: 'original', type: 'image', position: { x: 100, y: 0 }, now: 100,
+    data: { url: 'https://storage.example.com/storage/v1/object/public/uploads/image.png', ratio: '3:2', size: '1536x1024' }
+  })
+  const nodes = [emptyImage, originalImage, ...[
+    { exportRatio: '16:9', exportSize: 4096 }, { exportRatio: '', exportSize: 0 }
+  ].map((parameters, index) => createCanvasNode({
+    id: `export-${index}`, type: 'image', position: { x: 200, y: index * 100 }, now: 100,
+    data: { ...parameters, quality: 'high', resolution: '4k', output_format: 'png', moderation: 'auto' }
+  }))]
+  const { localSnapshot, remoteSnapshot } = createCanvasPersistenceSnapshots({ nodes })
+  for (const snapshot of [localSnapshot, remoteSnapshot]) {
+    const loaded = JSON.parse(JSON.stringify(snapshot)).nodes.map(normalizeImageNodeParameters)
+    assert.equal(loaded[0].data.exportRatio, '1:1')
+    assert.equal(loaded[0].data.exportSize, 1024)
+    assert.equal(Object.hasOwn(loaded[1].data, 'exportRatio'), false)
+    assert.equal(Object.hasOwn(loaded[1].data, 'exportSize'), false)
+    assert.equal(loaded[1].data.ratio, '3:2')
+    assert.equal(loaded[1].data.size, '1536x1024')
+    for (const node of loaded) {
+      const { duplicatedNode } = duplicateCanvasNode({ nodes: loaded, sourceId: node.id, newId: `${node.id}-copy` })
+      assert.deepEqual(duplicatedNode.data, node.data)
+      assert.equal(Object.hasOwn(node.data, 'quality'), false)
+      assert.equal(Object.hasOwn(node.data, 'resolution'), false)
+      assert.equal(Object.hasOwn(node.data, 'output_format'), false)
+      assert.equal(Object.hasOwn(node.data, 'moderation'), false)
+    }
+    assert.equal(loaded[2].data.exportRatio, '16:9')
+    assert.equal(loaded[2].data.exportSize, 4096)
+    assert.equal(loaded[3].data.exportRatio, '')
+    assert.equal(loaded[3].data.exportSize, 0)
+  }
 })
 
 test('both snapshot formats migrate old image configuration graphs and round trip without a settings card', () => {

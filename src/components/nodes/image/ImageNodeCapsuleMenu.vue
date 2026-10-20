@@ -21,14 +21,14 @@
         <NDropdown v-if="formatOptions.length > 1" :options="formatOptions" trigger="click" size="small" @select="$emit('selectFormat', $event)">
           <button class="capsule-select">{{ displayFormat }}</button>
         </NDropdown>
-        <NDropdown v-if="hasDisplayImage" :options="exportRatioOptions" trigger="click" size="small" :disabled="toolBusy || localExportBusy || !imageDimensionsReady" @select="$emit('selectExportRatio', $event)">
-          <button class="capsule-select" :disabled="toolBusy || localExportBusy || !imageDimensionsReady" title="Crop locally for PNG export; keep the original image unchanged">
-            {{ exportRatio ? `Export ratio ${exportRatio}` : 'Export ratio' }}
+        <NDropdown :options="exportRatioOptions" :value="exportRatio" :theme-overrides="parameterMenuTheme" :menu-props="() => ({ role: 'menu', 'aria-label': 'Image ratios' })" :node-props="option => ({ role: 'menuitemradio', 'aria-checked': option.key === exportRatio })" trigger="click" size="small" :disabled="toolBusy || localExportBusy" @select="$emit('selectExportRatio', $event)">
+          <button type="button" class="capsule-select" :disabled="toolBusy || localExportBusy" :aria-label="`Image ratio ${exportRatio || 'Original'}`" title="Local crop ratio; keep the original image unchanged">
+            {{ exportRatio || 'Original' }}
           </button>
         </NDropdown>
-        <NDropdown v-if="hasDisplayImage" :options="exportSizeOptions" trigger="click" size="small" :disabled="toolBusy || localExportBusy" @select="$emit('exportImage', $event)">
-          <button class="capsule-select" :disabled="toolBusy || localExportBusy" title="Download PNG locally at the selected size; keep the original image unchanged">
-            {{ localExportBusy ? 'Exporting…' : 'Export PNG' }}
+        <NDropdown :options="exportSizeOptions" :value="exportSize" :theme-overrides="parameterMenuTheme" :menu-props="() => ({ role: 'menu', 'aria-label': 'Image sizes' })" :node-props="option => ({ role: 'menuitemradio', 'aria-checked': option.key === exportSize })" trigger="click" size="small" :disabled="toolBusy || localExportBusy" @select="$emit('selectExportSize', $event)">
+          <button type="button" class="capsule-select capsule-resolution" :disabled="toolBusy || localExportBusy" :aria-label="`Image size ${displayExportSize}`" title="Local PNG size by long edge; keep the original image unchanged">
+            {{ displayExportSize }}
           </button>
         </NDropdown>
       </div>
@@ -44,6 +44,9 @@
         </NDropdown>
         <button class="capsule-icon" :disabled="!hasDisplayImage" title="Preview" @click="$emit('preview')">
           <n-icon :size="14"><ExpandOutline /></n-icon>
+        </button>
+        <button v-if="hasDisplayImage" type="button" class="capsule-icon" :disabled="toolBusy || localExportBusy" aria-label="Download PNG" :title="localExportBusy ? 'Exporting…' : 'Download PNG with the selected ratio and size'" @click="$emit('exportImage')">
+          <n-icon :size="14"><DownloadOutline /></n-icon>
         </button>
         <button class="capsule-icon" title="Duplicate" @click="$emit('duplicate')">
           <n-icon :size="14"><CopyOutline /></n-icon>
@@ -71,10 +74,12 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { NDropdown, NIcon } from 'naive-ui'
 import {
   CloseCircleOutline,
   CopyOutline,
+  DownloadOutline,
   ExpandOutline,
   RefreshOutline,
   TrashOutline
@@ -82,7 +87,7 @@ import {
 import createIcon from '@/assets/create-icon.svg'
 import toolsIcon from '@/assets/tools-icon.svg'
 
-defineProps({
+const props = defineProps({
   capsuleStyle: {
     type: Object,
     default: () => ({})
@@ -131,16 +136,26 @@ defineProps({
   exportRatioOptions: { type: Array, default: () => [] },
   exportSizeOptions: { type: Array, default: () => [] },
   exportRatio: { type: String, default: '' },
+  exportSize: { type: Number, default: 0 },
   localExportBusy: Boolean,
   toolOptions: {
     type: Array,
     default: () => []
   },
   hasDisplayImage: Boolean,
-  imageDimensionsReady: Boolean,
   toolBusy: Boolean,
   imageBusy: Boolean
 })
+
+const displayExportSize = computed(() => ({ 1024: '1K', 2048: '2K', 4096: '4K' }[props.exportSize] || 'Original'))
+const parameterMenuTheme = {
+  color: 'var(--surface-2)',
+  optionTextColor: 'var(--text)',
+  optionTextColorHover: 'var(--text)',
+  optionTextColorActive: 'var(--text)',
+  optionColorHover: 'var(--surface-3)',
+  optionColorActive: 'var(--surface-3)'
+}
 
 defineEmits([
   'selectModel',
@@ -149,6 +164,7 @@ defineEmits([
   'selectQuality',
   'selectFormat',
   'selectExportRatio',
+  'selectExportSize',
   'exportImage',
   'toolAction',
   'preview',

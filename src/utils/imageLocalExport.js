@@ -1,4 +1,5 @@
 import { loadImageElementFromSource } from './imageElementLoader.js'
+import { getImageNodeInitialCropRect } from './imageNodeLayout.js'
 
 const withExportTimeout = (promise, message) => {
   let timer
@@ -11,6 +12,7 @@ const withExportTimeout = (promise, message) => {
 export const exportImageLocally = async ({
   source = '',
   maxEdge = 0,
+  aspectRatio = '',
   fileName = 'image.png',
   cropRect = null,
   cropSourceSize = null,
@@ -19,6 +21,12 @@ export const exportImageLocally = async ({
 } = {}) => {
   if (typeof source !== 'string' || !source.trim()) throw new Error('No image source')
   if (![0, 1024, 2048, 4096].includes(maxEdge)) throw new Error('Invalid export size')
+  if (aspectRatio !== '' && (typeof aspectRatio !== 'string'
+    || !/^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(aspectRatio)
+    || !aspectRatio.split(':').map(Number).every((value) => Number.isFinite(value) && value > 0)
+    || !Number.isFinite(Number(aspectRatio.split(':')[0]) / Number(aspectRatio.split(':')[1])))) {
+    throw new Error('Invalid export ratio')
+  }
 
   let loadedImage
   let loadingFinished = false
@@ -41,7 +49,10 @@ export const exportImageLocally = async ({
     if (![coordinateWidth, coordinateHeight].every((value) => Number.isSafeInteger(value) && value > 0)) {
       throw new Error('Invalid crop source dimensions')
     }
-    let { x, y, width, height } = cropRect ?? { x: 0, y: 0, width: naturalWidth, height: naturalHeight }
+    const defaultRect = aspectRatio ? getImageNodeInitialCropRect({
+      metrics: { frameWidth: naturalWidth, frameHeight: naturalHeight }, fillRatio: 1, aspectRatio
+    }) : { x: 0, y: 0, width: naturalWidth, height: naturalHeight }
+    let { x, y, width, height } = cropRect ?? defaultRect
     if (![x, y, width, height].every(Number.isFinite)
       || x < 0 || y < 0 || width <= 0 || height <= 0
       || x + width > coordinateWidth || y + height > coordinateHeight) {

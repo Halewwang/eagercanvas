@@ -42,6 +42,64 @@ test('createCanvasNode merges defaults, incoming data and stable timestamps', ()
   })
 })
 
+test('new empty image nodes persist square 1K export defaults without changing other node types', () => {
+  for (const type of ['image', 'imageConfig']) {
+    const node = createCanvasNode({
+      id: 'empty-image', type, defaultData: { url: '', label: 'Image' },
+      data: { sourcePrompt: 'brief', sourceRefImages: ['reference.png'], sourceConfigId: 'legacy-config', assetUrls: {} }, now: 100
+    })
+    assert.equal(node.data.exportRatio, '1:1')
+    assert.equal(node.data.exportSize, 1024)
+    assert.equal(node.data.url, '')
+    assert.equal(node.data.sourcePrompt, 'brief')
+  }
+  const text = createCanvasNode({ id: 'text', type: 'text', now: 100 })
+  assert.equal(Object.hasOwn(text.data, 'exportRatio'), false)
+  assert.equal(Object.hasOwn(text.data, 'exportSize'), false)
+})
+
+test('image creation preserves original media without adding a crop or output size', () => {
+  const mediaSources = [
+    { url: 'image.png' }, { previewUrl: 'blob:preview' }, { base64: 'data:image/png;base64,abc' },
+    { sourceUrl: 'image.png' }, { src: 'image.png' }, { dataUrl: 'data:image/png;base64,abc' },
+    { assetId: 'asset-1' }, { assetUrl: 'image.png' }, { assetUrls: { original: 'image.png' } }
+  ]
+  for (const source of mediaSources) {
+    for (const input of [{ defaultData: source }, { data: source }]) {
+      const node = createCanvasNode({
+        id: 'media-image', type: 'image', ...input,
+        data: { ...(input.data || {}), ratio: '3:2', size: '1536x1024' }, now: 100
+      })
+      assert.equal(Object.hasOwn(node.data, 'exportRatio'), false, JSON.stringify(source))
+      assert.equal(Object.hasOwn(node.data, 'exportSize'), false, JSON.stringify(source))
+      assert.equal(node.data.ratio, '3:2')
+      assert.equal(node.data.size, '1536x1024')
+      for (const [key, value] of Object.entries(source)) assert.deepEqual(node.data[key], value)
+    }
+  }
+})
+
+test('image creation preserves explicit export parameters including original ratio and original pixels', () => {
+  for (const exportParameters of [
+    { exportRatio: '16:9', exportSize: 4096 },
+    { exportRatio: '', exportSize: 0 }
+  ]) {
+    for (const media of [{}, { url: 'image.png' }]) {
+      const data = { ...media, ...exportParameters }
+      const node = createCanvasNode({ id: 'image', type: 'image', data, now: 100 })
+      assert.equal(node.data.exportRatio, exportParameters.exportRatio)
+      assert.equal(node.data.exportSize, exportParameters.exportSize)
+      assert.deepEqual(data, { ...media, ...exportParameters })
+    }
+  }
+  const ratioOnly = createCanvasNode({ id: 'ratio', type: 'image', data: { exportRatio: '' }, now: 100 })
+  assert.equal(ratioOnly.data.exportRatio, '')
+  assert.equal(ratioOnly.data.exportSize, 1024)
+  const sizeOnly = createCanvasNode({ id: 'size', type: 'image', data: { exportSize: 0 }, now: 100 })
+  assert.equal(sizeOnly.data.exportRatio, '1:1')
+  assert.equal(sizeOnly.data.exportSize, 0)
+})
+
 test('updateCanvasNodeData only merges data for the targeted node', () => {
   const sourceNodes = [
     {
