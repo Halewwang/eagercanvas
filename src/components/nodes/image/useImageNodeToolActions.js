@@ -35,6 +35,7 @@ export const useImageNodeToolActions = ({
   defaultImageModel,
   displayImageUrl,
   edges,
+  flushSave,
   getErrorMessage = getDefaultErrorMessage,
   getImageNodeEnhancementErrorPatch,
   getImageNodeEnhancementRequest,
@@ -42,8 +43,8 @@ export const useImageNodeToolActions = ({
   getImageNodeToolSaveMessages,
   getNearestImageNodeSourceConfig,
   imageGen,
+  isNodeAvailable = () => true,
   localImageModel,
-  localBackground,
   messageApi = getDefaultMessageApi,
   nodeId,
   nodes,
@@ -59,9 +60,14 @@ export const useImageNodeToolActions = ({
   toolActionLoading,
   triggerUpload,
   updateLinkedImageNode,
+  updateNode,
   cropRect,
   cropStageMetrics
 } = {}) => {
+  const assertNodeAvailable = (targetId) => {
+    if (!isNodeAvailable(targetId)) throw Object.assign(new Error('Image node is no longer available'), { name: 'AbortError' })
+  }
+
   const buildEnhancementRequest = () => {
     const sourceConfig = getNearestImageNodeSourceConfig({
       nodes: readReactiveValue(nodes),
@@ -76,7 +82,6 @@ export const useImageNodeToolActions = ({
       currentNodeData: readReactiveValue(currentData),
       displayImageUrl: readReactiveValue(displayImageUrl),
       localImageModel: readReactiveValue(localImageModel),
-      localBackground: readReactiveValue(localBackground),
       projectId: readReactiveValue(currentProjectId),
       defaultImageModel,
       defaultEnhancePrompt
@@ -84,6 +89,7 @@ export const useImageNodeToolActions = ({
   }
 
   const handleEnhance = async () => {
+    if (!isNodeAvailable(readReactiveValue(nodeId))) return
     const request = buildEnhancementRequest()
     if (!request) {
       dispatchMessage(messageApi, {
@@ -94,14 +100,24 @@ export const useImageNodeToolActions = ({
     }
 
     writeReactiveValue(toolActionLoading, 'enhance')
+    const taskMetadata = {
+      model: request.model,
+      generationRatio: request.ratio || '',
+      generationResolution: request.resolution || '',
+      sourceConfigId: request.sourceConfigId || '',
+      sourcePrompt: request.sourcePrompt || request.prompt || '',
+      sourceRefImages: (Array.isArray(request.sourceRefImages) ? request.sourceRefImages : [])
+        .filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url))
+    }
     const newNodeId = createLinkedImageNode({
       loading: true,
       label: 'Enhanced Image',
       model: request.model,
-      ...(request.background ? { background: request.background } : {}),
+      ...(request.ratio !== undefined ? { generationRatio: request.ratio } : {}),
+      ...(request.resolution !== undefined ? { generationResolution: request.resolution } : {}),
       sourceConfigId: request.sourceConfigId,
       sourcePrompt: request.sourcePrompt,
-      sourceRefImages: request.sourceRefImages
+      sourceRefImages: taskMetadata.sourceRefImages
     })
     if (!newNodeId) {
       writeReactiveValue(toolActionLoading, '')
@@ -110,17 +126,28 @@ export const useImageNodeToolActions = ({
     }
 
     try {
-      const result = await imageGen.generate(request)
+      assertNodeAvailable(newNodeId)
+      const result = await imageGen.generate(request, {
+        onSubmitted: async (taskId) => {
+          assertNodeAvailable(newNodeId)
+          updateNode(newNodeId, { imageTaskId: taskId, imageTaskMetadata: taskMetadata })
+          await flushSave()
+          assertNodeAvailable(newNodeId)
+        }
+      })
+      if (!isNodeAvailable(newNodeId)) return
       const persistence = await resolveImagePersistence(
         result?.[0]?.url,
         getEnhancedFileName(),
         'Enhanced image persistence failed. Please retry.'
       )
+      if (!isNodeAvailable(newNodeId)) return
 
       const savedOk = await updateLinkedImageNode(newNodeId, getImageNodeEnhancementResultPatch({
         persistence,
         request
       }))
+      if (!isNodeAvailable(newNodeId)) return
 
       const saveState = readReactiveValue(projectSaveState) || {}
       const saveFeedback = resolveImageSaveFeedback(savedOk)
@@ -131,12 +158,17 @@ export const useImageNodeToolActions = ({
         messages: getImageNodeToolSaveMessages('enhance')
       })
     } catch (err) {
+      if (!isNodeAvailable(newNodeId) || err?.name === 'AbortError') return
       const message = getErrorMessage(err, 'Image enhancement failed')
-      await updateLinkedImageNode(newNodeId, getImageNodeEnhancementErrorPatch({
-        message,
-        request,
-        fallbackMessage: 'Image enhancement failed'
-      }))
+      await updateLinkedImageNode(newNodeId, {
+        ...getImageNodeEnhancementErrorPatch({
+          message,
+          request,
+          fallbackMessage: 'Image enhancement failed'
+        }),
+        ...(err?.imageTaskTerminal ? { imageTaskId: '', imageTaskMetadata: null } : {})
+      })
+      if (!isNodeAvailable(newNodeId)) return
       dispatchMessage(messageApi, { type: 'error', text: message })
     } finally {
       writeReactiveValue(toolActionLoading, '')
@@ -144,8 +176,9 @@ export const useImageNodeToolActions = ({
   }
 
   const applyCrop = async () => {
+    const targetId = readReactiveValue(nodeId)
     const source = readReactiveValue(displayImageUrl)
-    if (!source) return
+    if (!source || !isNodeAvailable(targetId)) return
 
     writeReactiveValue(toolActionLoading, 'crop')
 
@@ -155,10 +188,13 @@ export const useImageNodeToolActions = ({
         cropRect: readReactiveValue(cropRect),
         cropStageMetrics: readReactiveValue(cropStageMetrics)
       })
+      if (!isNodeAvailable(targetId)) return
       await replaceCurrentImageNode(cropPayload)
+      if (!isNodeAvailable(targetId)) return
       cancelCropMode()
       dispatchMessage(messageApi, { type: 'success', text: 'Crop applied' })
     } catch (err) {
+      if (!isNodeAvailable(targetId) || err?.name === 'AbortError') return
       dispatchMessage(messageApi, {
         type: 'error',
         text: err?.message || 'Crop failed'

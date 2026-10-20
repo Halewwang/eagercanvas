@@ -5,6 +5,6 @@ export const resolveRunProviderAccess = async (userId, run = {}, deps = {}) => {
   const access = await resolveServiceAccess(userId)
   return {
     serviceCredentialId: access.serviceCredentialId || null,
-    apiName: run.type === 'chat' || run.type === 'image' ? 'enbrand' : 'shared'
+    apiName: run.type === 'image' ? 'apimart' : run.type === 'chat' ? 'enbrand' : 'shared'
   }
 }

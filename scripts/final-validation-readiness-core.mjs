@@ -76,6 +76,10 @@ export const buildFinalValidationEnvTemplates = ({
     'OPENAI_API_BASE_URL=https://api.enbrand.co/v1',
     'OPENAI_API_KEY=REPLACE_WITH_OPENAI_API_KEY',
     '',
+    'APIMART_API_BASE_URL=https://api.apimart.ai/v1',
+    'APIMART_API_KEY=REPLACE_WITH_APIMART_API_KEY',
+    'APIMART_TIMEOUT_MS=1800000',
+    '',
     '# Shared video runtime credential.',
     `PROVIDER_API_BASE_URL=${providerApiBaseUrl}`,
     'PROVIDER_API_KEY=REPLACE_WITH_PROVIDER_API_KEY',
@@ -224,9 +228,9 @@ export const assessFinalValidationReadiness = ({
       value: backendEnv.RESEND_API_KEY,
       reason: 'RESEND_API_KEY is required for email/code auth validation.'
     }),
-    hasRealValue(backendEnv.OPENAI_API_KEY) && hasRealValue(backendEnv.PROVIDER_API_KEY)
+    hasRealValue(backendEnv.OPENAI_API_KEY) && hasRealValue(backendEnv.APIMART_API_KEY) && hasRealValue(backendEnv.PROVIDER_API_KEY)
       ? pass('provider-api-key', 'Shared model API keys')
-      : fail('provider-api-key', 'Shared model API keys', 'OPENAI_API_KEY is required for text/image validation; PROVIDER_API_KEY is required for video validation.')
+      : fail('provider-api-key', 'Shared model API keys', 'OPENAI_API_KEY is required for text, APIMART_API_KEY for images, and PROVIDER_API_KEY for video validation.')
   ]
 
   const failedChecks = checks.filter((check) => check.status === 'fail').length

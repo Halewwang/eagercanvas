@@ -21,20 +21,20 @@ test('runs.service preserves existing public helper exports for compatibility', 
   assert.match(source, /buildImageGenerationAssets,[\s\S]*buildVideoGenerationAssets[\s\S]*from '\.\/run-assets\.js'/)
 })
 
-test('image runs use the local queue and persist outputs before completion', () => {
+test('image runs submit once and persist durable task context without a background polling loop', () => {
   assert.match(source, /const LOCAL_IMAGE_RUN_TASK_PREFIX = 'local-image-run:'/)
-  assert.match(source, /if \(isQueuedImageRun\(payload\)\) \{[\s\S]*bindImageTaskOwnership\([\s\S]*queueImageRunExecution\([\s\S]*task_id: imageTaskId/)
-  assert.match(source, /persistImageResultAssets\(providerResponse, \{ persistInlineDataUrls: true \}\)/)
-  assert.match(source, /waitUntil\(executeQueuedImageRun\(params\)\)/)
-  assert.doesNotMatch(source, /gpt-image-lite|derouter|providerImageStatus/)
+  assert.match(source, /bindImageTaskOwnership\([\s\S]*providerGenerateImage\([\s\S]*upstream_task_id: upstreamTaskId/)
+  assert.match(source, /persistImageResultAssets\(providerResponse, \{ persistInlineDataUrls: true, requirePersistedAssets: true \}\)/)
+  assert.doesNotMatch(source, /waitUntil|queueImageRunExecution|executeQueuedImageRun/)
 })
 
-test('image task reads preserve ownership and recover persisted local or historical assets', () => {
+test('image task polls require ownership and a durable lease before querying the stored upstream task', () => {
   const taskSource = source.slice(source.indexOf('export const getImageTask ='))
-  assert.match(taskSource, /resolveImageTaskContextByTask\(\{ userId: _userId, taskId \}\)/)
+  assert.match(taskSource, /resolveImageTaskContextByTask\(\{ userId, taskId \}\)/)
   assert.match(taskSource, /getLocalImageRunTaskResult/)
+  assert.match(taskSource, /claimImageTaskPoll[\s\S]*providerImageStatus\(context\.metadata\.upstream_task_id/)
   assert.match(taskSource, /IMAGE_TASK_RETIRED/)
-  assert.doesNotMatch(taskSource, /resolveActiveUserServiceCredential|providerImageStatus/)
+  assert.doesNotMatch(taskSource, /providerGenerateImage|resolveActiveUserServiceCredential/)
 })
 
 test('runs.service delegates task ownership and status helpers to run-task-records service', () => {

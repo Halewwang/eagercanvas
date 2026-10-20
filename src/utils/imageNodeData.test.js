@@ -84,6 +84,8 @@ test('image node persistence patch preserves saved and temporary image state map
     previewUrl: '',
     base64: '',
     persistStatus: 'saved',
+    imageTaskId: '',
+    imageTaskMetadata: null,
     persistError: '',
     updatedAt: 1234,
     loading: false
@@ -177,48 +179,14 @@ test('image node save feedback patch preserves persisted status fields and times
   })
 })
 
-test('image node model params patch preserves capsule field names', () => {
-  assert.equal(typeof imageNodeData.getImageNodeModelParamsPatch, 'function')
-  assert.deepEqual(imageNodeData.getImageNodeModelParamsPatch({
-    model: 'gpt-image-2',
-    size: '1536x1024',
-    quality: 'high',
-    background: 'transparent',
-    outputFormat: 'webp',
-    ratio: '3:2',
-    resolution: '2k'
-  }), {
-    model: 'gpt-image-2',
-    size: '1536x1024',
-    quality: 'high',
-    background: 'transparent',
-    output_format: 'webp',
-    ratio: '3:2',
-    resolution: '2k'
-  })
-})
-
-test('image node size params patch preserves ratio and resolution fields', () => {
-  assert.equal(typeof imageNodeData.getImageNodeSizeParamsPatch, 'function')
-  assert.deepEqual(imageNodeData.getImageNodeSizeParamsPatch({
-    size: '1024x1024',
-    ratio: '1:1',
-    resolution: '1k'
-  }), {
-    size: '1024x1024',
-    ratio: '1:1',
-    resolution: '1k'
-  })
-})
-
 test('image node linked create data preserves defaults and payload overrides', () => {
   assert.deepEqual(getImageNodeLinkedCreateData({
     defaults: {
       model: 'gemini-default',
-      quality: 'standard',
+      generationRatio: '1:1',
       size: '1024x1024',
       ratio: '1:1',
-      resolution: '1k'
+      generationResolution: '1k'
     },
     payload: {
       model: 'gpt-image-2',
@@ -235,10 +203,10 @@ test('image node linked create data preserves defaults and payload overrides', (
     now: 3456
   }), {
     model: 'gpt-image-2',
-    quality: 'standard',
+    generationRatio: '1:1',
     size: '1536x1024',
     ratio: '3:2',
-    resolution: '1k',
+    generationResolution: '1k',
     url: '',
     previewUrl: '',
     base64: '',
@@ -260,10 +228,10 @@ test('image node linked update patch keeps optional label behavior', () => {
   assert.deepEqual(getImageNodeLinkedUpdatePatch({
     defaults: {
       model: 'gemini-default',
-      quality: 'standard',
+      generationRatio: '1:1',
       size: '1024x1024',
       ratio: '1:1',
-      resolution: '1k'
+      generationResolution: '1k'
     },
     payload: {
       previewUrl: 'blob:temporary',
@@ -274,10 +242,10 @@ test('image node linked update patch keeps optional label behavior', () => {
     now: 4567
   }), {
     model: 'gemini-default',
-    quality: 'standard',
-    size: '1024x1024',
-    ratio: '1:1',
-    resolution: '1k',
+    generationRatio: '1:1',
+    size: '',
+    ratio: '',
+    generationResolution: '1k',
     url: '',
     previewUrl: 'blob:temporary',
     base64: '',
@@ -367,7 +335,7 @@ test('image node nearest source config prefers explicit config before recursive 
   }), null)
 })
 
-test('image node enhancement request preserves source config and enhancement instructions without output targets', () => {
+test('image node enhancement request preserves source config and enhancement instructions with documented generation defaults', () => {
   const request = getImageNodeEnhancementRequest({
     sourceConfig: {
       id: 'config-1',
@@ -375,7 +343,6 @@ test('image node enhancement request preserves source config and enhancement ins
       data: {
         model: 'gpt-image-2',
         size: '1536x1024',
-        quality: 'high',
         ratio: '3:2'
       }
     },
@@ -386,7 +353,6 @@ test('image node enhancement request preserves source config and enhancement ins
     currentNodeData: {
       model: 'node-model',
       size: '1024x1024',
-      quality: 'standard',
       ratio: '1:1',
       sourceConfigId: 'node-config',
       sourcePrompt: 'Inherited prompt',
@@ -408,6 +374,7 @@ test('image node enhancement request preserves source config and enhancement ins
   assert.deepEqual(request, {
     model: 'gpt-image-2',
     projectId: 'project-1',
+    ratio: '1:1', resolution: '1k', size: '1:1',
     prompt: 'Enhance this image\n\nOriginal brief:\nConfig prompt',
     image: ['config-ref', 'self-image'],
     sourceConfigId: 'config-1',
@@ -433,6 +400,7 @@ test('image node enhancement request falls back to self image defaults and retur
   }), {
     model: 'local-model',
     projectId: 'project-2',
+    ratio: '1:1', resolution: '1k', size: '1:1',
     prompt: 'Enhance default',
     image: ['self-image'],
     sourceConfigId: '',
@@ -649,7 +617,7 @@ test('image node tool replacement patch preserves persisted and temporary result
     previousPersistedUrl: 'https://cdn.example/original.png',
     size: '1536x1024',
     ratio: '3:2',
-    resolution: '2k',
+    generationResolution: '2k',
     fileType: 'image/webp',
     transientPersistError: 'Multi-angle result is only shown temporarily. Please retry.',
     now: 2468
@@ -658,11 +626,13 @@ test('image node tool replacement patch preserves persisted and temporary result
     previewUrl: '',
     base64: '',
     persistStatus: 'saved',
+    imageTaskId: '',
+    imageTaskMetadata: null,
     persistError: '',
     updatedAt: 2468,
     size: '1536x1024',
     ratio: '3:2',
-    resolution: '2k',
+    generationResolution: '2k',
     fileType: 'image/webp',
     error: ''
   })
@@ -677,7 +647,7 @@ test('image node tool replacement patch preserves persisted and temporary result
     previousPersistedUrl: 'https://cdn.example/original.png',
     size: '1024x1024',
     ratio: '1:1',
-    resolution: '1k',
+    generationResolution: '1k',
     transientPersistError: 'Multi-angle result is only shown temporarily. Please retry.',
     now: 9753
   }), {
@@ -689,7 +659,7 @@ test('image node tool replacement patch preserves persisted and temporary result
     updatedAt: 9753,
     size: '1024x1024',
     ratio: '1:1',
-    resolution: '1k',
+    generationResolution: '1k',
     fileType: 'image/png',
     error: ''
   })
@@ -707,12 +677,12 @@ test('image node tool linked result patch preserves pending tool output state', 
       fileType: 'image/webp',
       size: '1536x1024',
       ratio: '3:2',
-      resolution: '2k'
+      generationResolution: '2k'
     },
     defaults: {
       size: '1024x1024',
       ratio: '1:1',
-      resolution: '1k'
+      generationResolution: '1k'
     },
     transientPersistError: 'Multi-angle result is only shown temporarily. Please retry.',
     now: 8642
@@ -730,7 +700,7 @@ test('image node tool linked result patch preserves pending tool output state', 
     fileType: 'image/webp',
     size: '1536x1024',
     ratio: '3:2',
-    resolution: '2k'
+    generationResolution: '2k'
   })
 
   assert.deepEqual(getImageNodeToolLinkedResultPatch({
@@ -741,16 +711,14 @@ test('image node tool linked result patch preserves pending tool output state', 
     },
     payload: {
       label: 'Wedding Result',
-      quality: 'high',
       sourcePrompt: 'wedding prompt',
       sourceRefImages: ['https://asset/ref.png']
     },
     defaults: {
       size: '1024x1024',
       ratio: '1:1',
-      resolution: '1k',
-      quality: 'standard'
-    },
+      generationResolution: '1k',
+      },
     labelFallback: 'Wedding 3x3 Result',
     includeQuality: true,
     includeSource: true,
@@ -761,6 +729,8 @@ test('image node tool linked result patch preserves pending tool output state', 
     previewUrl: '',
     base64: '',
     persistStatus: 'saved',
+    imageTaskId: '',
+    imageTaskMetadata: null,
     persistError: '',
     updatedAt: 9754,
     loading: false,
@@ -769,10 +739,9 @@ test('image node tool linked result patch preserves pending tool output state', 
     suppressErrorModal: false,
     label: 'Wedding Result',
     fileType: 'image/png',
-    size: '1024x1024',
-    ratio: '1:1',
-    resolution: '1k',
-    quality: 'high',
+    size: '',
+    ratio: '',
+    generationResolution: '1k',
     sourcePrompt: 'wedding prompt',
     sourceRefImages: ['https://asset/ref.png']
   })
@@ -791,12 +760,12 @@ test('image node tool linked create patch preserves direct create output state',
       fileType: 'image/webp',
       size: '1536x1024',
       ratio: '3:2',
-      resolution: '2k'
+      generationResolution: '2k'
     },
     defaults: {
       size: '1024x1024',
       ratio: '1:1',
-      resolution: '1k'
+      generationResolution: '1k'
     },
     now: 2222
   }), {
@@ -809,7 +778,7 @@ test('image node tool linked create patch preserves direct create output state',
     fileType: 'image/webp',
     size: '1536x1024',
     ratio: '3:2',
-    resolution: '2k'
+    generationResolution: '2k'
   })
 
   assert.deepEqual(imageNodeData.getImageNodeToolLinkedCreatePatch({
@@ -819,16 +788,14 @@ test('image node tool linked create patch preserves direct create output state',
       persisted: true
     },
     payload: {
-      quality: 'high',
       sourcePrompt: 'wedding prompt',
       sourceRefImages: ['https://asset/ref.png']
     },
     defaults: {
       size: '1024x1024',
       ratio: '1:1',
-      resolution: '1k',
-      quality: 'standard'
-    },
+      generationResolution: '1k',
+      },
     labelFallback: 'Wedding 3x3 Result',
     includeQuality: true,
     includeSource: true,
@@ -838,14 +805,15 @@ test('image node tool linked create patch preserves direct create output state',
     previewUrl: '',
     base64: '',
     persistStatus: 'saved',
+    imageTaskId: '',
+    imageTaskMetadata: null,
     persistError: '',
     updatedAt: 3333,
     label: 'Wedding 3x3 Result',
     fileType: 'image/png',
-    size: '1024x1024',
-    ratio: '1:1',
-    resolution: '1k',
-    quality: 'high',
+    size: '',
+    ratio: '',
+    generationResolution: '1k',
     sourcePrompt: 'wedding prompt',
     sourceRefImages: ['https://asset/ref.png']
   })
@@ -873,11 +841,15 @@ test('image node enhancement result patch preserves request lineage and persiste
     previewUrl: '',
     base64: '',
     persistStatus: 'saved',
+    imageTaskId: '',
+    imageTaskMetadata: null,
     persistError: '',
     updatedAt: 24680,
     loading: false,
     shouldSave: true,
     fileType: 'image/png',
+    generationRatio: '1:1',
+    generationResolution: '4k',
     sourceConfigId: 'config-1',
     sourcePrompt: 'enhance prompt',
     sourceRefImages: ['https://asset/ref.png']
@@ -1292,25 +1264,25 @@ test('image node replacement save message preserves silent synced and fallback c
 })
 
 
-test('enhancement carries the current node background into the image request', () => {
+test('enhancement drops unsupported options while preserving prompt and reference', () => {
   const request = getImageNodeEnhancementRequest({
     localBackground: 'opaque',
-    currentNodeData: { background: 'auto', sourcePrompt: 'Keep the composition' },
+    currentNodeData: { sourcePrompt: 'Keep the composition' },
     displayImageUrl: 'reference.png',
     defaultEnhancePrompt: 'Refine the details'
   })
-  assert.equal(request.background, 'opaque')
+  assert.equal(request.background, undefined)
   assert.deepEqual(request.image, ['reference.png'])
   assert.match(request.prompt, /Refine the details/)
 })
 
 
-test('linked image outputs retain the inherited background choice', () => {
-  const payload = { background: 'opaque' }
-  assert.equal(imageNodeData.getImageNodeLinkedCreateData({ payload }).background, 'opaque')
-  assert.equal(imageNodeData.getImageNodeToolLinkedCreatePatch({ payload }).background, 'opaque')
-  assert.equal(imageNodeData.getImageNodeToolLinkedResultPatch({ payload }).background, 'opaque')
-  assert.equal(imageNodeData.getImageNodeEnhancementResultPatch({ request: payload }).background, 'opaque')
+test('linked image outputs discard unsupported background and quality choices', () => {
+  const payload = { background: 'opaque', generationQuality: 'high' }
+  assert.equal(imageNodeData.getImageNodeLinkedCreateData({ payload }).background, undefined)
+  assert.equal(imageNodeData.getImageNodeToolLinkedCreatePatch({ payload }).background, undefined)
+  assert.equal(imageNodeData.getImageNodeToolLinkedResultPatch({ payload }).background, undefined)
+  assert.equal(imageNodeData.getImageNodeEnhancementResultPatch({ request: payload }).background, undefined)
 })
 
 test('image generation inputs prefer connected inputs and reuse saved sources only when disconnected', () => {
@@ -1323,4 +1295,46 @@ test('image generation inputs prefer connected inputs and reuse saved sources on
   assert.deepEqual(resolve({ resolved: { prompt: 'Connected brief', refImages: [] }, data }), { prompt: 'Connected brief', refImages: [] })
   assert.deepEqual(resolve({ resolved: { prompt: '', refImages: [] }, data }), { prompt: 'Saved brief', refImages: ['ref-a', 'ref-b'] })
   assert.deepEqual(resolve({ data: { sourcePrompt: ' ', prompt: ' Legacy brief ' } }), { prompt: 'Legacy brief', refImages: [] })
+})
+
+
+test('enhancement inherits canonical request controls and keeps them separate from returned media dimensions', () => {
+  const request = getImageNodeEnhancementRequest({
+    currentNodeData: { url: 'source.png', size: '1774x887', ratio: '2:1', sourcePrompt: 'brief',
+      generationRatio: '16:9', generationResolution: '4k', },
+    displayImageUrl: 'source.png', defaultImageModel: 'gpt-image-2'
+  })
+  assert.equal(request.ratio, '16:9')
+  assert.equal(request.resolution, '4k')
+  assert.equal(request.size, '16:9')
+  assert.equal(request.quality, undefined)
+  const result = imageNodeData.getImageNodeEnhancementResultPatch({ request })
+  assert.equal(result.generationRatio, '16:9')
+  assert.equal(result.generationResolution, '4k')
+  assert.equal(result.generationQuality, undefined)
+  assert.equal(Object.hasOwn(result, 'size'), false)
+  assert.equal(Object.hasOwn(result, 'ratio'), false)
+})
+
+test('tool output metadata inherits canonical settings without claiming requested size as returned dimensions', () => {
+  for (const build of [imageNodeData.getImageNodeLinkedCreateData, imageNodeData.getImageNodeLinkedUpdatePatch,
+    imageNodeData.getImageNodeToolLinkedCreatePatch, imageNodeData.getImageNodeToolLinkedResultPatch]) {
+    const result = build({ payload: { url: 'new.png', generationRatio: '16:9', generationResolution: '4k', },
+      defaults: { size: '1774x887', ratio: '2:1' } })
+    assert.equal(result.generationRatio, '16:9')
+    assert.equal(result.generationResolution, '4k')
+    assert.equal(result.generationQuality, undefined)
+    assert.equal(result.size, '')
+    assert.equal(result.ratio, '')
+  }
+})
+
+test('pending linked tasks survive metadata updates and clear only after persisted output', () => {
+  const pending = { imageTaskId: 'task-1', imageTaskMetadata: { sourcePrompt: 'brief' } }
+  assert.equal(imageNodeData.getImageNodeLinkedUpdatePatch({ payload: pending }).imageTaskId, 'task-1')
+  const temporary = imageNodeData.getImageNodePersistencePatch({ persisted: false, displayUrl: 'preview.png' })
+  assert.equal(Object.hasOwn(temporary, 'imageTaskId'), false)
+  const saved = imageNodeData.getImageNodePersistencePatch({ persisted: true, persistedUrl: 'saved.png' })
+  assert.equal(saved.imageTaskId, '')
+  assert.equal(saved.imageTaskMetadata, null)
 })

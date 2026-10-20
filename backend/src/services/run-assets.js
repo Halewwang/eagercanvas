@@ -1,4 +1,5 @@
 import { uploadDataUrl, uploadRemoteFile } from './upload.service.js'
+import { HttpError } from '../utils/http.js'
 
 export const extractProviderVideoUrl = (result = {}) =>
   result?.url ||
@@ -88,6 +89,7 @@ export const persistImageResultAssets = async (result = {}, options = {}) => {
   const persistRemoteUrl = options.persistRemoteUrl || persistRemoteUrlIfNeeded
   const persistDataUrl = options.persistDataUrl || persistDataUrlIfNeeded
   const persistInlineDataUrls = options.persistInlineDataUrls === true
+  const requirePersistedAssets = options.requirePersistedAssets === true
   const entries = Array.isArray(result?.data) ? [...result.data] : []
   if (!entries.length) return result
 
@@ -99,7 +101,7 @@ export const persistImageResultAssets = async (result = {}, options = {}) => {
       const { extension } = getImageFileDetails(remoteUrl)
       const fileName = `generated-${Date.now()}-${index}.${extension}`
       if (isInlineDataUrl(remoteUrl)) {
-        if (persistInlineDataUrls || shouldPersistInlineDataUrlBeforeResponse(remoteUrl)) {
+        if (requirePersistedAssets || persistInlineDataUrls || shouldPersistInlineDataUrlBeforeResponse(remoteUrl)) {
           const persistedUrl = await persistDataUrl(remoteUrl, fileName)
           return {
             ...entry,
@@ -115,7 +117,10 @@ export const persistImageResultAssets = async (result = {}, options = {}) => {
         }
       }
 
-      const persistedUrl = await persistRemoteUrl(remoteUrl, fileName).catch(() => remoteUrl)
+      const persistedUrl = await persistRemoteUrl(remoteUrl, fileName).catch(error => {
+        if (requirePersistedAssets) throw error
+        return remoteUrl
+      })
 
       return {
         ...entry,
@@ -123,6 +128,10 @@ export const persistImageResultAssets = async (result = {}, options = {}) => {
       }
     })
   )
+
+  if (requirePersistedAssets && persistedEntries.some(entry => !isPersistedUploadUrl(entry?.url))) {
+    throw new HttpError(500, 'Image output could not be saved', 'IMAGE_OUTPUT_SAVE_FAILED')
+  }
 
   return {
     ...result,

@@ -5,6 +5,9 @@ import { nextTick } from 'vue'
 
 const modelConfigUrl = new URL('./useModelConfig.js', import.meta.url)
 const modelsUrl = new URL('../config/models.js', import.meta.url)
+const modelsSource = readFileSync(modelsUrl, 'utf8')
+  .replace("from '@/utils/gptImageParameters'", `from '${new URL('../utils/gptImageParameters.js', import.meta.url).href}'`)
+const modelsModuleUrl = `data:text/javascript;base64,${Buffer.from(modelsSource).toString('base64')}`
 const constantsUrl = new URL('../utils/constants.js', import.meta.url)
 const { STORAGE_KEYS } = await import(constantsUrl.href)
 
@@ -26,7 +29,7 @@ test('model preferences discard retired saved models and reject unsupported cust
     const source = readFileSync(modelConfigUrl, 'utf8')
       .replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
       .replace("from '@/utils'", `from '${constantsUrl.href}'`)
-      .replace("from '@/config/models'", `from '${modelsUrl.href}'`)
+      .replace("from '@/config/models'", `from '${modelsModuleUrl}'`)
     const { useModelConfig } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
     const config = useModelConfig()
     await nextTick()

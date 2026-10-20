@@ -3,6 +3,21 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { ref } from 'vue'
 
+const parametersUrl = new URL('../utils/gptImageParameters.js', import.meta.url).href
+const legacySource = readFileSync(new URL('./legacyImageConfig.js', import.meta.url), 'utf8')
+  .replace("from '@/utils/gptImageParameters.js'", `from '${parametersUrl}'`)
+  .replace("from '@/utils/imageDimensions.js'", `from '${new URL('../utils/imageDimensions.js', import.meta.url).href}'`)
+const legacyUrl = `data:text/javascript;base64,${Buffer.from(legacySource).toString('base64')}`
+const snapshotsSource = readFileSync(new URL('./canvasSnapshots.js', import.meta.url), 'utf8')
+  .replace("from './canvasClone.js'", `from '${new URL('./canvasClone.js', import.meta.url).href}'`)
+  .replace("from './legacyImageConfig.js'", `from '${legacyUrl}'`)
+  .replace("from '@/utils/gptImageParameters.js'", `from '${parametersUrl}'`)
+const snapshotsUrl = `data:text/javascript;base64,${Buffer.from(snapshotsSource).toString('base64')}`
+const offlineSource = readFileSync(new URL('./canvasOfflineSync.js', import.meta.url), 'utf8')
+  .replace("from './canvasSnapshots.js'", `from '${snapshotsUrl}'`)
+  .replace("from './canvasSyncStatus.js'", `from '${new URL('./canvasSyncStatus.js', import.meta.url).href}'`)
+const offlineUrl = `data:text/javascript;base64,${Buffer.from(offlineSource).toString('base64')}`
+
 const source = readFileSync(new URL('./projects.js', import.meta.url), 'utf8')
 let harnessId = 0
 const deferred = () => {
@@ -59,6 +74,7 @@ const createHarness = async (t, options = {}) => {
     .replace(/import \{ (useAuthStore|getCanvasDraftStorage|canvasBroadcast|isLocalPreviewEnabled) \} from '[^']+'/g,
       (_, name) => `const { ${name} } = globalThis.${key}`)
     .replace("from '@/stores/canvasSyncStatus'", `from '${new URL('./canvasSyncStatus.js', import.meta.url).href}'`)
+    .replace("from './canvasOfflineSync.js'", `from '${offlineUrl}'`)
     .replace(/from '(\.\/[^']+)'/g, (_, path) => `from '${new URL(path, import.meta.url).href}'`)
   const store = await import(`data:text/javascript;base64,${Buffer.from(transformed).toString('base64')}#${harnessId}`)
   t.after(() => { delete globalThis[key]; globalThis.localStorage = previousStorage })

@@ -24,7 +24,6 @@ const createHarness = async (overrides = {}) => {
   ])
   const defaults = overrides.defaults || {
     model: 'model-a',
-    quality: 'hd',
     ratio: '16:9',
     resolution: '2k',
     size: '2560x1440'
@@ -97,7 +96,6 @@ test('image node linked nodes create a right-side image node with edge and selec
         payload: { label: 'Enhanced', loading: true },
         defaults: {
           model: 'model-a',
-          quality: 'hd',
           ratio: '16:9',
           resolution: '2k',
           size: '2560x1440'
@@ -150,7 +148,6 @@ test('image node linked nodes update existing linked nodes and save non-loading 
         payload: { url: 'https://cdn.example.com/result.png' },
         defaults: {
           model: 'model-a',
-          quality: 'hd',
           ratio: '16:9',
           resolution: '2k',
           size: '2560x1440'
@@ -178,7 +175,6 @@ test('image node linked nodes keep loading updates unsaved until final result ar
         payload: { loading: true },
         defaults: {
           model: 'model-a',
-          quality: 'hd',
           ratio: '16:9',
           resolution: '2k',
           size: '2560x1440'
@@ -188,4 +184,24 @@ test('image node linked nodes keep loading updates unsaved until final result ar
     ['timeout', 40],
     ['internals', 'target-node']
   ])
+})
+
+test('linked nodes inherit canonical controls directly from their source node', async () => {
+  const { calls, linked } = await createHarness({ nodes: [{ id: 'source-node', position: { x: 0, y: 0 }, data: {
+    url: 'source.png', size: '1774x887', ratio: '2:1',
+    generationRatio: '16:9', generationResolution: '4k', } }], defaults: { model: 'gpt-image-2' } })
+  linked.createLinkedImageNode({ loading: true })
+  const defaults = calls.find(call => call[0] === 'add-node')[3].defaults
+  assert.deepEqual(defaults, { model: 'gpt-image-2', generationRatio: '16:9', generationResolution: '4k', })
+  await linked.updateLinkedImageNode('new-image-node', { url: 'result.png' })
+  assert.deepEqual(calls.find(call => call[0] === 'update-node')[2].defaults, defaults)
+})
+
+test('linked updates retain target request controls when the source parameters change while generating', async () => {
+  const { calls, linked } = await createHarness({ defaults: { model: 'gpt-image-2' }, nodes: [
+    { id: 'source-node', data: { generationRatio: '1:1', generationResolution: '1k', } },
+    { id: 'target-node', data: { generationRatio: '16:9', generationResolution: '4k', } }
+  ] })
+  await linked.updateLinkedImageNode('target-node', { error: 'Provider error' })
+  assert.deepEqual(calls[0][2].defaults, { model: 'gpt-image-2', generationRatio: '16:9', generationResolution: '4k', })
 })

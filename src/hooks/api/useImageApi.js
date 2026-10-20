@@ -1,50 +1,63 @@
-import { ref } from 'vue'
+import { getCurrentScope, onScopeDispose, ref } from 'vue'
 import { generateImage, getImageGenerationTask } from '@/api'
 import { getModelByName, resolveImageModelKey } from '@/config/models'
+import { getGptImageGenerationSettings } from '@/utils/gptImageParameters'
 import { useApiState } from './useApiState.js'
 import {
   IMAGE_REQUEST_TIMEOUT_MS,
   getImageTaskId,
   getImageTaskStatus,
   isPendingImageTaskStatus,
-  normalizeGeneratedImages,
-  normalizeResolution,
-  ratioFromSize,
-  resolutionFromSize
+  normalizeGeneratedImages
 } from './imageApiCore.js'
 
 /**
  * Image generation composable | 图片生成组合式函数
  */
+const abortError = () => Object.assign(new Error('Image task polling paused'), { name: 'AbortError' })
+const waitForPoll = (signal) => new Promise((resolve, reject) => {
+  const finish = () => { signal?.removeEventListener('abort', cancel); resolve() }
+  const timer = setTimeout(finish, 5000)
+  const cancel = () => { clearTimeout(timer); reject(abortError()) }
+  if (signal?.aborted) cancel()
+  else signal?.addEventListener('abort', cancel, { once: true })
+})
+
 export const useImageGeneration = () => {
+  const scopeController = new AbortController()
+  if (getCurrentScope()) onScopeDispose(() => scopeController.abort())
   const { loading, error, status, reset, setLoading, setError, setSuccess } = useApiState()
 
   const images = ref([])
   const currentImage = ref(null)
 
-  const pollImageTask = async (id, timeoutMs = IMAGE_REQUEST_TIMEOUT_MS) => {
+  const pollImageTask = async (id, timeoutMs = IMAGE_REQUEST_TIMEOUT_MS, signal) => {
     status.value = 'polling'
     const startedAt = Date.now()
-    const interval = 5000
     const pollRequestTimeout = 60000
     const doneStatuses = new Set(['completed', 'complete', 'succeeded', 'success', 'done', 'finished', 'succeed'])
     const transientErrorStatuses = new Set([408, 425, 429, 500, 502, 503, 504])
 
     while (Date.now() - startedAt < timeoutMs) {
+      if (signal?.aborted) throw abortError()
       let result
       try {
         result = await getImageGenerationTask(id, {
           timeout: Math.min(pollRequestTimeout, timeoutMs),
+          signal,
           silentErrorToast: true,
           silentNetworkErrorToast: true
         })
       } catch (pollErr) {
+        if (signal?.aborted) throw abortError()
         const statusCode = Number(pollErr?.response?.status || pollErr?.status || 0)
         const isTimeout = pollErr?.code === 'ECONNABORTED' || /timeout/i.test(String(pollErr?.message || ''))
         const isTransient = isTimeout || transientErrorStatuses.has(statusCode) || !statusCode
-        if (!isTransient) throw pollErr
+        if (!isTransient) {
+          throw pollErr
+        }
 
-        await new Promise(resolve => setTimeout(resolve, interval))
+        await waitForPoll(signal)
         continue
       }
 
@@ -53,13 +66,13 @@ export const useImageGeneration = () => {
 
       const resultStatus = getImageTaskStatus(result)
       if (['failed', 'error', 'cancelled', 'canceled'].includes(resultStatus)) {
-        throw new Error(result?.error?.message || result?.message || '图片生成失败')
+        throw Object.assign(new Error(result?.error?.message || result?.message || '图片生成失败'), { imageTaskTerminal: true })
       }
       if (doneStatuses.has(resultStatus)) {
         throw new Error('No image output')
       }
 
-      await new Promise(resolve => setTimeout(resolve, interval))
+      await waitForPoll(signal)
     }
 
     throw new Error('图片生成仍在处理中，请稍后重试。')
@@ -69,7 +82,7 @@ export const useImageGeneration = () => {
    * Generate image with fixed params | 固定参数生成图片
    * @param {Object} params - { model, prompt, size, n, image (optional ref image) }
    */
-  const generate = async (params) => {
+  const generate = async (params, { onSubmitted, signal = scopeController.signal } = {}) => {
     setLoading(true)
     images.value = []
     currentImage.value = null
@@ -86,29 +99,13 @@ export const useImageGeneration = () => {
       }
       if (params.projectId) requestData.projectId = params.projectId
 
-      if (modelConfig.sizes?.length) {
-        requestData.size = modelConfig.sizes.includes(params.size)
-          ? params.size
-          : modelConfig.defaultParams?.size || modelConfig.sizes[0]
-      }
-      for (const [key, options] of [
-        ['quality', modelConfig.qualities],
-        ['background', modelConfig.backgrounds],
-        ['output_format', modelConfig.outputFormats]
-      ]) {
-        if (!options?.length || (key === 'output_format' && options.length < 2)) continue
-        requestData[key] = options.some((item) => item.key === params[key])
-          ? params[key]
-          : modelConfig.defaultParams?.[key] || options[0].key
-      }
-      if (modelConfig.ratios?.length) {
-        const ratio = params.aspect_ratio || params.ratio || ratioFromSize(requestData.size)
-        if (modelConfig.ratios.includes(ratio)) requestData.aspect_ratio = ratio
-      }
-      if (modelConfig.resolutions?.length) {
-        const resolution = normalizeResolution(params.resolution) || resolutionFromSize(requestData.size, requestData.aspect_ratio)
-        if (modelConfig.resolutions.some((item) => item.key === resolution)) requestData.resolution = resolution
-      }
+      const settings = getGptImageGenerationSettings({
+        generationRatio: params.generationRatio ?? params.aspect_ratio ?? params.ratio ?? params.size,
+        generationResolution: params.generationResolution ?? params.resolution
+      })
+      requestData.size = settings.ratio
+      requestData.resolution = settings.resolution
+      requestData.n = 1
       if (params.tool) requestData.tool = params.tool
       if (params.image_url) requestData.image_url = params.image_url
       if (params.sourceNodeId) requestData.sourceNodeId = params.sourceNodeId
@@ -136,6 +133,7 @@ export const useImageGeneration = () => {
 
       // Call API | 调用 API
       const response = await generateImage(requestData, {
+        signal,
         requestType: 'json',
         endpoint: modelConfig?.endpoint || '/images/generations',
         timeout: Number(modelConfig?.requestTimeoutMs || IMAGE_REQUEST_TIMEOUT_MS)
@@ -147,7 +145,8 @@ export const useImageGeneration = () => {
         const taskStatus = getImageTaskStatus(response)
         const id = getImageTaskId(response)
         if (id && isPendingImageTaskStatus(taskStatus)) {
-          generatedImages = await pollImageTask(id, Number(modelConfig?.requestTimeoutMs || IMAGE_REQUEST_TIMEOUT_MS))
+          await onSubmitted?.(id)
+          generatedImages = await pollImageTask(id, Number(modelConfig?.requestTimeoutMs || IMAGE_REQUEST_TIMEOUT_MS), signal)
         }
       }
 
@@ -165,5 +164,19 @@ export const useImageGeneration = () => {
     }
   }
 
-  return { loading, error, status, images, currentImage, generate, reset }
+  const resume = async (taskId, { signal = scopeController.signal } = {}) => {
+    setLoading(true)
+    try {
+      const output = await pollImageTask(taskId, 1800000, signal)
+      images.value = output
+      currentImage.value = output[0] || null
+      setSuccess()
+      return output
+    } catch (err) {
+      setError(err)
+      throw err
+    }
+  }
+
+  return { loading, error, status, images, currentImage, generate, resume, reset }
 }

@@ -241,3 +241,23 @@ test('existing JPEG and WebP asset URLs keep their file types when a query strin
     ['generated-2.webp', 'image/webp']
   ])
 })
+
+test('strict image persistence rejects remote upload failures and non-storage fallbacks', async () => {
+  const result = { data: [{ url: 'https://provider.example/generated.png' }] }
+  await assert.rejects(persistImageResultAssets(result, { requirePersistedAssets: true,
+    persistRemoteUrl: async () => { throw new Error('Storage unavailable') }
+  }), /Storage unavailable/)
+  await assert.rejects(persistImageResultAssets(result, { requirePersistedAssets: true,
+    persistRemoteUrl: async url => url
+  }), { code: 'IMAGE_OUTPUT_SAVE_FAILED' })
+})
+
+test('strict image persistence uploads small inline images and accepts only durable uploads', async () => {
+  let calls = 0
+  const result = await persistImageResultAssets({ data: [{ url: 'data:image/png;base64,YQ==' }] }, {
+    requirePersistedAssets: true, persistDataUrl: async () => { calls += 1; return 'https://storage.example/storage/v1/object/public/uploads/generated.png' }
+  })
+  assert.equal(calls, 1)
+  assert.match(result.data[0].url, /\/storage\/v1\/object\/public\/uploads\//)
+  assert.equal(result.data[0].transient, undefined)
+})

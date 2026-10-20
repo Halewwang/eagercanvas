@@ -5,12 +5,10 @@ import { env } from '../../config/env.js'
 import { readChatCompletionSseStream } from '../../utils/chat-sse.js'
 import {
   createEnbrandChatCompletion,
-  createEnbrandChatCompletionStream,
-  createEnbrandImage
+  createEnbrandChatCompletionStream
 } from './enbrand.adapter.js'
 
 const options = { openaiApiKey: 'enbrand-test-key' }
-const pngBase64 = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(192)]).toString('base64')
 const completion = (text = 'Hello') => ({
   id: 'resp-test',
   status: 'completed',
@@ -250,96 +248,4 @@ test('caller abort and timeout both remain effective for nonstream body reading'
     controller.abort()
     await assert.rejects(request, { name: 'AbortError' })
   })
-})
-
-test('image generation uses a synchronous OpenAI images route with only GPT Image 2', async () => {
-  await withFetch(async (url, init) => {
-    assert.equal(String(url), 'https://api.enbrand.co/v1/images/generations')
-    assert.equal(init.headers.Authorization, 'Bearer enbrand-test-key')
-    const body = JSON.parse(init.body)
-    assert.deepEqual(body, { model: 'gpt-image-2', prompt: 'A circle', n: 1, background: 'auto', output_format: 'png' })
-    return jsonResponse({ data: [{ b64_json: pngBase64 }], usage: { total_tokens: 8 } })
-  }, async () => {
-    const result = await createEnbrandImage({ model: 'old-image', prompt: 'A circle', size: '2048x2048', ratio: '1:1', resolution: '4k', output_format: 'jpeg', output_compression: 70, quality: 'high', moderation: 'low' }, options)
-    assert.match(result.data[0].url, /^data:image\/png;base64,/)
-    assert.equal(result.raw.usage.total_tokens, 8)
-    assert.equal(result.request_id, 'req-test')
-  })
-})
-
-test('image background keeps only auto or opaque without quality compensation', async () => {
-  for (const [background, expected] of [['auto', 'auto'], ['opaque', 'opaque'], ['transparent', 'auto'], ['unknown', 'auto']]) {
-    await withFetch((url, init) => {
-      assert.deepEqual(JSON.parse(init.body), { model: 'gpt-image-2', prompt: 'Circle', n: 1, background: expected, output_format: 'png' })
-      return jsonResponse({ data: [{ b64_json: pngBase64 }] })
-    }, () => createEnbrandImage({ prompt: 'Circle', background, quality: 'high', moderation: 'low' }, options))
-  }
-})
-
-test('image edits send every reference in multipart image[] without an async query', async () => {
-  const reference = `data:image/png;base64,${Buffer.from('image').toString('base64')}`
-  await withFetch(async (url, init) => {
-    assert.equal(String(url), 'https://api.enbrand.co/v1/images/edits')
-    assert.equal(init.headers['Content-Type'], undefined)
-    assert.equal(init.body.get('model'), 'gpt-image-2')
-    assert.equal(init.body.get('prompt'), 'New background')
-    assert.equal(init.body.getAll('image[]').length, 2)
-    assert.equal(init.body.get('image[]').name, 'image-1.png')
-    assert.equal(init.body.get('image[]').type, 'image/png')
-    assert.equal(await init.body.get('image[]').text(), 'image')
-    return jsonResponse({ data: [{ url: 'https://example.com/edited.png' }] })
-  }, async () => {
-    const result = await createEnbrandImage({ prompt: 'New background', images: [reference, reference] }, options)
-    assert.equal(result.data[0].url, 'https://example.com/edited.png')
-  })
-})
-
-test('image edits fall back to a supplied image when the images array is empty', async () => {
-  const image = `data:image/png;base64,${Buffer.from('image').toString('base64')}`
-  await withFetch(async (url, init) => {
-    assert.equal(String(url), 'https://api.enbrand.co/v1/images/edits')
-    assert.equal(init.body.getAll('image[]').length, 1)
-    return jsonResponse({ data: [{ url: 'https://example.com/edited.png' }] })
-  }, async () => {
-    await createEnbrandImage({ prompt: 'New background', images: [], image }, options)
-  })
-})
-
-for (const [mime, prefix] of [
-  ['png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
-  ['jpeg', Buffer.from([255, 216, 255, 224])],
-  ['webp', Buffer.from('RIFF0000WEBP')]
-]) {
-  test(`base64 images use the actual ${mime} signature when request and upstream MIME disagree`, async () => {
-    const b64 = Buffer.concat([prefix, Buffer.alloc(200)]).toString('base64')
-    await withFetch(() => jsonResponse({
-      output_format: 'jpeg',
-      data: [{ b64_json: b64, mime_type: 'image/gif' }]
-    }), async () => {
-      const result = await createEnbrandImage({ prompt: 'Circle', output_format: 'jpeg' }, options)
-      assert.ok(result.data[0].url.startsWith(`data:image/${mime};base64,`))
-      assert.equal(result.raw.output_format, 'jpeg')
-    })
-  })
-}
-
-test('base64 images reject data without a supported image signature', async () => {
-  await withFetch(() => jsonResponse({ data: [{ b64_json: Buffer.alloc(200).toString('base64'), mime_type: 'image/png' }] }), async () => {
-    await assert.rejects(createEnbrandImage({ prompt: 'Circle' }, options), { code: 'PROVIDER_INVALID_IMAGE' })
-  })
-})
-
-test('synchronous images reject empty or asynchronous task results', async () => {
-  await withFetch(() => jsonResponse({ task_id: 'unsupported-async' }), async () => {
-    await assert.rejects(createEnbrandImage({ prompt: 'Circle' }, options), { code: 'NO_IMAGE_OUTPUT' })
-  })
-})
-
-test('image edits preserve every legacy image array reference when images is empty', async () => {
-  const reference = 'data:image/png;base64,aW1hZ2U='
-  await withFetch((url, init) => {
-    assert.equal(String(url), 'https://api.enbrand.co/v1/images/edits')
-    assert.equal(init.body.getAll('image[]').length, 2)
-    return jsonResponse({ data: [{ url: 'https://example.com/edited.png' }] })
-  }, () => createEnbrandImage({ prompt: 'Edit', images: [], image: [reference, reference] }, options))
 })

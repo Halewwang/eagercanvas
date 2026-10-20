@@ -1,5 +1,21 @@
+import { getGptImageGenerationSettings } from '@/utils/gptImageParameters.js'
+import { getImageRatioFromDimensions } from '@/utils/imageDimensions.js'
+
 const hasMedia = (data = {}) => ['url', 'previewUrl', 'base64'].some(key => data[key])
 const hasValue = value => Array.isArray(value) ? value.some(Boolean) : String(value || '').trim() !== ''
+
+const getLegacyGenerationData = (data = {}) => {
+  const [width, height] = String(data.size || '').split('x').map(Number)
+  const settings = getGptImageGenerationSettings({
+    ...data,
+    generationRatio: data.generationRatio ?? data.exportRatio ?? data.ratio ?? data.aspect_ratio ?? (width && height ? getImageRatioFromDimensions(width, height) : undefined),
+    generationResolution: data.generationResolution ?? data.resolution ?? (width && height ? (Math.max(width, height) >= 3000 ? '4k' : Math.max(width, height) >= 1700 ? '2k' : '1k') : undefined)
+  })
+  return {
+    generationRatio: settings.ratio,
+    generationResolution: settings.resolution,
+  }
+}
 
 export const migrateLegacyImageConfigNodes = (canvas = {}) => {
   const { nodes = [], edges = [], groups = [] } = canvas
@@ -23,8 +39,8 @@ export const migrateLegacyImageConfigNodes = (canvas = {}) => {
     for (const id of outputs) {
       const data = { ...(inheritedData.get(id) || nodeById.get(id).data) }
       const defaults = {
+        ...getLegacyGenerationData(config.data),
         model: config.data?.model,
-        background: config.data?.background,
         prompt: config.data?.prompt,
         sourcePrompt: hasValue(config.data?.sourcePrompt) ? config.data.sourcePrompt : config.data?.prompt,
         sourceRefImages: config.data?.sourceRefImages,
@@ -41,7 +57,8 @@ export const migrateLegacyImageConfigNodes = (canvas = {}) => {
   const replace = id => replacements.get(id) || [id]
   const nextNodes = nodes.filter(node => !removed.has(node.id)).map(node => {
     if (node.type !== 'imageConfig') return inheritedData.has(node.id) ? { ...node, data: inheritedData.get(node.id) } : node
-    const data = { ...node.data }
+    const data = { ...node.data, ...getLegacyGenerationData(node.data) }
+    for (const key of ['generationQuality', 'background', 'exportRatio', 'exportSize', 'quality', 'resolution', 'aspect_ratio']) delete data[key]
     if (!hasValue(data.sourcePrompt) && hasValue(data.prompt)) data.sourcePrompt = data.prompt
     if (!hasMedia(data)) {
       delete data.size

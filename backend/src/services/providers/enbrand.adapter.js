@@ -3,9 +3,6 @@ import { HttpError } from '../../utils/http.js'
 import { normalizeProviderVisibleMessage } from '../../utils/provider-visible-message.js'
 import { attachProviderResponseMetadata } from '../provider-response-metadata.js'
 import { buildProviderUrl } from './http-client.js'
-import { buildGptImage2RequestBody, getInputImages } from './image-request.js'
-import { normalizeImageResponse } from './image-response.js'
-import { extensionFromMimeType, fetchBinaryFromSource } from './media-source.js'
 
 const TEXT_MODEL = 'gpt-5.6-sol'
 
@@ -17,7 +14,7 @@ const providerError = (data, response, code = 'PROVIDER_ERROR') => {
   return attachProviderResponseMetadata(new HttpError(response?.ok === false ? response.status : 502, message, code), response)
 }
 
-const requestOpenAi = async (path, body, requestOptions = {}, image = false) => {
+const requestOpenAi = async (path, body, requestOptions = {}) => {
   const apiKey = String(requestOptions.openaiApiKey || env.openaiApiKey || '').trim()
   if (!apiKey) throw new HttpError(500, 'OPENAI_API_KEY is not configured', 'OPENAI_NOT_CONFIGURED')
 
@@ -28,7 +25,7 @@ const requestOpenAi = async (path, body, requestOptions = {}, image = false) => 
   const defaultTimeout = Number(env.openaiTimeoutMs) || 180000
   const timeoutMs = Number(requestOptions.timeoutMs) > 0
     ? Number(requestOptions.timeoutMs)
-    : (image ? Math.max(defaultTimeout, 1800000) : defaultTimeout)
+    : defaultTimeout
   const timer = setTimeout(() => controller.abort(new DOMException('OpenAI request timed out', 'AbortError')), timeoutMs)
   const cleanup = () => {
     clearTimeout(timer)
@@ -36,14 +33,13 @@ const requestOpenAi = async (path, body, requestOptions = {}, image = false) => 
   }
 
   try {
-    const multipart = body instanceof FormData
     const response = await fetch(buildProviderUrl(env.openaiApiBaseUrl || 'https://api.enbrand.co/v1', path), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        ...(multipart ? {} : { 'Content-Type': 'application/json' })
+        'Content-Type': 'application/json'
       },
-      body: multipart ? body : JSON.stringify(body),
+      body: JSON.stringify(body),
       signal: controller.signal
     })
     if (!response.ok) {
@@ -233,40 +229,4 @@ export const createEnbrandChatCompletionStream = async (payload = {}, requestOpt
   headers.delete('content-length')
   headers.delete('content-encoding')
   return new Response(body, { status: response.status, headers })
-}
-
-export const createEnbrandImage = async (payload = {}, requestOptions = {}) => {
-  let body = buildGptImage2RequestBody(payload)
-  const images = getInputImages(payload)
-  if (images.length > 16) throw new HttpError(400, 'At most 16 reference images are supported', 'TOO_MANY_IMAGES')
-  if (images.length) {
-    const form = new FormData()
-    for (const [key, value] of Object.entries(body)) form.append(key, String(value))
-    for (const [index, source] of images.entries()) {
-      const { mimeType, buffer } = await fetchBinaryFromSource(source)
-      form.append('image[]', new Blob([buffer], { type: mimeType }), `image-${index + 1}.${extensionFromMimeType(mimeType)}`)
-    }
-    body = form
-  }
-  const { response, cleanup } = await requestOpenAi(`/v1/images/${images.length ? 'edits' : 'generations'}`, body, requestOptions, true)
-  try {
-    const raw = await response.json()
-    const normalized = normalizeImageResponse(raw)
-    normalized.data = normalized.data.map((item) => {
-      const inline = item.url.match(/^data:[^;,]+;base64,(.+)$/is)
-      if (!inline) return item
-      const signature = Buffer.from(inline[1].slice(0, 32), 'base64')
-      let format
-      if (signature.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) format = 'png'
-      else if (signature[0] === 255 && signature[1] === 216 && signature[2] === 255) format = 'jpeg'
-      else if (signature.toString('ascii', 0, 4) === 'RIFF' && signature.toString('ascii', 8, 12) === 'WEBP') format = 'webp'
-      else throw new HttpError(502, 'Provider returned an unsupported image signature', 'PROVIDER_INVALID_IMAGE')
-      return { ...item, url: `data:image/${format};base64,${inline[1]}` }
-    })
-    normalized.raw = raw
-    if (!normalized.data.length) throw new HttpError(502, 'No image output from provider', 'NO_IMAGE_OUTPUT')
-    return attachProviderResponseMetadata(normalized, response)
-  } finally {
-    cleanup()
-  }
 }

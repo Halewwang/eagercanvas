@@ -52,6 +52,10 @@ export const env = {
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   openaiTimeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 1800000),
 
+  apimartApiBaseUrl: process.env.APIMART_API_BASE_URL || 'https://api.apimart.ai/v1',
+  apimartApiKey: process.env.APIMART_API_KEY || '',
+  apimartTimeoutMs: Number(process.env.APIMART_TIMEOUT_MS || 1800000),
+
   // Video requests use the shared server credential after service authorization.
   providerApiBaseUrl: process.env.PROVIDER_API_BASE_URL || 'https://api.302ai.cn',
   providerApiBaseUrls: process.env.PROVIDER_API_BASE_URLS || '',

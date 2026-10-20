@@ -7,25 +7,19 @@ const getPrompt = (output = {}) => String(output?.output?.prompt || '')
 
 const createBasePayload = ({
   imageSource,
-  background,
   model,
   output,
-  quality,
   ratio,
-  resolution,
-  size
+  resolution
 }) => ({
   targetMode: 'new',
   model: resolveImageModelKey(model),
-  ...(background ? { background } : {}),
-  ...(size ? { size } : {}),
-  ...(ratio ? { ratio } : {}),
-  ...(resolution ? { resolution } : {}),
-  ...(quality ? { quality } : {}),
+  ...(ratio ? { generationRatio: ratio } : {}),
+  ...(resolution ? { generationResolution: resolution } : {}),
   fileType: RESULT_FILE_TYPE,
   label: RESULT_LABEL,
   sourcePrompt: getPrompt(output),
-  sourceRefImages: [imageSource],
+  sourceRefImages: /^https?:\/\//i.test(imageSource || '') ? [imageSource] : [],
   meta: {
     tool: 'wedding-3x3',
     json: output
@@ -34,22 +28,16 @@ const createBasePayload = ({
 
 const createGenerationRequest = ({
   imageSource,
-  background,
   model,
   output,
-  quality,
   ratio,
   resolution,
-  size
 }) => ({
   model: resolveImageModelKey(model),
-  ...(background ? { background } : {}),
   prompt: getPrompt(output),
   image: imageSource,
-  ...(size ? { size } : {}),
-  ...(ratio ? { ratio, aspect_ratio: ratio } : {}),
+  ...(ratio ? { ratio } : {}),
   ...(resolution ? { resolution } : {}),
-  ...(quality ? { quality } : {})
 })
 
 export const createWedding3x3PendingPayload = (payload = {}) => createBasePayload(payload)
@@ -63,29 +51,24 @@ export const createWedding3x3ApplyPayload = (payload = {}) => ({
 export const runWedding3x3Generation = async ({
   imageGen,
   imageSource,
-  background,
   model,
+  onSubmitted,
   output,
-  quality,
   ratio,
   resolution,
-  size
 } = {}) => {
   const request = createGenerationRequest({
     imageSource,
-    background,
     model,
     output,
-    quality,
     ratio,
     resolution,
-    size
-  })
+    })
 
   if (typeof imageGen?.generate !== 'function') {
     throw new Error('Image generator is missing')
   }
-  const generated = await imageGen.generate(request)
+  const generated = await imageGen.generate(request, { onSubmitted })
   const first = Array.isArray(generated) ? generated[0] : generated
   const nextUrl = String(first?.url || '').trim()
 

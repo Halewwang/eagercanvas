@@ -3,12 +3,10 @@
     :show="showMultiAngle"
     :image-url="imageUrl"
     :model="model"
-    :background="background"
     :ratio="ratio"
-    :size="size"
     :resolution="resolution"
     :ratio-options="ratioOptions"
-    :size-options="sizeOptions"
+    :on-submitted="onMultiAngleSubmitted"
     @update:show="$emit('update:showMultiAngle', $event)"
     @pending="$emit('multiAnglePending', $event)"
     @apply="$emit('multiAngleApply', $event)"
@@ -18,11 +16,9 @@
     :show="showWedding3x3"
     :image-url="imageUrl"
     :model="model"
-    :background="background"
     :ratio="ratio"
-    :size="size"
     :resolution="resolution"
-    :quality="quality"
+    :on-submitted="onWedding3x3Submitted"
     @update:show="$emit('update:showWedding3x3', $event)"
     @pending="$emit('wedding3x3Pending', $event)"
     @apply="$emit('wedding3x3Apply', $event)"
@@ -37,13 +33,11 @@ import Wedding3x3ToolDrawer from '@/components/tools/Wedding3x3ToolDrawer.vue'
 defineProps({
   showMultiAngle: Boolean,
   showWedding3x3: Boolean,
+  onMultiAngleSubmitted: Function,
+  onWedding3x3Submitted: Function,
   imageUrl: {
     type: String,
     default: ''
-  },
-  background: {
-    type: String,
-    default: 'auto'
   },
   model: {
     type: String,
@@ -53,15 +47,7 @@ defineProps({
     type: String,
     default: ''
   },
-  size: {
-    type: String,
-    default: ''
-  },
   resolution: {
-    type: String,
-    default: ''
-  },
-  quality: {
     type: String,
     default: ''
   },
@@ -69,10 +55,6 @@ defineProps({
     type: Array,
     default: () => []
   },
-  sizeOptions: {
-    type: Array,
-    default: () => []
-  }
 })
 
 defineEmits([

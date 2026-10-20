@@ -12,27 +12,14 @@
       :display-ratio="displayRatio"
       :resolution-options="resolutionDropdownOptions"
       :display-resolution="displayResolution"
-      :quality-options="qualityDropdownOptions"
-      :display-quality="displayQualityControl"
-      :format-options="formatDropdownOptions"
-      :display-format="displayFormatControl"
-      :export-ratio-options="IMAGE_EXPORT_RATIO_OPTIONS"
-      :export-size-options="IMAGE_EXPORT_SIZE_OPTIONS"
-      :export-ratio="localExportRatio"
-      :export-size="localExportSize"
-      :local-export-busy="localExportBusy"
       :tool-options="toolDropdownOptions"
       :has-display-image="hasDisplayImage"
-      :tool-busy="isToolBusy || localExportBusy"
+      :tool-busy="isToolBusy"
       :image-busy="isImageBusy"
       @select-model="setImageModel"
       @select-ratio="setImageRatio"
       @select-resolution="setResolution"
-      @select-quality="setImageQuality"
-      @select-format="setOutputFormat"
-      @select-export-ratio="startLocalExportCrop"
-      @select-export-size="setLocalExportSize"
-      @export-image="downloadLocalImage()"
+      @download="downloadPreviewImage()"
       @tool-action="handleToolAction"
       @preview="openPreviewModal"
       @duplicate="handleDuplicate"
@@ -64,8 +51,7 @@
           :image-url="canvasDisplayImageUrl"
           :alt="data.label || 'Image'"
           :crop-active="activeTool === 'crop'"
-          :crop-export-mode="localExportCropActive"
-          :crop-busy="localExportBusy || isToolBusy"
+          :crop-busy="isToolBusy"
           :crop-mask-styles="cropMaskStyles"
           :crop-box-style="cropBoxStyle"
           :crop-handles="cropHandles"
@@ -104,8 +90,7 @@
       :max-zoom="PREVIEW_MAX_ZOOM"
       :canvas-style="previewCanvasStyle"
       :image-style="previewImageStyle"
-      :download-busy="localExportBusy"
-      @download="downloadLocalImage()"
+      @download="downloadPreviewImage()"
       @zoom-out="zoomOutPreview"
       @reset-zoom="resetPreviewZoom"
       @zoom-in="zoomInPreview"
@@ -127,13 +112,11 @@
       v-model:show-wedding3x3="showWedding3x3Drawer"
       :image-url="displayImageUrl"
       :model="localImageModel"
-      :background="localBackground"
       :ratio="localImageRatio"
-      :size="localImageSize"
       :resolution="localResolution"
-      :quality="localImageQuality"
       :ratio-options="ratioDropdownOptions"
-      :size-options="imageSizeOptions"
+      :on-multi-angle-submitted="handleMultiAngleSubmitted"
+      :on-wedding3x3-submitted="handleWedding3x3Submitted"
       @multi-angle-pending="handleMultiAnglePending"
       @multi-angle-apply="handleMultiAngleApply"
       @multi-angle-error="handleMultiAngleError"
@@ -145,7 +128,7 @@
 </template>
 
 <script setup>
-import { computed, h, onUnmounted, ref, watch } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
 import { storeToRefs } from 'pinia'
 import NodeBindingStatus from './NodeBindingStatus.vue'
@@ -170,7 +153,6 @@ import { useImageNodeProgressState } from './image/useImageNodeProgressState.js'
 import { useImageNodeReplacement } from './image/useImageNodeReplacement.js'
 import { useImageNodeToolActions } from './image/useImageNodeToolActions.js'
 import { useImageNodeToolDrawerResults } from './image/useImageNodeToolDrawerResults.js'
-import { IMAGE_EXPORT_RATIO_OPTIONS, IMAGE_EXPORT_SIZE_OPTIONS, useImageNodeLocalExport } from './image/useImageNodeLocalExport.js'
 import { useImageNodePreviewDownload } from './image/useImageNodePreviewDownload.js'
 import { useImageNodeUploadLifecycle } from './image/useImageNodeUploadLifecycle.js'
 import { useImageNodeUploadPersistence } from './image/useImageNodeUploadPersistence.js'
@@ -184,9 +166,7 @@ import { useCanvasStore } from '@/stores/canvas'
 import { pinia } from '@/stores/pinia'
 import {
   DEFAULT_IMAGE_MODEL,
-  DEFAULT_IMAGE_SIZE,
   getModelConfig,
-  getModelSizeOptions,
   imageModelOptions
 } from '@/stores/models'
 import { useImageGeneration } from '@/hooks/api/useImageApi.js'
@@ -207,8 +187,6 @@ import {
   getImageNodePersistencePatch as buildImagePersistencePatch,
   getImageNodeSaveFeedback,
   getImageNodeSaveFeedbackPatch,
-  getImageNodeModelParamsPatch,
-  getImageNodeSizeParamsPatch,
   getImageNodeLinkedCreateData,
   getImageNodeLinkedUpdatePatch,
   getImageNodeLinkedPosition,
@@ -267,6 +245,10 @@ const {
   saveProject,
   updateNode
 } = canvasStore
+let imageNodeDisposed = false
+const imageNodeProjectId = currentProjectId.value
+const imageNodeId = props.id
+const isNodeContextAvailable = id => !imageNodeDisposed && props.id === imageNodeId && currentProjectId.value === imageNodeProjectId && nodes.value.some(node => node.id === id)
 const { isConfigured } = useApiConfig()
 const imageGen = useImageGeneration()
 
@@ -279,39 +261,24 @@ const showHandles = computed(() => showCapsule.value || isSelected.value)
 const uploadInputRef = ref(null)
 const uploadInputId = `image-upload-${String(props.id || 'node')}`
 const {
-  displayFormatControl,
   displayImageModel,
-  displayQualityControl,
   displayRatio,
   displayResolution,
-  formatDropdownOptions,
   imageModelDropdownOptions,
-  imageSizeOptions,
-  localBackground,
   localImageModel,
-  localImageQuality,
   localImageRatio,
-  localImageSize,
-  localOutputFormat,
   localResolution,
   moduleStyle,
-  qualityDropdownOptions,
   ratioDropdownOptions,
   resolutionDropdownOptions,
   setImageModel,
-  setImageQuality,
   setImageRatio,
-  setOutputFormat,
   setResolution,
   stageStyle
 } = useImageNodeModelControls({
-  buildModelParamsPatch: getImageNodeModelParamsPatch,
-  buildSizeParamsPatch: getImageNodeSizeParamsPatch,
   data: () => props.data,
   defaultImageModel: DEFAULT_IMAGE_MODEL,
-  defaultImageSize: DEFAULT_IMAGE_SIZE,
   getModelConfig,
-  getModelSizeOptions,
   imageModelOptions,
   nodeId: () => props.id,
   naturalSize: () => previewNaturalSize.value,
@@ -384,6 +351,14 @@ const {
   persistImageUrl,
   projectSaveState
 })
+const mediaImageSize = ref(props.data?.size || '')
+const mediaImageRatio = ref(props.data?.ratio || '')
+const mediaResolution = ref(props.data?.resolution || '')
+watch(() => [props.data?.size, props.data?.ratio, props.data?.resolution], ([size, ratio, resolution]) => {
+  mediaImageSize.value = size || ''
+  mediaImageRatio.value = ratio || ''
+  mediaResolution.value = resolution || ''
+})
 const { handleFileUpload } = useImageNodeUploadPersistence({
   applyUploadSaveOutcome,
   clearLocalPreviewUrl,
@@ -403,8 +378,8 @@ const { handleFileUpload } = useImageNodeUploadPersistence({
   getImageNodeUploadSaveOutcome,
   isLocalPreviewMode,
   isUploading,
-  localImageRatio,
-  localImageSize,
+  localImageRatio: mediaImageRatio,
+  localImageSize: mediaImageSize,
   maxUploadSizeBytes: MAX_UPLOAD_SIZE_BYTES,
   messageApi: () => window.$message,
   nodeId: () => props.id,
@@ -433,9 +408,9 @@ const { replaceCurrentImageNode } = useImageNodeReplacement({
   getImageNodeReplacementUploadedPatch,
   getImageNodeSaveFeedbackPatch,
   isLocalPreviewMode,
-  localImageRatio,
-  localImageSize,
-  localResolution,
+  localImageRatio: mediaImageRatio,
+  localImageSize: mediaImageSize,
+  localResolution: mediaResolution,
   messageApi: () => window.$message,
   nodeId: () => props.id,
   projectSaveState,
@@ -459,11 +434,8 @@ const {
   flushSave,
   getDefaults: () => ({
     model: localImageModel.value,
-    background: localBackground.value,
-    quality: localImageQuality.value,
-    ratio: localImageRatio.value,
-    resolution: localResolution.value,
-    size: localImageSize.value
+    generationRatio: localImageRatio.value,
+    generationResolution: localResolution.value
   }),
   nodeId: () => props.id,
   nodes,
@@ -472,12 +444,11 @@ const {
   updateNodeInternals
 })
 const displayImageUrl = computed(() => String(props.data?.previewUrl || props.data?.url || props.data?.base64 || '').trim())
-const { downloadImageBlob, getPreviewDownloadFilename } = useImageNodePreviewDownload({
+const { downloadPreviewImage } = useImageNodePreviewDownload({
   getLabel: () => props.data?.label,
   getSourceUrl: () => displayImageUrl.value
 })
 const hasDisplayImage = computed(() => !!displayImageUrl.value)
-const imageDimensionsReady = computed(() => previewNaturalSize.value.width > 0 && previewNaturalSize.value.height > 0)
 watch(displayImageUrl, () => {
   previewNaturalSize.value = { width: 0, height: 0 }
   cancelCropMode()
@@ -491,10 +462,13 @@ const { canvasDisplayImageUrl } = useImageNodeCanvasPreview({
 const {
   handleGenerateImage,
   handleRegenerateImage,
-  handleStopGeneration
+  handleStopGeneration,
+  resumeImageGeneration,
+  disposeGeneration
 } = useImageNodeGeneration({
   buildImagePersistencePatch,
   buildSourceRefImages,
+  currentData: () => props.data,
   currentProjectId,
   displayImageUrl,
   getConnectedInputs,
@@ -506,8 +480,10 @@ const {
   imageActionLoading,
   imageGen,
   isConfigured,
-  localBackground,
+  isNodeAvailable: isNodeContextAvailable,
   localImageModel,
+  localImageRatio,
+  localResolution,
   messageApi: () => window.$message,
   nodeId: () => props.id,
   projectSaveState,
@@ -579,35 +555,14 @@ const {
   viewportZoom: () => viewport.value.zoom
 })
 const {
-  downloadLocalImage,
-  localExportBusy,
-  localExportCropActive,
-  localExportRatio,
-  localExportSize,
-  setLocalExportSize,
-  startEditingCrop,
-  startLocalExportCrop
-} = useImageNodeLocalExport({
-  activeTool,
-  cancelCropMode,
-  cropRect,
-  cropStageMetrics,
-  displayImageUrl,
-  data: () => props.data,
-  downloadImageBlob,
-  getFileName: getPreviewDownloadFilename,
-  hasNaturalDimensions: imageDimensionsReady,
-  nodeId: () => props.id,
-  startCropMode,
-  updateNode
-})
-const {
   handleMultiAngleApply,
   handleMultiAngleError,
   handleMultiAnglePending,
+  handleMultiAngleSubmitted,
   handleWedding3x3Apply,
   handleWedding3x3Error,
   handleWedding3x3Pending,
+  handleWedding3x3Submitted,
   showMultiAngleDrawer,
   showWedding3x3Drawer
 } = useImageNodeToolDrawerResults({
@@ -621,10 +576,9 @@ const {
   getImageNodeToolPendingPatch,
   getImageNodeToolReplacementPatch,
   getImageNodeToolSaveMessages,
-  localImageQuality,
   localImageRatio,
-  localImageSize,
   localResolution,
+  isNodeAvailable: isNodeContextAvailable,
   messageApi: () => window.$message,
   nodeId: () => props.id,
   projectSaveState,
@@ -648,6 +602,7 @@ const {
   defaultImageModel: DEFAULT_IMAGE_MODEL,
   displayImageUrl,
   edges,
+  flushSave,
   getErrorMessage,
   getImageNodeEnhancementErrorPatch,
   getImageNodeEnhancementRequest,
@@ -656,7 +611,7 @@ const {
   getNearestImageNodeSourceConfig,
   imageGen,
   localImageModel,
-  localBackground,
+  isNodeAvailable: isNodeContextAvailable,
   messageApi: () => window.$message,
   nodeId: () => props.id,
   nodes,
@@ -668,10 +623,11 @@ const {
   showImageToolSaveMessage,
   showMultiAngleDrawer,
   showWedding3x3Drawer,
-  startCropMode: startEditingCrop,
+  startCropMode,
   toolActionLoading,
   triggerUpload,
   updateLinkedImageNode,
+  updateNode,
   cropRect,
   cropStageMetrics
 })
@@ -682,7 +638,10 @@ const capsuleStyle = {
 const isImageBusy = computed(() => !!props.data?.loading || imageGen.loading.value || !!imageActionLoading.value)
 const isToolBusy = computed(() => !!toolActionLoading.value)
 
+onMounted(() => { void resumeImageGeneration() })
 onUnmounted(() => {
+  imageNodeDisposed = true
+  disposeGeneration()
   stopCropInteraction()
 })
 
@@ -711,7 +670,7 @@ const handleDelete = () => {
   removeNode(props.id)
 }
 
-const handleApplyImageCrop = () => localExportCropActive.value ? downloadLocalImage() : applyCrop()
+const handleApplyImageCrop = () => applyCrop()
 
 const handleDuplicate = () => {
   const newId = duplicateNode(props.id)

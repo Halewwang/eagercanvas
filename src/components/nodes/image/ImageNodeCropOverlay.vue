@@ -14,8 +14,8 @@
       />
     </div>
     <div class="crop-inline-actions" @mousedown.stop>
-      <span>{{ exportMode ? 'Local export · original unchanged' : 'Edit crop' }}</span>
-      <button :disabled="busy" @click.stop="$emit('apply')">{{ exportMode ? 'Download PNG ↵' : 'Apply crop ↵' }}</button>
+      <span>Edit crop</span>
+      <button :disabled="busy" @click.stop="$emit('apply')">Apply crop ↵</button>
       <button :disabled="busy" @click.stop="$emit('cancel')">Cancel Esc</button>
     </div>
   </div>
@@ -23,7 +23,6 @@
 
 <script setup>
 defineProps({
-  exportMode: Boolean,
   busy: Boolean,
   maskStyles: {
     type: Object,

@@ -6,30 +6,12 @@
           <button class="capsule-select">{{ displayImageModel }}</button>
         </NDropdown>
 
-        <NDropdown v-if="ratioOptions.length > 0" :options="ratioOptions" trigger="click" size="small" @select="$emit('selectRatio', $event)">
-          <button class="capsule-select">{{ displayRatio }}</button>
+        <NDropdown v-if="ratioOptions.length > 0" :options="ratioOptions" :value="selectedKey(ratioOptions, displayRatio)" :node-props="option => parameterOptionProps(option, ratioOptions, displayRatio)" :theme-overrides="parameterMenuTheme" :menu-props="() => ({ role: 'menu', 'aria-label': 'Image ratios' })" trigger="click" size="small" :disabled="toolBusy || imageBusy" @update:show="ratioMenuOpen = $event" @select="$emit('selectRatio', $event)">
+          <button type="button" class="capsule-select" :disabled="toolBusy || imageBusy" :aria-label="`Image ratio ${displayRatio}`" aria-haspopup="menu" :aria-expanded="ratioMenuOpen" title="Ratio for the next model generation">{{ displayRatio }}</button>
         </NDropdown>
 
-        <NDropdown v-if="resolutionOptions.length > 0" :options="resolutionOptions" trigger="click" size="small" @select="$emit('selectResolution', $event)">
-          <button class="capsule-select capsule-resolution">{{ displayResolution }}</button>
-        </NDropdown>
-
-        <NDropdown v-if="qualityOptions.length > 0" :options="qualityOptions" trigger="click" size="small" @select="$emit('selectQuality', $event)">
-          <button class="capsule-select">{{ displayQuality }}</button>
-        </NDropdown>
-
-        <NDropdown v-if="formatOptions.length > 1" :options="formatOptions" trigger="click" size="small" @select="$emit('selectFormat', $event)">
-          <button class="capsule-select">{{ displayFormat }}</button>
-        </NDropdown>
-        <NDropdown :options="exportRatioOptions" :value="exportRatio" :theme-overrides="parameterMenuTheme" :menu-props="() => ({ role: 'menu', 'aria-label': 'Image ratios' })" :node-props="option => ({ role: 'menuitemradio', 'aria-checked': option.key === exportRatio })" trigger="click" size="small" :disabled="toolBusy || localExportBusy" @select="$emit('selectExportRatio', $event)">
-          <button type="button" class="capsule-select" :disabled="toolBusy || localExportBusy" :aria-label="`Image ratio ${exportRatio || 'Original'}`" title="Local crop ratio; keep the original image unchanged">
-            {{ exportRatio || 'Original' }}
-          </button>
-        </NDropdown>
-        <NDropdown :options="exportSizeOptions" :value="exportSize" :theme-overrides="parameterMenuTheme" :menu-props="() => ({ role: 'menu', 'aria-label': 'Image sizes' })" :node-props="option => ({ role: 'menuitemradio', 'aria-checked': option.key === exportSize })" trigger="click" size="small" :disabled="toolBusy || localExportBusy" @select="$emit('selectExportSize', $event)">
-          <button type="button" class="capsule-select capsule-resolution" :disabled="toolBusy || localExportBusy" :aria-label="`Image size ${displayExportSize}`" title="Local PNG size by long edge; keep the original image unchanged">
-            {{ displayExportSize }}
-          </button>
+        <NDropdown v-if="resolutionOptions.length > 0" :options="resolutionOptions" :value="selectedKey(resolutionOptions, displayResolution)" :node-props="option => parameterOptionProps(option, resolutionOptions, displayResolution)" :theme-overrides="parameterMenuTheme" :menu-props="() => ({ role: 'menu', 'aria-label': 'Image resolutions' })" trigger="click" size="small" :disabled="toolBusy || imageBusy" @update:show="resolutionMenuOpen = $event" @select="$emit('selectResolution', $event)">
+          <button type="button" class="capsule-select capsule-resolution" :disabled="toolBusy || imageBusy" :aria-label="`Image resolution ${displayResolution}`" aria-haspopup="menu" :aria-expanded="resolutionMenuOpen" title="Resolution tier for the next model generation">{{ displayResolution }}</button>
         </NDropdown>
       </div>
 
@@ -45,7 +27,7 @@
         <button class="capsule-icon" :disabled="!hasDisplayImage" title="Preview" @click="$emit('preview')">
           <n-icon :size="14"><ExpandOutline /></n-icon>
         </button>
-        <button v-if="hasDisplayImage" type="button" class="capsule-icon" :disabled="toolBusy || localExportBusy" aria-label="Download PNG" :title="localExportBusy ? 'Exporting…' : 'Download PNG with the selected ratio and size'" @click="$emit('exportImage')">
+        <button v-if="hasDisplayImage" type="button" class="capsule-icon" :disabled="toolBusy" aria-label="Download original image" title="Download the original image" @click="$emit('download')">
           <n-icon :size="14"><DownloadOutline /></n-icon>
         </button>
         <button class="capsule-icon" title="Duplicate" @click="$emit('duplicate')">
@@ -65,16 +47,16 @@
       <button v-if="!imageBusy" class="capsule-icon" title="Regenerate" @click="$emit('regenerate')">
         <n-icon :size="14"><RefreshOutline /></n-icon>
       </button>
-      <button v-if="imageBusy" class="capsule-icon capsule-icon-solid capsule-create" title="Stop" @click="$emit('stop')">
+      <button v-if="imageBusy" class="capsule-icon capsule-icon-solid capsule-create" title="Pause tracking" @click="$emit('stop')">
         <n-icon :size="14"><CloseCircleOutline /></n-icon>
-        <span class="capsule-create-label">Stop</span>
+        <span class="capsule-create-label">Pause</span>
       </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref } from 'vue'
 import { NDropdown, NIcon } from 'naive-ui'
 import {
   CloseCircleOutline,
@@ -87,7 +69,7 @@ import {
 import createIcon from '@/assets/create-icon.svg'
 import toolsIcon from '@/assets/tools-icon.svg'
 
-const props = defineProps({
+defineProps({
   capsuleStyle: {
     type: Object,
     default: () => ({})
@@ -117,27 +99,6 @@ const props = defineProps({
     type: String,
     default: ''
   },
-  qualityOptions: {
-    type: Array,
-    default: () => []
-  },
-  displayQuality: {
-    type: String,
-    default: ''
-  },
-  formatOptions: {
-    type: Array,
-    default: () => []
-  },
-  displayFormat: {
-    type: String,
-    default: ''
-  },
-  exportRatioOptions: { type: Array, default: () => [] },
-  exportSizeOptions: { type: Array, default: () => [] },
-  exportRatio: { type: String, default: '' },
-  exportSize: { type: Number, default: 0 },
-  localExportBusy: Boolean,
   toolOptions: {
     type: Array,
     default: () => []
@@ -147,7 +108,17 @@ const props = defineProps({
   imageBusy: Boolean
 })
 
-const displayExportSize = computed(() => ({ 1024: '1K', 2048: '2K', 4096: '4K' }[props.exportSize] || 'Original'))
+const ratioMenuOpen = ref(false)
+const resolutionMenuOpen = ref(false)
+const selectedKey = (options, displayValue) => options.find(option => (
+  String(option.key).toLowerCase() === displayValue.toLowerCase() || option.label === displayValue
+))?.key
+const parameterOptionProps = (option, options, displayValue) => ({
+  role: 'menuitemradio',
+  'aria-checked': option.key === selectedKey(options, displayValue),
+  'aria-disabled': Boolean(option.disabled)
+})
+
 const parameterMenuTheme = {
   color: 'var(--surface-2)',
   optionTextColor: 'var(--text)',
@@ -161,11 +132,7 @@ defineEmits([
   'selectModel',
   'selectRatio',
   'selectResolution',
-  'selectQuality',
-  'selectFormat',
-  'selectExportRatio',
-  'selectExportSize',
-  'exportImage',
+  'download',
   'toolAction',
   'preview',
   'duplicate',
@@ -178,6 +145,17 @@ defineEmits([
 
 <style scoped src="./../node-base.css"></style>
 <style scoped>
+.capsule-select:focus-visible,
+.capsule-icon:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.capsule-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .capsule-tool-trigger {
   display: inline-flex;
   align-items: center;

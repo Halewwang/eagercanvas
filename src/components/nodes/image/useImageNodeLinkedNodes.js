@@ -36,7 +36,17 @@ export const useImageNodeLinkedNodes = ({
   const readNodeId = () => readOption(nodeId)
   const readNodes = () => readOption(nodes) || []
   const readStageStyle = () => readOption(stageStyle) || {}
-  const readDefaults = () => readOption(getDefaults) || {}
+  const readDefaults = (targetNodeId = readNodeId()) => {
+    const data = {
+      ...readNodes().find(node => node.id === readNodeId())?.data,
+      ...readNodes().find(node => node.id === targetNodeId)?.data
+    }
+    return {
+      ...(readOption(getDefaults) || {}),
+      ...Object.fromEntries(['generationRatio', 'generationResolution']
+        .filter(key => data[key] !== undefined).map(key => [key, data[key]]))
+    }
+  }
   const resolveEdge = (edge) => (
     edgeStrategy?.resolve ? edgeStrategy.resolve(edge) : edge
   )
@@ -91,7 +101,7 @@ export const useImageNodeLinkedNodes = ({
     if (!linkedNodeId) return undefined
     updateNode(linkedNodeId, buildUpdatePatch({
       payload,
-      defaults: readDefaults()
+      defaults: readDefaults(linkedNodeId)
     }))
     setTimeoutFn(() => updateNodeInternals(linkedNodeId), 40)
     if (payload.loading) return true

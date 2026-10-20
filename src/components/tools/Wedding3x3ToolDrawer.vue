@@ -167,9 +167,8 @@
 
                 <div class="field-grid field-grid-two">
                   <AutocompleteField v-model="selectedModel" label="Model" :options="imageModelSelectOptions" />
-                  <AutocompleteField v-if="qualityOptions.length" v-model="selectedQuality" label="Quality" :options="qualityOptions" />
-                  <AutocompleteField v-if="ratioOptions.length" v-model="selectedRatio" label="Ratio" :options="ratioOptions" />
-                  <AutocompleteField v-if="resolutionOptions.length" v-model="selectedResolution" label="Resolution" :options="resolutionOptions" />
+                  <AutocompleteField v-if="ratioOptions.length" :model-value="selectedRatio" label="Ratio" :options="ratioOptions" @update:model-value="selectGenerationSize('ratio', $event)" />
+                  <AutocompleteField v-if="resolutionOptions.length" :model-value="selectedResolution" label="Resolution" :options="resolutionOptions" @update:model-value="selectGenerationSize('resolution', $event)" />
                 </div>
               </section>
 
@@ -211,10 +210,10 @@
               <button
                 class="tool-primary-btn"
                 type="button"
-                :disabled="!imageSource || applying || validationErrors.length > 0"
+                :disabled="!imageSource || applying || !!submittedTaskId || validationErrors.length > 0"
                 @click="generateImage"
               >
-                {{ applying ? 'Generating...' : 'Generate Image' }}
+                {{ applying ? 'Generating...' : submittedTaskId ? 'Reopen output to resume' : 'Generate Image' }}
               </button>
             </div>
           </div>
@@ -226,6 +225,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import { selectGptImageGenerationSize } from '@/utils/gptImageParameters'
 import {
   WEDDING_3X3_DEFAULT_MODE,
   WEDDING_3X3_MODE_OPTIONS,
@@ -236,7 +236,7 @@ import {
   validateWedding3x3Config
 } from '@/utils/wedding3x3Builder'
 import { WEDDING_3X3_LIMITS } from '@/config/wedding3x3'
-import { getModelConfig, getModelQualityOptions, getModelSizeOptions, imageModelOptions, DEFAULT_IMAGE_MODEL, resolveImageModelKey } from '@/stores/models'
+import { getModelConfig, imageModelOptions, DEFAULT_IMAGE_MODEL, resolveImageModelKey } from '@/stores/models'
 import { useImageGeneration } from '@/hooks/api/useImageApi.js'
 import { AutocompleteField, MultiAutocompleteField } from './ToolAutocompleteFields.js'
 import {
@@ -248,20 +248,13 @@ import {
   createWedding3x3PendingPayload,
   runWedding3x3Generation
 } from './Wedding3x3GenerationRunner.js'
-import {
-  resolutionFromSizeKey,
-  resolveWedding3x3SelectedSize
-} from './Wedding3x3GenerationOptions.js'
 
 const props = defineProps({
   show: Boolean,
+  onSubmitted: Function,
   imageUrl: {
     type: String,
     default: ''
-  },
-  background: {
-    type: String,
-    default: 'auto'
   },
   model: {
     type: String,
@@ -271,18 +264,10 @@ const props = defineProps({
     type: String,
     default: '16:9'
   },
-  size: {
-    type: String,
-    default: '1024x1024'
-  },
   resolution: {
     type: String,
     default: '1k'
   },
-  quality: {
-    type: String,
-    default: 'auto'
-  }
 })
 
 const emit = defineEmits(['update:show', 'pending', 'apply', 'error'])
@@ -316,7 +301,6 @@ const form = reactive({
 })
 
 const selectedModel = ref(DEFAULT_IMAGE_MODEL)
-const selectedQuality = ref('auto')
 const selectedRatio = ref('16:9')
 const selectedResolution = ref('1k')
 
@@ -327,29 +311,16 @@ const imageModelSelectOptions = computed(() =>
   }))
 )
 
-const sizeOptions = computed(() => getModelSizeOptions(selectedModel.value, selectedQuality.value))
 
 const currentModelConfig = computed(() => getModelConfig(selectedModel.value))
 const ratioOptions = computed(() => (currentModelConfig.value?.ratios || []).map((ratio) => ({ key: ratio, label: ratio })))
 
 const resolutionOptions = computed(() => (currentModelConfig.value?.resolutions || []).map((item) => ({ key: item.key, label: item.label || item.key.toUpperCase() })))
 
-const selectedSize = computed(() =>
-  resolveWedding3x3SelectedSize(sizeOptions.value, selectedRatio.value, selectedResolution.value, props.size)
-)
-
-const qualityOptions = computed(() => getModelQualityOptions(selectedModel.value))
 const generationParams = computed(() => ({
   model: selectedModel.value,
-  ...(currentModelConfig.value?.backgrounds?.length ? {
-    background: currentModelConfig.value.backgrounds.some((item) => item.key === props.background)
-      ? props.background
-      : currentModelConfig.value.defaultParams?.background
-  } : {}),
-  ...(sizeOptions.value.some((item) => item.key === selectedSize.value) ? { size: selectedSize.value } : {}),
   ...(ratioOptions.value.some((item) => item.key === selectedRatio.value) ? { ratio: selectedRatio.value } : {}),
   ...(resolutionOptions.value.some((item) => item.key === selectedResolution.value) ? { resolution: selectedResolution.value } : {}),
-  ...(qualityOptions.value.some((item) => item.key === selectedQuality.value) ? { quality: selectedQuality.value } : {})
 }))
 
 watch(
@@ -357,11 +328,12 @@ watch(
   (visible) => {
     if (!visible) return
     selectedModel.value = resolveImageModelKey(props.model)
-    selectedQuality.value = qualityOptions.value.some((item) => item.key === props.quality)
-      ? props.quality
-      : qualityOptions.value[0]?.key || 'auto'
-    selectedRatio.value = '16:9'
-    selectedResolution.value = '1k'
+    selectedRatio.value = ratioOptions.value.some((item) => item.key === props.ratio)
+      ? props.ratio
+      : ratioOptions.value[0]?.key || 'auto'
+    selectedResolution.value = resolutionOptions.value.some((item) => item.key === props.resolution)
+      ? props.resolution
+      : '1k'
   },
   { immediate: true }
 )
@@ -372,23 +344,19 @@ watch(selectedModel, (model) => {
     selectedModel.value = resolvedModel
     return
   }
-  const nextQuality = qualityOptions.value.some((item) => item.key === selectedQuality.value)
-    ? selectedQuality.value
-    : qualityOptions.value[0]?.key || 'auto'
-  selectedQuality.value = nextQuality
   if (!ratioOptions.value.some((item) => item.key === selectedRatio.value)) {
     selectedRatio.value = ratioOptions.value.find((item) => item.key === '16:9')?.key || ratioOptions.value[0]?.key || '16:9'
   }
   if (!resolutionOptions.value.some((item) => item.key === selectedResolution.value)) {
-    selectedResolution.value = resolutionOptions.value[0]?.key || resolutionFromSizeKey(selectedSize.value)
+    selectedResolution.value = '1k'
   }
 })
 
-watch(selectedRatio, () => {
-  if (!resolutionOptions.value.some((item) => item.key === selectedResolution.value)) {
-    selectedResolution.value = resolutionOptions.value[0]?.key || resolutionFromSizeKey(selectedSize.value)
-  }
-})
+const selectGenerationSize = (field, value) => {
+  const next = selectGptImageGenerationSize({ ratio: selectedRatio.value, resolution: selectedResolution.value }, field, value)
+  selectedRatio.value = next.ratio
+  selectedResolution.value = next.resolution
+}
 
 const serializedVariables = computed(() => ({
   style: form.style,
@@ -433,6 +401,7 @@ const validationErrors = computed(() =>
 const jsonPreview = computed(() => JSON.stringify(generatedJson.value, null, 2))
 const promptPreview = computed(() => generatedJson.value.output.prompt || '')
 const asyncApplying = ref(false)
+const submittedTaskId = ref('')
 const applying = computed(() => imageGen.loading.value || asyncApplying.value)
 
 const copyJson = () => copyWedding3x3PreviewText(jsonPreview.value, 'JSON 已复制。')
@@ -440,7 +409,7 @@ const copyPrompt = () => copyWedding3x3PreviewText(promptPreview.value, 'Prompt 
 const downloadJson = () => downloadWedding3x3JsonPreview(jsonPreview.value)
 
 const generateImage = async () => {
-  if (!imageSource.value || validationErrors.value.length > 0 || applying.value) return
+  if (!imageSource.value || validationErrors.value.length > 0 || applying.value || submittedTaskId.value) return
 
   const output = generatedJson.value
   const generationPayload = {
@@ -454,16 +423,23 @@ const generateImage = async () => {
     asyncApplying.value = true
     const nextUrl = await runWedding3x3Generation({
       ...generationPayload,
-      imageGen
+      imageGen,
+      onSubmitted: async (taskId) => {
+        submittedTaskId.value = taskId
+        await props.onSubmitted?.(taskId)
+      }
     })
 
+    submittedTaskId.value = ''
     emit('apply', createWedding3x3ApplyPayload({
       ...generationPayload,
       url: nextUrl
     }))
   } catch (error) {
+    if (error?.imageTaskTerminal) submittedTaskId.value = ''
     emit('error', {
-      message: error?.message || 'Wedding 3x3 generation failed'
+      message: error?.message || 'Wedding 3x3 generation failed',
+      imageTaskTerminal: error?.imageTaskTerminal === true
     })
     window.$message?.error(error?.message || 'Wedding 3x3 generation failed')
   } finally {

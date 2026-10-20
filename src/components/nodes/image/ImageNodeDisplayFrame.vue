@@ -15,7 +15,6 @@
       </div>
       <ImageNodeCropOverlay
         v-if="cropActive"
-        :export-mode="cropExportMode"
         :busy="cropBusy"
         :mask-styles="cropMaskStyles"
         :box-style="cropBoxStyle"
@@ -41,7 +40,6 @@ defineProps({
     type: String,
     default: 'Image'
   },
-  cropExportMode: Boolean,
   cropBusy: Boolean,
   cropActive: {
     type: Boolean,

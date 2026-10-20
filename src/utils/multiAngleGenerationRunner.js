@@ -4,6 +4,11 @@ import {
 } from './multiAngleCamera.js'
 const RESULT_FILE_TYPE = 'image/png'
 
+const generationData = ({ ratio, resolution }) => ({
+  ...(ratio ? { generationRatio: ratio } : {}),
+  ...(resolution ? { generationResolution: resolution } : {}),
+})
+
 const createMeta = ({ cameraInput, prompt, model, azimuth, elevation, zoom }) => ({
   tool: 'multi-angle',
   azimuth: Math.round(Number(azimuth) || 0),
@@ -36,46 +41,47 @@ export const createMultiAngleGenerationContext = ({
 
 export const createMultiAnglePendingPayload = ({
   context,
-  background,
+  imageSource,
+  model,
   ratio,
   resolution,
-  size
 } = {}) => ({
   targetMode: 'new',
-  ...(background ? { background } : {}),  ...(size ? { size } : {}),
-  ...(ratio ? { ratio } : {}),
-  ...(resolution ? { resolution } : {}),
+  ...generationData({ ratio, resolution }),
   fileType: RESULT_FILE_TYPE,
+  model: model || context?.meta?.model || '',
+  sourcePrompt: context?.prompt || '',
+  sourceRefImages: /^https?:\/\//i.test(imageSource || '') ? [imageSource] : [],
   meta: context?.meta
 })
 
 export const createMultiAngleApplyPayload = ({
   context,
-  background,
+  imageSource,
+  model,
   ratio,
   resolution,
-  size,
   url
 } = {}) => ({
   targetMode: 'new',
-  ...(background ? { background } : {}),  url: String(url || '').trim(),
+  url: String(url || '').trim(),
   base64: '',
   fileType: RESULT_FILE_TYPE,
-  ...(size ? { size } : {}),
-  ...(ratio ? { ratio } : {}),
-  ...(resolution ? { resolution } : {}),
+  ...generationData({ ratio, resolution }),
+  model: model || context?.meta?.model || '',
+  sourcePrompt: context?.prompt || '',
+  sourceRefImages: /^https?:\/\//i.test(imageSource || '') ? [imageSource] : [],
   meta: context?.meta
 })
 
 export const runMultiAngleGeneration = async ({
   context,
-  background,
   imageGen,
   imageSource,
   model,
+  onSubmitted,
   ratio,
   resolution,
-  size
 } = {}) => {
   if (typeof imageGen?.generate !== 'function') {
     throw new Error('Image generator is missing')
@@ -86,10 +92,9 @@ export const runMultiAngleGeneration = async ({
     model,
     prompt: context?.prompt || '',
     image: imageSource,
-    ...(background ? { background } : {}),    ...(size ? { size } : {}),
     ...(ratio ? { ratio } : {}),
-    ...(resolution ? { resolution } : {})
-  })
+    ...(resolution ? { resolution } : {}),
+  }, { onSubmitted })
   const first = Array.isArray(generated) ? generated[0] : generated
   const nextUrl = String(first?.url || '').trim()
   if (!nextUrl) {

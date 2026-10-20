@@ -6,7 +6,8 @@ import {
   isKlingVideoModel,
   isTopazVideoEnhancePayload
 } from './providers/dashboard302.adapter.js'
-import { createEnbrandChatCompletion, createEnbrandChatCompletionStream, createEnbrandImage } from './providers/enbrand.adapter.js'
+import { createEnbrandChatCompletion, createEnbrandChatCompletionStream } from './providers/enbrand.adapter.js'
+import { createApimartImage, getApimartImageTask } from './providers/apimart.adapter.js'
 import { isOpenAiVideoModel, isOpenAiVideoTaskId } from './providers/openai.adapter.js'
 import { isSeedanceModel } from './providers/seedance.adapter.js'
 
@@ -18,15 +19,11 @@ export const providerChatCompletionsStream = async (payload = {}, requestOptions
 
 export const providerGenerateImage = async (payload = {}, requestOptions = {}) => {
   const request = resolveImageGenerationRequest(payload)
-  return createEnbrandImage(request.payload, requestOptions)
+  return createApimartImage(request.payload, requestOptions)
 }
 
-export const providerImageStatus = async (taskId) => {
-  if (!String(taskId || '').trim()) {
-    throw new HttpError(400, 'Image task id is required', 'IMAGE_TASK_ID_REQUIRED')
-  }
-  throw new HttpError(410, 'Legacy upstream image tasks are no longer supported', 'LEGACY_IMAGE_TASK_UNSUPPORTED')
-}
+export const providerImageStatus = (taskId, requestOptions = {}) =>
+  getApimartImageTask(taskId, requestOptions)
 
 export const providerRemoveBackground = async () => {
   throw new HttpError(410, 'The legacy background removal provider has been removed', 'BACKGROUND_REMOVAL_UNSUPPORTED')

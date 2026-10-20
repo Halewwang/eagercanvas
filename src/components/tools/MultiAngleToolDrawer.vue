@@ -22,20 +22,22 @@
           <div v-if="normalizedRatioOptions.length || filteredResolutionOptions.length" class="input-options-grid">
             <label v-if="normalizedRatioOptions.length" class="option-field">
               <span class="option-label">Ratio</span>
-              <select v-model="selectedRatio" class="option-select">
-                <option v-for="option in normalizedRatioOptions" :key="option.key" :value="option.key">
-                  {{ option.label }}
-                </option>
-              </select>
+              <BaseSelect
+                :model-value="selectedRatio"
+                aria-label="Multi-angle ratio"
+                :options="normalizedRatioOptions.map(option => ({ label: option.label, value: option.key }))"
+                @update:model-value="selectGenerationSize('ratio', $event)"
+              />
             </label>
 
             <label v-if="filteredResolutionOptions.length" class="option-field">
               <span class="option-label">Resolution</span>
-              <select v-model="selectedResolution" class="option-select">
-                <option v-for="option in filteredResolutionOptions" :key="option.key" :value="option.key">
-                  {{ option.label }}
-                </option>
-              </select>
+              <BaseSelect
+                :model-value="selectedResolution"
+                aria-label="Multi-angle resolution"
+                :options="filteredResolutionOptions.map(option => ({ label: option.label, value: option.key }))"
+                @update:model-value="selectGenerationSize('resolution', $event)"
+              />
             </label>
           </div>
         </section>
@@ -190,8 +192,8 @@
         <div class="drawer-footer">
           <div class="footer-actions">
             <button class="tool-secondary-btn" type="button" @click="emit('update:show', false)">Cancel</button>
-            <button class="tool-primary-btn" type="button" :disabled="!imageSource || applying" @click="applyTransform">
-              {{ applying ? 'Generating...' : 'Generate' }}
+            <button class="tool-primary-btn" type="button" :disabled="!imageSource || applying || !!submittedTaskId" @click="applyTransform">
+              {{ applying ? 'Generating...' : submittedTaskId ? 'Reopen output to resume' : 'Generate' }}
             </button>
           </div>
         </div>
@@ -203,6 +205,8 @@
 
 <script setup>
 import { Teleport, computed, onUnmounted, ref, watch } from 'vue'
+import { BaseSelect } from '@/components/ui'
+import { getGptImageGenerationSettings, selectGptImageGenerationSize } from '@/utils/gptImageParameters'
 import { DEFAULT_IMAGE_MODEL, getModelByName, resolveImageModelKey } from '@/config/models'
 import { useImageGeneration } from '@/hooks/api/useImageApi.js'
 import {
@@ -211,22 +215,13 @@ import {
   createMultiAnglePendingPayload,
   runMultiAngleGeneration
 } from '@/utils/multiAngleGenerationRunner.js'
-import {
-  getMultiAngleFilteredSizeOptions,
-  normalizeMultiAngleOptionList,
-  ratioFromMultiAngleSize,
-  resolutionFromMultiAngleSize
-} from '@/utils/multiAngleSizeOptions.js'
 
 const props = defineProps({
   show: Boolean,
+  onSubmitted: Function,
   imageUrl: {
     type: String,
     default: ''
-  },
-  background: {
-    type: String,
-    default: 'auto'
   },
   model: {
     type: String,
@@ -236,10 +231,6 @@ const props = defineProps({
     type: String,
     default: '1:1'
   },
-  size: {
-    type: String,
-    default: '1024x1024'
-  },
   resolution: {
     type: String,
     default: '1k'
@@ -248,10 +239,6 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
-  sizeOptions: {
-    type: Array,
-    default: () => []
-  }
 })
 
 const emit = defineEmits(['update:show', 'pending', 'apply', 'error'])
@@ -260,11 +247,11 @@ const imageGen = useImageGeneration()
 const defaultImage = ref('')
 const imageSource = ref('')
 const applying = ref(false)
+const submittedTaskId = ref('')
 const activePreset = ref('front')
 const controlAreaRef = ref(null)
 const dragState = ref(null)
 const selectedRatio = ref('1:1')
-const selectedSize = ref('1024x1024')
 const selectedResolution = ref('1k')
 
 const azimuth = ref(0)
@@ -305,11 +292,7 @@ const displayAzimuth = computed(() => `${Math.round(Number(azimuth.value) || 0)}
 const displayElevation = computed(() => `${Math.round(Number(elevation.value) || 0)}°`)
 const displayZoom = computed(() => Number(zoom.value || 0).toFixed(1))
 const currentModelConfig = computed(() => getModelByName(resolveImageModelKey(props.model)))
-const normalizedRatioOptions = computed(() => normalizeMultiAngleOptionList(props.ratioOptions)
-  .filter((item) => currentModelConfig.value?.ratios?.includes(item.key)))
-const normalizedSizeOptions = computed(() => normalizeMultiAngleOptionList(props.sizeOptions)
-  .filter((item) => currentModelConfig.value?.sizes?.includes(item.key)))
-const filteredSizeOptions = computed(() => getMultiAngleFilteredSizeOptions(normalizedSizeOptions.value, selectedRatio.value))
+const normalizedRatioOptions = computed(() => (currentModelConfig.value?.ratios || []).map(key => ({ key, label: key === 'auto' ? 'Auto' : key })))
 const filteredResolutionOptions = computed(() => (currentModelConfig.value?.resolutions || [])
   .map((item) => ({ key: item.key, label: item.label || item.key.toUpperCase() })))
 
@@ -362,41 +345,20 @@ watch(
 )
 
 watch(
-  () => [props.ratio, props.size, props.show],
+  () => [props.ratio, props.resolution, props.show],
   () => {
-    selectedRatio.value = String(props.ratio || ratioFromMultiAngleSize(props.size) || '1:1')
-    selectedSize.value = String(props.size || '1024x1024')
-    selectedResolution.value = String(props.resolution || resolutionFromMultiAngleSize(selectedSize.value) || '1k')
+    const settings = getGptImageGenerationSettings({ generationRatio: props.ratio, generationResolution: props.resolution })
+    selectedRatio.value = settings.ratio
+    selectedResolution.value = settings.resolution
   },
   { immediate: true }
 )
 
-watch(selectedRatio, (ratio) => {
-  if (ratioFromMultiAngleSize(selectedSize.value) === ratio) return
-  const next = filteredSizeOptions.value[0]
-  if (next?.key) {
-    selectedSize.value = next.key
-    selectedResolution.value = resolutionFromMultiAngleSize(next.key)
-  }
-})
-
-watch(selectedResolution, (resolution) => {
-  const next = filteredSizeOptions.value.find((item) => resolutionFromMultiAngleSize(item.key) === resolution) || filteredSizeOptions.value[0]
-  if (next?.key) selectedSize.value = next.key
-})
-
-watch(
-  () => props.show,
-  (visible) => {
-    if (!visible) return
-    if (!imageSource.value) {
-      imageSource.value = defaultImage.value
-    }
-    if (!selectedSize.value) selectedSize.value = props.size || '1024x1024'
-    if (!selectedRatio.value) selectedRatio.value = props.ratio || ratioFromMultiAngleSize(selectedSize.value)
-    if (!selectedResolution.value) selectedResolution.value = props.resolution || resolutionFromMultiAngleSize(selectedSize.value)
-  }
-)
+const selectGenerationSize = (field, value) => {
+  const next = selectGptImageGenerationSize({ ratio: selectedRatio.value, resolution: selectedResolution.value }, field, value)
+  selectedRatio.value = next.ratio
+  selectedResolution.value = next.resolution
+}
 
 const applyPreset = (preset) => {
   activePreset.value = preset.key
@@ -410,7 +372,7 @@ const resetControls = () => {
 }
 
 const applyTransform = async () => {
-  if (!imageSource.value || applying.value) return
+  if (!imageSource.value || applying.value || submittedTaskId.value) return
   applying.value = true
 
   try {
@@ -422,8 +384,8 @@ const applyTransform = async () => {
     })
     const generationPayload = {
       context,
-      background: props.background,
-      ...(normalizedSizeOptions.value.some((item) => item.key === selectedSize.value) ? { size: selectedSize.value } : {}),
+      imageSource: imageSource.value,
+      model: resolveImageModelKey(props.model),
       ...(normalizedRatioOptions.value.some((item) => item.key === selectedRatio.value) ? { ratio: selectedRatio.value } : {}),
       ...(filteredResolutionOptions.value.some((item) => item.key === selectedResolution.value) ? { resolution: selectedResolution.value } : {})
     }
@@ -432,17 +394,22 @@ const applyTransform = async () => {
     const nextUrl = await runMultiAngleGeneration({
       ...generationPayload,
       imageGen,
-      imageSource: imageSource.value,
-      model: resolveImageModelKey(props.model),
+      onSubmitted: async (taskId) => {
+        submittedTaskId.value = taskId
+        await props.onSubmitted?.(taskId)
+      },
     })
 
+    submittedTaskId.value = ''
     emit('apply', createMultiAngleApplyPayload({
       ...generationPayload,
       url: nextUrl,
     }))
   } catch (error) {
+    if (error?.imageTaskTerminal) submittedTaskId.value = ''
     emit('error', {
-      message: error?.message || 'Multi-angle generation failed'
+      message: error?.message || 'Multi-angle generation failed',
+      imageTaskTerminal: error?.imageTaskTerminal === true
     })
     window.$message?.error(error?.message || 'Multi-angle generation failed')
   } finally {

@@ -5,10 +5,8 @@ import test from 'node:test'
 
 const drawerUrl = new URL('./MultiAngleToolDrawer.vue', import.meta.url)
 const runnerUrl = new URL('../../utils/multiAngleGenerationRunner.js', import.meta.url)
-const sizeOptionsUrl = new URL('../../utils/multiAngleSizeOptions.js', import.meta.url)
 const styleUrl = new URL('./MultiAngleToolDrawer.css', import.meta.url)
 const runnerPath = fileURLToPath(runnerUrl)
-const sizeOptionsPath = fileURLToPath(sizeOptionsUrl)
 const stylePath = fileURLToPath(styleUrl)
 const drawerSource = readFileSync(drawerUrl, 'utf8')
 
@@ -29,15 +27,9 @@ test('multi angle drawer delegates generation orchestration to a focused runner'
   assert.doesNotMatch(drawerSource, /No image output from model/)
 })
 
-test('multi angle drawer delegates size ratio and resolution option logic to utilities', () => {
-  assert.ok(existsSync(sizeOptionsPath), 'multiAngleSizeOptions.js should exist')
-  assert.match(
-    drawerSource,
-    /import \{\s*getMultiAngleFilteredSizeOptions,\s*normalizeMultiAngleOptionList,\s*ratioFromMultiAngleSize,\s*resolutionFromMultiAngleSize\s*\} from '@\/utils\/multiAngleSizeOptions\.js'/s
-  )
-  assert.doesNotMatch(drawerSource, /const ratioFromSizeKey = /)
-  assert.doesNotMatch(drawerSource, /const resolutionFromSizeString = /)
-  assert.doesNotMatch(drawerSource, /const normalizeOptionList = /)
+test('multi angle uses documented independent ratio and resolution controls', () => {
+  assert.match(drawerSource, /getGptImageGenerationSettings/)
+  assert.doesNotMatch(drawerSource, /ratioFromMultiAngleSize|resolutionFromMultiAngleSize|props\.size/)
 })
 
 test('multi angle drawer delegates scoped panel styles to a focused stylesheet', () => {
@@ -63,5 +55,27 @@ test('multi angle describes approximate viewpoint guidance', () => {
   assert.match(drawerSource, /Target Viewpoint/)
   assert.match(drawerSource, /Viewpoint guidance; generated angles may vary\./)
   assert.doesNotMatch(drawerSource, />Camera Control</)
-  assert.match(drawerSource, /background: props\.background/)
+})
+
+
+test('restored generation controls use the shared dark select and inherit documented parameters', () => {
+  assert.doesNotMatch(drawerSource, /<select\b|<option\b/)
+  assert.match(drawerSource, /<BaseSelect[\s\S]*aria-label="Multi-angle ratio"/)
+  assert.match(drawerSource, /<BaseSelect[\s\S]*aria-label="Multi-angle resolution"/)
+  assert.doesNotMatch(drawerSource, /quality:|background: props/)
+})
+
+
+test('multi angle output selection couples parameters only on user events', () => {
+  assert.match(drawerSource, /@update:model-value="selectGenerationSize\('ratio', \$event\)"/)
+  assert.match(drawerSource, /@update:model-value="selectGenerationSize\('resolution', \$event\)"/)
+  assert.match(drawerSource, /selectGptImageGenerationSize\(/)
+  assert.doesNotMatch(drawerSource, /watch\(selectedRatio|watch\(selectedResolution/)
+})
+
+test('multi angle awaits durable task saving and prevents resubmission after interrupted polling', () => {
+  assert.match(drawerSource, /onSubmitted: Function/)
+  assert.match(drawerSource, /onSubmitted: async \(taskId\) => \{\s*submittedTaskId\.value = taskId\s*await props\.onSubmitted\?\.\(taskId\)/)
+  assert.match(drawerSource, /:disabled="!imageSource \|\| applying \|\| !!submittedTaskId"/)
+  assert.match(drawerSource, /imageTaskTerminal: error\?\.imageTaskTerminal === true/)
 })

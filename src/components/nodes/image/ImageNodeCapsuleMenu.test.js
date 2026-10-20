@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { after } from 'node:test'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -21,8 +22,6 @@ const { default: CapsuleMenu } = await server.ssrLoadModule('/src/components/nod
 const render = (props = {}) => {
   const app = createSSRApp({ render: () => h(CapsuleMenu, {
     toolOptions: [{ key: 'replace-image', label: 'Upload Image' }],
-    backgroundOptions: [{ key: 'auto', label: 'Auto' }],
-    displayBackground: 'Background',
     ...props
   }) })
   app.provide('@css-render/vue3-ssr', { styles: [], ids: new Set() })
@@ -45,29 +44,48 @@ test('image capsule hides an empty Tools menu and disables tools while processin
 })
 
 
-test('empty image nodes expose selectable local parameters as their current values', async () => {
-  const html = await render({ exportRatio: '1:1', exportSize: 4096 })
-  assert.match(html, /aria-label="Image ratio 1:1"[^>]*>\s*1:1\s*<\/button>/)
-  assert.match(html, /aria-label="Image size 4K"[^>]*>\s*4K\s*<\/button>/)
-  const ratioButton = html.match(/<button([^>]*aria-label="Image ratio 1:1"[^>]*)>/)[1]
-  assert.doesNotMatch(ratioButton, /\bdisabled\b/)
-  assert.doesNotMatch(html, /Export ratio|Export PNG/)
-  assert.doesNotMatch(html, /aria-label="Download PNG"/)
+const parameterProps = {
+  ratioOptions: [{ key: '1:1', label: '1:1' }, { key: '16:9', label: '16:9' }],
+  resolutionOptions: [{ key: '4k', label: '4K' }],
+  displayRatio: '16:9', displayResolution: '4K',
+}
+
+test('empty nodes display generation ratio and resolution directly', async () => {
+  const html = await render(parameterProps)
+  for (const [name, value] of [['ratio', '16:9'], ['resolution', '4K']]) {
+    const button = html.match(new RegExp(`<button([^>]*aria-label="Image ${name} ${value}"[^>]*)>([\\s\\S]*?)<\\/button>`))
+    assert.ok(button, name)
+    assert.doesNotMatch(button[1], /\bdisabled\b/)
+    assert.match(button[2], new RegExp(value))
+  }
+  assert.doesNotMatch(html, /Image quality|Image qualities|Generation size|3840/)
+  assert.doesNotMatch(html, /Local crop|Local PNG|Export ratio|Export PNG/)
 })
 
-test('existing images keep current parameter values and provide a separate local download action', async () => {
-  const html = await render({ hasDisplayImage: true, exportRatio: '16:9', exportSize: 2048 })
-  assert.match(html, />\s*16:9\s*<\/button>/)
-  assert.match(html, />\s*2K\s*<\/button>/)
-  assert.match(html, /aria-label="Download PNG"/)
-  assert.match(html, /keep the original image unchanged/)
-  const busyHtml = await render({ hasDisplayImage: true, exportRatio: '1:1', exportSize: 4096, localExportBusy: true })
-  for (const name of ['Image ratio 1:1', 'Image size 4K', 'Download PNG']) {
-    assert.match(busyHtml.match(new RegExp(`<button([^>]*aria-label="${name}"[^>]*)>`))[1], /\bdisabled\b/)
+test('existing images download their original output and disable controls while generating', async () => {
+  const html = await render({ ...parameterProps, hasDisplayImage: true })
+  assert.match(html, /aria-label="Download original image"/)
+  assert.match(html, /Download the original image/)
+  const busy = await render({ ...parameterProps, imageBusy: true })
+  for (const label of ['Image ratio 16:9', 'Image resolution 4K']) {
+    assert.match(busy.match(new RegExp(`<button([^>]*aria-label="${label}"[^>]*)>`))[1], /\bdisabled\b/)
   }
 })
 
-test('unconfigured imported images display original ratio and size explicitly', async () => {
-  const html = await render({ hasDisplayImage: true, exportRatio: '', exportSize: 0 })
-  assert.equal([...html.matchAll(/>\s*Original\s*<\/button>/g)].length, 2)
+
+test('parameter menus keep dark surfaces selected radio roles and keyboard focus cues', async () => {
+  const html = await render(parameterProps)
+  for (const label of ['Image ratio 16:9', 'Image resolution 4K']) {
+    const attributes = html.match(new RegExp(`<button([^>]*aria-label="${label}"[^>]*)>`))[1]
+    assert.match(attributes, /aria-haspopup="menu"/)
+    assert.match(attributes, /aria-expanded="false"/)
+  }
+  const source = readFileSync(new URL('./ImageNodeCapsuleMenu.vue', import.meta.url), 'utf8')
+  assert.match(source, /role: 'menuitemradio'/)
+  assert.match(source, /'aria-checked': option.key === selectedKey\(options, displayValue\)/)
+  assert.equal((source.match(/:value="selectedKey\(/g) || []).length, 2)
+  assert.equal((source.match(/@update:show="(?:ratio|resolution)MenuOpen = \$event"/g) || []).length, 2)
+  assert.match(source, /color: 'var\(--surface-2\)'/)
+  assert.match(source, /optionColorActive: 'var\(--surface-3\)'/)
+  assert.match(source, /\.capsule-select:focus-visible/)
 })

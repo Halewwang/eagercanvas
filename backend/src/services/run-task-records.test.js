@@ -175,9 +175,11 @@ test('resolveImageTaskContextByTask verifies ownership and returns task metadata
     assert.deepEqual(context, {
       runId: 'run_image_123',
       model: 'gpt-image-2',
-      sourceNodeId: 'image-node-1'
+      sourceNodeId: 'image-node-1',
+      recordId: '',
+      metadata: { run_id: 'run_image_123', model: 'gpt-image-2', source_node_id: 'image-node-1' }
     })
-    assert.deepEqual(selects, ['metadata'])
+    assert.deepEqual(selects, ['id, metadata'])
   } finally {
     restore.mock.restore()
   }
@@ -259,5 +261,13 @@ test('video task creation reports ownership persistence failures', async () => {
   const restore = mockSupabaseFrom(() => ({ insert: async () => ({ error: { message: 'Audit unavailable' } }) }))
   try {
     await assert.rejects(bindVideoTaskOwnership({ userId: 'user-1', runId: 'run-1', taskId: 'task-1' }), { status: 500, code: 'TASK_OWNERSHIP_BIND_FAILED' })
+  } finally { restore.mock.restore() }
+})
+
+
+test('image ownership binding fails closed when task context cannot be persisted', async () => {
+  const restore = mockSupabaseFrom(() => ({ insert: async () => ({ error: { message: 'Audit unavailable' } }) }))
+  try {
+    await assert.rejects(bindImageTaskOwnership({ userId: 'user-1', runId: 'run-1', taskId: 'task-1' }), { status: 500, code: 'TASK_OWNERSHIP_BIND_FAILED' })
   } finally { restore.mock.restore() }
 })

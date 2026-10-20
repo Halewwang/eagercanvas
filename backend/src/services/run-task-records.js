@@ -19,13 +19,14 @@ export const bindVideoTaskOwnership = async ({ userId, runId, taskId, sourceNode
   }
 }
 
-export const bindImageTaskOwnership = async ({ userId, runId, taskId, model = '', sourceNodeId = '' }) => {
+export const bindImageTaskOwnership = async ({ userId, runId, taskId, model = '', sourceNodeId = '', context = {} }) => {
   if (!taskId) return
   const safeSourceNodeId = String(sourceNodeId || '').trim()
   const { error } = await supabase.from('audit_logs').insert({
     user_id: userId,
     action: 'image.task.created',
     metadata: {
+      ...context,
       run_id: runId,
       task_id: taskId,
       model: String(model || '').trim(),
@@ -33,7 +34,7 @@ export const bindImageTaskOwnership = async ({ userId, runId, taskId, model = ''
     }
   })
   if (error) {
-    console.warn('[image] bind task ownership failed', error.message)
+    throw new HttpError(500, error.message, 'TASK_OWNERSHIP_BIND_FAILED')
   }
 }
 
@@ -64,7 +65,7 @@ export const assertImageTaskOwnership = async ({ userId, taskId }) => {
 export const resolveImageTaskContextByTask = async ({ userId, taskId }) => {
   const { data, error } = await supabase
     .from('audit_logs')
-    .select('metadata')
+    .select('id, metadata')
     .eq('user_id', userId)
     .eq('action', 'image.task.created')
     .contains('metadata', { task_id: String(taskId) })
@@ -79,7 +80,34 @@ export const resolveImageTaskContextByTask = async ({ userId, taskId }) => {
     throw new HttpError(404, 'Image task not found', 'IMAGE_TASK_NOT_FOUND')
   }
 
-  return mapImageTaskContext(data[0]?.metadata || {})
+  return {
+    ...mapImageTaskContext(data[0]?.metadata || {}),
+    recordId: String(data[0]?.id || ''),
+    metadata: data[0]?.metadata || {}
+  }
+}
+
+export const updateImageTaskContext = async ({ userId, taskId, context, metadata, expectedVersion }) => {
+  const { data, error } = await supabase.from('audit_logs')
+    .update({ metadata })
+    .eq('id', context.recordId)
+    .eq('user_id', userId)
+    .eq('action', 'image.task.created')
+    .contains('metadata', { task_id: taskId, poll_version: expectedVersion })
+    .select('id, metadata')
+  if (error) throw new HttpError(500, error.message, 'IMAGE_TASK_CONTEXT_SAVE_FAILED')
+  const row = Array.isArray(data) ? data[0] : null
+  return row ? { ...context, recordId: String(row.id), metadata: row.metadata } : null
+}
+
+export const claimImageTaskPoll = async ({ userId, taskId, context, now = Date.now() }) => {
+  if (Number(context.metadata?.poll_lock_until || 0) > now) return null
+  const version = Number(context.metadata?.poll_version || 0)
+  return updateImageTaskContext({ userId, taskId, context, expectedVersion: version, metadata: {
+    ...context.metadata,
+    poll_version: version + 1,
+    poll_lock_until: now + 5 * 60 * 1000
+  } })
 }
 
 export const assertVideoTaskOwnership = async ({ userId, taskId }) => {

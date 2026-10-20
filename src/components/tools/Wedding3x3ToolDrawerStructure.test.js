@@ -5,12 +5,10 @@ import { test } from 'node:test'
 
 const drawerUrl = new URL('./Wedding3x3ToolDrawer.vue', import.meta.url)
 const fieldModuleUrl = new URL('./ToolAutocompleteFields.js', import.meta.url)
-const generationOptionsModuleUrl = new URL('./Wedding3x3GenerationOptions.js', import.meta.url)
 const previewActionsModuleUrl = new URL('./Wedding3x3PreviewActions.js', import.meta.url)
 const generationRunnerModuleUrl = new URL('./Wedding3x3GenerationRunner.js', import.meta.url)
 const styleModuleUrl = new URL('./Wedding3x3ToolDrawer.css', import.meta.url)
 const fieldModulePath = fileURLToPath(fieldModuleUrl)
-const generationOptionsModulePath = fileURLToPath(generationOptionsModuleUrl)
 const previewActionsModulePath = fileURLToPath(previewActionsModuleUrl)
 const generationRunnerModulePath = fileURLToPath(generationRunnerModuleUrl)
 const styleModulePath = fileURLToPath(styleModuleUrl)
@@ -24,6 +22,13 @@ const readGenerationRunnerSource = () =>
 
 const readStyleModuleSource = () =>
   existsSync(styleModulePath) ? readFileSync(styleModuleUrl, 'utf8') : ''
+
+test('theme set awaits durable task saving and prevents resubmission after interrupted polling', () => {
+  assert.match(drawerSource, /onSubmitted: Function/)
+  assert.match(drawerSource, /onSubmitted: async \(taskId\) => \{\s*submittedTaskId\.value = taskId\s*await props\.onSubmitted\?\.\(taskId\)/)
+  assert.match(drawerSource, /:disabled="!imageSource \|\| applying \|\| !!submittedTaskId \|\| validationErrors.length > 0"/)
+  assert.match(drawerSource, /imageTaskTerminal: error\?\.imageTaskTerminal === true/)
+})
 
 test('wedding 3x3 drawer delegates autocomplete field UI to a focused tool module', () => {
   const fieldModuleSource = readFieldModuleSource()
@@ -64,19 +69,15 @@ test('tool autocomplete helpers preserve option labels and search metadata', asy
   assert.equal(matchesOptionQuery(normalized[0], 'venue'), false)
 })
 
-test('wedding 3x3 drawer delegates generation option derivation to a focused module', () => {
-  assert.ok(existsSync(generationOptionsModulePath), 'Wedding3x3GenerationOptions.js should exist')
-  assert.match(
-    drawerSource,
-    /import \{\s*resolutionFromSizeKey,\s*resolveWedding3x3SelectedSize\s*\} from '\.\/Wedding3x3GenerationOptions\.js'/s
-  )
-  assert.doesNotMatch(drawerSource, /const ratioFromSizeKey = /)
-  assert.doesNotMatch(drawerSource, /const resolutionFromSizeKey = /)
+test('theme set uses provider ratio and resolution options directly', () => {
+  assert.match(drawerSource, /currentModelConfig\.value\?\.ratios/)
+  assert.match(drawerSource, /currentModelConfig\.value\?\.resolutions/)
+  assert.doesNotMatch(drawerSource, /qualityOptions|selectedQuality|resolutionFromSizeKey/)
 })
 
 test('wedding 3x3 uses the standard image generator without retired provider task polling', () => {
   const generationRunnerSource = readGenerationRunnerSource()
-  assert.match(generationRunnerSource, /imageGen\.generate\(request\)/)
+  assert.match(generationRunnerSource, /imageGen\.generate\(request, \{ onSubmitted \}\)/)
   assert.doesNotMatch(generationRunnerSource, /createImageGenerationRun|getImageGenerationTask|AsyncImageResult/)
 })
 
@@ -119,7 +120,7 @@ test('wedding 3x3 drawer delegates scoped panel styles to a focused stylesheet',
 
 
 test('wedding output controls require actual model capabilities', () => {
-  for (const name of ['qualityOptions', 'ratioOptions', 'resolutionOptions']) {
+  for (const name of ['ratioOptions', 'resolutionOptions']) {
     assert.ok(drawerSource.includes(`v-if="${name}.length"`))
   }
 })
@@ -128,4 +129,21 @@ test('theme set exposes prompt guidance without a reproducibility control', () =
   assert.doesNotMatch(drawerSource, /Random Seed|randomSeed|random_seed: form\./)
   assert.match(drawerSource, /Structure Guidance/)
   assert.match(drawerSource, /Style and structure are prompt guidance; results may vary\./)
+})
+
+
+test('theme set inherits the canvas output controls without restoring native select elements', () => {
+  assert.doesNotMatch(drawerSource, /<select\b|<option\b/)
+  const openWatcher = drawerSource.slice(drawerSource.indexOf('() => props.show'), drawerSource.indexOf('watch(selectedModel'))
+  assert.match(openWatcher, /props\.ratio/)
+  assert.match(openWatcher, /props\.resolution/)
+  assert.doesNotMatch(openWatcher, /selectedRatio\.value = '16:9'|selectedResolution\.value = '1k'/)
+})
+
+
+test('theme set output selection couples parameters only on user events', () => {
+  assert.match(drawerSource, /@update:model-value="selectGenerationSize\('ratio', \$event\)"/)
+  assert.match(drawerSource, /@update:model-value="selectGenerationSize\('resolution', \$event\)"/)
+  assert.match(drawerSource, /selectGptImageGenerationSize\(/)
+  assert.doesNotMatch(drawerSource, /watch\(selectedRatio|watch\(selectedResolution/)
 })

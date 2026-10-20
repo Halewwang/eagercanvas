@@ -191,57 +191,6 @@ test('retired chat and image models fail before database or network access', asy
   })
 })
 
-const imageResponse = () => Response.json({
-  data: [{ b64_json: Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(192)]).toString('base64') }],
-  usage: { input_tokens: 6, output_tokens: 10, total_tokens: 16 }
-}, { headers: { 'x-request-id': 'req-enbrand-image' } })
-
-test('GPT image returns a local task and persists its output and enbrand usage in the background', async () => {
-  await withRunHarness({ response: imageResponse }, async state => {
-    const result = await createRun(userId, { type: 'image', payload: { prompt: 'A circle', sourceNodeId: 'image-node' } })
-    assert.equal(result.status, 'running')
-    assert.equal(result.result.task_id, `local-image-run:${result.runId}`)
-    assert.equal(result.result.provider, 'enbrand')
-    assert.equal(state.background.length, 1)
-    await Promise.all(state.background)
-    assertOnlyActiveServiceLookup(state)
-    assert.equal(state.requests.length, 1)
-    assert.equal(state.requests[0].url, 'https://api.enbrand.co/v1/images/generations')
-    assert.equal(state.requests[0].body.model, 'gpt-image-2')
-    assert.equal(state.uploads.length, 1)
-    assert.equal(state.uploads[0].bytes.length, 200)
-    assert.equal(state.runs[0].status, 'completed')
-    assertEnbrandUsage(state.usage[0], { model: 'gpt-image-2', input: 6, output: 10 })
-    assert.equal(state.usage[0].image_count, 1)
-    assert.equal(state.usage[0].provider_request_id, 'req-enbrand-image')
-    const media = state.audit.find(row => row.action === 'media.generated')
-    assert.equal(media.metadata.status, 'completed')
-    assert.match(media.metadata.assets[0].url, /^https:\/\/storage.example\/storage\/v1\/object\/public\/uploads\//)
-    assert.equal(media.metadata.assets[0].sourceNodeId, 'image-node')
-    assert.deepEqual(state.warnings, [])
-  })
-})
-
-test('background GPT image storage failure marks the run and media failed without returning inline assets', async () => {
-  await withRunHarness({ response: imageResponse, uploadFailure: true }, async state => {
-    const result = await createRun(userId, { type: 'image', payload: { prompt: 'A circle' } })
-    assert.equal(result.status, 'running')
-    await Promise.all(state.background)
-    assert.equal(state.requests.length, 1)
-    assert.equal(state.uploads.length, 1)
-    assert.equal(state.runs[0].status, 'failed')
-    assert.equal(state.runs[0].error_msg, 'File upload failed')
-    const media = state.audit.find(row => row.action === 'media.generated')
-    assert.equal(media.metadata.status, 'failed')
-    assert.deepEqual(media.metadata.assets, [])
-    assertEnbrandUsage(state.usage[0], { model: 'gpt-image-2', input: 6, output: 10 })
-    assert.equal(state.usage[0].image_count, 1)
-    assert.equal(state.usage[0].provider_request_id, 'req-enbrand-image')
-    assert.ok(state.warnings.some(message => message.includes('queued image run failed')))
-  })
-})
-
-
 test('opened users create and poll owned video tasks with the shared server key and no 302 management calls', async () => {
   const response = (request) => request.url.includes('/topazlabs/')
     ? Response.json({ error: { message: 'Unsupported task' } }, { status: 404 })

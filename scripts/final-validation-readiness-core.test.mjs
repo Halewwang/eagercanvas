@@ -75,6 +75,7 @@ test('assessFinalValidationReadiness accepts non-placeholder real validation inp
       JWT_REFRESH_SECRET: 'refresh-secret-with-enough-length',
       RESEND_API_KEY: 're_123456',
       OPENAI_API_KEY: 'sk-enbrand',
+      APIMART_API_KEY: 'sk-apimart',
       PROVIDER_API_KEY: 'sk-provider'
     }
   })
@@ -93,6 +94,8 @@ test('buildFinalValidationEnvTemplates creates non-secret local env skeletons', 
   assert.match(result.backendContent, /SUPABASE_URL=https:\/\/rzfsyezidhgyikehucrh\.supabase\.co/)
   assert.match(result.backendContent, /OPENAI_API_BASE_URL=https:\/\/api\.enbrand\.co\/v1/)
   assert.match(result.backendContent, /OPENAI_API_KEY=REPLACE_WITH_OPENAI_API_KEY/)
+  assert.match(result.backendContent, /APIMART_API_BASE_URL=https:\/\/api\.apimart\.ai\/v1/)
+  assert.match(result.backendContent, /APIMART_API_KEY=REPLACE_WITH_APIMART_API_KEY/)
   assert.match(result.backendContent, /ADMIN_LIFECYCLE_MUTATIONS_ENABLED=false/)
   assert.match(result.backendContent, /PROVIDER_API_BASE_URL=https:\/\/api\.302ai\.cn/)
   assert.doesNotMatch(result.backendContent, /DASHBOARD_302_|ISSUE_ALERT_|SERVICE_CREDENTIAL_ENCRYPTION_KEY|BILLING_SYNC_/)
@@ -164,5 +167,10 @@ test('buildFinalValidationRunbook includes final validation steps when ready', (
 
 test('video credentials alone do not make text and image validation ready', () => {
   const result = assessFinalValidationReadiness({ backendEnv: { PROVIDER_API_KEY: 'video-key', DASHBOARD_302_API_KEY: 'dashboard-key' } })
+  assert.equal(result.checks.find(c => c.id === 'provider-api-key').status, 'fail')
+})
+
+test('text and video credentials cannot substitute for the image credential', () => {
+  const result = assessFinalValidationReadiness({ backendEnv: { OPENAI_API_KEY: 'text-key', PROVIDER_API_KEY: 'video-key' } })
   assert.equal(result.checks.find(c => c.id === 'provider-api-key').status, 'fail')
 })

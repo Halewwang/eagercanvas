@@ -3,9 +3,9 @@
     <div class="zoom-modal-card" @click.stop>
       <div class="zoom-modal-toolbar">
         <div class="zoom-modal-actions">
-          <button class="zoom-tool-btn zoom-tool-btn-download" :disabled="downloadBusy" title="Download PNG with the selected ratio and size" @click="$emit('download')">
+          <button class="zoom-tool-btn zoom-tool-btn-download" :disabled="downloadBusy" title="Download the original image" @click="$emit('download')">
             <n-icon :size="14"><DownloadOutline /></n-icon>
-            <span>{{ downloadBusy ? 'Exporting…' : 'Download PNG' }}</span>
+            <span>{{ downloadBusy ? 'Downloading…' : 'Download original' }}</span>
           </button>
         </div>
         <div class="zoom-modal-actions">

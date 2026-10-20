@@ -2,8 +2,21 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-import { createCanvasPersistenceSnapshots, createCanvasSnapshot, normalizeImageNodeParameters } from './canvasSnapshots.js'
-import { createCanvasNode, duplicateCanvasNode } from './canvasActionsCore.js'
+const parametersUrl = new URL('../utils/gptImageParameters.js', import.meta.url).href
+const legacySource = readFileSync(new URL('./legacyImageConfig.js', import.meta.url), 'utf8')
+  .replace("from '@/utils/gptImageParameters.js'", `from '${parametersUrl}'`)
+  .replace("from '@/utils/imageDimensions.js'", `from '${new URL('../utils/imageDimensions.js', import.meta.url).href}'`)
+const legacyUrl = `data:text/javascript;base64,${Buffer.from(legacySource).toString('base64')}`
+const snapshotsSource = readFileSync(new URL('./canvasSnapshots.js', import.meta.url), 'utf8')
+  .replace("from './canvasClone.js'", `from '${new URL('./canvasClone.js', import.meta.url).href}'`)
+  .replace("from './legacyImageConfig.js'", `from '${legacyUrl}'`)
+  .replace("from '@/utils/gptImageParameters.js'", `from '${parametersUrl}'`)
+const { createCanvasPersistenceSnapshots, createCanvasSnapshot, normalizeImageNodeParameters } =
+  await import(`data:text/javascript;base64,${Buffer.from(snapshotsSource).toString('base64')}`)
+const actionsSource = readFileSync(new URL('./canvasActionsCore.js', import.meta.url), 'utf8')
+  .replace("from '@/utils/gptImageParameters.js'", `from '${parametersUrl}'`)
+const { createCanvasNode, duplicateCanvasNode } =
+  await import(`data:text/javascript;base64,${Buffer.from(actionsSource).toString('base64')}`)
 
 test('canvas persistence snapshots preserve local transient media while pruning remote payloads in one node traversal', () => {
   const visits = []
@@ -111,67 +124,61 @@ test('saveProject uses the paired persistence snapshot helper instead of buildin
 })
 
 
-test('old image generation controls are removed while media metadata and references survive', () => {
+test('image generation settings migrate without changing actual media dimensions', () => {
   const data = {
-    size: '1536x1024', ratio: '3:2', quality: 'high', resolution: '4k', aspect_ratio: '16:9',
-    output_format: 'webp', outputFormat: 'jpeg', output_compression: 100, moderation: 'auto',
-    enable_sync_mode: true, enable_base64_output: false,
-    background: 'opaque', sourcePrompt: 'Keep this creative brief', sourceRefImages: ['ref.png'], url: 'image.png'
+    size: '1536x1024', ratio: '3:2', resolution: '4k',
+    exportRatio: '16:9', exportSize: 4096,
+    output_format: 'webp', moderation: 'auto', url: 'image.png'
   }
   const image = normalizeImageNodeParameters({ type: 'image', data })
   assert.deepEqual(image.data, {
-    size: '1536x1024', ratio: '3:2', background: 'opaque', sourcePrompt: data.sourcePrompt,
-    sourceRefImages: data.sourceRefImages, url: 'image.png'
-  })
-  const config = normalizeImageNodeParameters({ type: 'imageConfig', data })
-  assert.equal(Object.hasOwn(config.data, 'size'), false)
-  assert.equal(Object.hasOwn(config.data, 'ratio'), false)
-  assert.equal(config.data.sourcePrompt, data.sourcePrompt)
+    size: '1536x1024', ratio: '3:2', url: 'image.png',
+    generationRatio: '16:9', generationResolution: '4k', })
+  assert.deepEqual(normalizeImageNodeParameters(image), image)
+  const canonical = normalizeImageNodeParameters({ type: 'image', data: {
+    ...data, generationRatio: '4:5', generationResolution: '2k', } })
+  assert.equal(canonical.data.generationRatio, '4:5')
+  assert.equal(canonical.data.generationResolution, '2k')
+  assert.equal(canonical.data.generationQuality, undefined)
+  assert.equal(data.exportSize, 4096, 'normalization must not mutate source data')
   const video = { type: 'video', data }
   assert.equal(normalizeImageNodeParameters(video), video)
-  assert.equal(data.quality, 'high', 'normalization must not mutate the source')
 })
 
-test('image export settings survive serialization, load normalization and duplication independently of removed generation controls', () => {
-  const emptyImage = createCanvasNode({ id: 'empty', type: 'image', position: { x: 0, y: 0 }, now: 100 })
-  const originalImage = createCanvasNode({
-    id: 'original', type: 'image', position: { x: 100, y: 0 }, now: 100,
-    data: { url: 'https://storage.example.com/storage/v1/object/public/uploads/image.png', ratio: '3:2', size: '1536x1024' }
-  })
-  const nodes = [emptyImage, originalImage, ...[
-    { exportRatio: '16:9', exportSize: 4096 }, { exportRatio: '', exportSize: 0 }
-  ].map((parameters, index) => createCanvasNode({
-    id: `export-${index}`, type: 'image', position: { x: 200, y: index * 100 }, now: 100,
-    data: { ...parameters, quality: 'high', resolution: '4k', output_format: 'png', moderation: 'auto' }
-  }))]
-  const { localSnapshot, remoteSnapshot } = createCanvasPersistenceSnapshots({ nodes })
+test('canonical generation settings survive snapshots and duplication independently of media metadata', () => {
+  const empty = createCanvasNode({ id: 'empty', type: 'image', now: 100 })
+  assert.equal(empty.data.generationRatio, '1:1')
+  assert.equal(empty.data.generationResolution, '1k')
+  assert.equal(empty.data.generationQuality, undefined)
+  assert.equal(Object.hasOwn(empty.data, 'exportRatio'), false)
+  const media = createCanvasNode({ id: 'media', type: 'image', data: {
+    url: 'https://storage.example.com/storage/v1/object/public/uploads/image.png', size: '1536x1024', ratio: '3:2',
+    generationRatio: '16:9', generationResolution: '4k', } })
+  const { localSnapshot, remoteSnapshot } = createCanvasPersistenceSnapshots({ nodes: [empty, media,
+    { id: 'auto', type: 'image', position: { x: 0, y: 0 }, data: { exportRatio: '', exportSize: 0 } }
+  ] })
   for (const snapshot of [localSnapshot, remoteSnapshot]) {
     const loaded = JSON.parse(JSON.stringify(snapshot)).nodes.map(normalizeImageNodeParameters)
-    assert.equal(loaded[0].data.exportRatio, '1:1')
-    assert.equal(loaded[0].data.exportSize, 1024)
-    assert.equal(Object.hasOwn(loaded[1].data, 'exportRatio'), false)
-    assert.equal(Object.hasOwn(loaded[1].data, 'exportSize'), false)
-    assert.equal(loaded[1].data.ratio, '3:2')
+    assert.equal(loaded[0].data.generationRatio, '1:1')
     assert.equal(loaded[1].data.size, '1536x1024')
+    assert.equal(loaded[1].data.ratio, '3:2')
+    assert.equal(loaded[1].data.generationRatio, '16:9')
+    assert.equal(loaded[1].data.generationResolution, '4k')
+    assert.equal(loaded[1].data.generationQuality, undefined)
+    assert.equal(loaded[2].data.generationRatio, 'auto')
+    assert.equal(loaded[2].data.generationResolution, '1k')
     for (const node of loaded) {
       const { duplicatedNode } = duplicateCanvasNode({ nodes: loaded, sourceId: node.id, newId: `${node.id}-copy` })
       assert.deepEqual(duplicatedNode.data, node.data)
-      assert.equal(Object.hasOwn(node.data, 'quality'), false)
-      assert.equal(Object.hasOwn(node.data, 'resolution'), false)
-      assert.equal(Object.hasOwn(node.data, 'output_format'), false)
-      assert.equal(Object.hasOwn(node.data, 'moderation'), false)
+      for (const key of ['exportRatio', 'exportSize', 'quality', 'resolution']) assert.equal(Object.hasOwn(node.data, key), false)
     }
-    assert.equal(loaded[2].data.exportRatio, '16:9')
-    assert.equal(loaded[2].data.exportSize, 4096)
-    assert.equal(loaded[3].data.exportRatio, '')
-    assert.equal(loaded[3].data.exportSize, 0)
   }
 })
 
 test('both snapshot formats migrate old image configuration graphs and round trip without a settings card', () => {
   const original = { nodes: [
     { id: 'text', type: 'text', data: { content: 'brief' } },
-    { id: 'config', type: 'imageConfig', data: { model: 'gpt-image-2', background: 'opaque', quality: 'high', size: '1024x1024' } },
+    { id: 'config', type: 'imageConfig', data: { model: 'gpt-image-2', size: '1024x1024' } },
     { id: 'out', type: 'image', data: { url: 'https://storage.example.com/storage/v1/object/public/uploads/image.png', size: '1774x887', ratio: '2:1', runId: 'keep-run' } }
   ], edges: [{ id: 'input', source: 'text', target: 'config' }, { id: 'output', source: 'config', target: 'out' }], groups: [], viewport: { zoom: 0.8 } }
   const { localSnapshot, remoteSnapshot } = createCanvasPersistenceSnapshots(original)
@@ -179,7 +186,7 @@ test('both snapshot formats migrate old image configuration graphs and round tri
   assert.deepEqual(localSnapshot.nodes.map(n => n.type), ['text', 'image'])
   assert.deepEqual(localSnapshot.edges.map(e => [e.source, e.target]), [['text', 'out']])
   const image = localSnapshot.nodes[1]
-  assert.equal(image.data.background, 'opaque')
+  assert.equal(image.data.background, undefined)
   assert.equal(image.data.size, '1774x887')
   assert.equal(image.data.runId, 'keep-run')
   assert.equal(image.data.sourceConfigId, 'config')
@@ -196,4 +203,27 @@ test('load, undo and template insertion normalize the full graph before renderin
   assert.match(canvasSource, /const restored = migrateLegacyImageConfigNodes\(cloneCanvasData\(state\)\)/)
   assert.match(factorySource, /migrateLegacyImageConfigNodes\(workflow\.createNodes\(/)
   assert.doesNotMatch(canvasSource, /addNode\('imageConfig'/)
+})
+
+test('APIMart migration drops unsupported options and normalizes former Auto resolution without touching media', () => {
+  const oldData = { url: 'image.png', size: '1536x1024', ratio: '3:2', generationRatio: 'auto', generationResolution: 'auto', generationQuality: 'high', quality: 'high', background: 'opaque', output_format: 'webp' }
+  const result = normalizeImageNodeParameters({ type: 'image', data: oldData })
+  assert.deepEqual(result.data, { url: 'image.png', size: '1536x1024', ratio: '3:2', generationRatio: 'auto', generationResolution: '1k' })
+  assert.equal(oldData.generationQuality, 'high')
+})
+
+test('unfinished image tasks persist across refresh without embedding request image data', () => {
+  const node = { id: 'pending-image', type: 'image', data: { loading: true, imageTaskId: 'durable-task', imageTaskMetadata: {
+    model: 'gpt-image-2', generationRatio: '16:9', generationResolution: '4k', sourcePrompt: 'creative brief',
+    sourceRefImages: ['https://cdn.example.com/ref.png', 'data:image/png;base64,secret'], image: 'data:image/png;base64,secret'
+  } } }
+  const { localSnapshot, remoteSnapshot } = createCanvasPersistenceSnapshots({ nodes: [node] })
+  for (const snapshot of [localSnapshot, remoteSnapshot]) {
+    const restored = JSON.parse(JSON.stringify(snapshot)).nodes[0].data
+    assert.equal(restored.imageTaskId, 'durable-task')
+    assert.equal(restored.imageTaskMetadata.generationResolution, '4k')
+    assert.deepEqual(restored.imageTaskMetadata.sourceRefImages, ['https://cdn.example.com/ref.png'])
+    assert.equal(Object.hasOwn(restored.imageTaskMetadata, 'image'), false)
+    assert.equal(Object.hasOwn(restored, 'loading'), false)
+  }
 })

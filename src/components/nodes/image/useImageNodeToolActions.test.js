@@ -49,6 +49,11 @@ const createHarness = async (overrides = {}) => {
     defaultImageSize: '1024x1024',
     displayImageUrl: { value: overrides.displayImageUrl ?? 'https://cdn.example.com/source.png' },
     edges: { value: [{ id: 'edge-1' }] },
+    flushSave: async () => {
+      calls.push(['flush-save'])
+      await overrides.onFlushSave?.()
+      return true
+    },
     findNearestSizeKey: (...args) => {
       calls.push(['find-nearest-size', ...args])
       return '1024x1024'
@@ -65,12 +70,15 @@ const createHarness = async (overrides = {}) => {
     getImageNodeRatioFromSizeKey: (size) => `ratio:${size}`,
     getImageNodeToolSaveMessages: (key) => ({ synced: `${key} saved` }),
     imageGen: {
-      generate: async (request) => {
+      generate: async (request, options) => {
         calls.push(['generate', request])
+        await overrides.onGenerate?.()
+        if (overrides.submittedTaskId) await options.onSubmitted(overrides.submittedTaskId)
         if (overrides.generateError) throw overrides.generateError
         return overrides.generateResult ?? [{ url: 'https://tmp.example.com/enhanced.png' }]
       }
     },
+    isNodeAvailable: overrides.isNodeAvailable,
     localImageModel: { value: 'gpt-image-2' },
     localImageQuality: { value: 'high' },
     localImageRatio: { value: '4:3' },
@@ -88,6 +96,7 @@ const createHarness = async (overrides = {}) => {
     },
     resolveImagePersistence: async (...args) => {
       calls.push(['resolve-persistence', ...args])
+      await overrides.onResolvePersistence?.()
       return overrides.persistence ?? {
         displayUrl: 'https://cdn.example.com/result.png',
         persistedUrl: 'https://cdn.example.com/result.png',
@@ -112,8 +121,10 @@ const createHarness = async (overrides = {}) => {
     triggerUpload: () => calls.push(['trigger-upload']),
     updateLinkedImageNode: async (...args) => {
       calls.push(['update-linked', ...args])
+      await overrides.onUpdateLinked?.()
       return overrides.linkedSavedOk ?? true
-    }
+    },
+    updateNode: (...args) => calls.push(['update-node', ...args])
   })
 
   return {
@@ -220,4 +231,88 @@ test('image node tool actions apply crop through replacement and leave crop mode
   })
   assert.equal(calls.some((call) => call[0] === 'cancel-crop'), true)
   assert.deepEqual(messages, [['success', 'Crop applied']])
+})
+
+
+test('enhancement pending node inherits the exact generation request controls', async () => {
+  const request = { model: 'gpt-image-2', ratio: '16:9', resolution: '4k', size: '3840x2160' }
+  const { calls, tools } = await createHarness({ enhancementRequest: request })
+  await tools.handleEnhance()
+  const created = calls.find(call => call[0] === 'create-linked')[1]
+  assert.equal(created.generationRatio, '16:9')
+  assert.equal(created.generationResolution, '4k')
+  assert.equal(created.generationQuality, undefined)
+  assert.equal(Object.hasOwn(created, 'size'), false)
+  assert.deepEqual(calls.find(call => call[0] === 'generate')[1], request)
+})
+
+test('enhancement saves a submitted task before polling can complete and excludes embedded references', async () => {
+  let releaseSave
+  const savePending = new Promise(resolve => { releaseSave = resolve })
+  const { calls, tools } = await createHarness({
+    submittedTaskId: 'enhance-task-1',
+    enhancementRequest: {
+      model: 'gpt-image-2', ratio: '16:9', resolution: '4k', sourcePrompt: 'Enhance',
+      sourceRefImages: ['https://cdn.example.com/ref.png', 'data:image/png;base64,large', 'blob:temporary']
+    },
+    onFlushSave: () => savePending
+  })
+  const enhancement = tools.handleEnhance()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(calls.find(call => call[0] === 'update-node'), ['update-node', 'linked-image-1', {
+    imageTaskId: 'enhance-task-1',
+    imageTaskMetadata: {
+      model: 'gpt-image-2', generationRatio: '16:9', generationResolution: '4k',
+      sourceConfigId: '', sourcePrompt: 'Enhance', sourceRefImages: ['https://cdn.example.com/ref.png']
+    }
+  }])
+  assert.equal(calls.some(call => call[0] === 'resolve-persistence'), false)
+  releaseSave()
+  await enhancement
+  assert.equal(calls.some(call => call[0] === 'resolve-persistence'), true)
+})
+
+test('enhancement clears saved tasks only after a terminal provider error', async () => {
+  for (const terminal of [false, true]) {
+    const generateError = Object.assign(new Error('Connection interrupted'), { imageTaskTerminal: terminal })
+    const { calls, tools } = await createHarness({ submittedTaskId: 'enhance-task-1', generateError })
+    await tools.handleEnhance()
+    const failedPatch = calls.find(call => call[0] === 'update-linked')[2]
+    assert.equal(Object.hasOwn(failedPatch, 'imageTaskId'), terminal)
+    if (terminal) assert.equal(failedPatch.imageTaskId, '')
+  }
+})
+
+test('enhancement stops stale submissions without saving or patching a different project', async () => {
+  for (const stage of ['submitted', 'persistence', 'linked-save']) {
+    let available = true
+    const expireContext = () => { available = false }
+    const { calls, messages, tools } = await createHarness({
+      submittedTaskId: 'enhance-task-1',
+      isNodeAvailable: () => available,
+      ...(stage === 'submitted' ? { onGenerate: expireContext } : {}),
+      ...(stage === 'persistence' ? { onResolvePersistence: expireContext } : {}),
+      ...(stage === 'linked-save' ? { onUpdateLinked: expireContext } : {})
+    })
+    await tools.handleEnhance()
+    assert.deepEqual(messages, [])
+    assert.equal(calls.some(call => call[0] === 'save-message'), false)
+    assert.equal(calls.filter(call => call[0] === 'update-linked').length, stage === 'linked-save' ? 1 : 0)
+    if (stage === 'submitted') {
+      assert.equal(calls.some(call => call[0] === 'update-node' || call[0] === 'flush-save'), false)
+    }
+  }
+})
+
+test('enhancement keeps its saved task when its context disappears during snapshot save', async () => {
+  let available = true
+  const { calls, messages, tools } = await createHarness({
+    submittedTaskId: 'enhance-task-1',
+    isNodeAvailable: () => available,
+    onFlushSave: () => { available = false }
+  })
+  await tools.handleEnhance()
+  assert.equal(calls.find(call => call[0] === 'update-node')[2].imageTaskId, 'enhance-task-1')
+  assert.equal(calls.some(call => call[0] === 'resolve-persistence' || call[0] === 'update-linked'), false)
+  assert.deepEqual(messages, [])
 })

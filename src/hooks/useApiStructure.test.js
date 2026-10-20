@@ -53,7 +53,7 @@ test('image API hooks live in the image domain module with legacy exports preser
   assert.match(imageSource, /from '\.\/imageApiCore\.js'/)
   assert.doesNotMatch(imageSource, /const ratioFromSize = /)
   assert.doesNotMatch(imageSource, /const normalizeGeneratedImages = /)
-  assert.match(imageCoreSource, /export const ratioFromSize = /)
+  assert.match(imageCoreSource, /export const getImageTaskStatus = /)
   assert.match(imageCoreSource, /export const normalizeGeneratedImages = /)
   assert.ok(countLines(imageSource) < 200, 'useImageApi.js should stay below 200 lines')
 

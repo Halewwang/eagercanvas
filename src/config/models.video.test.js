@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
 
-import {
+const modelsSource = readFileSync(new URL('./models.js', import.meta.url), 'utf8')
+  .replace("from '@/utils/gptImageParameters'", `from '${new URL('../utils/gptImageParameters.js', import.meta.url).href}'`)
+const {
   VIDEO_MODELS,
   getVideoConnectionProfile,
   getVideoGenerationProfile,
   resolveSeedanceGenerationType
-} from './models.js'
+} = await import(`data:text/javascript;base64,${Buffer.from(modelsSource).toString('base64')}`)
 
 test('Seedance 2.0 exposes video reference support and model-specific options', () => {
   const model = VIDEO_MODELS.find((item) => item.key === 'seedance-2.0')

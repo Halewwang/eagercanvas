@@ -3,33 +3,24 @@
  * Centralized model configuration | 集中模型配置
  */
 
-export const GPT_IMAGE_2_BACKGROUND_OPTIONS = [
-    { label: 'Auto', key: 'auto' },
-    { label: 'Opaque', key: 'opaque' }
-]
-
-export const GPT_IMAGE_2_OUTPUT_FORMAT_OPTIONS = [
-    { label: 'PNG', key: 'png' }
-]
+import { GPT_IMAGE_2_RATIOS, GPT_IMAGE_2_RESOLUTION_OPTIONS } from '@/utils/gptImageParameters'
 
 const GPT_IMAGE_2_MODEL_CONFIG = {
     label: 'GPT Image 2',
     key: 'gpt-image-2',
-    sizes: [],
-    ratios: [],
-    resolutions: [],
-    qualities: [],
-    hideRatioCapsule: true,
-    backgrounds: GPT_IMAGE_2_BACKGROUND_OPTIONS,
-    outputFormats: GPT_IMAGE_2_OUTPUT_FORMAT_OPTIONS,
+    sizes: GPT_IMAGE_2_RATIOS,
+    ratios: GPT_IMAGE_2_RATIOS,
+    resolutions: GPT_IMAGE_2_RESOLUTION_OPTIONS,
+    hideRatioCapsule: false,
     defaultParams: {
-        background: 'auto'
+        ratio: '1:1',
+        resolution: '1k',
+        size: '1:1'
     },
     supportImageReference: true,
-    maxReferenceImages: 16,
-    showAdvancedCapsuleParams: true,
+    maxReferenceImages: 15,
     requestTimeoutMs: 1800000,
-    tips: '尺寸与清晰度由模型决定，输出 PNG，最多 16 张参考图。'
+    tips: '按比例与分辨率生成图片，最多 15 张参考图。'
 }
 
 // Image generation models | 图片生成模型
@@ -224,12 +215,6 @@ export const getVideoConnectionProfile = (modelKey = '', generationType = '') =>
 export const CHAT_MODELS = [
     { label: 'GPT 5.6 Sol', key: 'gpt-5.6-sol' }
 ]
-
-// Image size options | 图片尺寸选项
-export const IMAGE_SIZE_OPTIONS = []
-
-// Image quality options | 图片质量选项
-export const IMAGE_QUALITY_OPTIONS = []
 
 // Image style options | 图片风格选项
 export const IMAGE_STYLE_OPTIONS = [

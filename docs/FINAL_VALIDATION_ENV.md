@@ -43,13 +43,15 @@ RESEND_API_KEY=
 RESEND_FROM_EMAIL=
 OPENAI_API_BASE_URL=https://api.enbrand.co/v1
 OPENAI_API_KEY=
+APIMART_API_BASE_URL=https://api.apimart.ai/v1
+APIMART_API_KEY=
 # Video only
 PROVIDER_API_BASE_URL=
 PROVIDER_API_KEY=
 ADMIN_LIFECYCLE_MUTATIONS_ENABLED=false
 ```
 
-`JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` must be non-placeholder random strings with at least 24 characters. `OPENAI_API_KEY` is required for `gpt-5.6-sol` text and `gpt-image-2` images. `PROVIDER_API_KEY` is required for video generation. Enable service access once in the user-management Dashboard; all models use server credentials without individual key binding. Never reuse a 302 key for the OpenAI endpoint.
+`JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` must be non-placeholder random strings with at least 24 characters. `OPENAI_API_KEY` is required for `gpt-5.6-sol` text; the separate `APIMART_API_KEY` is required for `gpt-image-2` images. `PROVIDER_API_KEY` is required for video generation. Enable service access once in the user-management Dashboard; all models use server credentials without individual key binding. Provider credentials are never used as fallbacks for another channel.
 
 Keep `ADMIN_LIFECYCLE_MUTATIONS_ENABLED=false` until `supabase/016_admin_rbac_lifecycle.sql` and its prerequisites have been applied and verified. Then enable it for the approved validation environment before testing service, role, and account changes. A passing environment readiness check does not prove that the database migrations or credentials are valid.
 
@@ -116,7 +118,7 @@ npm run check:validation-readiness
 
 The command prints only pass/fail and missing-key reasons. It does not print secret values and it intentionally ignores `.env.example` files.
 
-The readiness result reflects the local files at the time the command runs. Real secrets are required for `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `OPENAI_API_KEY`, and `PROVIDER_API_KEY`; no 302 Dashboard management key is required.
+The readiness result reflects the local files at the time the command runs. Real secrets are required for `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `OPENAI_API_KEY`, `APIMART_API_KEY`, and `PROVIDER_API_KEY`; no 302 Dashboard management key is required.
 
 To print the final validation runbook for the current readiness state, run:
 

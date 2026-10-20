@@ -2,12 +2,14 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-import {
+const actionsSource = readFileSync(new URL('./canvasActionsCore.js', import.meta.url), 'utf8')
+  .replace("from '@/utils/gptImageParameters.js'", `from '${new URL('../utils/gptImageParameters.js', import.meta.url).href}'`)
+const {
   createCanvasNode,
   duplicateCanvasNode,
   removeCanvasNodeGraph,
   updateCanvasNodeData
-} from './canvasActionsCore.js'
+} = await import(`data:text/javascript;base64,${Buffer.from(actionsSource).toString('base64')}`)
 
 test('createCanvasNode merges defaults, incoming data and stable timestamps', () => {
   const node = createCanvasNode({
@@ -16,12 +18,10 @@ test('createCanvasNode merges defaults, incoming data and stable timestamps', ()
     position: { x: 12, y: 24 },
     defaultData: {
       label: 'Image',
-      quality: 'standard',
       createdAt: 1,
       updatedAt: 2
     },
     data: {
-      quality: 'hd',
       url: 'https://storage.example.com/image.png',
       createdAt: 88
     },
@@ -34,7 +34,7 @@ test('createCanvasNode merges defaults, incoming data and stable timestamps', ()
     position: { x: 12, y: 24 },
     data: {
       label: 'Image',
-      quality: 'hd',
+      generationRatio: '1:1', generationResolution: '1k',
       url: 'https://storage.example.com/image.png',
       createdAt: 88,
       updatedAt: 100
@@ -42,14 +42,15 @@ test('createCanvasNode merges defaults, incoming data and stable timestamps', ()
   })
 })
 
-test('new empty image nodes persist square 1K export defaults without changing other node types', () => {
+test('new empty image nodes persist square 1K generation defaults without changing other node types', () => {
   for (const type of ['image', 'imageConfig']) {
     const node = createCanvasNode({
       id: 'empty-image', type, defaultData: { url: '', label: 'Image' },
       data: { sourcePrompt: 'brief', sourceRefImages: ['reference.png'], sourceConfigId: 'legacy-config', assetUrls: {} }, now: 100
     })
-    assert.equal(node.data.exportRatio, '1:1')
-    assert.equal(node.data.exportSize, 1024)
+    assert.equal(node.data.generationRatio, '1:1')
+    assert.equal(node.data.generationResolution, '1k')
+    assert.equal(node.data.generationQuality, undefined)
     assert.equal(node.data.url, '')
     assert.equal(node.data.sourcePrompt, 'brief')
   }
@@ -79,25 +80,22 @@ test('image creation preserves original media without adding a crop or output si
   }
 })
 
-test('image creation preserves explicit export parameters including original ratio and original pixels', () => {
-  for (const exportParameters of [
-    { exportRatio: '16:9', exportSize: 4096 },
-    { exportRatio: '', exportSize: 0 }
+test('image creation preserves explicit canonical settings and converts former local export defaults', () => {
+  for (const generation of [
+    { generationRatio: '16:9', generationResolution: '4k', },
+    { generationRatio: 'auto', generationResolution: '1k', }
   ]) {
     for (const media of [{}, { url: 'image.png' }]) {
-      const data = { ...media, ...exportParameters }
-      const node = createCanvasNode({ id: 'image', type: 'image', data, now: 100 })
-      assert.equal(node.data.exportRatio, exportParameters.exportRatio)
-      assert.equal(node.data.exportSize, exportParameters.exportSize)
-      assert.deepEqual(data, { ...media, ...exportParameters })
+      const node = createCanvasNode({ id: 'image', type: 'image', data: { ...media, ...generation }, now: 100 })
+      for (const [key, value] of Object.entries(generation)) assert.equal(node.data[key], value)
     }
   }
   const ratioOnly = createCanvasNode({ id: 'ratio', type: 'image', data: { exportRatio: '' }, now: 100 })
-  assert.equal(ratioOnly.data.exportRatio, '')
-  assert.equal(ratioOnly.data.exportSize, 1024)
+  assert.equal(ratioOnly.data.generationRatio, 'auto')
+  assert.equal(ratioOnly.data.generationResolution, '1k')
   const sizeOnly = createCanvasNode({ id: 'size', type: 'image', data: { exportSize: 0 }, now: 100 })
-  assert.equal(sizeOnly.data.exportRatio, '1:1')
-  assert.equal(sizeOnly.data.exportSize, 0)
+  assert.equal(sizeOnly.data.generationRatio, '1:1')
+  assert.equal(sizeOnly.data.generationResolution, '1k')
 })
 
 test('updateCanvasNodeData only merges data for the targeted node', () => {

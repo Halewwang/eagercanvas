@@ -1,3 +1,5 @@
+import { getGptImageGenerationSettings } from '@/utils/gptImageParameters.js'
+
 export const createCanvasNode = ({
   id,
   type,
@@ -7,17 +9,25 @@ export const createCanvasNode = ({
   now = Date.now()
 }) => {
   const nodeData = { ...defaultData, ...data }
-  const isEmptyImage = ['image', 'imageConfig'].includes(type) &&
-    !['url', 'previewUrl', 'base64', 'sourceUrl', 'src', 'dataUrl', 'assetId', 'assetUrl'].some(key => nodeData[key]) &&
-    !Object.values(nodeData.assetUrls || {}).some(Boolean)
+  const settings = ['image', 'imageConfig'].includes(type) ? getGptImageGenerationSettings(nodeData) : null
+  if (['image', 'imageConfig'].includes(type)) {
+    for (const key of ['generationQuality', 'quality', 'background', 'output_format', 'outputFormat']) delete nodeData[key]
+  }
+  if (settings) {
+    delete nodeData.exportRatio
+    delete nodeData.exportSize
+  }
 
   return {
     id,
     type,
     position,
     data: {
-      ...(isEmptyImage ? { exportRatio: '1:1', exportSize: 1024 } : {}),
       ...nodeData,
+      ...(settings ? {
+        generationRatio: settings.ratio,
+        generationResolution: settings.resolution,
+      } : {}),
       createdAt: data.createdAt || now,
       updatedAt: data.updatedAt || now
     }

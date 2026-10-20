@@ -5,10 +5,7 @@ import {
   getImageTaskId,
   getImageTaskStatus,
   isPendingImageTaskStatus,
-  normalizeGeneratedImages,
-  normalizeResolution,
-  ratioFromSize,
-  resolutionFromSize
+  normalizeGeneratedImages
 } from './api/imageApiCore.js'
 import {
   buildVideoRequestData,
@@ -17,14 +14,7 @@ import {
   getVideoUrl
 } from './api/videoApiCore.js'
 
-test('image api core preserves size, resolution, task id, and output normalization behavior', () => {
-  assert.equal(ratioFromSize('1280x720'), '16:9')
-  assert.equal(ratioFromSize('720x1280'), '9:16')
-  assert.equal(ratioFromSize('invalid'), '1:1')
-  assert.equal(normalizeResolution('2K'), '2k')
-  assert.equal(normalizeResolution('large'), '')
-  assert.equal(resolutionFromSize('2048x2048', '1:1'), '2k')
-  assert.equal(resolutionFromSize('4096x4096', '1:1'), '4k')
+test('image api core preserves task id and output normalization behavior', () => {
   assert.equal(getImageTaskId({ data: { request_id: 'img-task-1' } }), 'img-task-1')
   assert.equal(getImageTaskStatus({ data: { status: 'SUCCEEDED' } }), 'succeeded')
   assert.deepEqual(
@@ -47,6 +37,10 @@ test('image api core preserves size, resolution, task id, and output normalizati
 
 test('image api core treats provider-created image tasks as pending for polling', () => {
   assert.equal(isPendingImageTaskStatus('created'), true)
+  assert.equal(isPendingImageTaskStatus('submitted'), true)
+  const response = { data: [{ status: 'submitted', task_id: 'apimart-task' }] }
+  assert.equal(getImageTaskId(response), 'apimart-task')
+  assert.equal(getImageTaskStatus(response), 'submitted')
   assert.equal(isPendingImageTaskStatus('running'), true)
   assert.equal(isPendingImageTaskStatus('completed'), false)
 })

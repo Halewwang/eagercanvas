@@ -11,7 +11,7 @@ for (const type of ['chat', 'image', 'video']) {
         return { serviceCredentialId: 'service-1', apiKey: 'must-not-be-forwarded' }
       }
     })
-    assert.deepEqual(access, { serviceCredentialId: 'service-1', apiName: type === 'video' ? 'shared' : 'enbrand' })
+    assert.deepEqual(access, { serviceCredentialId: 'service-1', apiName: type === 'image' ? 'apimart' : type === 'video' ? 'shared' : 'enbrand' })
     assert.equal(Object.hasOwn(access, 'apiKey'), false)
   })
 

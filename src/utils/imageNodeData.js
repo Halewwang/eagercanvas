@@ -1,4 +1,16 @@
 import { getImageRatioFromDimensions } from './imageDimensions.js'
+import { getGptImageGenerationSettings } from './gptImageParameters.js'
+
+const getGenerationData = (...sources) => Object.fromEntries(
+  ['generationRatio', 'generationResolution']
+    .map(key => [key, sources.map(source => source?.[key]).find(value => value !== undefined)])
+    .filter(([, value]) => value !== undefined)
+)
+
+const getRequestGenerationData = (request = {}) => ({
+  ...(request.ratio !== undefined ? { generationRatio: request.ratio } : {}),
+  ...(request.resolution !== undefined ? { generationResolution: request.resolution } : {}),
+})
 
 const defaultInputLabels = {
   prompt: 'Prompt',
@@ -80,6 +92,7 @@ export const getImageNodePersistencePatch = (
   persistStatus: result?.persisted ? 'saved' : 'pending',
   persistError: result?.persisted ? '' : (result?.persistError || ''),
   updatedAt: now,
+  ...(result?.persisted ? { imageTaskId: '', imageTaskMetadata: null } : {}),
   ...extra
 })
 
@@ -132,45 +145,17 @@ export const getImageNodeSaveFeedbackPatch = ({
   updatedAt: now
 })
 
-export const getImageNodeModelParamsPatch = ({
-  model,
-  size,
-  quality,
-  background,
-  outputFormat,
-  ratio,
-  resolution
-} = {}) => ({
-  model,
-  size,
-  quality,
-  background,
-  output_format: outputFormat,
-  ratio,
-  resolution
-})
-
-export const getImageNodeSizeParamsPatch = ({
-  size,
-  ratio,
-  resolution
-} = {}) => ({
-  size,
-  ratio,
-  resolution
-})
-
 const getImageNodeLinkedBaseData = ({
   payload = {},
   defaults = {},
   now = Date.now()
 } = {}) => ({
   model: payload.model || defaults.model || '',
-  ...(payload.background || defaults.background ? { background: payload.background || defaults.background } : {}),
-  quality: payload.quality || defaults.quality || '',
-  size: payload.size || defaults.size || '',
-  ratio: payload.ratio || defaults.ratio || '',
-  resolution: payload.resolution || defaults.resolution || '',
+  ...(payload.imageTaskId !== undefined ? { imageTaskId: payload.imageTaskId } : {}),
+  ...(payload.imageTaskMetadata !== undefined ? { imageTaskMetadata: payload.imageTaskMetadata } : {}),
+  ...getGenerationData(payload, defaults),
+  size: payload.size || '',
+  ratio: payload.ratio || '',
   url: payload.url || '',
   previewUrl: payload.previewUrl || '',
   base64: payload.base64 || '',
@@ -280,7 +265,6 @@ export const getImageNodeEnhancementRequest = ({
   currentNodeData = {},
   displayImageUrl = '',
   localImageModel = '',
-  localBackground = '',
   projectId = '',
   defaultImageModel = '',
   defaultEnhancePrompt = ''
@@ -290,7 +274,11 @@ export const getImageNodeEnhancementRequest = ({
     ? currentNodeData.sourceRefImages.filter(Boolean)
     : []
   const selfImage = String(displayImageUrl || '').trim()
-  const background = localBackground || currentNodeData?.background || sourceConfig?.data?.background
+  const settings = getGptImageGenerationSettings({
+    ...sourceConfig?.data,
+    ...currentNodeData,
+    ...(selfImage ? { url: selfImage } : {})
+  })
 
   let prompt = inheritedPrompt
   let refImages = inheritedRefs
@@ -325,7 +313,7 @@ export const getImageNodeEnhancementRequest = ({
     ).trim(),
     projectId,
     prompt,
-    ...(background ? { background } : {}),
+    ...settings,
     image: refImages,
     sourceConfigId: sourceConfig?.id || currentNodeData?.sourceConfigId || '',
     sourcePrompt: prompt,
@@ -423,7 +411,8 @@ export const getImageNodeToolReplacementPatch = ({
   previousPersistedUrl = '',
   size = '',
   ratio = '',
-  resolution = '',
+  generationRatio,
+  generationResolution,
   fileType = 'image/png',
   transientPersistError = '',
   now = Date.now()
@@ -440,7 +429,7 @@ export const getImageNodeToolReplacementPatch = ({
       }),
   size,
   ratio,
-  resolution,
+  ...getGenerationData({ generationRatio, generationResolution }),
   fileType: fileType || 'image/png',
   updatedAt: now,
   error: ''
@@ -451,7 +440,6 @@ export const getImageNodeToolLinkedResultPatch = ({
   payload = {},
   defaults = {},
   labelFallback = '',
-  includeQuality = false,
   includeSource = false,
   transientPersistError = '',
   now = Date.now()
@@ -463,11 +451,9 @@ export const getImageNodeToolLinkedResultPatch = ({
   suppressErrorModal: false,
   ...(labelFallback ? { label: payload.label || labelFallback } : {}),
   fileType: payload.fileType || 'image/png',
-  ...(payload.background || defaults.background ? { background: payload.background || defaults.background } : {}),
-  size: payload.size || defaults.size || '',
-  ratio: payload.ratio || defaults.ratio || '',
-  resolution: payload.resolution || defaults.resolution || '',
-  ...(includeQuality ? { quality: payload.quality || defaults.quality || '' } : {}),
+  size: payload.size || '',
+  ratio: payload.ratio || '',
+  ...getGenerationData(payload, defaults),
   ...(includeSource
     ? {
         sourcePrompt: payload.sourcePrompt || '',
@@ -482,18 +468,15 @@ export const getImageNodeToolLinkedCreatePatch = ({
   payload = {},
   defaults = {},
   labelFallback = '',
-  includeQuality = false,
   includeSource = false,
   now = Date.now()
 } = {}) => ({
   ...getImageNodePersistencePatch(persistence, {}, { now }),
   ...(labelFallback ? { label: payload.label || labelFallback } : {}),
   fileType: payload.fileType || 'image/png',
-  ...(payload.background || defaults.background ? { background: payload.background || defaults.background } : {}),
-  size: payload.size || defaults.size || '',
-  ratio: payload.ratio || defaults.ratio || '',
-  resolution: payload.resolution || defaults.resolution || '',
-  ...(includeQuality ? { quality: payload.quality || defaults.quality || '' } : {}),
+  size: payload.size || '',
+  ratio: payload.ratio || '',
+  ...getGenerationData(payload, defaults),
   ...(includeSource
     ? {
         sourcePrompt: payload.sourcePrompt || '',
@@ -511,7 +494,7 @@ export const getImageNodeEnhancementResultPatch = ({
   loading: false,
   shouldSave: !!persistence?.persisted,
   fileType: 'image/png',
-  ...(request.background ? { background: request.background } : {}),
+  ...getRequestGenerationData(request),
   sourceConfigId: request.sourceConfigId || '',
   sourcePrompt: request.sourcePrompt || '',
   sourceRefImages: Array.isArray(request.sourceRefImages) ? request.sourceRefImages : []

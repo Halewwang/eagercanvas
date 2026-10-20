@@ -1,5 +1,6 @@
 import { cloneCanvasData } from './canvasClone.js'
 import { migrateLegacyImageConfigNodes } from './legacyImageConfig.js'
+import { getGptImageGenerationSettings } from '@/utils/gptImageParameters.js'
 
 const TRANSIENT_NODE_FIELDS = new Set([
   'base64',
@@ -63,10 +64,20 @@ const hasNodeUnpersistedMedia = (node) => {
 export const normalizeImageNodeParameters = (node) => {
   if (!['image', 'imageConfig'].includes(node?.type)) return node
   const data = { ...(node.data || {}) }
-  for (const key of ['quality', 'resolution', 'aspect_ratio', 'output_format', 'outputFormat', 'output_compression', 'moderation', 'enable_sync_mode', 'enable_base64_output']) {
+  const settings = getGptImageGenerationSettings(data)
+  data.generationRatio = settings.ratio
+  data.generationResolution = settings.resolution
+  if (data.imageTaskId) {
+    const metadata = data.imageTaskMetadata || {}
+    data.imageTaskMetadata = Object.fromEntries(['model', 'generationRatio', 'generationResolution', 'sourcePrompt', 'sourceConfigId']
+      .filter(key => typeof metadata[key] === 'string').map(key => [key, metadata[key]]))
+    data.imageTaskMetadata.sourceRefImages = (Array.isArray(metadata.sourceRefImages) ? metadata.sourceRefImages : [])
+      .filter(url => typeof url === 'string' && /^https?:\/\//i.test(url))
+  }
+  for (const key of ['generationQuality', 'background', 'exportRatio', 'exportSize', 'quality', 'resolution', 'aspect_ratio', 'output_format', 'outputFormat', 'output_compression', 'moderation', 'enable_sync_mode', 'enable_base64_output']) {
     delete data[key]
   }
-  if (node.type === 'imageConfig') {
+  if (node.type === 'imageConfig' && !['url', 'previewUrl', 'base64'].some(key => data[key])) {
     delete data.size
     delete data.ratio
   }

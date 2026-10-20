@@ -8,10 +8,11 @@ const IMAGE_REQUEST_TIMEOUT_MS = 180000
 
 // 生成图片
 export const generateImage = (data, options = {}) => {
-  const { requestType = 'json', endpoint = '/images/generations', timeout = IMAGE_REQUEST_TIMEOUT_MS } = options
+  const { requestType = 'json', endpoint = '/images/generations', timeout = IMAGE_REQUEST_TIMEOUT_MS, signal } = options
   
   return apiRequest({
     url: endpoint,
+    signal,
     method: 'post',
     data,
     timeout,
