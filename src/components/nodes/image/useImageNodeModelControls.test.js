@@ -51,14 +51,45 @@ test('canonical parameter selection never mutates returned media dimensions or c
   assert.equal(updates.length, count)
 })
 
-test('external updates and retired model keys normalize while stage follows real image dimensions', async () => {
+test('external updates and retired model keys normalize while explicit ratio controls the stage', async () => {
   const { controls, data, naturalSize } = createHarness({ model: 'retired' })
   assert.equal(controls.localImageModel.value, 'gpt-image-2')
   data.value = { generationRatio: '3:1', generationResolution: '4k' }
   await nextTick()
   assert.equal(controls.displayRatio.value, '3:1')
   naturalSize.value = { width: 1536, height: 1024 }
-  assert.deepEqual(controls.stageStyle.value, { width: '360px', height: '240px' })
+  assert.deepEqual(controls.stageStyle.value, { width: '420px', height: '140px' })
   controls.setImageModel('retired')
   assert.equal(controls.localImageModel.value, 'gpt-image-2')
+})
+
+test('selecting a ratio immediately resizes empty, loaded and generating nodes without rewriting media', async () => {
+  for (const loading of [false, true]) {
+    const { controls, data, naturalSize } = createHarness({
+      loading, ratio: '4:5', size: '1024x1280', generationRatio: '4:5'
+    })
+    controls.setImageRatio('21:9')
+    assert.deepEqual(controls.stageStyle.value, { width: '420px', height: '180px' })
+    assert.deepEqual(controls.moduleStyle.value, { width: 'calc(420px + 2px)' })
+    naturalSize.value = { width: 1024, height: 1280 }
+    await nextTick()
+    assert.deepEqual(controls.stageStyle.value, { width: '420px', height: '180px' })
+    assert.equal(data.value.size, '1024x1280')
+    assert.equal(data.value.ratio, '4:5')
+    const restored = createHarness(JSON.parse(JSON.stringify(data.value)))
+    assert.deepEqual(restored.controls.stageStyle.value, controls.stageStyle.value)
+    controls.setImageRatio('9:16')
+    assert.deepEqual(controls.stageStyle.value, { width: '260px', height: '462px' })
+    controls.setResolution('4k')
+    assert.deepEqual(controls.stageStyle.value, { width: '260px', height: '462px' })
+  }
+})
+
+test('Auto follows actual image dimensions and falls back to media metadata or square', () => {
+  const { controls, naturalSize } = createHarness({ size: '1536x1024', ratio: '3:2', generationRatio: '21:9' })
+  controls.setImageRatio('auto')
+  assert.deepEqual(controls.stageStyle.value, { width: '360px', height: '240px' })
+  naturalSize.value = { width: 1920, height: 1080 }
+  assert.deepEqual(controls.stageStyle.value, { width: '420px', height: '236.25px' })
+  assert.deepEqual(createHarness({ generationRatio: 'auto' }).controls.stageStyle.value, { width: '320px', height: '320px' })
 })

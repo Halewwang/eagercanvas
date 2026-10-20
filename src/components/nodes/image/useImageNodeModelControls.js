@@ -31,11 +31,9 @@ export const useImageNodeModelControls = ({
   const displayImageModel = computed(() => imageModelDropdownOptions.value.find(item => item.key === localImageModel.value)?.label || localImageModel.value)
   const displayRatio = computed(() => localImageRatio.value === 'auto' ? 'Auto' : localImageRatio.value)
   const displayResolution = computed(() => localResolution.value.toUpperCase())
-  const stageStyle = computed(() => getImageNodeStageStyle({
-    ratio: readData().ratio || localImageRatio.value,
-    size: readData().size || '',
-    naturalSize: readOption(naturalSize)
-  }))
+  const stageStyle = computed(() => getImageNodeStageStyle(localImageRatio.value === 'auto'
+    ? { ratio: readData().ratio, size: readData().size, naturalSize: readOption(naturalSize) }
+    : { ratio: localImageRatio.value }))
   const moduleStyle = computed(() => ({ width: `calc(${stageStyle.value.width} + 2px)` }))
 
   watch(readData, nextData => {
